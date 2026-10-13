@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "planner-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "PLANNER", "class_name": "PlannerStore" }]
+  },
+  "migrations": [
+    // SQLite-backed Durable Objects are available on the Workers free plan.
+    { "tag": "v1", "new_sqlite_classes": ["PlannerStore"] }
+  ]
+  // The API token is a secret, set with: npx wrangler secret put API_TOKEN
+}

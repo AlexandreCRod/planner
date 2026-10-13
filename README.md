@@ -1,6 +1,6 @@
 # Planner
 
-A personal Android app that combines recurring tasks, a calendar and rich notes, all linked together. Everything stays on the phone: there is no account and no cloud, only local backups.
+A personal Android app that combines recurring tasks, a calendar and rich notes, all linked together. The phone holds the main copy of your data and works fully offline. Cloud sync to your own Cloudflare Worker is optional and off by default; see [server/README.md](server/README.md).
 
 ## Build and install
 
@@ -35,11 +35,13 @@ Automatic backups run every hour or every day (configurable), or never. Each bac
 ## Project layout
 
 ```
+server/      optional Cloudflare Worker + Durable Object (cloud copy, change feed)
 app/src/main/java/com/alex/planner/
   data/      Room entities, DAO, repository, settings
   domain/    recurrence engine, overdue/streak logic, quick-add parser, holidays
   alarm/     AlarmManager scheduling, notifications, full-screen alarm
   backup/    JSON backup/restore + WorkManager schedule
+  sync/      client for the Cloudflare server
   widget/    Glance home-screen widgets
   ui/        Compose screens (today, calendar, tasks, notes, graph, browse, settings)
 ```
