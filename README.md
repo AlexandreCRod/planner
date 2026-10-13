@@ -6,12 +6,13 @@ A personal Android app that combines recurring tasks, a calendar and rich notes,
 
 1. Install [Android Studio](https://developer.android.com/studio) and finish its setup wizard. The wizard installs the Android SDK.
 2. In Android Studio, choose **File → Open** and pick this folder (`C:\Alex\Claude\Calendar`). Wait for the Gradle sync to finish.
+   - **Java version:** the build needs **JDK 17 or 21**. Android Studio's bundled Java 25 is too new for this project's Gradle and Kotlin versions. If the sync fails, go to **Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK** and choose JDK 21. It's installed at `C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot`.
 3. Install on your phone:
    1. On the phone, enable **Developer options**: go to **Settings → About phone** and tap **Build number** seven times.
    2. In **Developer options**, turn on **USB debugging** (or **Wireless debugging**).
    3. Connect the phone, choose it in the device dropdown, and press **Run ▶**.
 
-From a terminal, `gradlew installDebug` builds the app and installs it on the connected phone. `gradlew test` runs the unit tests.
+From a terminal (with `JAVA_HOME` set to JDK 21), `gradlew installDebug` builds the app and installs it on the connected phone. `gradlew test` runs the unit tests.
 
 On first launch, allow notifications. For alarms that are never delayed, open **Settings → Battery optimization** in the app and exclude Planner. On Android 14 and later, also allow **Full-screen alarms** on the same screen.
 

@@ -9,3 +9,4 @@
 .externalNativeBuild/
 .cxx/
 .kotlin/
+build-log.txt
