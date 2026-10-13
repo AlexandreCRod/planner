@@ -25,6 +25,7 @@ You need a free Cloudflare account and [Node.js](https://nodejs.org) 22 or newer
 ```bash
 cd server
 npm install
+npm install-scripts approve esbuild workerd   # npm 11+ only: lets wrangler fetch its local runtime
 npx wrangler login                      # opens the browser to sign in to Cloudflare
 npx wrangler secret put API_TOKEN       # paste a long random string; this is your password
 npx wrangler deploy                     # prints https://planner-sync.<you>.workers.dev
@@ -40,7 +41,10 @@ Then open **Settings → Cloud sync** in the app. Turn it on, paste the URL and 
 npm test            # unit tests for the record/diff helpers
 npm run typecheck
 echo API_TOKEN=dev-token > .dev.vars && npm run dev   # local server on http://localhost:8787
+npm run e2e         # in a second terminal: 10 end-to-end checks against the local server
 ```
+
+Don't point `npm run e2e` at your real deployment: it overwrites the stored data.
 
 ## API
 
