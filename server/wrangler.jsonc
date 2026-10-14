@@ -4,6 +4,13 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "observability": { "enabled": true },
+  // The PC app (web/, built with `npm run build` there) is served from the same address.
+  // API paths always reach the Worker; any other unknown path gets the app's index.html.
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
   "durable_objects": {
     "bindings": [{ "name": "PLANNER", "class_name": "PlannerStore" }]
   },

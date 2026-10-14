@@ -1,0 +1,113 @@
+// Dates are "local days since 1970-01-01" (like Android's LocalDate.toEpochDay) so a 9:00 task
+// stays at 9:00 wall time on every device.
+
+const DAY_MS = 86_400_000;
+
+export interface YMD { y: number; m: number; d: number } // m = 1..12
+
+export function epochOf(y: number, m: number, d: number): number {
+  return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+}
+
+export function ymd(epoch: number): YMD {
+  const dt = new Date(epoch * DAY_MS);
+  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
+}
+
+export function today(): number {
+  const n = new Date();
+  return epochOf(n.getFullYear(), n.getMonth() + 1, n.getDate());
+}
+
+export function nowMinutes(): number {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes();
+}
+
+/** ISO weekday: Monday = 1 ... Sunday = 7. */
+export function weekday(epoch: number): number {
+  return ((((epoch + 3) % 7) + 7) % 7) + 1; // 1970-01-01 was a Thursday
+}
+
+export function daysInMonth(y: number, m: number): number {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+export function addMonths(epoch: number, n: number): number {
+  const { y, m, d } = ymd(epoch);
+  const total = y * 12 + (m - 1) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return epochOf(ny, nm, Math.min(d, daysInMonth(ny, nm)));
+}
+
+export function monthsBetween(a: number, b: number): number {
+  const x = ymd(a), z = ymd(b);
+  return (z.y - x.y) * 12 + (z.m - x.m);
+}
+
+export function startOfWeek(epoch: number, mondayFirst: boolean): number {
+  const wd = weekday(epoch);
+  return epoch - (mondayFirst ? wd - 1 : wd % 7);
+}
+
+/** Local wall time (epoch day + minutes) → a JS timestamp. */
+export function toTimestamp(epoch: number, minutes: number): number {
+  const { y, m, d } = ymd(epoch);
+  return new Date(y, m - 1, d, Math.floor(minutes / 60), minutes % 60).getTime();
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+export const monthShort = (m: number) => MONTHS[m - 1];
+export const monthLong = (m: number) => MONTHS_LONG[m - 1];
+export const dayShort = (wd: number) => DAYS[wd - 1];
+
+export function formatDate(epoch: number): string {
+  const { y, m, d } = ymd(epoch);
+  const base = `${dayShort(weekday(epoch))}, ${d} ${monthShort(m)}`;
+  return y === ymd(today()).y ? base : `${base} ${y}`;
+}
+
+export function relativeDay(epoch: number): string {
+  const t = today();
+  if (epoch === t) return "Today";
+  if (epoch === t + 1) return "Tomorrow";
+  if (epoch === t - 1) return "Yesterday";
+  return formatDate(epoch);
+}
+
+export const use24h = (() => {
+  const s = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(2020, 0, 1, 15));
+  return !/[AP]M/i.test(s);
+})();
+
+export function formatTime(min: number): string {
+  const h = Math.floor(min / 60), mm = min % 60;
+  if (use24h) return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${mm ? ":" + String(mm).padStart(2, "0") : ""} ${h < 12 ? "AM" : "PM"}`;
+}
+
+export function dueCountdown(dueTs: number, now = Date.now()): string {
+  const mins = Math.round((dueTs - now) / 60000);
+  const abs = Math.abs(mins);
+  if (abs < 1) return "due now";
+  const text = abs < 60 ? `${abs}m` : abs < 1440 ? `${Math.floor(abs / 60)}h ${abs % 60}m` : `${Math.floor(abs / 1440)}d ${Math.floor((abs % 1440) / 60)}h`;
+  return mins > 0 ? `in ${text}` : `${text} overdue`;
+}
+
+export function offsetLabel(min: number): string {
+  if (min === 0) return "At time";
+  if (min % 10080 === 0) return `${min / 10080} week(s) before`;
+  if (min % 1440 === 0) return `${min / 1440} day(s) before`;
+  if (min % 60 === 0) return `${min / 60} hour(s) before`;
+  return `${min} min before`;
+}
+
+export function ordinal(n: number): string {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${s}`;
+}

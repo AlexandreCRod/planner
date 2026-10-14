@@ -1,6 +1,11 @@
 # Planner
 
-A personal Android app that combines recurring tasks, a calendar and rich notes, all linked together. The phone holds the main copy of your data and works fully offline. Cloud sync to your own Cloudflare Worker is optional and off by default; see [server/README.md](server/README.md).
+A personal planner with recurring tasks, a calendar and rich notes, all linked together. There are two apps:
+
+- **Android app** (`app/`): the full app, with alarms, reminders, widgets and backups.
+- **PC app** (`web/`): runs in any browser at your Worker's address, and can be installed as a desktop app from Chrome or Edge.
+
+Each keeps its own full copy and works offline. They sync both ways through your own Cloudflare Worker (`server/`). A user guide is in the shared "Planner — How it works" document.
 
 ## Build and install
 
@@ -36,7 +41,8 @@ Automatic backups run every hour or every day (configurable), or never. Each bac
 ## Project layout
 
 ```
-server/      optional Cloudflare Worker + Durable Object (cloud copy, change feed)
+server/      Cloudflare Worker + Durable Object: two-way sync, and hosts the PC app
+web/         PC app (React + TypeScript, built into web/dist)
 app/src/main/java/com/alex/planner/
   data/      Room entities, DAO, repository, settings
   domain/    recurrence engine, overdue/streak logic, quick-add parser, holidays
@@ -46,3 +52,17 @@ app/src/main/java/com/alex/planner/
   widget/    Glance home-screen widgets
   ui/        Compose screens (today, calendar, tasks, notes, graph, browse, settings)
 ```
+
+## PC app
+
+```bash
+cd web
+npm install
+npm install-scripts approve esbuild   # npm 11+ only
+npm run build      # outputs web/dist, which the Worker serves
+npm test           # domain tests (same cases as the Android tests)
+```
+
+To develop it, run `npm run dev` in `server/` (local Worker on :8787), then `npx vite` in `web/`, and open http://127.0.0.1:5173. The dev server forwards `/api` to the local Worker.
+
+To publish it, run `npm run build` in `web/`, then `npx wrangler deploy` in `server/`.
