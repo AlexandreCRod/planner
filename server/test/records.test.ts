@@ -37,7 +37,7 @@ test("token comparison", () => {
   assert.ok(!tokensMatch("", "abc"));
 });
 
-import { clientWins, parseSyncBody, syncDeletionGuard } from "../src/records.ts";
+import { clientWins, isPhone, parseSyncBody, syncDeletionGuard } from "../src/records.ts";
 
 test("sync body validation", () => {
   const ok = parseSyncBody({ since: 3, changes: [{ kind: "items", id: "7", data: { id: 7 } }, { kind: "links", id: "1:2", data: null }] });
@@ -57,6 +57,15 @@ test("conflict rules", () => {
   assert.equal(clientWins("items", { updatedAt: 1 }, null), true);
   // other kinds: the syncing client wins
   assert.equal(clientWins("reminders", { offsetMin: 5 }, { offsetMin: 10 }), true);
+  // phone against PC: the phone wins, whatever the times
+  assert.equal(clientWins("items", { updatedAt: 5 }, { updatedAt: 9 }, true, false), true);
+  assert.equal(clientWins("items", { updatedAt: 9 }, { updatedAt: 5 }, false, true), false);
+  assert.equal(clientWins("reminders", { offsetMin: 5 }, { offsetMin: 10 }, false, true), false);
+  // ...but an edit still beats a delete
+  assert.equal(clientWins("items", null, { updatedAt: 1 }, true, false), false);
+  assert.equal(isPhone("Google Pixel 6a"), true);
+  assert.equal(isPhone("PC browser"), false);
+  assert.equal(isPhone(null), false);
 });
 
 test("sync deletion guard", () => {

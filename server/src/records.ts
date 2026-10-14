@@ -120,15 +120,25 @@ export function parseSyncBody(input: unknown): { since: number; changes: Incomin
   return { since, changes };
 }
 
+/** The PC app identifies itself as "PC browser"; any other named device is the phone. */
+export function isPhone(device: string | null): boolean {
+  return device !== null && device !== "PC browser";
+}
+
 /**
  * Both sides changed the same record since the client last synced: who wins?
  * - An edit beats a delete (nothing a person typed is silently thrown away).
- * - Two edits of an item: the later `updatedAt` wins.
+ * - Two edits from different devices: the phone's version wins.
+ * - Two edits of an item from the same kind of device: the later `updatedAt` wins.
  * - Anything else: the client that is syncing now wins (it holds the most recent action).
  */
-export function clientWins(kind: Kind, incoming: PlannerRecord | null, existing: PlannerRecord | null): boolean {
+export function clientWins(
+  kind: Kind, incoming: PlannerRecord | null, existing: PlannerRecord | null,
+  incomingFromPhone = false, existingFromPhone = false,
+): boolean {
   if (incoming === null) return existing === null;
   if (existing === null) return true;
+  if (incomingFromPhone !== existingFromPhone) return incomingFromPhone;
   if (kind === "items") {
     const a = Number(incoming.updatedAt ?? 0);
     const b = Number(existing.updatedAt ?? 0);

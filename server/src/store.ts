@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   KINDS, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
-  canonical, clientWins, deletionGuard, keyOf, syncDeletionGuard,
+  canonical, clientWins, deletionGuard, isPhone, keyOf, syncDeletionGuard,
 } from "./records.ts";
 
 export interface Env {
@@ -59,6 +59,11 @@ export class PlannerStore extends DurableObject<Env> {
         gz BLOB NOT NULL
       );
     `);
+    // Which side wrote each record last, so the phone can win conflicts ([clientWins]).
+    const columns = this.sql.exec<{ name: string }>("PRAGMA table_info(records)").toArray();
+    if (!columns.some((c) => c.name === "phone")) {
+      this.sql.exec("ALTER TABLE records ADD COLUMN phone INTEGER NOT NULL DEFAULT 0");
+    }
   }
 
   private meta(key: string): string | null {
@@ -121,8 +126,8 @@ export class PlannerStore extends DurableObject<Env> {
           seq++;
           upserted++;
           this.sql.exec(
-            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted) VALUES (?, ?, ?, ?, 0)",
-            kind, id, data, seq,
+            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted, phone) VALUES (?, ?, ?, ?, 0, ?)",
+            kind, id, data, seq, isPhone(device) ? 1 : 0,
           );
         }
         for (const [id, prev] of existing) {
@@ -151,8 +156,8 @@ export class PlannerStore extends DurableObject<Env> {
   async sync(since: number, changes: IncomingChange[], force: boolean, device: string | null): Promise<SyncResult> {
     const live = (kind: Kind, id: string) =>
       this.sql
-        .exec<{ data: string | null; seq: number; deleted: number }>(
-          "SELECT data, seq, deleted FROM records WHERE kind = ? AND id = ?", kind, id,
+        .exec<{ data: string | null; seq: number; deleted: number; phone: number }>(
+          "SELECT data, seq, deleted, phone FROM records WHERE kind = ? AND id = ?", kind, id,
         )
         .toArray()[0];
 
@@ -165,6 +170,7 @@ export class PlannerStore extends DurableObject<Env> {
       if (problem) return { ok: false, reason: problem };
     }
 
+    const fromPhone = isPhone(device);
     const kept = new Set<string>(); // records where the client's version now stands
     let applied = 0;
     let conflicts = 0;
@@ -173,7 +179,7 @@ export class PlannerStore extends DurableObject<Env> {
       for (const c of changes) {
         const row = live(c.kind, c.id);
         const existing = row && row.deleted === 0 && row.data !== null ? (JSON.parse(row.data) as PlannerRecord) : null;
-        if (row && row.seq > since && !clientWins(c.kind, c.data, existing)) {
+        if (row && row.seq > since && !clientWins(c.kind, c.data, existing, fromPhone, row.phone === 1)) {
           conflicts++;
           continue; // the server's newer version goes back to the client below
         }
@@ -182,15 +188,15 @@ export class PlannerStore extends DurableObject<Env> {
           if (!existing) continue;
           seq++;
           applied++;
-          this.sql.exec("UPDATE records SET data = NULL, deleted = 1, seq = ? WHERE kind = ? AND id = ?", seq, c.kind, c.id);
+          this.sql.exec("UPDATE records SET data = NULL, deleted = 1, seq = ?, phone = ? WHERE kind = ? AND id = ?", seq, fromPhone ? 1 : 0, c.kind, c.id);
         } else {
           const data = canonical(c.data);
           if (existing && row!.data === data) continue;
           seq++;
           applied++;
           this.sql.exec(
-            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted) VALUES (?, ?, ?, ?, 0)",
-            c.kind, c.id, data, seq,
+            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted, phone) VALUES (?, ?, ?, ?, 0, ?)",
+            c.kind, c.id, data, seq, fromPhone ? 1 : 0,
           );
         }
       }

@@ -6,10 +6,10 @@ import assert from "node:assert/strict";
 const base = process.argv[2] ?? "http://127.0.0.1:8787";
 const token = process.argv[3] ?? "dev-token";
 
-async function call(method, path, { body, auth = token } = {}) {
+async function call(method, path, { body, auth = token, device = "e2e" } = {}) {
   const res = await fetch(base + path, {
     method,
-    headers: { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), "Content-Type": "application/json", "X-Device": "e2e" },
+    headers: { ...(auth ? { Authorization: `Bearer ${auth}` } : {}), "Content-Type": "application/json", "X-Device": device },
     body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
   const text = await res.text();
@@ -138,7 +138,9 @@ await step("two devices sync both ways", async () => {
   // Start empty, then the phone syncs its data for the first time.
   await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [] }) });
   const s0 = (await call("GET", "/api/status")).json.seq;
-  const phone = await call("POST", "/api/sync", { body: { since: s0, changes: [
+  const PHONE = { device: "Google Pixel 6a" };
+  const PC = { device: "PC browser" };
+  const phone = await call("POST", "/api/sync", { ...PHONE, body: { since: s0, changes: [
     { kind: "items", id: "1", data: item(1, "Stretch", { updatedAt: 10 }) },
     { kind: "items", id: "2", data: item(2, "Read", { updatedAt: 10 }) },
   ] } });
@@ -146,32 +148,38 @@ await step("two devices sync both ways", async () => {
   assert.deepEqual([phone.json.applied, phone.json.changes.length], [2, 0]);
 
   // The PC syncs from scratch: gets both items, and adds its own.
-  const pc = await call("POST", "/api/sync", { body: { since: 0, changes: [
+  const pc = await call("POST", "/api/sync", { ...PC, body: { since: 0, changes: [
     { kind: "items", id: "900", data: item(900, "From PC", { updatedAt: 20 }) },
   ] } });
   assert.deepEqual(pc.json.changes.filter((c) => c.kind === "items" && c.data).map((c) => c.data.title).sort(), ["Read", "Stretch"]);
 
-  // Both edit item 1 offline; the PC's edit is newer. The phone also deletes item 2.
-  const pcEdit = await call("POST", "/api/sync", { body: { since: pc.json.seq, changes: [
+  // Both edit item 1 offline; the PC's edit is newer but the phone's wins. The phone also deletes item 2.
+  const pcEdit = await call("POST", "/api/sync", { ...PC, body: { since: pc.json.seq, changes: [
     { kind: "items", id: "1", data: item(1, "Stretch 15 min", { updatedAt: 40 }) },
   ] } });
   assert.equal(pcEdit.json.applied, 1);
-  const phoneEdit = await call("POST", "/api/sync", { body: { since: phone.json.seq, changes: [
+  const phoneEdit = await call("POST", "/api/sync", { ...PHONE, body: { since: phone.json.seq, changes: [
     { kind: "items", id: "1", data: item(1, "Stretch 5 min", { updatedAt: 30 }) },
     { kind: "items", id: "2", data: null },
   ] } });
-  assert.equal(phoneEdit.json.conflicts, 1, "older phone edit loses");
+  assert.equal(phoneEdit.json.conflicts, 0, "the phone's edit wins over the PC's");
   const back = Object.fromEntries(phoneEdit.json.changes.filter((c) => c.kind === "items").map((c) => [c.id, c.data?.title]));
-  assert.equal(back["1"], "Stretch 15 min", "phone receives the PC's newer edit");
+  assert.ok(!("1" in back), "phone keeps its own edit");
   assert.equal(back["900"], "From PC", "phone receives the PC's new item");
   assert.ok(!("2" in back), "phone's delete was applied, not echoed");
 
-  // The PC catches up: sees the delete, nothing else.
-  const pcPull = await call("POST", "/api/sync", { body: { since: pcEdit.json.seq, changes: [] } });
-  assert.deepEqual(pcPull.json.changes.map((c) => [c.kind, c.id, c.data]), [["items", "2", null]]);
+  // The PC catches up: gets the phone's edit and the delete.
+  const pcPull = await call("POST", "/api/sync", { ...PC, body: { since: pcEdit.json.seq, changes: [] } });
+  assert.deepEqual(pcPull.json.changes.map((c) => [c.kind, c.id, c.data?.title ?? null]), [["items", "1", "Stretch 5 min"], ["items", "2", null]]);
+
+  // A later PC edit of the same item, made after it has seen the phone's, goes through normally.
+  const pcAgain = await call("POST", "/api/sync", { ...PC, body: { since: pcPull.json.seq, changes: [
+    { kind: "items", id: "1", data: item(1, "Stretch 10 min", { updatedAt: 50 }) },
+  ] } });
+  assert.deepEqual([pcAgain.json.applied, pcAgain.json.conflicts], [1, 0]);
   const final = await call("GET", "/api/snapshot");
-  assert.deepEqual(final.json.items.map((i) => i.title).sort(), ["From PC", "Stretch 15 min"]);
-  assert.equal(final.json.seq, pcPull.json.seq);
+  assert.deepEqual(final.json.items.map((i) => i.title).sort(), ["From PC", "Stretch 10 min"]);
+  assert.equal(final.json.seq, pcAgain.json.seq);
 });
 
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);

@@ -12,7 +12,7 @@ Browser ───────── GET / ────────────�
 - **Durable Object** (`src/store.ts`): one instance with its own SQLite database. Every record has a sequence number that rises on each change; deletions are kept as markers.
 - **Two-way sync** (`POST /api/sync`):
   1. A device sends `{since, changes}`: what changed on its side since the sequence number it last saw.
-  2. The server applies each change, unless another device changed the same record in the meantime and wins the conflict. Rules, in `src/records.ts`: an edit beats a delete, between two edits of an item the later one wins, and otherwise the syncing device wins.
+  2. The server applies each change, unless another device changed the same record in the meantime and wins the conflict. Rules, in `src/records.ts`: an edit beats a delete, between edits from the phone and the PC the phone wins, between two edits of an item from the same device the later one wins, and otherwise the syncing device wins.
   3. The reply carries everything the device is missing.
   4. The Durable Object handles one request at a time, so nothing can slip in between.
 - **Safety:** a sync that would delete everything, or more than half of 20+ items, is refused unless forced. One compressed full copy is kept per day for 14 days.
