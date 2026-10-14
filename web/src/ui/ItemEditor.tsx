@@ -151,7 +151,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
               <div className="row">Every <input type="number" min={1} max={99} className="input" style={{ width: 64 }} value={d.interval} onChange={(e) => set({ interval: Math.max(1, Number(e.target.value) || 1) })} />
                 {({ DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" } as Record<string, string>)[d.freq]}{d.interval > 1 ? "s" : ""}</div>
               {d.freq === "WEEKLY" && <div className="daydots">
-                {[1, 2, 3, 4, 5, 6, 7].map((w) => <button key={w} className={hasWeekDay(mask, w) ? "on" : ""} onClick={() => { const n = mask ^ dayBit(w); if (n) set({ weekDays: n }); }}>{"MTWTFSS"[w - 1]}</button>)}
+                {[1, 2, 3, 4, 5, 6, 7].map((w) => <button key={w} title={["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][w - 1]} className={hasWeekDay(mask, w) ? "on" : ""} onClick={() => { const n = mask ^ dayBit(w); if (n) set({ weekDays: n }); }}>{"MTWTFSS"[w - 1]}</button>)}
                 <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b0011111 })}>Weekdays</button>
                 <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b1100000 })}>Weekends</button>
               </div>}

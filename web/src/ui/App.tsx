@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { relativeDay, today } from "../domain/dates.ts";
+import { formatClock, relativeDay, today } from "../domain/dates.ts";
 import { testToken, setToken, startAutoSync, syncNow } from "../store/sync.ts";
 import { BrowseView } from "./BrowseView.tsx";
 import { CalendarView } from "./CalendarView.tsx";
@@ -46,7 +46,7 @@ export function App() {
         <div className="spacer" />
         <div className="sync-pill" title={sync.message}>
           <span className="dot" style={{ background: SYNC_COLORS[sync.state] }} />
-          {sync.state === "syncing" ? "Syncing…" : sync.state === "offline" ? "Offline" : sync.state === "idle" ? `Synced${sync.lastSyncAt ? " " + new Date(sync.lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : "Sync problem"}
+          {sync.state === "syncing" ? "Syncing…" : sync.state === "offline" ? "Offline" : sync.state === "idle" ? `Synced${sync.lastSyncAt ? " " + formatClock(sync.lastSyncAt) : ""}` : "Sync problem"}
         </div>
       </nav>
       <div className="main">

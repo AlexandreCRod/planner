@@ -83,3 +83,15 @@ test("ids match the Android app", () => {
 test("wiki links in Android editor HTML", () => {
   assert.deepEqual(wikiTitles("<p>see &lsqb;&lsqb;Stretch&rsqb;&rsqb; then&period;</p>"), ["Stretch"]);
 });
+
+test("time format follows the setting", async () => {
+  const { formatTime } = await import("../src/domain/dates.ts");
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null };
+  store.set("clockFormat", "24");
+  assert.equal(formatTime(15 * 60 + 30), "15:30");
+  store.set("clockFormat", "12");
+  assert.equal(formatTime(15 * 60 + 30), "3:30 PM");
+  assert.equal(formatTime(9 * 60), "9 AM");
+  delete (globalThis as { localStorage?: unknown }).localStorage;
+});

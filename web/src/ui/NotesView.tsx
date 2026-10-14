@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { formatDate, formatTime, ymd } from "../domain/dates.ts";
+import { formatDate, formatDateTime, formatTime, ymd } from "../domain/dates.ts";
 import { occurrencesIn } from "../domain/schedule.ts";
 import { preview, stripHtml } from "../domain/text.ts";
-import { type Item, argbOf, cssColor, newItem } from "../domain/types.ts";
-import { deleteIfEmpty, isEmptyNote, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../store/store.ts";
+import { type Item, type NoteImage, argbOf, cssColor, newItem } from "../domain/types.ts";
+import { importImage, useImageUrl } from "../store/images.ts";
+import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../store/store.ts";
 import { Icon, go, openItem } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor, type RichEditorHandle } from "./RichEditor.tsx";
@@ -70,17 +71,22 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
   const [title, setTitle] = useState(base.title);
   const [tags, setTags] = useState(() => (s.tagsByItem.get(base.id) ?? []).map((t) => t.name).join(" "));
   const [style, setStyle] = useState({ pinned: base.pinned, bgColor: base.bgColor, bgPattern: base.bgPattern, fontFamily: base.fontFamily, categoryId: base.categoryId });
+  const [place, setPlace] = useState({ location: base.location ?? "", lat: base.lat ?? null, lng: base.lng ?? null });
+  const [viewing, setViewing] = useState<NoteImage | null>(null);
+  const [locating, setLocating] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<"" | "style" | "templates" | "versions">("");
   const [initialHtml, setInitialHtml] = useState(base.content);
   const rich = useRef<RichEditorHandle>(null);
   const opened = useRef(base.content);
   const timer = useRef<number>();
-  const latest = useRef({ noteId, title, tags, style });
-  latest.current = { noteId, title, tags, style };
+  const latest = useRef({ noteId, title, tags, style, place });
+  latest.current = { noteId, title, tags, style, place };
   const deleted = useRef(false);
 
   const current = (): Item => ({
     ...base, id: latest.current.noteId, title: latest.current.title.trim(), content: rich.current?.html() ?? base.content, ...latest.current.style,
+    location: latest.current.place.location.trim(), lat: latest.current.place.lat, lng: latest.current.place.lng,
   });
   const tagList = () => latest.current.tags.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
 
@@ -92,7 +98,38 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
     return saved;
   };
   const scheduleSave = () => { clearTimeout(timer.current); timer.current = window.setTimeout(save, 1000); };
-  useEffect(() => { scheduleSave(); }, [title, tags, style]);
+  useEffect(() => { scheduleSave(); }, [title, tags, style, place]);
+
+  /** Attaches picture files; a new note is saved first, even if nothing is typed yet. */
+  const addPictures = async (files: Iterable<File>) => {
+    const pics = [...files].filter((f) => f.type.startsWith("image/"));
+    if (!pics.length) return;
+    let id = latest.current.noteId;
+    if (!id) {
+      id = saveItem(current(), { tags: tagList() });
+      setNoteId(id); latest.current.noteId = id; history.replaceState(null, "", `#/note/${id}`);
+    }
+    for (const f of pics) {
+      try { addImage(id, await importImage(f)); } catch (e) { alert(`Couldn't add ${f.name || "the picture"}: ${e instanceof Error ? e.message : e}`); }
+    }
+  };
+  const pastedPictures = (e: React.ClipboardEvent | React.DragEvent) => {
+    const files = "clipboardData" in e ? e.clipboardData.files : e.dataTransfer.files;
+    if (![...files].some((f) => f.type.startsWith("image/"))) return;
+    e.preventDefault(); e.stopPropagation();
+    void addPictures(files);
+  };
+  const locate = () => {
+    if (!navigator.geolocation) { alert("This browser can't tell where you are."); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setLocating(false); const { latitude: lat, longitude: lng } = pos.coords; setPlace({ location: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng }); },
+      () => { setLocating(false); alert("Couldn't get this computer's location (permission refused or not available)."); },
+      { timeout: 15000 },
+    );
+  };
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : place.location.trim())}`;
+  const images = s.images.get(noteId) ?? [];
 
   // On leaving: keep a version if the text changed; drop the note if it ended up empty.
   useEffect(() => () => {
@@ -117,10 +154,12 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
       <div className="toolbar" style={{ position: "relative", background: bg ?? undefined, borderColor: "rgb(128 128 128 / .2)" }}>
         <button className="icon-btn" title="Back" onClick={() => history.back()}><Icon name="left" /></button>
         <b className="grow">{isDaily ? formatDate(base.noteDay!) : ""}</b>
-        <button className={`icon-btn ${style.pinned ? "on" : ""}`} title="Pin" onClick={() => setStyle({ ...style, pinned: !style.pinned })}><Icon name="pin" size={18} /></button>
-        <button className={`btn small ${panel === "style" ? "primary" : ""}`} onClick={() => setPanel(panel === "style" ? "" : "style")}>Page style</button>
-        <button className={`btn small ${panel === "templates" ? "primary" : ""}`} onClick={() => setPanel(panel === "templates" ? "" : "templates")}>Templates</button>
-        <button className={`btn small ${panel === "versions" ? "primary" : ""}`} disabled={!noteId} onClick={() => setPanel(panel === "versions" ? "" : "versions")}>History</button>
+        <button className="icon-btn" title="Add picture (you can also paste or drop one into the note)" onClick={() => fileInput.current?.click()}><Icon name="image" size={18} /></button>
+        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addPictures(e.target.files); e.target.value = ""; }} />
+        <button className={`icon-btn ${style.pinned ? "on" : ""}`} title={style.pinned ? "Unpin" : "Pin"} onClick={() => setStyle({ ...style, pinned: !style.pinned })}><Icon name="pin" size={18} /></button>
+        <button className={`btn small ${panel === "style" ? "primary" : ""}`} title="Page colour, pattern, font and category" onClick={() => setPanel(panel === "style" ? "" : "style")}>Page style</button>
+        <button className={`btn small ${panel === "templates" ? "primary" : ""}`} title="Insert a ready-made layout" onClick={() => setPanel(panel === "templates" ? "" : "templates")}>Templates</button>
+        <button className={`btn small ${panel === "versions" ? "primary" : ""}`} title="Earlier versions of this note" disabled={!noteId} onClick={() => setPanel(panel === "versions" ? "" : "versions")}>History</button>
         <button className="icon-btn" title="Move to trash" disabled={!noteId} onClick={() => { if (confirm("Move this note to the trash?")) { deleted.current = true; trash(noteId); history.back(); } }}><Icon name="trash" size={18} /></button>
       </div>
       {panel === "style" && (
@@ -152,12 +191,13 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
           {versions.length === 0 && <div className="hint" style={{ padding: 8 }}>A version is saved each time you leave a note after changing it.</div>}
           {versions.map((v) => (
             <div key={v.id} className="task" onClick={() => { setInitialHtml(v.content); if (!isDaily) setTitle(v.title); setPanel(""); scheduleSave(); }}>
-              <div className="grow"><div>{new Date(v.savedAt).toLocaleString()}</div><div className="sub ellipsis">{preview(v.content, 100)}</div></div>
+              <div className="grow"><div>{formatDateTime(v.savedAt)}</div><div className="sub ellipsis">{preview(v.content, 100)}</div></div>
             </div>
           ))}
         </div>
       )}
-      <div className="editor-page" style={{ fontFamily: FONTS[style.fontFamily] }}>
+      <div className="editor-page" style={{ fontFamily: FONTS[style.fontFamily] }} onPasteCapture={pastedPictures} onDropCapture={pastedPictures}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}>
         {isDaily && dayOcc.length > 0 && (
           <div className="chips-row">
             {dayOcc.map((o) => <button key={o.item.id} className="chip" onClick={() => openItem(o.item, o.day)}>
@@ -166,12 +206,52 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
         )}
         {!isDaily && <input className="title-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ color: fg, fontFamily: "inherit" }} />}
         <input className="tags-input" placeholder="# tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
+        <div className="place-row">
+          <Icon name="place" size={16} />
+          {/* A typed place has no coordinates; only "use my location" sets them. */}
+          <input className="tags-input" placeholder="place" value={place.location} onChange={(e) => setPlace({ location: e.target.value, lat: null, lng: null })} />
+          <button className="icon-btn" title="Use this computer's location" disabled={locating} onClick={locate}><Icon name="myLocation" size={18} /></button>
+          {place.location.trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
+        </div>
+        {images.length > 0 && (
+          <div className="image-strip">
+            {images.map((img) => <Thumb key={img.id} img={img} onOpen={() => setViewing(img)} />)}
+          </div>
+        )}
         <div className="card" style={{ background: "transparent", border: 0 }}>
           <RichEditor ref={rich} initialHtml={initialHtml} onChange={scheduleSave} fontFamily={FONTS[style.fontFamily]} />
         </div>
         <div style={{ marginTop: 24, borderTop: "1px solid rgb(128 128 128 / .25)", color: "var(--text)" }}>
           <LinksSection id={noteId} s={s} ensureSaved={() => save()} />
         </div>
+      </div>
+      {viewing && <Lightbox img={viewing} onClose={() => setViewing(null)} onRemove={() => { if (confirm("Remove this picture from the note? It's removed on all your devices.")) { deleteImage(viewing); setViewing(null); } }} />}
+    </div>
+  );
+}
+
+function Thumb({ img, onOpen }: { img: NoteImage; onOpen: () => void }) {
+  const url = useImageUrl(img.hash);
+  return (
+    <button className="thumb" title="Open picture" onClick={onOpen}>
+      {url ? <img src={url} alt="" /> : <span className="hint">Downloading…</span>}
+    </button>
+  );
+}
+
+function Lightbox({ img, onClose, onRemove }: { img: NoteImage; onClose: () => void; onRemove: () => void }) {
+  const url = useImageUrl(img.hash);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="lightbox" onClick={onClose}>
+      {url && <img src={url} alt="" onClick={(e) => e.stopPropagation()} />}
+      <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+        <button className="btn" title="Remove this picture from the note" onClick={onRemove}><Icon name="trash" size={16} /> Remove</button>
+        <button className="btn" title="Close (Esc)" onClick={onClose}><Icon name="close" size={16} /> Close</button>
       </div>
     </div>
   );

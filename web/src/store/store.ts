@@ -8,11 +8,11 @@ import { parseDays } from "../domain/recurrence.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml, wikiTitles } from "../domain/text.ts";
 import {
-  type Category, type Completion, type Item, type ItemTag, type Link, type NoteVersion, type Reminder, type Tag,
+  type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
   TYPE_COLORS, cssColor, isRecurring, newItem,
 } from "../domain/types.ts";
 
-export const KINDS = ["categories", "tags", "items", "completions", "reminders", "itemTags", "links", "versions"] as const;
+export const KINDS = ["categories", "tags", "items", "completions", "reminders", "itemTags", "links", "versions", "images"] as const;
 export type Kind = (typeof KINDS)[number];
 type Rec = Record<string, unknown>;
 
@@ -89,6 +89,8 @@ export class Snapshot {
   readonly reminders = new Map<number, Reminder[]>();
   readonly tagsByItem = new Map<number, Tag[]>();
   readonly versions = new Map<number, NoteVersion[]>();
+  /** Pictures per note, oldest first. */
+  readonly images = new Map<number, NoteImage[]>();
 
   constructor() {
     for (const r of list<Reminder>("reminders")) this.reminders.set(r.itemId, [...(this.reminders.get(r.itemId) ?? []), r]);
@@ -99,6 +101,8 @@ export class Snapshot {
     }
     for (const v of list<NoteVersion>("versions")) this.versions.set(v.itemId, [...(this.versions.get(v.itemId) ?? []), v]);
     for (const vs of this.versions.values()) vs.sort((a, b) => b.savedAt - a.savedAt);
+    for (const i of list<NoteImage>("images")) this.images.set(i.itemId, [...(this.images.get(i.itemId) ?? []), i]);
+    for (const is of this.images.values()) is.sort((a, b) => a.createdAt - b.createdAt);
   }
 
   colorOf(item: Item): string {
@@ -195,6 +199,7 @@ function removeItemDeep(id: number) {
   for (const t of list<ItemTag>("itemTags")) if (t.itemId === id) del("itemTags", t);
   for (const l of list<Link>("links")) if (l.sourceId === id || l.targetId === id) del("links", l);
   for (const v of list<NoteVersion>("versions")) if (v.itemId === id) del("versions", v);
+  for (const i of list<NoteImage>("images")) if (i.itemId === id) del("images", i);
 }
 
 export function deleteForever(id: number) { removeItemDeep(id); changed(); }
@@ -264,10 +269,18 @@ export function deleteCategory(c: Category) {
 }
 
 export function isEmptyNote(i: Item) {
-  return (i.noteDay !== null || !i.title.trim()) && !stripHtml(i.content).trim();
+  return (i.noteDay !== null || !i.title.trim()) && !stripHtml(i.content).trim() && !(i.location ?? "").trim() &&
+    !list<NoteImage>("images").some((img) => img.itemId === i.id);
 }
 
-/** Notes with no title and no text are not kept. */
+export function addImage(itemId: number, img: { hash: string; mime: string; width: number; height: number }) {
+  put("images", { id: newId(), itemId, ...img, createdAt: Date.now() } satisfies NoteImage);
+  changed();
+}
+
+export function deleteImage(img: NoteImage) { del("images", img); changed(); }
+
+/** Notes with no title, text, place or pictures are not kept. */
 export function deleteIfEmpty(id: number) {
   const i = records.get(`items/${id}`) as Item | undefined;
   if (i && i.type === "NOTE" && isEmptyNote(i)) deleteForever(id);

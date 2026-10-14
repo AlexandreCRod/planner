@@ -12,3 +12,4 @@
 build-log.txt
 test-log.txt
 phone-backup-*/
+.claude/

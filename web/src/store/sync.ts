@@ -2,6 +2,7 @@
 // Compare local records with the last synced copy ("base"), send the differences, apply what
 // comes back. The server settles conflicts; deletes are sent as data: null.
 import * as db from "./db.ts";
+import { fetchMissing, uploadBlob } from "./images.ts";
 import { type Kind, allRecords, applyRemote } from "./store.ts";
 
 type Rec = Record<string, unknown>;
@@ -78,6 +79,10 @@ async function doSync(force: boolean): Promise<number> {
     outgoing.push({ kind: key.slice(0, slash) as Kind, id: key.slice(slash + 1), data: l ?? null });
   }
   try {
+    // A picture's file goes up before its record, so the phone can always fetch it.
+    for (const c of outgoing) {
+      if (c.kind === "images" && c.data) await uploadBlob(String(c.data.hash), String(c.data.mime ?? "image/jpeg"));
+    }
     const reply = await api(`/api/sync${force ? "?force=1" : ""}`, {
       method: "POST",
       body: JSON.stringify({ since: base.seq, changes: outgoing }),
@@ -93,6 +98,7 @@ async function doSync(force: boolean): Promise<number> {
     if (outgoing.length || reply.changes.length) parts.push(`sent ${outgoing.length}, received ${reply.changes.length}`);
     if (reply.conflicts) parts.push(`${reply.conflicts} conflict(s) settled`);
     setStatus({ state: "idle", lastSyncAt: now, message: parts.join(" · ") });
+    await fetchMissing([...allRecords().entries()].filter(([k]) => k.startsWith("images/")).map(([, r]) => String(r.hash)));
     return reply.changes.length;
   } catch (e) {
     if (e instanceof HttpError && e.code === 401) setStatus({ state: "signed-out", message: "Wrong password" });

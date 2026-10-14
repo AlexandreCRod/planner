@@ -10,6 +10,7 @@ export const KINDS = [
   "itemTags",
   "links",
   "versions",
+  "images",
 ] as const;
 
 export type Kind = (typeof KINDS)[number];
@@ -145,6 +146,16 @@ export function clientWins(
     return a >= b;
   }
   return true;
+}
+
+/** Image files are named by the SHA-256 of their bytes (64 lowercase hex characters). */
+export function isBlobHash(s: string): boolean {
+  return /^[0-9a-f]{64}$/.test(s);
+}
+
+export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Same protection as [deletionGuard], for a sync that deletes items. */

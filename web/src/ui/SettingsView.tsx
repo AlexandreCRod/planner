@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { type ClockFormat, clockFormat, formatDateTime } from "../domain/dates.ts";
 import { type AlertType, type Category, argbOf, cssColor } from "../domain/types.ts";
-import { deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../store/store.ts";
+import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../store/store.ts";
 import { type SyncStatus, getStatus, onStatus, resetLocal, signOut, syncNow } from "../store/sync.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
 import { typeLabel } from "./LinksSection.tsx";
@@ -27,6 +28,7 @@ export function SettingsView() {
   const [accent, setAccent] = useState(localStorage.getItem("accent") ?? "#3f51b5");
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [notify, setNotify] = useState(notificationsEnabled());
+  const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [editing, setEditing] = useState<Category | null>(null);
   useEffect(() => { localStorage.setItem("theme", theme); localStorage.setItem("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { localStorage.setItem("weekStartsMonday", String(monday)); }, [monday]);
@@ -41,6 +43,15 @@ export function SettingsView() {
 
       <div className="section">Calendar</div>
       <label className="row"><input type="checkbox" checked={monday} onChange={(e) => setMonday(e.target.checked)} /> Week starts on Monday</label>
+      <div className="row" style={{ marginTop: 10 }}>Time format
+        <div className="seg">{([["system", "This computer's setting"], ["24", "24-hour (15:30)"], ["12", "12-hour (3:30 PM)"]] as [ClockFormat, string][]).map(([v, l]) => (
+          <button key={v} className={clock === v ? "on" : ""} onClick={() => {
+            setClock(v);
+            localStorage.setItem("clockFormat", v);
+            changed(true); // redraw every view with the new format
+          }}>{l}</button>
+        ))}</div>
+      </div>
 
       <div className="section">Notifications on this computer</div>
       <label className="row">
@@ -52,7 +63,7 @@ export function SettingsView() {
       <div className="section">Sync</div>
       <div className="card" style={{ padding: 14 }}>
         <div>Server: <code>{location.origin}</code></div>
-        <div className="hint" style={{ margin: "6px 0" }}>Last sync: {sync.lastSyncAt ? new Date(sync.lastSyncAt).toLocaleString() : "never"} {sync.message && `· ${sync.message}`}</div>
+        <div className="hint" style={{ margin: "6px 0" }}>Last sync: {sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"} {sync.message && `· ${sync.message}`}</div>
         <div className="row">
           <button className="btn" onClick={() => void syncNow()}>Sync now</button>
           <button className="btn danger" onClick={async () => { if (confirm("Sign out and remove this computer's copy? Your data stays on the server and the phone.")) { await resetLocal(); signOut(); location.reload(); } }}>Sign out</button>

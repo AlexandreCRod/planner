@@ -1,5 +1,5 @@
-import { parseSnapshot, parseSyncBody, tokensMatch } from "./records.ts";
-import { type Env, PlannerStore } from "./store.ts";
+import { isBlobHash, parseSnapshot, parseSyncBody, sha256Hex, tokensMatch } from "./records.ts";
+import { type Env, MAX_BLOB_BYTES, PlannerStore } from "./store.ts";
 
 export { PlannerStore };
 
@@ -13,6 +13,8 @@ export { PlannerStore };
  *   GET  /api/changes?since=N        records changed after sequence N (for other clients)
  *   GET  /api/history                daily safety copies kept by the server
  *   GET  /api/history/:id            one of those copies
+ *   PUT  /api/blobs/:sha256          store an image file (body = its bytes)
+ *   GET  /api/blobs/:sha256          fetch an image file
  *
  * Every request needs "Authorization: Bearer <API_TOKEN>".
  */
@@ -75,6 +77,25 @@ export default {
       if (m && request.method === "GET") {
         const text = await store.historySnapshot(Number(m[1]));
         return text === null ? json({ error: "Not found" }, 404) : new Response(text, { headers: { "Content-Type": "application/json", ...cors() } });
+      }
+      const b = path.match(/^\/api\/blobs\/([^/]+)$/);
+      if (b && request.method === "PUT") {
+        if (!isBlobHash(b[1])) return json({ error: "Bad hash" }, 400);
+        const mime = request.headers.get("Content-Type") ?? "";
+        if (!mime.startsWith("image/")) return json({ error: "Only images can be stored" }, 415);
+        const data = await request.arrayBuffer();
+        if (data.byteLength === 0 || data.byteLength > MAX_BLOB_BYTES) return json({ error: "Image is empty or too large" }, 413);
+        if ((await sha256Hex(data)) !== b[1]) return json({ error: "Hash does not match the bytes" }, 400);
+        await store.putBlob(b[1], mime, data);
+        return json({ ok: true });
+      }
+      if (b && request.method === "GET") {
+        if (!isBlobHash(b[1])) return json({ error: "Bad hash" }, 400);
+        const blob = await store.getBlob(b[1]);
+        if (!blob) return json({ error: "Not found" }, 404);
+        return new Response(blob.data, {
+          headers: { "Content-Type": blob.mime, "Cache-Control": "private, max-age=31536000, immutable", ...cors() },
+        });
       }
       return json({ error: "Not found" }, 404);
     } catch (e) {

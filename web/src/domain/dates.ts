@@ -79,16 +79,39 @@ export function relativeDay(epoch: number): string {
   return formatDate(epoch);
 }
 
-export const use24h = (() => {
+const system24h = (() => {
   const s = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(2020, 0, 1, 15));
   return !/[AP]M/i.test(s);
 })();
 
+/** "system" (this computer's setting), "24" or "12"; chosen in Settings. */
+export type ClockFormat = "system" | "24" | "12";
+export function clockFormat(): ClockFormat {
+  try {
+    const v = globalThis.localStorage?.getItem("clockFormat");
+    return v === "24" || v === "12" ? v : "system";
+  } catch {
+    return "system";
+  }
+}
+export const use24h = () => (clockFormat() === "system" ? system24h : clockFormat() === "24");
+
 export function formatTime(min: number): string {
   const h = Math.floor(min / 60), mm = min % 60;
-  if (use24h) return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  if (use24h()) return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}${mm ? ":" + String(mm).padStart(2, "0") : ""} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** Clock time of a timestamp, in the chosen format. */
+export function formatClock(ts: number): string {
+  const d = new Date(ts);
+  return formatTime(d.getHours() * 60 + d.getMinutes());
+}
+
+/** Date and time of a timestamp, e.g. "15/10/2026, 09:30". */
+export function formatDateTime(ts: number): string {
+  return `${new Date(ts).toLocaleDateString()}, ${formatClock(ts)}`;
 }
 
 export function dueCountdown(dueTs: number, now = Date.now()): string {

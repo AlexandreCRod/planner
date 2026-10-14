@@ -14,6 +14,7 @@ Browser ───────── GET / ────────────�
   1. A device sends `{since, changes}`: what changed on its side since the sequence number it last saw.
   2. The server applies each change, unless another device changed the same record in the meantime and wins the conflict. Rules, in `src/records.ts`: an edit beats a delete, between edits from the phone and the PC the phone wins, between two edits of an item from the same device the later one wins, and otherwise the syncing device wins.
   3. The reply carries everything the device is missing.
+- Note pictures travel separately: `PUT /api/blobs/<sha256>` stores a file (images only, up to ~1.9 MB, the hash must match the bytes) and `GET /api/blobs/<sha256>` fetches it. The "images" records only carry the hash. A device uploads a picture before syncing its record, and downloads any it lacks after a sync. Files no note uses are removed after two days, during the daily safety copy.
   4. The Durable Object handles one request at a time, so nothing can slip in between.
 - **Safety:** a sync that would delete everything, or more than half of 20+ items, is refused unless forced. One compressed full copy is kept per day for 14 days.
 

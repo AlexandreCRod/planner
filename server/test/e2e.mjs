@@ -182,4 +182,27 @@ await step("two devices sync both ways", async () => {
   assert.equal(final.json.seq, pcAgain.json.seq);
 });
 
+await step("image files: stored by hash, synced as records", async () => {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5]);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const put = (h, body, type = "image/jpeg") =>
+    fetch(`${base}/api/blobs/${h}`, { method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": type }, body });
+  assert.equal((await put(hash, bytes)).status, 200);
+  assert.equal((await put(hash, bytes)).status, 200, "same file again is fine");
+  assert.equal((await put("0".repeat(64), bytes)).status, 400, "hash must match the bytes");
+  assert.equal((await put(hash, bytes, "text/plain")).status, 415);
+  assert.equal((await fetch(`${base}/api/blobs/${hash}`)).status, 401);
+  const got = await fetch(`${base}/api/blobs/${hash}`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(got.headers.get("Content-Type"), "image/jpeg");
+  assert.deepEqual(new Uint8Array(await got.arrayBuffer()), bytes);
+  assert.equal((await fetch(`${base}/api/blobs/${"a".repeat(64)}`, { headers: { Authorization: `Bearer ${token}` } })).status, 404);
+
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const image = { id: 77, itemId: 1, hash, mime: "image/jpeg", width: 4, height: 3, createdAt: 1 };
+  const r = await call("POST", "/api/sync", { body: { since: s0, changes: [{ kind: "images", id: "77", data: image }] } });
+  assert.equal(r.json.applied, 1);
+  assert.deepEqual((await call("GET", "/api/snapshot")).json.images, [image]);
+});
+
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);

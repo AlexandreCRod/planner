@@ -44,6 +44,11 @@ export interface Item {
   deletedAt: number | null;
   /** 0 none, 1 low, 2 medium, 3 high, 4 urgent. */
   priority: number;
+  /** Place name or address (missing on records made before places existed). */
+  location?: string;
+  /** Coordinates when the place came from the device's position. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }
@@ -53,6 +58,8 @@ export interface Tag { id: number; name: string }
 export interface ItemTag { itemId: number; tagId: number }
 export interface Link { sourceId: number; targetId: number; auto: boolean }
 export interface NoteVersion { id: number; itemId: number; title: string; content: string; savedAt: number }
+/** A picture on a note; the file is stored by its SHA-256 [hash] (see store/images.ts). */
+export interface NoteImage { id: number; itemId: number; hash: string; mime: string; width: number; height: number; createdAt: number }
 
 export const NO_DAY = 0;
 export const PRIORITIES = ["None", "Low", "Medium", "High", "Urgent"] as const;
@@ -66,6 +73,7 @@ export function newItem(fields: Partial<Item> & { type: ItemType }): Item {
     freq: "NONE", interval: 1, weekDays: 0, monthDays: "", months: 0, untilDay: null, excludedDays: "",
     overduePolicy: "SHOW_OVERDUE", parentId: null, noteDay: null, pinned: false,
     bgColor: null, bgPattern: 0, fontFamily: 0, createdAt: now, updatedAt: now, deletedAt: null, priority: 0,
+    location: "", lat: null, lng: null,
     ...fields,
   };
 }

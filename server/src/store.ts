@@ -29,6 +29,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_KEEP = 14;
 /** SQLite rows in Durable Objects are limited to 2 MB. */
 const MAX_HISTORY_BYTES = 1_900_000;
+/** Largest image file accepted (the apps shrink photos well below this). */
+export const MAX_BLOB_BYTES = 1_900_000;
+/** Image files no note refers to are removed after this long (an upload comes just before its record). */
+const BLOB_GRACE_MS = 2 * DAY_MS;
 
 /**
  * One instance holds the whole planner. Every record is a row tagged with a sequence number
@@ -57,6 +61,12 @@ export class PlannerStore extends DurableObject<Env> {
         created_at INTEGER NOT NULL,
         items INTEGER NOT NULL,
         gz BLOB NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS blobs (
+        hash TEXT PRIMARY KEY,
+        mime TEXT NOT NULL,
+        data BLOB NOT NULL,
+        created_at INTEGER NOT NULL
       );
     `);
     // Which side wrote each record last, so the phone can win conflicts ([clientWins]).
@@ -263,10 +273,33 @@ export class PlannerStore extends DurableObject<Env> {
     return new Response(stream).text();
   }
 
+  /** Stores an image file under its hash; storing the same file again is a no-op. */
+  async putBlob(hash: string, mime: string, data: ArrayBuffer): Promise<void> {
+    this.sql.exec(
+      "INSERT OR IGNORE INTO blobs (hash, mime, data, created_at) VALUES (?, ?, ?, ?)",
+      hash, mime, data, Date.now(),
+    );
+  }
+
+  async getBlob(hash: string): Promise<{ mime: string; data: ArrayBuffer } | null> {
+    const row = this.sql.exec<{ mime: string; data: ArrayBuffer }>("SELECT mime, data FROM blobs WHERE hash = ?", hash).toArray()[0];
+    return row ? { mime: row.mime, data: row.data } : null;
+  }
+
+  /** Removes image files that no note has referred to for a while. */
+  private gcBlobs() {
+    this.sql.exec(
+      `DELETE FROM blobs WHERE created_at < ? AND hash NOT IN (
+         SELECT json_extract(data, '$.hash') FROM records WHERE kind = 'images' AND deleted = 0)`,
+      Date.now() - BLOB_GRACE_MS,
+    );
+  }
+
   /** Keeps one compressed full copy per day (last 14), as a safety net against bad pushes. */
   private async maybeKeepHistory(snapshot: Snapshot) {
     const last = this.sql.exec<{ t: number | null }>("SELECT MAX(created_at) AS t FROM history").one().t ?? 0;
     if (Date.now() - last < DAY_MS) return;
+    this.gcBlobs();
     const stream = new Blob([JSON.stringify(snapshot)]).stream().pipeThrough(new CompressionStream("gzip"));
     const gz = await new Response(stream).arrayBuffer();
     if (gz.byteLength > MAX_HISTORY_BYTES) return;
