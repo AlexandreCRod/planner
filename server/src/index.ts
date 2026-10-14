@@ -1,4 +1,4 @@
-import { parseSnapshot, tokensMatch } from "./records.ts";
+import { parseSnapshot, parseSyncBody, tokensMatch } from "./records.ts";
 import { type Env, PlannerStore } from "./store.ts";
 
 export { PlannerStore };
@@ -6,6 +6,7 @@ export { PlannerStore };
 /**
  * HTTP API in front of the Durable Object.
  *
+ *   POST /api/sync[?force=1]         two-way sync: send local changes, receive the rest
  *   GET  /api/status                 counts, sequence number, last push time
  *   PUT  /api/snapshot[?force=1]     replace the stored data with the app's full snapshot
  *   GET  /api/snapshot               full data, same JSON shape as an app backup
@@ -26,8 +27,9 @@ export default {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!tokensMatch(token, env.API_TOKEN)) return json({ error: "Unauthorized" }, 401);
 
-    // Single user: everything lives in one Durable Object instance.
-    const store = env.PLANNER.get(env.PLANNER.idFromName("default"));
+    // Single user: everything lives in one Durable Object instance. "v2" started with two-way
+    // sync; the first instance ("default") still holds the old one-way mirror.
+    const store = env.PLANNER.get(env.PLANNER.idFromName("v2"));
     const path = url.pathname.replace(/\/+$/, "");
 
     try {
@@ -47,6 +49,18 @@ export default {
         const snapshot = parseSnapshot(body);
         if (typeof snapshot === "string") return json({ error: snapshot }, 400);
         const result = await store.push(snapshot, url.searchParams.get("force") === "1", request.headers.get("X-Device"));
+        return result.ok ? json(result) : json({ error: result.reason }, 409);
+      }
+      if (path === "/api/sync" && request.method === "POST") {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ error: "Body is not valid JSON" }, 400);
+        }
+        const parsed = parseSyncBody(body);
+        if (typeof parsed === "string") return json({ error: parsed }, 400);
+        const result = await store.sync(parsed.since, parsed.changes, url.searchParams.get("force") === "1", request.headers.get("X-Device"));
         return result.ok ? json(result) : json({ error: result.reason }, 409);
       }
       if (path === "/api/changes" && request.method === "GET") {
@@ -72,7 +86,7 @@ export default {
 function cors(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Device",
   };
 }

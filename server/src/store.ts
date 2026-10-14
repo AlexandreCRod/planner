@@ -1,5 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
-import { KINDS, type Kind, type PlannerRecord, type Snapshot, canonical, deletionGuard, keyOf } from "./records.ts";
+import {
+  KINDS, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
+  canonical, clientWins, deletionGuard, keyOf, syncDeletionGuard,
+} from "./records.ts";
 
 export interface Env {
   PLANNER: DurableObjectNamespace<PlannerStore>;
@@ -8,6 +11,10 @@ export interface Env {
 
 export type PushResult =
   | { ok: true; seq: number; upserted: number; deleted: number }
+  | { ok: false; reason: string };
+
+export type SyncResult =
+  | { ok: true; seq: number; applied: number; conflicts: number; changes: Change[] }
   | { ok: false; reason: string };
 
 export interface Change {
@@ -134,9 +141,81 @@ export class PlannerStore extends DurableObject<Env> {
     return { ok: true, seq: this.seq(), upserted, deleted };
   }
 
+  /**
+   * Two-way sync in one round trip. The client sends what changed on its side since it last saw
+   * sequence [since]; the server applies each change unless the same record was changed by another
+   * device in the meantime and loses the conflict rules ([clientWins]). The reply holds every record
+   * changed since [since] that the client doesn't already have, including server versions that won.
+   * Durable Objects handle one request at a time, so nothing can slip in between read and write.
+   */
+  async sync(since: number, changes: IncomingChange[], force: boolean, device: string | null): Promise<SyncResult> {
+    const live = (kind: Kind, id: string) =>
+      this.sql
+        .exec<{ data: string | null; seq: number; deleted: number }>(
+          "SELECT data, seq, deleted FROM records WHERE kind = ? AND id = ?", kind, id,
+        )
+        .toArray()[0];
+
+    if (!force) {
+      const storedItems = this.sql
+        .exec<{ n: number }>("SELECT COUNT(*) AS n FROM records WHERE kind = 'items' AND deleted = 0")
+        .one().n;
+      const deletedItems = changes.filter((c) => c.kind === "items" && c.data === null && live("items", c.id)?.deleted === 0).length;
+      const problem = syncDeletionGuard(storedItems, deletedItems);
+      if (problem) return { ok: false, reason: problem };
+    }
+
+    const kept = new Set<string>(); // records where the client's version now stands
+    let applied = 0;
+    let conflicts = 0;
+    this.ctx.storage.transactionSync(() => {
+      let seq = this.seq();
+      for (const c of changes) {
+        const row = live(c.kind, c.id);
+        const existing = row && row.deleted === 0 && row.data !== null ? (JSON.parse(row.data) as PlannerRecord) : null;
+        if (row && row.seq > since && !clientWins(c.kind, c.data, existing)) {
+          conflicts++;
+          continue; // the server's newer version goes back to the client below
+        }
+        kept.add(`${c.kind}\u0000${c.id}`);
+        if (c.data === null) {
+          if (!existing) continue;
+          seq++;
+          applied++;
+          this.sql.exec("UPDATE records SET data = NULL, deleted = 1, seq = ? WHERE kind = ? AND id = ?", seq, c.kind, c.id);
+        } else {
+          const data = canonical(c.data);
+          if (existing && row!.data === data) continue;
+          seq++;
+          applied++;
+          this.sql.exec(
+            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted) VALUES (?, ?, ?, ?, 0)",
+            c.kind, c.id, data, seq,
+          );
+        }
+      }
+      this.setMeta("seq", seq);
+      if (applied > 0) {
+        this.setMeta("lastPushAt", Date.now());
+        if (device) this.setMeta("lastDevice", device);
+      }
+    });
+
+    const missing = this.sql
+      .exec<{ kind: Kind; id: string; data: string | null; seq: number }>(
+        "SELECT kind, id, data, seq FROM records WHERE seq > ? ORDER BY seq", since,
+      )
+      .toArray()
+      .filter((r) => !kept.has(`${r.kind}\u0000${r.id}`))
+      .map((r) => ({ kind: r.kind, id: r.id, seq: r.seq, data: r.data === null ? null : (JSON.parse(r.data) as PlannerRecord) }));
+
+    if (applied > 0) await this.maybeKeepHistory(await this.snapshot());
+    return { ok: true, seq: this.seq(), applied, conflicts, changes: missing };
+  }
+
   /** The current data in the same shape the Android app uses for backups. */
   async snapshot(): Promise<Snapshot> {
-    const out = { version: 1, createdAt: Date.now() } as Snapshot;
+    const out = { version: 1, createdAt: Date.now(), seq: this.seq() } as Snapshot & { seq: number };
     for (const kind of KINDS) out[kind] = [];
     for (const row of this.sql
       .exec<{ kind: Kind; data: string }>("SELECT kind, data FROM records WHERE deleted = 0 ORDER BY kind, seq")

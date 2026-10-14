@@ -36,3 +36,32 @@ test("token comparison", () => {
   assert.ok(!tokensMatch("abc", "abcd"));
   assert.ok(!tokensMatch("", "abc"));
 });
+
+import { clientWins, parseSyncBody, syncDeletionGuard } from "../src/records.ts";
+
+test("sync body validation", () => {
+  const ok = parseSyncBody({ since: 3, changes: [{ kind: "items", id: "7", data: { id: 7 } }, { kind: "links", id: "1:2", data: null }] });
+  assert.ok(typeof ok !== "string");
+  assert.equal(ok.changes.length, 2);
+  assert.equal(typeof parseSyncBody({ since: -1, changes: [] }), "string");
+  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "nope", id: "1", data: null }] }), "string");
+  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "items", id: "8", data: { id: 7 } }] }), "string");
+});
+
+test("conflict rules", () => {
+  // two edits of an item: later updatedAt wins
+  assert.equal(clientWins("items", { updatedAt: 5 }, { updatedAt: 9 }), false);
+  assert.equal(clientWins("items", { updatedAt: 9 }, { updatedAt: 5 }), true);
+  // an edit beats a delete, in both directions
+  assert.equal(clientWins("items", null, { updatedAt: 1 }), false);
+  assert.equal(clientWins("items", { updatedAt: 1 }, null), true);
+  // other kinds: the syncing client wins
+  assert.equal(clientWins("reminders", { offsetMin: 5 }, { offsetMin: 10 }), true);
+});
+
+test("sync deletion guard", () => {
+  assert.equal(syncDeletionGuard(30, 0), null);
+  assert.ok(syncDeletionGuard(30, 20));
+  assert.ok(syncDeletionGuard(3, 3));
+  assert.equal(syncDeletionGuard(30, 5), null);
+});

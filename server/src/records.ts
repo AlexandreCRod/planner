@@ -92,3 +92,53 @@ export function tokensMatch(a: string, b: string): boolean {
   for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
   return diff === 0;
 }
+
+/** One record change sent by a client: `data: null` means the client deleted it. */
+export interface IncomingChange {
+  kind: Kind;
+  id: string;
+  data: PlannerRecord | null;
+}
+
+/** Validates the body of POST /api/sync; returns an error message when it's malformed. */
+export function parseSyncBody(input: unknown): { since: number; changes: IncomingChange[] } | string {
+  if (input === null || typeof input !== "object") return "Body must be a JSON object";
+  const obj = input as Record<string, unknown>;
+  const since = obj.since;
+  if (typeof since !== "number" || !Number.isInteger(since) || since < 0) return '"since" must be a non-negative integer';
+  if (!Array.isArray(obj.changes)) return '"changes" must be an array';
+  const changes: IncomingChange[] = [];
+  for (const c of obj.changes as unknown[]) {
+    if (c === null || typeof c !== "object") return "Each change must be an object";
+    const { kind, id, data } = c as Record<string, unknown>;
+    if (!KINDS.includes(kind as Kind)) return `Unknown kind "${String(kind)}"`;
+    if (typeof id !== "string" || id.length === 0) return "Each change needs a string id";
+    if (data !== null && (typeof data !== "object" || Array.isArray(data))) return "data must be an object or null";
+    if (data !== null && keyOf(kind as Kind, data as PlannerRecord) !== id) return `id "${id}" does not match its ${String(kind)} record`;
+    changes.push({ kind: kind as Kind, id, data: data as PlannerRecord | null });
+  }
+  return { since, changes };
+}
+
+/**
+ * Both sides changed the same record since the client last synced: who wins?
+ * - An edit beats a delete (nothing a person typed is silently thrown away).
+ * - Two edits of an item: the later `updatedAt` wins.
+ * - Anything else: the client that is syncing now wins (it holds the most recent action).
+ */
+export function clientWins(kind: Kind, incoming: PlannerRecord | null, existing: PlannerRecord | null): boolean {
+  if (incoming === null) return existing === null;
+  if (existing === null) return true;
+  if (kind === "items") {
+    const a = Number(incoming.updatedAt ?? 0);
+    const b = Number(existing.updatedAt ?? 0);
+    return a >= b;
+  }
+  return true;
+}
+
+/** Same protection as [deletionGuard], for a sync that deletes items. */
+export function syncDeletionGuard(storedItems: number, deletedItems: number): string | null {
+  if (deletedItems === 0) return null;
+  return deletionGuard(storedItems, storedItems - deletedItems);
+}

@@ -134,4 +134,44 @@ await step("rejects malformed bodies", async () => {
   assert.equal((await call("GET", "/api/nope")).status, 404);
 });
 
+await step("two devices sync both ways", async () => {
+  // Start empty, then the phone syncs its data for the first time.
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [] }) });
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const phone = await call("POST", "/api/sync", { body: { since: s0, changes: [
+    { kind: "items", id: "1", data: item(1, "Stretch", { updatedAt: 10 }) },
+    { kind: "items", id: "2", data: item(2, "Read", { updatedAt: 10 }) },
+  ] } });
+  assert.equal(phone.status, 200, JSON.stringify(phone.json));
+  assert.deepEqual([phone.json.applied, phone.json.changes.length], [2, 0]);
+
+  // The PC syncs from scratch: gets both items, and adds its own.
+  const pc = await call("POST", "/api/sync", { body: { since: 0, changes: [
+    { kind: "items", id: "900", data: item(900, "From PC", { updatedAt: 20 }) },
+  ] } });
+  assert.deepEqual(pc.json.changes.filter((c) => c.kind === "items" && c.data).map((c) => c.data.title).sort(), ["Read", "Stretch"]);
+
+  // Both edit item 1 offline; the PC's edit is newer. The phone also deletes item 2.
+  const pcEdit = await call("POST", "/api/sync", { body: { since: pc.json.seq, changes: [
+    { kind: "items", id: "1", data: item(1, "Stretch 15 min", { updatedAt: 40 }) },
+  ] } });
+  assert.equal(pcEdit.json.applied, 1);
+  const phoneEdit = await call("POST", "/api/sync", { body: { since: phone.json.seq, changes: [
+    { kind: "items", id: "1", data: item(1, "Stretch 5 min", { updatedAt: 30 }) },
+    { kind: "items", id: "2", data: null },
+  ] } });
+  assert.equal(phoneEdit.json.conflicts, 1, "older phone edit loses");
+  const back = Object.fromEntries(phoneEdit.json.changes.filter((c) => c.kind === "items").map((c) => [c.id, c.data?.title]));
+  assert.equal(back["1"], "Stretch 15 min", "phone receives the PC's newer edit");
+  assert.equal(back["900"], "From PC", "phone receives the PC's new item");
+  assert.ok(!("2" in back), "phone's delete was applied, not echoed");
+
+  // The PC catches up: sees the delete, nothing else.
+  const pcPull = await call("POST", "/api/sync", { body: { since: pcEdit.json.seq, changes: [] } });
+  assert.deepEqual(pcPull.json.changes.map((c) => [c.kind, c.id, c.data]), [["items", "2", null]]);
+  const final = await call("GET", "/api/snapshot");
+  assert.deepEqual(final.json.items.map((i) => i.title).sort(), ["From PC", "Stretch 15 min"]);
+  assert.equal(final.json.seq, pcPull.json.seq);
+});
+
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);
