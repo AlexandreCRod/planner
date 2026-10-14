@@ -106,7 +106,9 @@ export function currentEntry(item: Item, done: CompletionIndex, today: number): 
   if (entries.length) return entries[0];
   if (item.startDay === null) return { item, day: null, status: "DONE", missed: 0 };
   const next = nextOnOrAfter(item, today + 1);
-  return next !== null ? { item, day: next, status: "UPCOMING", missed: 0 } : { item, day: item.startDay, status: "DONE", missed: 0 };
+  if (next === null) return { item, day: item.startDay, status: "DONE", missed: 0 };
+  // A future occurrence can be ticked early: show it as done so it can also be unticked.
+  return { item, day: next, status: done.isDone(item.id, next) ? "DONE" : "UPCOMING", missed: 0 };
 }
 
 export interface Streak { current: number; best: number; rate30: number; total: number }

@@ -4,7 +4,7 @@ import { epochOf, weekday } from "../src/domain/dates.ts";
 import { tagIdFor, newId } from "../src/domain/ids.ts";
 import { parseQuickAdd } from "../src/domain/quickadd.ts";
 import { LAST_DAY_OF_MONTH, dayBit, occurrences, occursOn } from "../src/domain/recurrence.ts";
-import { CompletionIndex, entriesFor, streak } from "../src/domain/schedule.ts";
+import { CompletionIndex, currentEntry, entriesFor, streak } from "../src/domain/schedule.ts";
 import { newItem } from "../src/domain/types.ts";
 import { wikiTitles } from "../src/domain/text.ts";
 
@@ -48,6 +48,12 @@ test("overdue policies and streaks", () => {
   const done = new CompletionIndex([0, 2, 3, 4].map((i) => ({ itemId: 1, day: mon + i, completedAt: 0 })));
   const s = streak(task(mon, { freq: "DAILY" }), done, mon + 5);
   assert.deepEqual([s.current, s.best], [3, 3]);
+});
+
+test("ticking a future task shows it done", () => {
+  const oneOff = task(mon + 1);
+  assert.equal(currentEntry(oneOff, new CompletionIndex([]), mon).status, "UPCOMING");
+  assert.equal(currentEntry(oneOff, new CompletionIndex([{ itemId: 1, day: mon + 1, completedAt: 0 }]), mon).status, "DONE");
 });
 
 test("quick add with reminder, alarm and priority", () => {
