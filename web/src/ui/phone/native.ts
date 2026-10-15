@@ -4,6 +4,8 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Keyboard } from "@capacitor/keyboard";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../../platform.ts";
+import { startPressFeedback } from "./press.ts";
+import { startPhoneTheme } from "./theme.ts";
 
 // ---------- Haptics (no-ops in a browser) ----------
 export const hapticLift = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {}); };
@@ -31,10 +33,12 @@ export function useKeyboardHeight(): number {
 }
 
 let started = false;
-/** Starts the keyboard and back-button plumbing (once). */
+/** Starts the keyboard and back-button plumbing, press feedback and the accent palette (once). */
 export function startPhonePlumbing() {
   if (started) return;
   started = true;
+  startPhoneTheme();
+  startPressFeedback();
   const vv = window.visualViewport;
   if (vv) {
     const measure = () => { viewportCover = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); update(); };

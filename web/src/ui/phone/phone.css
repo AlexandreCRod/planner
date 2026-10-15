@@ -6,61 +6,83 @@ html.phone {
   --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --bar-h: 64px;
-  --p-primary: var(--accent);
+  /* Material 3 roles, exactly as Theme.kt's lightColorScheme (accent palettes set by theme.ts). */
+  --p-primary: var(--p-acc-light, #1a73e8);
   --p-on-primary: #ffffff;
-  --p-primary-container: #d3e3fd;
+  --p-primary-container: var(--p-acc-light-container, #d3e3fd);
   --p-on-primary-container: #0f1530;
-  --p-sec-container: color-mix(in srgb, #d3e3fd 70%, #fef7ff);
+  --p-sec-container: rgb(var(--p-acc-light-container-rgb, 211 227 253) / 0.7);
   --p-on-sec-container: #1a1c2a;
+  --p-tertiary: var(--p-tert-light, #5f6368);
   --bg: #fef7ff;
   --surface: #fef7ff;
   --surface-2: #ece6f0;
+  --p-sc-lowest: #ffffff;
   --p-sc-low: #f7f2fa;
   --p-sc: #f3edf7;
   --p-sc-high: #ece6f0;
+  --p-sc-highest: #e6e0e9;
   --text: #1d1b20;
   --muted: #49454f;
   --p-outline: #79747e;
   --line: #cac4d0;
   --danger: #b3261e;
   --p-ripple: rgb(29 27 32 / 0.1);
+  /* The checkbox tick, in onPrimary. */
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='white' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
   font-family: Roboto, "Google Sans", system-ui, sans-serif;
   font-size: 14px;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
 }
+/* Dark: Theme.kt's darkColorScheme (not pure black). */
 @media (prefers-color-scheme: dark) {
   html.phone:not([data-theme="light"]) {
-    --p-primary: color-mix(in srgb, var(--accent) 38%, #ffffff); --p-on-primary: #0e1120; --p-primary-container: #0842a0; --p-on-primary-container: #edefff;
-    --p-sec-container: color-mix(in srgb, #0842a0 60%, #141318); --p-on-sec-container: #e6e6f0;
-    --bg: #141318; --surface: #141318; --surface-2: #2b2a2f; --p-sc-low: #1c1b20; --p-sc: #201f25; --p-sc-high: #2b2a2f;
-    --text: #e6e0e9; --muted: #cac4d0; --p-outline: #938f99; --line: #49454f; --danger: #f2b8b5; --p-ripple: rgb(230 224 233 / 0.12);
+  --p-primary: var(--p-acc-dark, #a8c7fa); --p-on-primary: #0e1120; --p-primary-container: var(--p-acc-dark-container, #0842a0); --p-on-primary-container: #edefff;
+  --p-sec-container: rgb(var(--p-acc-dark-container-rgb, 8 66 160) / 0.6); --p-on-sec-container: #e6e6f0; --p-tertiary: var(--p-tert-dark, #b86368);
+  --bg: #141318; --surface: #141318; --surface-2: #2b2a2f; --p-sc-lowest: #0f0e13; --p-sc-low: #1c1b20; --p-sc: #201f25; --p-sc-high: #2b2a2f; --p-sc-highest: #36343a;
+  --text: #e6e0e9; --muted: #cac4d0; --p-outline: #938f99; --line: #49454f; --danger: #f2b8b5; --p-ripple: rgb(230 224 233 / 0.1);
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%230e1120' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
   }
 }
 html.phone[data-theme="dark"] {
-  --p-primary: color-mix(in srgb, var(--accent) 38%, #ffffff); --p-on-primary: #0e1120; --p-primary-container: #0842a0; --p-on-primary-container: #edefff;
-  --p-sec-container: color-mix(in srgb, #0842a0 60%, #141318); --p-on-sec-container: #e6e6f0;
-  --bg: #141318; --surface: #141318; --surface-2: #2b2a2f; --p-sc-low: #1c1b20; --p-sc: #201f25; --p-sc-high: #2b2a2f;
-  --text: #e6e0e9; --muted: #cac4d0; --p-outline: #938f99; --line: #49454f; --danger: #f2b8b5; --p-ripple: rgb(230 224 233 / 0.12);
+  --p-primary: var(--p-acc-dark, #a8c7fa); --p-on-primary: #0e1120; --p-primary-container: var(--p-acc-dark-container, #0842a0); --p-on-primary-container: #edefff;
+  --p-sec-container: rgb(var(--p-acc-dark-container-rgb, 8 66 160) / 0.6); --p-on-sec-container: #e6e6f0; --p-tertiary: var(--p-tert-dark, #b86368);
+  --bg: #141318; --surface: #141318; --surface-2: #2b2a2f; --p-sc-lowest: #0f0e13; --p-sc-low: #1c1b20; --p-sc: #201f25; --p-sc-high: #2b2a2f; --p-sc-highest: #36343a;
+  --text: #e6e0e9; --muted: #cac4d0; --p-outline: #938f99; --line: #49454f; --danger: #f2b8b5; --p-ripple: rgb(230 224 233 / 0.1);
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%230e1120' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
 }
 html.phone, html.phone body { overflow: hidden; overscroll-behavior: none; }
 html.phone body { background: var(--bg); }
 html.phone button { -webkit-tap-highlight-color: transparent; }
+/* Press feedback: press.ts adds a ripple under the finger (Material: the content colour at 10%,
+   spreading from the touch point, fading out when let go). No CSS :active, which Chrome only applies
+   after a delay and drops at once on a quick tap. */
+html.phone [data-ripple-host] { position: relative; }
+.phone .p-ripple { position: absolute !important; inset: 0; width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; overflow: hidden; border-radius: inherit; pointer-events: none; transition: opacity .15s linear; }
+.phone .p-ripple::after {
+  content: ""; position: absolute; left: var(--x); top: var(--y); width: var(--d); height: var(--d);
+  margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2); border-radius: 50%; background: currentColor; opacity: .1;
+  animation: p-ripple .225s cubic-bezier(.2, 0, 0, 1);
+}
+@keyframes p-ripple { from { transform: scale(.2); } }
+.phone .p-ripple.out { opacity: 0; }
 /* Touch screens: no sticky hover colours. */
 html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.phone .icon-btn:hover, html.phone .nav:hover { background: none; }
 
 /* ---------- Shell: pager, bottom bar, + button ---------- */
 .phone .p-root { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
 .phone .p-pager { position: absolute; top: 0; left: 0; right: 0; bottom: calc(var(--bar-h) + var(--sab)); overflow: hidden; }
-.phone .p-track { position: absolute; inset: 0; will-change: transform; }
-.phone .p-page { position: absolute; inset: 0; overflow: hidden; contain: layout paint style; background: var(--bg); }
+/* No will-change: the pager is only its own layer while it moves (see slide() in PhoneApp). */
+.phone .p-track { position: absolute; inset: 0; }
+.phone .p-page { position: absolute; top: 0; bottom: 0; width: 100%; overflow: hidden; contain: layout paint style; background: var(--bg); }
 
 .phone .p-bar {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; display: flex;
   height: calc(var(--bar-h) + var(--sab)); padding-bottom: var(--sab);
   background: var(--p-sc); touch-action: none; user-select: none; -webkit-user-select: none;
 }
-.phone .p-pill-track { position: absolute; left: 0; top: 0; height: var(--bar-h); pointer-events: none; will-change: transform; }
+.phone .p-pill-track { position: absolute; left: 0; top: 0; height: var(--bar-h); pointer-events: none; }
 .phone .p-pill { position: absolute; left: 50%; margin-left: -28px; top: 7px; width: 56px; height: 30px; border-radius: 15px; background: var(--p-sec-container); }
 .phone .p-tab { flex: 1; min-width: 0; height: var(--bar-h); position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); }
 .phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s; }
@@ -73,9 +95,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
   width: 56px; height: 56px; border-radius: 16px; border: 0; display: grid; place-items: center;
   background: var(--p-primary-container); color: var(--p-on-primary-container);
   box-shadow: 0 3px 5px -1px rgb(0 0 0 / .2), 0 6px 10px 0 rgb(0 0 0 / .14), 0 1px 18px 0 rgb(0 0 0 / .12);
-  transition: transform .15s;
 }
-.phone .p-fab:active { transform: scale(.94); }
 
 /* Full-screen pages over the pager (an item, a note, search, settings) */
 .phone .p-overlay { position: absolute; inset: 0; z-index: 30; background: var(--bg); animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
@@ -89,51 +109,68 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-appbar h1.pad { padding-left: 12px; }
 .phone .p-appbar.today { height: calc(76px + var(--sat)); }
 .phone .p-icon { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); padding: 0; }
-.phone .p-icon:active { background: var(--p-ripple); }
-.phone .p-dayswitch { position: relative; display: flex; flex-direction: column; padding: 0 6px; border-radius: 8px; min-width: 0; }
-.phone .p-dayswitch:active { background: var(--p-ripple); }
-.phone .p-dayswitch .big { font-size: 22px; line-height: 28px; font-weight: 400; color: var(--text); white-space: nowrap; }
+/* Today's bar (HomeScreen.kt: TopAppBar with expandedHeight 76 dp, DaySwitcher as its title, which
+   M3 insets 16 dp; the arrows sit in the title slot, so they take the title's colour, onSurface). */
+.phone .p-dayrow { display: flex; align-items: center; min-width: 0; margin-left: 12px; }
+.phone .p-icon.title-icon { color: var(--text); }
+.phone .p-dayswitch { position: relative; display: flex; flex-direction: column; padding: 0 6px; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone .p-dayswitch .big { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; color: var(--text); white-space: nowrap; }
 .phone .p-dayswitch .small { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
 .phone .p-dayswitch input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 .phone .p-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 16px 104px; }
 .phone .p-content.flush { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .phone .p-content.note-host { overflow-y: auto; display: block; }
 
-/* ---------- Today (TodayScreen.kt) ---------- */
+/* ---------- Today (TodayScreen.kt, components/Rows.kt) ----------
+   Material 3 type scale as used there: titleSmall 14/20 w500 .1, bodyLarge 16/24 .5, bodyMedium 14/20 .25,
+   bodySmall 12/16 .4, labelLarge 14/20 w500 .1, labelMedium 12/16 w500 .5, labelSmall 11/16 w500 .5. */
 .phone .today-list { padding: 0; touch-action: pan-y; }
-.phone .today-list .today-page { will-change: transform; }
-.phone .today-list .progress-row { margin: 0 !important; padding: 2px 16px 0; gap: 10px; }
-.phone .today-list .progress { height: 4px !important; border-radius: 2px !important; background: var(--p-sec-container) !important; }
-.phone .today-list .progress-row .hint { font-size: 12px; line-height: 16px; }
-.phone .today-list .section { margin: 0; padding: 24px 16px 4px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary); }
-.phone .today-list .hint.empty, .phone .today-list .hint.anytime { padding: 6px 16px; margin: 0 !important; font-size: 14px; line-height: 20px; }
-.phone .today-list .hint.anytime { font-size: 12px; }
+.phone .p-progress-row { display: flex; align-items: center; gap: 10px; padding: 4px 16px 0; }
+.phone .p-progress { flex: 1; min-width: 0; display: flex; height: 4px; }
+.phone .p-progress .active { flex: none; height: 4px; border-radius: 2px; background: var(--p-primary); }
+.phone .p-progress .track { position: relative; flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: var(--p-sec-container); }
+.phone .p-progress .stop { position: absolute; right: 0; top: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--p-primary); }
+.phone .p-progress-label { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); white-space: nowrap; }
+.phone .today-list .section { margin: 0; padding: 24px 8px 4px 16px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary); }
+.phone .today-list .hint.empty { padding: 6px 16px; margin: 0 !important; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .today-list .hint.anytime { padding: 6px 16px; margin: 0 !important; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+
 .phone .today-list .task { padding: 2px 8px; gap: 0; border-radius: 0; align-items: center; }
-.phone .today-list .task:active, .phone .today-list .event:active { background: var(--p-ripple); }
 .phone .today-list .task .bar { width: 4px; height: 36px; align-self: center; border-radius: 2px; flex: none; }
+/* Material 3 checkbox: a 20 dp box with a 2 dp border in a 40 dp touch target, filled with the item's colour. */
 .phone .today-list .task input[type=checkbox] {
-  -webkit-appearance: none; appearance: none; flex: none; margin: 13px 15px; width: 18px; height: 18px;
-  border: 2px solid var(--muted); border-radius: 2px; background: transparent; transition: background-color .15s, border-color .15s;
+  -webkit-appearance: none; appearance: none; flex: none; margin: 10px; width: 20px; height: 20px;
+  border: 2px solid var(--muted); border-radius: 2px; background: transparent;
 }
-.phone .today-list .task input[type=checkbox]:checked {
-  border-color: var(--p-primary);
-  background: var(--p-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M9.55 18 3.85 12.3l1.425-1.425L9.55 15.15l9.175-9.175L20.15 7.4Z'/%3E%3C/svg%3E") center / 16px no-repeat;
-}
+.phone .today-list .task input[type=checkbox]:checked { border-color: var(--c, var(--p-primary)); background: var(--c, var(--p-primary)) var(--p-check) center / 20px no-repeat; }
 .phone .today-list .task .grow { padding: 5px 0; }
-.phone .today-list .task .title { font-size: 16px; line-height: 24px; letter-spacing: .15px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.phone .today-list .task .sub { font-size: 12px; line-height: 16px; letter-spacing: .4px; margin-top: 0; }
-.phone .today-list .task .pill { margin-right: 8px; font-size: 11px; line-height: 16px; font-weight: 500; }
-.phone .today-list .event { padding: 7px 16px; gap: 0; border-radius: 0; }
-.phone .today-list .event .time { width: 60px; flex: none; font-size: 11px; line-height: 16px; font-weight: 500; color: var(--muted); }
-.phone .today-list .event .time::first-line { font-size: 14px; line-height: 20px; color: var(--text); }
-.phone .today-list .event > span { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
-.phone .today-list .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .15px; }
-.phone .today-list .event .grow .hint { font-size: 12px !important; line-height: 16px; }
+.phone .today-list .task .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.phone .today-list .task .title.done { color: var(--muted); }
+.phone .today-list .task .sub { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; margin-top: 0; color: var(--muted); }
+.phone .today-list .task .sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .today-list .task .rem-emoji, .phone .today-list .fire-emoji { display: none; }
+.phone .today-list .task .sub .sub-icon { display: inline-flex; flex: none; }
+.phone .today-list .task .pills { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 8px; }
+.phone .today-list .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+.phone .today-list .pill .sub-icon.fire { display: inline-flex; margin-right: 3px; }
+.phone .today-list .rep { width: 17px; height: 17px; margin-right: 4px; vertical-align: -3px; }
+
+.phone .today-list .event { padding: 7px 16px; gap: 0; border-radius: 0; align-items: center; }
+.phone .today-list .event .time { width: 60px; flex: none; display: flex; flex-direction: column; }
+.phone .today-list .event .time br { display: none; }
+.phone .today-list .event .time .t1 { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); }
+.phone .today-list .event .time .t2 { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .today-list .event .time .t0 { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--text); }
+.phone .today-list .event > span:not(.p-ripple) { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
+.phone .today-list .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone .today-list .event .grow .hint { font-size: 12px !important; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+.phone .today-list .event .grow .hint:empty { display: none; }
+
 .phone .today-list .note-preview {
   margin: 2px 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 12px;
-  background: var(--p-sc-high); -webkit-line-clamp: unset;
+  background: var(--p-sc-high); color: var(--text); -webkit-line-clamp: unset;
 }
-.phone .today-list .note-preview .note-text { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.phone .today-list .note-preview .note-text { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; letter-spacing: .25px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ---------- Calendar (CalendarScreen.kt, TimeGrid.kt) ---------- */
 .phone .p-cal { position: relative; }
@@ -143,7 +180,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-menu { position: absolute; right: 8px; top: 44px; z-index: 30; min-width: 180px; padding: 8px 0; border-radius: 4px; background: var(--p-sc); box-shadow: 0 2px 6px rgb(0 0 0 / .2), 0 6px 18px rgb(0 0 0 / .14); animation: p-menu .14s ease-out; transform-origin: top right; }
 @keyframes p-menu { from { opacity: 0; transform: scale(.9); } }
 .phone .p-menu button { display: flex; width: 100%; height: 48px; align-items: center; padding: 0 16px; border: 0; background: none; font-size: 14px; color: var(--text); text-align: left; }
-.phone .p-menu button:active { background: var(--p-ripple); }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .phone .p-month { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
@@ -233,7 +269,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .gp-actions { display: flex; align-items: center; margin-top: 12px; }
 .phone .gp-compact.slot .gp-actions { margin-top: 0; margin-left: -12px; }
 .phone .p-text-btn { height: 40px; padding: 0 12px; border: 0; border-radius: 20px; background: none; color: var(--p-primary); font-size: 14px; font-weight: 500; letter-spacing: .1px; display: inline-flex; align-items: center; }
-.phone .p-text-btn:active { background: color-mix(in srgb, var(--p-primary) 12%, transparent); }
 .phone .p-filled-btn { height: 40px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--p-primary); color: var(--p-on-primary); font-size: 14px; font-weight: 500; letter-spacing: .1px; }
 .phone .p-filled-btn:disabled { background: color-mix(in srgb, var(--text) 12%, transparent); color: color-mix(in srgb, var(--text) 38%, transparent); }
 .phone .gp-title { width: 100%; border: 0; background: none; padding: 0; font-size: 24px; line-height: 32px; color: var(--text); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
@@ -262,3 +297,10 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .login .btn { min-height: 44px; justify-content: center; font-size: 15px; }
 .phone .p-content .chips-row { margin-top: 4px; }
 .phone .editor-page { padding: 8px 16px 80px; }
+
+/* The row icons drawn with the native app's glyphs (Compose material-icons: Outlined.Alarm, Outlined.Link,
+   Filled.Repeat, Filled.LocalFireDepartment); the shared rows keep their own paths on the PC. */
+.phone .today-list .sub-icon.alarm path { d: path("M22 5.72l-4.6-3.86-1.29 1.53 4.6 3.86L22 5.72zM7.88 3.39L6.6 1.86 2 5.71l1.29 1.53 4.59-3.85zM12.5 8H11v6l4.75 2.85.75-1.23-4-2.37V8zM12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"); }
+.phone .today-list .sub-icon.link path { d: path("M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"); }
+.phone .today-list .rep path { d: path("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"); }
+.phone .today-list .sub-icon.fire path { d: path("M19.48 12.35c-1.57-4.08-7.16-4.3-5.81-10.23.1-.44-.37-.78-.75-.55C9.29 3.71 6.68 8 8.87 13.62c.18.46-.36.89-.75.59-1.81-1.37-2-3.34-1.84-4.75.06-.52-.62-.77-.91-.34C4.69 10.16 4 11.84 4 14.37c.38 5.6 5.11 7.32 6.81 7.54 2.43.31 5.06-.14 6.95-1.87 2.08-1.93 2.84-5.01 1.72-7.69zm-9.28 5.03c1.44-.35 2.18-1.39 2.38-2.31.33-1.43-.96-2.83-.09-5.09.33 1.87 3.27 3.04 3.27 5.08.08 2.53-2.66 4.7-5.56 2.32z"); }

@@ -15,6 +15,9 @@ import { Icon, go } from "../common.tsx";
 import { type Draft, ItemEditor } from "../ItemEditor.tsx";
 import { hapticLight, hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
+/** Whole device pixels: the panel is its own GPU layer, and one left at a fractional offset is drawn soft. */
+const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRatio;
+
 export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
 
 /** Native: spring(stiffness = 600), critically damped. */
@@ -180,6 +183,8 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
   const grow = () => { if (canGrow) settleTo(1); };
 
   // ---------- The drag ----------
+  // A tap that wobbles less than the touch slop (8 dp) is still a tap (use-gesture's default of 3 px,
+  // counted along the finger's whole path, swallowed the clicks of real fingers).
   const bind = useDrag(({ delta: [, dy], last, tap, velocity: [, vy], direction: [, dirY] }) => {
     if (tap || grownRef.current || closing.current) return;
     if (!last) {
@@ -206,7 +211,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
       const target = v < -FLING ? 1 : v > FLING ? 0 : p > 0.5 ? 1 : 0;
       settleTo(target, -v / range());
     }
-  }, { axis: "y", threshold: 4, filterTaps: true, pointer: { capture: false } });
+  }, { axis: "y", threshold: 8, filterTaps: true, tapsThreshold: 10, pointer: { capture: false } });
 
   const parsedItem = quick && text.trim() && type !== "NOTE" ? draft.item : null;
 
@@ -216,7 +221,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
       <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
         onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
         onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350) dismiss(); }} />
-      <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${v}px,0)`) }} {...(grown ? {} : bind())}>
+      <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }} {...(grown ? {} : bind())}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
         {editorReady && canGrow && (
           <animated.div className={`gp-full ${grown ? "live" : ""}`} style={{ height: availH, opacity: sp.p.to((p) => clamp01(p * 12 - 0.6)) }}>

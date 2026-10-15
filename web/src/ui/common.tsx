@@ -143,13 +143,15 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
   const done = status === "DONE";
   const color = s.colorOf(item);
   const due = dueAt(entry);
+  const hasReminders = (s.reminders.get(item.id)?.length ?? 0) > 0;
+  const linked = s.neighbours(item.id).size > 0;
   const sub = [
     showDay && entry.day !== null ? relativeDay(entry.day) : null,
     item.startMin !== null ? formatTime(item.startMin) : null,
     isRecurring(item) ? describe(item) : null,
   ].filter(Boolean).join(" · ");
   return (
-    <div className="task" onClick={() => openItem(item, entry.day)}>
+    <div className="task" style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
       <span className="bar" style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
@@ -159,14 +161,21 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
           {item.priority > 0 && !done && <span title={`${PRIORITIES[item.priority]} priority`} style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS[item.priority]} /></span>}
           {item.title || "Untitled"}
         </div>
-        {sub && <div className="sub ellipsis">{sub}{(s.reminders.get(item.id)?.length ?? 0) > 0 && " · ⏰"}</div>}
+        {sub && <div className="sub ellipsis">
+          <span className="sub-text">{sub}</span>{hasReminders && <span className="rem-emoji"> · ⏰</span>}
+          {/* The phone shows these as small icons after the line, like the native row (hidden on the PC). */}
+          {hasReminders && <span className="sub-icon alarm"><Icon name="alarm" size={14} /></span>}
+          {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
+        </div>}
       </div>
+      <span className="pills">
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
-      {status === "CARRIED" && <Pill color="#7d5260">Carried over</Pill>}
+      {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}
       {status === "DUE" && due !== null && <Pill color={due < now ? "var(--danger)" : color}>{dueCountdown(due, now)}</Pill>}
       {status === "UPCOMING" && entry.day !== null && <Pill color="var(--muted)">{relativeDay(entry.day)}</Pill>}
-      {streakInfo && streakInfo.current > 0 && <Pill color="#ff7043">🔥 {streakInfo.current}</Pill>}
+      {streakInfo && streakInfo.current > 0 && <Pill color="#ff7043"><span className="fire-emoji">🔥 </span><span className="sub-icon fire"><Icon name="fire" size={12} /></span>{streakInfo.current}</Pill>}
+      </span>
     </div>
   );
 }
@@ -174,7 +183,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
 export function EventRow({ o, s, showDay }: { o: Occurrence; s: Snapshot; showDay?: boolean }) {
   return (
     <div className="event" onClick={() => openItem(o.item, o.day)}>
-      <div className="time">{o.timed ? <>{formatTime(o.startMin!)}{o.endMin !== null && <><br />{formatTime(o.endMin)}</>}</> : "All day"}</div>
+      <div className="time">{o.timed ? <><span className="t1">{formatTime(o.startMin!)}</span>{o.endMin !== null && <><br /><span className="t2">{formatTime(o.endMin)}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
         <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>

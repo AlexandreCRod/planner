@@ -2,7 +2,6 @@
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
 import { animated, useSpring, type SpringValue } from "@react-spring/web";
-import { useDrag } from "@use-gesture/react";
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType } from "../../domain/types.ts";
@@ -16,7 +15,9 @@ import { SettingsView } from "../SettingsView.tsx";
 import { TasksView } from "../TasksView.tsx";
 import { TodayView, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest } from "./AddPanel.tsx";
-import { Scaffold } from "./chrome.tsx";
+import { MIcon, Scaffold } from "./chrome.tsx";
+import { swallowNextClick } from "./gesture.ts";
+import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing } from "./native.ts";
 import { PhoneCalendar, calendarSelectedDay } from "./PhoneCalendar.tsx";
 import "./phone.css";
@@ -34,6 +35,14 @@ const LAST = TABS.length - 1;
 /** Compose's pager snap: stiffness 400, critically damped. */
 const PAGER_SPRING = { tension: 400, friction: 40 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+/**
+ * The pager's offset. While it moves it's a 3D translate (its own GPU layer, cheap to slide); at rest it's
+ * a plain 2D one, or none, so the page is painted straight onto the screen at whole pixels. (A layer
+ * left in place gets resampled at fractional offsets, which is what made text look soft.)
+ */
+const slide = (p: number, sign: number) => Number.isInteger(p)
+  ? (p ? `translateX(${sign * p * 100}%)` : "none")
+  : `translate3d(${sign * p * 100}%,0,0)`;
 
 export function PhoneApp() {
   const [path, query] = useRoute();
@@ -59,25 +68,30 @@ export function PhoneApp() {
 
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
 
-  /** Settles the pager on a page (spring, carrying the finger's speed in pages per ms). */
-  const settle = (i: number, velocity = 0) => {
+  /**
+   * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
+   * ms), or at once for a tap on a tab, as the native bar does (sliding past every page in between
+   * would be slower and draw them all).
+   */
+  const settle = (i: number, velocity = 0, jump = false) => {
     i = clamp(i, 0, LAST);
     tabRef.current = i;
     setTab(i);
     setMounted((m) => (m.has(i) ? m : new Set([...m, i])));
-    api.start({ pos: i, config: { ...PAGER_SPRING, velocity } });
+    if (jump) api.start({ pos: i, immediate: true });
+    else api.start({ pos: i, config: { ...PAGER_SPRING, velocity } });
     if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", `#/${TABS[i].key}`);
   };
 
   // A route to a page (go("calendar"), the back button...) turns the pager there.
-  useEffect(() => { if (routeTab >= 0 && routeTab !== tabRef.current) settle(routeTab); }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (routeTab >= 0 && routeTab !== tabRef.current) settle(routeTab, 0, true); }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const overlay = routeTab < 0 && route !== "" ? route : null;
   // Back: overlays and panels close first (they push their own handlers), then other tabs return to Today.
   useEffect(() => {
     setShellBack(() => {
       if (overlay) history.back();
-      else if (tabRef.current !== 0) settle(0);
+      else if (tabRef.current !== 0) settle(0, 0, true);
       else minimizeApp();
     });
   });
@@ -99,9 +113,9 @@ export function PhoneApp() {
   return (
     <div className="p-root">
       <div className="p-pager">
-        <animated.div className="p-track" style={{ transform: pos.to((p) => `translate3d(${-p * 100}%,0,0)`) }}>
+        <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
           {TABS.map((t, i) => (
-            <div key={t.key} className="p-page" style={{ transform: `translate3d(${i * 100}%,0,0)` }} aria-hidden={i !== tab}>
+            <div key={t.key} className="p-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
               {mounted.has(i) && <Page tabKey={t.key} onNewAt={setNewAt(setAdding)} pending={adding?.mode === "slot" ? adding : null} />}
             </div>
           ))}
@@ -109,7 +123,7 @@ export function PhoneApp() {
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} onSettle={settle} />
       {TABS[tab].key !== "graph" && !overlay && (
-        <button className="p-fab" aria-label="Add" onClick={openAdd}><Icon name="add" size={24} /></button>
+        <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="add" /></button>
       )}
       {overlay && <Overlay route={route} path={path} query={query} />}
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onClose={() => setAdding(null)} />}
@@ -149,47 +163,73 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
 }
 
 /**
- * Material 3 navigation bar. The selection pill sits wherever the pages are, so a finger sliding along
- * the bar drags the pages (one tab width per page) and the pill with them; letting go settles on the
- * nearest page, carried on by the finger's speed.
+ * Material 3 navigation bar. A tap on a tab goes there at once. A finger slid along the bar (past the
+ * touch slop) drags the pages instead, one tab width per page, with the selection pill riding along;
+ * letting go settles on the nearest page, carried on by the finger's speed. Like the native bar, the
+ * slide is watched before the buttons see it, and a tap that wobbles less than the slop stays a tap.
  */
 function BottomBar({ pos, start, listeners, onSettle }: {
-  pos: SpringValue<number>; start: number; listeners: Set<(i: number) => void>; onSettle: (i: number, velocity?: number) => void;
+  pos: SpringValue<number>; start: number; listeners: Set<(i: number) => void>; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
 }) {
   const [selected, setSelected] = useState(start);
   useEffect(() => { listeners.add(setSelected); return () => { listeners.delete(setSelected); }; }, [listeners]);
-  const bar = useRef<HTMLDivElement>(null);
-  const slid = useRef(false);
+  const bar = useRef<HTMLElement>(null);
+  const settleRef = useRef(onSettle);
+  settleRef.current = onSettle;
   const day = ymd(todayEpoch()).d;
 
-  const bind = useDrag(({ first, last, tap, movement: [mx], velocity: [vx], direction: [dx], memo }) => {
-    if (tap) return;
-    const tabW = (bar.current?.clientWidth ?? 360) / TABS.length;
-    const from: number = first || memo === undefined ? pos.get() : memo;
-    const target = clamp(from + mx / tabW, 0, LAST);
-    if (!last) {
-      slid.current = true;
-      pos.start(target, { immediate: true });
-    } else {
-      // Where the fling would carry it: the speed (tabs per ms) over about a sixth of a second.
-      const v = (vx * dx) / tabW;
-      const projected = target + v * 160;
-      const i = clamp(Math.round(projected), Math.floor(target), Math.ceil(target));
-      onSettle(i, v);
-      window.setTimeout(() => { slid.current = false; }, 0);
-    }
-    return from;
-  }, { axis: "x", threshold: 6, filterTaps: true, pointer: { capture: true } });
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    let g: { id: number; x0: number; from: number; sliding: boolean; vx: number; lastX: number; lastT: number } | null = null;
+    const tabW = () => el.clientWidth / TABS.length;
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      g = null;
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      const dt = e.timeStamp - g.lastT;
+      if (dt > 0) { g.vx = 0.7 * ((e.clientX - g.lastX) / dt) + 0.3 * g.vx; g.lastT = e.timeStamp; }
+      g.lastX = e.clientX;
+      const dx = e.clientX - g.x0;
+      if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
+      g.sliding = true;
+      pos.start(clamp(g.from + dx / tabW(), 0, LAST), { immediate: true });
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      if (g.sliding) {
+        swallowNextClick();
+        const target = clamp(g.from + (g.lastX - g.x0) / tabW(), 0, LAST);
+        // Where the fling would carry it: the speed (tabs per ms) over about a sixth of a second.
+        const v = g.vx / tabW();
+        const i = clamp(Math.round(target + v * 160), Math.floor(target), Math.ceil(target));
+        settleRef.current(i, v);
+      }
+      stop();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      g = { id: e.pointerId, x0: e.clientX, from: pos.get(), sliding: false, vx: 0, lastX: e.clientX, lastT: e.timeStamp };
+      window.addEventListener("pointermove", onMove, { passive: true });
+      window.addEventListener("pointerup", onUp, { passive: true });
+      window.addEventListener("pointercancel", onUp, { passive: true });
+    };
+    el.addEventListener("pointerdown", onDown, { passive: true });
+    return () => { stop(); el.removeEventListener("pointerdown", onDown); };
+  }, [pos]);
 
   return (
-    <nav className="p-bar" ref={bar} {...bind()}>
+    <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
-      <animated.span className="p-pill-track" style={{ width: `${100 / TABS.length}%`, transform: pos.to((p) => `translate3d(${p * 100}%,0,0)`) }}>
+      <animated.span className="p-pill-track" style={{ width: `${100 / TABS.length}%`, transform: pos.to((p) => slide(p, 1)) }}>
         <span className="p-pill" />
       </animated.span>
       {TABS.map((t, i) => (
-        <button key={t.key} className={`p-tab ${selected === i ? "on" : ""}`}
-          onClick={() => { if (!slid.current) onSettle(i); }}>
+        <button key={t.key} className={`p-tab ${selected === i ? "on" : ""}`} onClick={() => onSettle(i, 0, true)}>
           <span className="p-tab-icon">
             {t.key === "today" ? <TodayGlyph day={day} /> : <Icon name={t.icon} size={24} />}
           </span>

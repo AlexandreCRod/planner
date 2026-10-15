@@ -86,6 +86,9 @@ button.chip:hover { background: var(--surface-2); }
 .task input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 .task .title.done { text-decoration: line-through; color: var(--muted); }
 .task .sub { font-size: 12px; color: var(--muted); }
+/* Phone-only bits of the shared rows (phone.css shows them); the PC row is laid out as before. */
+.task .pills { display: contents; }
+.sub-icon { display: none; }
 
 .event { display: flex; gap: 12px; align-items: center; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
 .event:hover { background: var(--surface-2); }
