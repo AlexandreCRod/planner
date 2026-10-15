@@ -21,7 +21,6 @@ import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.ts
 import "./phone.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
-import { startLatencyLog } from "./latency.ts";
 
 // The native app's tabs, less Alarms (left out of the web app for now).
 const TABS: { key: string; label: string }[] = [
@@ -72,7 +71,7 @@ export function PhoneApp() {
   }));
   const [adding, setAdding] = useState<AddRequest | null>(null);
 
-  useLayoutEffect(() => { startPhonePlumbing(); startLatencyLog(); }, []);
+  useLayoutEffect(() => { startPhonePlumbing(); }, []);
 
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
