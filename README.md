@@ -80,7 +80,8 @@ On first launch, allow notifications. For alarms that are never delayed, open **
 ### Updating the phone app
 
 - **From the computer:** run the app again from Android Studio, or `gradlew installDebug`, over USB or wireless debugging. Your data stays.
-- **From a GitHub release:** if an `.apk` is attached to a release of this repository, open the release page on the phone (signed in to GitHub, since the repository is private), download the file and open it. Allow your browser to install apps when Android asks. Android then offers to **update** Planner, and your data stays.
+- **From a GitHub release:** each release on the repository's **Releases** page has the phone app attached as `planner-<version>.apk`. Open the latest release on the phone (signed in to GitHub, since the repository is private), download the file and open it. Allow your browser to install apps when Android asks. Android then offers to **update** Planner, and your data stays.
+  - To make a release, raise `versionCode` and `versionName` in `app/build.gradle.kts`, run `gradlew assembleDebug`, and attach `app/build/outputs/apk/debug/app-debug.apk` (renamed to `planner-<version>.apk`) to a new GitHub release.
   - This only works when the new `.apk` is signed with the same key as the installed app. Debug builds are signed with the debug key of the computer that built them, so build releases on the same computer. An `.apk` signed with a different key can't update the app: Android would ask you to uninstall first, which removes the phone's copy (you can bring it back afterwards with **Restore** from the cloud).
 
 ## Sync
