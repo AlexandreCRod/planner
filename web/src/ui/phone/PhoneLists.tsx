@@ -314,7 +314,7 @@ export const PhoneGraph = memo(function PhoneGraph() {
         </>}
       </ChipRow>
       <div className="p-graph" ref={box}>
-        {graph.nodes.length === 0 && <div className="p-graph-empty">No connections yet.<br />Link items from their editor, or type [[Title]] inside a note.</div>}
+        {graph.nodes.length === 0 && <div className="p-graph-empty"><span>No connections yet.<br />Link items from their editor, or type [[Title]] inside a note.</span></div>}
         <svg width={w} height={h}>
           {graph.edges.map(([a, b]) => {
             const pa = P(a), pb = P(b);

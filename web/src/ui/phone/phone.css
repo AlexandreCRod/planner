@@ -320,21 +320,21 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-divider { flex: none; height: 1px; background: var(--line); }
 
 /* ---------- Shared M3 pieces (chrome.tsx) ---------- */
-/* Filter chip: 32 dp tall in a 48 dp touch row, 8 dp corners, outlined until picked. */
+/* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
 .phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
 .phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
 .phone .p-chip {
-  flex: none; height: 32px; margin: 8px 0; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 8px; background: none;
+  flex: none; height: 32px; margin: 4px 0; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 8px; background: none;
   display: inline-flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px;
   color: var(--muted); white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s;
 }
 .phone .p-chip.on { background: var(--p-sec-container); border-color: transparent; color: var(--p-on-sec-container); }
 .phone .p-chip.check { padding-left: 8px; }
-/* Segmented buttons: 40 dp in a 48 dp row, outlined, the chosen one filled with a tick. */
+/* Segmented buttons: 40 dp, outlined, the chosen one filled with a tick. */
 .phone .p-seg-wrap { flex: none; padding: 8px 16px 0; }
-.phone .p-segmented { display: flex; height: 40px; margin: 4px 0; border: 1px solid var(--p-outline); border-radius: 20px; overflow: hidden; }
+.phone .p-segmented { display: flex; height: 40px; border: 1px solid var(--p-outline); border-radius: 20px; overflow: hidden; }
 .phone .p-segmented button { flex: 1; min-width: 0; border: 0; background: none; padding: 0 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); transition: background-color .15s; }
 .phone .p-segmented button + button { border-left: 1px solid var(--p-outline); }
 .phone .p-segmented button.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
@@ -475,7 +475,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-graph .hl { fill: none; stroke: var(--p-primary); stroke-width: 2; }
 .phone .p-graph text { font-size: 11px; dominant-baseline: hanging; text-anchor: middle; fill: color-mix(in srgb, var(--text) 90%, transparent); }
 .phone .p-graph text.dim { fill: color-mix(in srgb, var(--text) 35%, transparent); }
-.phone .p-graph-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; text-align: center; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .p-graph-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--muted); }
 .phone .p-graph-reset { position: absolute; top: 0; right: 0; }
 .phone .p-graphcard { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 16px 16px 8px; border-radius: 12px; background: var(--p-sc-highest); color: var(--text); }
 .phone .p-graphcard .actions { display: flex; margin: 4px 0 0 -12px; }
