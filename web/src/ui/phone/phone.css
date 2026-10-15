@@ -438,7 +438,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-ytitle { padding: 0 2px 4px; color: var(--text); }
 .phone .p-ytitle.now { color: var(--p-primary); }
 .phone .p-yweek, .phone .p-yrow { display: flex; }
-.phone .p-yweek span { flex: 1; text-align: center; font-size: 9px; line-height: 12px; color: var(--muted); }
+.phone .p-yweek span { flex: 1; text-align: center; font-size: 9px; line-height: 24px; color: var(--muted); }
 .phone .p-yday { flex: 1; aspect-ratio: 1; display: grid; place-items: center; min-width: 0; }
 .phone .p-yday > span { width: calc(100% - 2px); height: calc(100% - 2px); border-radius: 50%; display: grid; place-items: center; font-size: 9px; line-height: 10px; color: var(--text); }
 .phone .p-yday > span.today { color: var(--p-on-primary); font-weight: 700; }
