@@ -1,6 +1,6 @@
 // contenteditable editor that reads and writes the same HTML as the Android editor, including
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
-import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import { formatDateTime } from "../domain/dates.ts";
 import { Icon } from "./common.tsx";
 
@@ -10,7 +10,7 @@ const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 
 export interface RichEditorHandle { html(): string; focus(): void; insertText(t: string): void }
 
-function sanitize(html: string): string {
+export function sanitize(html: string): string {
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
   doc.querySelectorAll("script,style,iframe,object,embed,link,meta").forEach((n) => n.remove());
   doc.querySelectorAll("*").forEach((el) => {
@@ -94,8 +94,11 @@ function placeCaretAtEnd(el: HTMLElement) {
 
 export const RichEditor = forwardRef<RichEditorHandle, {
   initialHtml: string; onChange: () => void; minHeight?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
-}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact }, ref) {
+  /** Show the formatting bar only once the text has been clicked into. */
+  toolbarOnFocus?: boolean;
+}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus }, ref) {
   const el = useRef<HTMLDivElement>(null);
+  const [toolbar, setToolbar] = useState(!toolbarOnFocus);
 
   useEffect(() => {
     if (el.current) el.current.innerHTML = sanitize(initialHtml);
@@ -174,7 +177,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     onChange();
   };
 
-  // Enter on a checklist line starts the next box at the same indent; on an empty box it ends the list.
+  // Enter on a checklist line starts the next box at the same indent, even after an empty box: boxes keep
+  // coming until the line's box is removed (the ☐ button, or deleting the box while typing).
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter" || e.shiftKey) return;
     const root = el.current!;
@@ -182,18 +186,11 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (!block || block.tagName === "LI") return;
     const info = boxInfo(block);
     if (!info.hasBox) return;
-    const rest = (block.textContent ?? "").slice(info.indent + 1).replace(/^[  ]/, "").trim();
     e.preventDefault();
-    if (!rest) {
-      const t = firstText(block);
-      if (t) t.deleteData(info.indent, Math.min(2, t.data.length - info.indent));
-      if (!block.textContent) block.innerHTML = "<br>";
-    } else {
-      const p = document.createElement("p");
-      p.textContent = INDENT.slice(0, info.indent) + BOX + " ";
-      block.after(p);
-      placeCaretAtEnd(p);
-    }
+    const p = document.createElement("p");
+    p.textContent = INDENT.slice(0, info.indent) + BOX + " ";
+    block.after(p);
+    placeCaretAtEnd(p);
     onChange();
   };
 
@@ -210,7 +207,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
 
   return (
     <>
-      <div className="toolbar">
+      {toolbar && <div className="toolbar">
         {!compact && <><B icon="undo" title="Undo (Ctrl+Z)" onClick={() => exec("undo")} /><B icon="redo" title="Redo (Ctrl+Y)" onClick={() => exec("redo")} /><span className="sep" /></>}
         <B label="B" title="Bold (Ctrl+B)" onClick={() => exec("bold")} />
         <B label="I" title="Italic (Ctrl+I)" onClick={() => exec("italic")} />
@@ -242,9 +239,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
           <B label="🕒" title="Insert date and time" onClick={() => exec("insertText", formatDateTime(Date.now()))} />
           <B label="⌫" title="Clear formatting" onClick={() => exec("removeFormat")} />
         </>}
-      </div>
+      </div>}
       <div ref={el} className="rich" contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onInput={onChange} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
+        style={{ minHeight, fontFamily }} onFocus={() => setToolbar(true)} onInput={onChange} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
     </>
   );
 });

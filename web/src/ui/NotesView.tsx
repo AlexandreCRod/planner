@@ -24,16 +24,17 @@ const isDark = (hex: string) => { const n = parseInt(hex.slice(1), 16); return (
 
 export function NotesView() {
   const s = useSnapshot();
-  const [filter, setFilter] = useState<"all" | "pinned" | "daily" | "notes">("all");
+  // Daily notes only show under their own chip, so the page is about regular notes.
+  const [filter, setFilter] = useState<"notes" | "pinned" | "daily">("notes");
   const [tag, setTag] = useState<number | null>(null);
   const notes = s.items.filter((i) => i.type === "NOTE")
-    .filter((n) => filter === "all" || (filter === "pinned" ? n.pinned : filter === "daily" ? n.noteDay !== null : n.noteDay === null))
+    .filter((n) => (filter === "daily" ? n.noteDay !== null : n.noteDay === null && (filter !== "pinned" || n.pinned)))
     .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
   return (
     <>
       <div className="chips-row">
-        {([["all", "All"], ["pinned", "Pinned"], ["daily", "Daily notes"], ["notes", "Notes"]] as const).map(([k, l]) => (
+        {([["notes", "Notes"], ["pinned", "Pinned"], ["daily", "Daily notes"]] as const).map(([k, l]) => (
           <button key={k} className={`chip ${filter === k ? "on" : ""}`} onClick={() => setFilter(k)}>{l}</button>
         ))}
         {s.tags.map((t) => <button key={t.id} className={`chip ${tag === t.id ? "on" : ""}`} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</button>)}

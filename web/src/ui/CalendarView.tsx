@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, dayShort, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, occurrencesIn } from "../domain/schedule.ts";
 import { type Item, displayTitle, isRecurring, newItem } from "../domain/types.ts";
@@ -146,6 +146,8 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<{ series: Item; day: number; edited: Item } | null>(null);
+  // The clicked empty slot (one across all columns): outlined first, a second click creates the event.
+  const [slot, setSlot] = useState<{ day: number; min: number } | null>(null);
   const t = todayEpoch();
   const occ = useMemo(() => occurrencesIn(items, s.done, days[0], days[days.length - 1]), [items, s, days]);
   const allDay = days.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
@@ -230,7 +232,8 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
         <div>{Array.from({ length: 24 }, (_, i) => <div key={i} className="hour-label" style={{ height: h }}>{i ? formatTime(i * 60) : ""}</div>)}</div>
         {days.map((d, di) => (
           <DayColumn key={d} day={d} hour={h} placed={timed[di]} s={s} isToday={d === t}
-            colWidth={() => (wrap.current ? (wrap.current.clientWidth - 52) / days.length : 100)} onCommit={commit} />
+            colWidth={() => (wrap.current ? (wrap.current.clientWidth - 52) / days.length : 100)} onCommit={commit}
+            slot={slot?.day === d ? slot.min : null} onSlot={(min) => setSlot(min === null ? null : { day: d, min })} />
         ))}
       </div>
       {pending && (
@@ -249,9 +252,10 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
   );
 }
 
-function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit }: {
+function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit, slot, onSlot }: {
   day: number; hour: number; placed: Placed[]; s: Snapshot; isToday: boolean; colWidth: () => number;
   onCommit: (o: Occurrence, dDay: number, dStart: number, dEnd: number) => void;
+  slot: number | null; onSlot: (min: number | null) => void;
 }) {
   const pxPerMin = hour / 60;
   const [drag, setDrag] = useState<{ key: string; dx: number; dy: number; resize: boolean } | null>(null);
@@ -287,8 +291,12 @@ function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit }: {
     <div className="daycol" onClick={(e) => {
       if (e.target !== e.currentTarget) return;
       const y = e.nativeEvent.offsetY;
-      newEventAt(day, Math.min(1410, Math.floor(y / pxPerMin / 30) * 30));
+      onSlot(Math.min(1410, Math.floor(y / pxPerMin / 30) * 30));
     }}>
+      {slot !== null && (
+        <div className="slot-sel" style={{ top: slot * pxPerMin, height: Math.max(20, 60 * pxPerMin) }} title="Click again to add an event here"
+          onClick={(e) => { e.stopPropagation(); onSlot(null); newEventAt(day, slot); }}>+ {formatTime(slot)}</div>
+      )}
       {Array.from({ length: 23 }, (_, i) => <div key={i} className="hline" style={{ top: (i + 1) * hour }} />)}
       {placed.map((p) => {
         const key = `${p.o.item.id}-${p.o.day}`;
@@ -297,7 +305,19 @@ function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit }: {
         const c = s.colorOf(p.o.item);
         const height = Math.max(14, (p.end - p.start) * pxPerMin + (d?.resize ? d.dy : 0));
         const tiny = height < 22;
-        return (
+        // While dragging, an outline shows where it will land, with its new time.
+        const ghost = d && !d.resize ? (() => {
+          const length = p.end - p.start;
+          const start = Math.max(0, Math.min(1425, p.start + snap(d.dy)));
+          const dDay = Math.round(d.dx / colWidth());
+          return (
+            <div key={key + "-ghost"} className="drop-ghost" style={{
+              top: start * pxPerMin, height: Math.max(16, length * pxPerMin), left: `calc(${dDay * colWidth()}px + 1px)`, width: "calc(100% - 3px)",
+              borderColor: c, color: c, background: `color-mix(in srgb, ${c} 18%, transparent)`,
+            }}>{isTask ? formatTime(start) : `${formatTime(start)}–${formatTime(Math.min(1439, start + length))}`}</div>
+          );
+        })() : null;
+        return (<Fragment key={key}>{ghost}
           <div key={key} className={`block ${d ? "dragging" : ""}`} onPointerDown={(e) => startDrag(e, p, false)}
             style={{
               top: p.start * pxPerMin + (d && !d.resize ? d.dy : 0), height,
@@ -307,12 +327,12 @@ function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit }: {
               textDecoration: p.o.completed ? "line-through" : undefined,
             }}>
             <b style={{ fontWeight: 600 }}>{displayTitle(p.o.item)}</b>
-            {height >= 40 && !isTask && <div style={{ opacity: 0.85, fontSize: 11 }}>{formatTime(p.start)}–{formatTime(Math.min(1439, p.end))}</div>}
+            {height >= 40 && !isTask && <div style={{ opacity: 0.85, fontSize: 11 }}>{formatTime(p.start)}–{formatTime(Math.min(1439, p.end + (d?.resize ? snap(d.dy) : 0)))}</div>}
             {!isTask && height >= 30 && (
               <div onPointerDown={(e) => startDrag(e, p, true)} title="Drag to change length"
                 style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 8, cursor: "ns-resize" }} />
             )}
-          </div>
+          </div></Fragment>
         );
       })}
       {isToday && <div className="nowline" style={{ top: now * pxPerMin }} />}

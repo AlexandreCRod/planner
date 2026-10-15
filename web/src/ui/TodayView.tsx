@@ -4,7 +4,7 @@ import { type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedD
 import { preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
 import { useSnapshot } from "../store/store.ts";
-import { EventRow, Icon, TaskRow, go, useCheckedHold, useNow } from "./common.tsx";
+import { EventRow, Icon, TaskRow, go, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const toInput = (e: number) => { const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
@@ -47,10 +47,12 @@ export function TodayView() {
     dayTasks = tasksOnDay(s.items, s.done, day, t);
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);
-  const shownTasks = hold.arrange(`t${day}`, dayTasks, rowKey);
+  // "Show completed tasks on Today" off: ticked tasks leave today's list (after the hold).
+  const hideDone = isToday && !showDoneOnToday();
+  const shownTasks = hold.arrange(`t${day}`, hideDone ? dayTasks.filter((e) => e.status !== "DONE") : dayTasks, rowKey);
   // Ticked during this day but not listed above: overdue ones, undated ones, early ticks...
   const listed = new Set([...shownOverdue, ...shownTasks].map(rowKey));
-  const alsoDone = tickedDuring(s.items, s.completions, day).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
+  const alsoDone = hideDone ? [] : tickedDuring(s.items, s.completions, day).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
   const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day + 7);
   const dayEvents = events.filter((o) => o.day <= day && o.endDay >= day);
   const upcoming = isToday ? events.filter((o) => o.day > day).slice(0, 8) : [];
@@ -106,7 +108,7 @@ export function TodayView() {
       {dayEvents.length === 0 && <div className="hint">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
       {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} />)}
       <div className="section">{isToday ? "Today's note" : "Note"}</div>
-      <div className="card" style={{ padding: 16, cursor: "pointer" }} onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
+      <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
         {daily ? preview(daily.content, 200) || "Empty — click to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}
       </div>
       {upcoming.length > 0 && <>

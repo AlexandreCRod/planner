@@ -91,6 +91,19 @@ button.chip:hover { background: var(--surface-2); }
 .event:hover { background: var(--surface-2); }
 .event .time { width: 64px; font-size: 12.5px; color: var(--muted); }
 
+/* Today's note card: only what fits on two lines */
+.note-preview { padding: 12px 14px; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Task / event view (before Edit) */
+.info-row { display: flex; gap: 14px; align-items: flex-start; padding: 7px 0; font-size: 14.5px; }
+.info-row .ico { width: 20px; flex: none; text-align: center; color: var(--muted); }
+.view-notes { font-size: 14.5px; line-height: 1.5; }
+.add-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+
+/* Calendar: tapped slot and drag target */
+.slot-sel { position: absolute; left: 1px; right: 2px; border: 2px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-size: 12px; font-weight: 600; padding: 1px 6px; cursor: pointer; z-index: 3; }
+.drop-ghost { position: absolute; border: 2px solid; border-radius: 6px; font-size: 11px; font-weight: 700; padding: 0 5px; pointer-events: none; z-index: 4; }
+
 /* "Repeats" mark before a repeating item's title */
 .rep { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; margin-right: 5px; vertical-align: -3px; }
 
