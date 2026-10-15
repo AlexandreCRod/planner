@@ -9,7 +9,7 @@ import {
   NO_DAY, PRIORITIES, PRIORITY_COLORS, argbOf, cssColor, isRecurring,
 } from "../domain/types.ts";
 import { type EditScope, deleteForever, deleteOccurrence, saveItem, saveSeriesEdit, toggleCompletion, trash, useSnapshot } from "../store/store.ts";
-import { Icon } from "./common.tsx";
+import { Icon, go } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor, type RichEditorHandle, sanitize } from "./RichEditor.tsx";
 
@@ -56,6 +56,16 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const [editing, setEditing] = useState(isNewPlaceholder);
   // Editor sections opened with the "Add" chips (they also show by themselves once they have content).
   const [added, setAdded] = useState<Set<string>>(new Set());
+  // What's being typed as a location (null once a suggestion is picked), and the addresses it matches.
+  const [placeQuery, setPlaceQuery] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<{ name: string; lat: number; lng: number }[]>([]);
+  useEffect(() => {
+    const q = placeQuery?.trim() ?? "";
+    if (q.length < 3) { setSuggestions([]); return; }
+    let stop = false;
+    const t = setTimeout(() => { void searchPlaces(q).then((r) => { if (!stop) setSuggestions(r); }); }, 500);
+    return () => { stop = true; clearTimeout(t); };
+  }, [placeQuery]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cancel(); };
@@ -152,6 +162,13 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
           <header>
             <button className="icon-btn" onClick={onClose} title="Close"><Icon name="close" /></button>
             <b className="grow">{oEvent ? "Event" : "Task"}</b>
+            <button className="icon-btn" title="Duplicate" onClick={() => {
+              const copyId = saveItem({ ...o, id: 0, deletedAt: null }, {
+                reminders: (s.reminders.get(o.id) ?? []).map((r) => ({ ...r, id: 0 })),
+                tags: (s.tagsByItem.get(o.id) ?? []).map((t) => t.name),
+              });
+              go(`item/${copyId}`);
+            }}><Icon name="copy" /></button>
             <button className="icon-btn" title="Delete" onClick={() => setConfirmDelete(true)}><Icon name="trash" /></button>
             <button className="btn primary" onClick={startEdit}><Icon name="edit" size={16} /> Edit</button>
           </header>
@@ -168,7 +185,15 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
               </label>
             )}
             <Info icon={<Icon name="schedule" size={16} />}>{whenText(o, day)}</Info>
-            {(o.location ?? "").trim() && <Info icon={<Icon name="place" size={16} />}><a href={mapsUrl(o)} target="_blank" rel="noreferrer">{o.location}</a></Info>}
+            {(o.location ?? "").trim() && (
+              <Info icon={<Icon name="place" size={16} />}>
+                <a href={mapsUrl(o)} target="_blank" rel="noreferrer">{o.location}</a>
+                <div className="row" style={{ marginTop: 4 }}>
+                  <a className="btn small" href={directionsUrl(o, "google")} target="_blank" rel="noreferrer">Directions in Google Maps</a>
+                  <a className="btn small" href={directionsUrl(o, "waze")} target="_blank" rel="noreferrer">Waze</a>
+                </div>
+              </Info>
+            )}
             {isRecurring(o) && <Info icon={<Icon name="repeat" size={16} color={color} />}>{describe(o)}</Info>}
             {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
             {!oEvent && o.startDay !== null && o.overduePolicy !== "SHOW_OVERDUE" && (
@@ -296,10 +321,16 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
 
           <div className="frow"><Icon name="place" size={20} />
             {/* A typed place has no coordinates; only "my location" sets them. */}
-            <input className="plain grow" placeholder="Add location" value={d.location ?? ""} onChange={(e) => set({ location: e.target.value, lat: null, lng: null })} />
+            <input className="plain grow" placeholder="Add location" value={d.location ?? ""} onChange={(e) => { set({ location: e.target.value, lat: null, lng: null }); setPlaceQuery(e.target.value); }} />
             <button className="icon-btn" title="Use this computer's location" onClick={locate}><Icon name="myLocation" size={18} /></button>
-            {(d.location ?? "").trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl(d)} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
+            {(d.location ?? "").trim() && <a className="icon-btn" title="Directions in Google Maps" href={directionsUrl(d, "google")} target="_blank" rel="noreferrer"><Icon name="directions" size={18} /></a>}
           </div>
+          {/* Addresses matching what's typed (OpenStreetMap search); picking one fills in its coordinates. */}
+          {suggestions.map((p) => (
+            <div key={p.name} className="frow clickable suggestion" onClick={() => { set({ location: p.name, lat: p.lat, lng: p.lng }); setSuggestions([]); setPlaceQuery(null); }}>
+              <span /><Icon name="place" size={16} /><span className="grow">{p.name}</span>
+            </div>
+          ))}
           <hr />
 
           {/* Alerts: a plain list of "15 minutes before" lines, like Google Calendar's notifications. */}
@@ -350,7 +381,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
           {/* Notes: always there, a plain box until you click into it; then the formatting buttons appear. */}
           <div className="frow top"><Icon name="subject" size={20} />
             <div className="grow notes-box">
-              <RichEditor ref={rich} initialHtml={initialHtml} onChange={() => {}} minHeight={80} compact toolbarOnFocus placeholder="Add notes" />
+              <RichEditor ref={rich} initialHtml={initialHtml} onChange={() => {}} minHeight={24} compact toolbarOnFocus placeholder="Add description" />
             </div>
           </div>
           <hr />
@@ -389,6 +420,25 @@ function whenText(item: Item, day: number | null): string {
   const time = (m: number | null) => (m !== null ? formatTime(m) : "");
   if (item.allDay) return span ? `All day, ${formatDate(start)} – ${formatDate(end)}` : `${formatDate(start)} · all day`;
   return span ? `${formatDate(start)} ${time(item.startMin)} – ${formatDate(end)} ${time(item.endMin)}` : `${formatDate(start)} · ${time(item.startMin)}–${time(item.endMin)}`;
+}
+
+/** Directions to the place in Google Maps or Waze. */
+const directionsUrl = (i: Item, app: "google" | "waze") => {
+  const hasPoint = i.lat !== null && i.lng !== null;
+  if (app === "waze") return hasPoint ? `https://waze.com/ul?ll=${i.lat},${i.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent((i.location ?? "").trim())}&navigate=yes`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hasPoint ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
+};
+
+/** Address suggestions from OpenStreetMap's search (Nominatim), at most 5. */
+async function searchPlaces(q: string): Promise<{ name: string; lat: number; lng: number }[]> {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`, { headers: { Accept: "application/json" } });
+    if (!r.ok) return [];
+    const list = (await r.json()) as { display_name: string; lat: string; lon: string }[];
+    return list.map((p) => ({ name: p.display_name, lat: Number(p.lat), lng: Number(p.lon) }));
+  } catch {
+    return [];
+  }
 }
 
 const mapsUrl = (i: Item) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.lat !== null && i.lng !== null ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { today as todayEpoch } from "../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../domain/schedule.ts";
-import { isRecurring } from "../domain/types.ts";
-import { useSnapshot } from "../store/store.ts";
-import { TaskRow, useCheckedHold, useNow } from "./common.tsx";
+import { NO_DAY, isRecurring, newItem } from "../domain/types.ts";
+import { saveItem, toggleCompletion, useSnapshot } from "../store/store.ts";
+import { Icon, TaskRow, go, useCheckedHold, useNow } from "./common.tsx";
 
 const GROUPS = ["Daily", "Weekly", "Monthly", "Yearly", "One-time", "Anytime"] as const;
 
@@ -25,9 +25,12 @@ export function TasksView() {
   const [category, setCategory] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const hold = useCheckedHold();
+  // Scheduled tasks, or the to-do list: tasks with no date or time.
+  const [todo, setTodo] = useState(() => localStorage.getItem("tasksTab") === "todo");
+  const showTab = (v: boolean) => { setTodo(v); localStorage.setItem("tasksTab", v ? "todo" : "scheduled"); };
 
   const entries = s.items
-    .filter((i) => i.type === "TASK" && (category === null || i.categoryId === category))
+    .filter((i) => i.type === "TASK" && i.startDay !== null && (category === null || i.categoryId === category))
     .map((i) => currentEntry(i, s.done, t))
     .filter((e) => showDone || e.status !== "DONE" || isRecurring(e.item));
   const sorted = (list: TaskEntry[]) => [...list].sort((a, b) =>
@@ -36,6 +39,11 @@ export function TasksView() {
 
   return (
     <div style={{ maxWidth: 820 }}>
+      <div className="seg" style={{ marginBottom: 10 }}>
+        <button className={!todo ? "on" : ""} onClick={() => showTab(false)}>Scheduled</button>
+        <button className={todo ? "on" : ""} onClick={() => showTab(true)}>To-do</button>
+      </div>
+      {todo ? <TodoList /> : <>
       <div className="chips-row">
         <button className={`chip ${showDone ? "on" : ""}`} onClick={() => setShowDone(!showDone)}>Show completed</button>
         {s.categories.map((c) => (
@@ -62,6 +70,51 @@ export function TasksView() {
           </div>
         );
       })}
+      </>}
+    </div>
+  );
+}
+
+/** The to-do list: tasks with no date or time, Google Tasks style, with a line to add one straight away. */
+function TodoList() {
+  const s = useSnapshot();
+  const now = useNow();
+  const hold = useCheckedHold();
+  const [text, setText] = useState("");
+  const [showDone, setShowDone] = useState(false);
+  const undated = s.items.filter((i) => i.type === "TASK" && i.startDay === null);
+  const open = undated.filter((i) => !s.done.isDone(i.id, NO_DAY))
+    .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)
+    .map((item): TaskEntry => ({ item, day: null, status: "ANYTIME", missed: 0 }));
+  const shown = hold.arrange("todo", open, (e) => String(e.item.id));
+  const done = undated.filter((i) => s.done.isDone(i.id, NO_DAY)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const add = () => {
+    const title = text.trim();
+    if (!title) return;
+    saveItem(newItem({ type: "TASK", title }));
+    setText("");
+  };
+  return (
+    <div>
+      <div className="row todo-add">
+        <Icon name="add" />
+        <input className="plain grow" placeholder="Add a to-do" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        {text.trim() && <button className="btn small primary" onClick={add}>Add</button>}
+      </div>
+      {!shown.length && !done.length && <div className="hint">Nothing to do. Type above to add a task with no date.</div>}
+      {shown.map((e, index) => (
+        <TaskRow key={e.item.id} entry={e} s={s} now={now} onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
+      ))}
+      {done.length > 0 && <>
+        <div className="section" style={{ cursor: "pointer" }} onClick={() => setShowDone(!showDone)}>{showDone ? "▾" : "▸"} Completed ({done.length})</div>
+        {showDone && done.map((item) => (
+          <div key={item.id} className="task" onClick={() => go(`item/${item.id}`)}>
+            <span className="bar" style={{ background: s.colorOf(item) }} />
+            <input type="checkbox" checked onClick={(e) => e.stopPropagation()} onChange={() => toggleCompletion(item.id, NO_DAY, false)} />
+            <div className="grow"><div className="title done ellipsis">{item.title || "Untitled"}</div></div>
+          </div>
+        ))}
+      </>}
     </div>
   );
 }

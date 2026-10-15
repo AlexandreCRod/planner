@@ -109,6 +109,10 @@ select.plain { cursor: pointer; }
 .rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; position: absolute; }
 .rich { position: relative; }
 .icon-btn.on { color: var(--accent); }
+.todo-add { gap: 14px; padding: 4px 8px 8px; color: var(--accent); }
+.todo-add .plain { color: var(--text); font-size: 15px; }
+.gform .suggestion { min-height: 34px; font-size: 13px; gap: 10px; }
+.gform .suggestion > svg { color: var(--muted); }
 
 /* Task / event view (before Edit) */
 .info-row { display: flex; gap: 14px; align-items: flex-start; padding: 7px 0; font-size: 14.5px; }
