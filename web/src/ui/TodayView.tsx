@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
+import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
-import { preview } from "../domain/text.ts";
+import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
-import { useSnapshot } from "../store/store.ts";
-import { animated, useSpring } from "@react-spring/web";
-import type { ReactNode } from "react";
+import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { EventRow, Icon, TaskRow, go, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
-import { AppBarActions, MIcon } from "./phone/chrome.tsx";
-import { useHorizontalSwipe } from "./phone/gesture.ts";
+import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
+import { useSwipePager } from "./phone/pager.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const toInput = (e: number) => { const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
@@ -20,8 +18,16 @@ const rowKey = (e: TaskEntry) => `${e.item.id}_${e.day}`;
 let viewed: number | null = null;
 /** The day Today shows (the phone's + button adds to it). */
 export const todayViewedDay = () => viewed ?? todayEpoch();
+/** Back to the real today (a double tap on the phone's Today tab). */
+export const resetToday = () => { viewed = null; };
+
+type Hold = ReturnType<typeof useCheckedHold>;
 
 export function TodayView({ phone }: { phone?: boolean }) {
+  return phone ? <PhoneToday /> : <PcToday />;
+}
+
+function PcToday() {
   const s = useSnapshot();
   const now = useNow();
   const t = todayEpoch();
@@ -43,6 +49,33 @@ export function TodayView({ phone }: { phone?: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
+  const weekdayName = WEEKDAYS[weekday(day) - 1];
+
+  return (
+    <div className="today-page" style={{ maxWidth: 820 }}>
+      <div className="day-head">
+        <button className="icon-btn" title="Previous day (←)" onClick={() => show(day - 1)}><Icon name="left" /></button>
+        <label className="day-title" title="Pick a day">
+          <span className="big">{word ?? weekdayName}</span>
+          <span className="hint">{word ? `${weekdayName}, ` : ""}{formatDateShort(day)}</span>
+          <input type="date" value={toInput(day)} onChange={(e) => {
+            const [y, m, d] = e.target.value.split("-").map(Number);
+            if (e.target.value) show(epochOf(y, m, d));
+          }} onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch { /* not supported */ } }} />
+        </label>
+        <button className="icon-btn" title="Next day (→)" onClick={() => show(day + 1)}><Icon name="right" /></button>
+        {!isToday && <button className="btn small" onClick={() => show(t)}><Icon name="today" size={14} /> Back to today</button>}
+      </div>
+
+      <DaySections day={day} t={t} s={s} now={now} hold={hold} />
+    </div>
+  );
+}
+
+/** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
+function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
+  const isToday = day === t;
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
     const tasks = tasksForDay(s.items, s.done, t);
@@ -68,7 +101,6 @@ export function TodayView({ phone }: { phone?: boolean }) {
   const doneCount = dayTasks.filter((e) => e.status === "DONE").length;
   const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
   const dayWord = word?.toLowerCase() ?? "that day";
-  const weekdayName = WEEKDAYS[weekday(day) - 1];
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
     <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay}
@@ -76,7 +108,7 @@ export function TodayView({ phone }: { phone?: boolean }) {
       onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
   ));
 
-  const sections = <>
+  return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
@@ -103,9 +135,9 @@ export function TodayView({ phone }: { phone?: boolean }) {
       {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} />)}
       <div className="section">{isToday ? "Today's note" : "Note"}</div>
       <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
-        {phone && <MIcon name="editNote" />}
+        {phone && <MIcon name="oEditNote" />}
         {phone
-          ? <span className="note-text">{daily ? preview(daily.content, 200) || "Empty — tap to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}</span>
+          ? <PhoneNotePreview html={daily?.content ?? null} isToday={isToday} />
           : daily ? preview(daily.content, 200) || "Empty — click to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}
       </div>
       {upcoming.length > 0 && <>
@@ -113,26 +145,31 @@ export function TodayView({ phone }: { phone?: boolean }) {
         {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay />)}
       </>}
   </>;
+}
 
-  if (phone) return <PhoneToday day={day} word={word} weekdayName={weekdayName} isToday={isToday} show={show} t={t}>{sections}</PhoneToday>;
+/** Lines shown of the day's note on Today; more ends in "…". */
+const NOTE_PREVIEW_LINES = 4;
 
+/** The start of the day's note with its shape kept (TodayScreen.kt's NotePreview): bullets, numbers, boxes. */
+function PhoneNotePreview({ html, isToday }: { html: string | null; isToday: boolean }) {
+  const lines: NoteLine[] = html ? noteLines(html) : [];
+  if (!lines.length) {
+    return <span className="note-text">{html !== null ? "Empty — tap to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}</span>;
+  }
   return (
-    <div className="today-page" style={{ maxWidth: 820 }}>
-      <div className="day-head">
-        <button className="icon-btn" title="Previous day (←)" onClick={() => show(day - 1)}><Icon name="left" /></button>
-        <label className="day-title" title="Pick a day">
-          <span className="big">{word ?? weekdayName}</span>
-          <span className="hint">{word ? `${weekdayName}, ` : ""}{formatDateShort(day)}</span>
-          <input type="date" value={toInput(day)} onChange={(e) => {
-            const [y, m, d] = e.target.value.split("-").map(Number);
-            if (e.target.value) show(epochOf(y, m, d));
-          }} onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch { /* not supported */ } }} />
-        </label>
-        <button className="icon-btn" title="Next day (→)" onClick={() => show(day + 1)}><Icon name="right" /></button>
-        {!isToday && <button className="btn small" onClick={() => show(t)}><Icon name="today" size={14} /> Back to today</button>}
-      </div>
-
-      {sections}
+    <div className="note-lines">
+      {lines.slice(0, NOTE_PREVIEW_LINES).map((l, i) => {
+        const more = i === NOTE_PREVIEW_LINES - 1 && lines.length > NOTE_PREVIEW_LINES;
+        const ticked = l.kind === "CHECK" && l.checked;
+        return (
+          <div key={i} className="note-line" style={{ paddingLeft: l.level * 14 }}>
+            {l.kind === "BULLET" && <span className="mark b">•</span>}
+            {l.kind === "NUMBER" && <span className="mark n">{l.number}.</span>}
+            {l.kind === "CHECK" && <span className="mark c"><MIcon name={l.checked ? "oCheckBox" : "oCheckBoxOutlineBlank"} size={16} /></span>}
+            <span className={`txt ${ticked ? "ticked" : ""}`}>{l.text}{more ? " …" : ""}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -151,54 +188,71 @@ function PhoneProgress({ done, total }: { done: number; total: number }) {
   );
 }
 
+/** One page of the phone's day pager: its own scrolling list. Memoised, so turning days redraws only the newcomer. */
+const DayPage = memo(function DayPage({ day, t, s, now, hold }: { day: number; t: number; s: Snapshot; now: number; hold: Hold }) {
+  return (
+    <div className="today-page">
+      <DaySections day={day} t={t} s={s} now={now} hold={hold} phone />
+      <div style={{ height: 88 }} />
+    </div>
+  );
+});
+
 /**
  * Today on the phone, laid out like the native TodayScreen in HomeScreen's top app bar: the day switcher
  * (arrows and a two-line title that opens a date picker) as the bar's title, search and settings as its
- * actions, and the list below, where a sideways swipe moves a day back or forward.
+ * actions. Below, the days sit side by side like a ViewPager: a sideways drag moves them with the
+ * finger, the day before or after sliding in beside it, and letting go settles on a day.
  */
-function PhoneToday({ day, word, weekdayName, isToday, show, t, children }: {
-  day: number; word: string | null; weekdayName: string; isToday: boolean; show: (d: number) => void; t: number; children: ReactNode;
-}) {
-  const [{ x, o }, api] = useSpring(() => ({ x: 0, o: 1, config: { tension: 500, friction: 44 } }));
-  // A swipe brings the new day in from the side the finger went towards; the arrows change it at once.
-  const swiped = (dir: number) => {
-    show(day + dir);
-    api.start({ from: { x: dir * 56, o: 0.2 }, to: { x: 0, o: 1 } });
-  };
-  const list = useHorizontalSwipe<HTMLDivElement>({
-    onMove: (dx) => { api.start({ x: dx * 0.4, o: 1 - Math.min(0.5, Math.abs(dx) / 600), immediate: true }); },
-    onEnd: (dx, vx) => {
-      const fling = Math.abs(vx) > 0.6 && Math.sign(vx) === Math.sign(dx);
-      if (dx > 72 || (fling && dx > 0)) swiped(-1);
-      else if (dx < -72 || (fling && dx < 0)) swiped(1);
-      else api.start({ x: 0, o: 1 });
-    },
+function PhoneToday() {
+  const s = useSnapshot();
+  const now = useNow();
+  const t = todayEpoch();
+  const [view, setView] = useState<number | null>(viewed);
+  const day = view ?? t;
+  const dayRef = useRef(day);
+  dayRef.current = day;
+  const isToday = day === t;
+  const show = (d: number) => { viewed = d === t ? null : d; setView(viewed); };
+  const hold = useCheckedHold();
+  const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
+  // The neighbours are drawn a moment after the day changes, so turning a day (by swipe or arrow)
+  // only has to move pages that are already there; the new neighbour follows in the background.
+  const near = useDeferredValue(day);
+  const days = [...new Set([near - 1, near, near + 1, day])].sort((a, b) => a - b);
+  const track = useRef<HTMLDivElement>(null);
+  const pager = useSwipePager<HTMLDivElement>({
+    layers: () => [track.current],
+    onStep: (dir) => show(dayRef.current + dir),
   });
+
   return (
     <div className="p-scaffold">
-      <header className="p-appbar today">
+      <header className="p-appbar tall">
         <div className="p-dayrow">
-          <button className="p-icon title-icon" aria-label="Previous day" onClick={() => show(day - 1)}><MIcon name="arrowLeft" /></button>
+          <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => show(day - 1)} />
           <label className="p-dayswitch">
-            <span className="big">{word ?? weekdayName}</span>
+            <span className="big">{word ?? WEEKDAYS[weekday(day) - 1]}</span>
             <span className="small">{word ? formatDate(day) : formatDateShort(day)}</span>
             <input type="date" value={toInput(day)} onChange={(e) => {
               const [y, m, d] = e.target.value.split("-").map(Number);
               if (e.target.value) show(epochOf(y, m, d));
             }} />
           </label>
-          <button className="p-icon title-icon" aria-label="Next day" onClick={() => show(day + 1)}><MIcon name="arrowRight" /></button>
+          <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => show(day + 1)} />
         </div>
         <span className="grow" />
-        {!isToday && <button className="p-icon" aria-label="Back to today" onClick={() => show(t)}><MIcon name="today" /></button>}
+        {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         <AppBarActions />
       </header>
-      <div className="p-content today-list" ref={list}>
-        {/* At rest: no transform at all, so the list is painted at whole pixels (no soft text). */}
-        <animated.div className="today-page" style={{ transform: x.to((v) => (v ? `translate3d(${v}px,0,0)` : "none")), opacity: o }}>
-          {children}
-          <div style={{ height: 88 }} />
-        </animated.div>
+      <div className="p-daypager" ref={pager}>
+        <div className="p-daytrack" ref={track}>
+          {days.map((d) => (
+            <div key={d} className="p-content today-list p-daypage" style={{ left: `${(d - day) * 100}%` }} aria-hidden={d !== day}>
+              <DayPage day={d} t={t} s={s} now={now} hold={hold} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 // Small shared pieces: icons, task and event rows, the hash router.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
@@ -105,6 +105,8 @@ export function useCheckedHold() {
   const [held, setHeld] = useState<Map<string, { index: number; entry: TaskEntry }>>(new Map());
   const timers = useRef(new Map<string, number>());
   useEffect(() => () => { for (const t of timers.current.values()) clearTimeout(t); }, []);
+  // The same object until a row is held or let go, so memoised lists can take it as a prop.
+  return useMemo(() => {
   const drop = (k: string) => setHeld((prev) => { const n = new Map(prev); n.delete(k); return n; });
   return {
     onToggle(list: string, key: string, entry: TaskEntry, index: number, done: boolean) {
@@ -127,6 +129,7 @@ export function useCheckedHold() {
       return out;
     },
   };
+  }, [held]);
 }
 
 /** The "repeats" mark in front of a repeating item's title. */

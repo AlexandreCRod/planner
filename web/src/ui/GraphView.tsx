@@ -2,11 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { preview } from "../domain/text.ts";
 import type { ItemType } from "../domain/types.ts";
-import { useSnapshot } from "../store/store.ts";
+import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { Icon, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
 
-interface P { x: number; y: number; vx: number; vy: number }
+export interface P { x: number; y: number; vx: number; vy: number }
 
 export function GraphView({ focusId }: { focusId: number }) {
   const s = useSnapshot();
@@ -20,73 +20,9 @@ export function GraphView({ focusId }: { focusId: number }) {
   const [, setFrame] = useState(0);
   const svg = useRef<SVGSVGElement>(null);
 
-  const graph = useMemo(() => {
-    const ids = new Set(s.items.filter((i) => types.has(i.type)).map((i) => i.id));
-    let edges = [...new Set(s.links.filter((l) => ids.has(l.sourceId) && ids.has(l.targetId) && l.sourceId !== l.targetId)
-      .map((l) => (l.sourceId < l.targetId ? `${l.sourceId}:${l.targetId}` : `${l.targetId}:${l.sourceId}`)))]
-      .map((k) => k.split(":").map(Number) as [number, number]);
-    let keep: Set<number> = ids;
-    if (focus && s.byId.has(focus)) {
-      const adj = new Map<number, number[]>();
-      for (const [a, b] of edges) { adj.set(a, [...(adj.get(a) ?? []), b]); adj.set(b, [...(adj.get(b) ?? []), a]); }
-      keep = new Set([focus]);
-      let frontier = [focus];
-      for (let i = 0; i < depth; i++) {
-        frontier = frontier.flatMap((n) => adj.get(n) ?? []).filter((n) => !keep.has(n));
-        frontier.forEach((n) => keep.add(n));
-      }
-      edges = edges.filter(([a, b]) => keep.has(a) && keep.has(b));
-    }
-    const degree = new Map<number, number>();
-    for (const [a, b] of edges) { degree.set(a, (degree.get(a) ?? 0) + 1); degree.set(b, (degree.get(b) ?? 0) + 1); }
-    const nodes = s.items.filter((i) => keep.has(i.id) && (orphans || focus || (degree.get(i.id) ?? 0) > 0));
-    return { nodes, edges, degree };
-  }, [s, types, orphans, focus, depth]);
+  const graph = useMemo(() => buildGraph(s, types, orphans, focus, depth), [s, types, orphans, focus, depth]);
 
-  // Physics: repulsion between all nodes, springs along links, a gentle pull to the centre.
-  useEffect(() => {
-    const ids = graph.nodes.map((n) => n.id);
-    const r = 40 * Math.sqrt(ids.length + 1);
-    for (const id of ids) {
-      if (!pos.current.has(id)) {
-        const a = (id % 997) / 997 * Math.PI * 2, d = ((id % 389) / 389) * r;
-        pos.current.set(id, { x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0 });
-      }
-    }
-    let alpha = 1, raf = 0;
-    const tick = () => {
-      const f = new Map(ids.map((id) => [id, { x: 0, y: 0 }]));
-      for (let i = 0; i < ids.length; i++) {
-        const a = pos.current.get(ids[i])!;
-        for (let j = i + 1; j < ids.length; j++) {
-          const b = pos.current.get(ids[j])!;
-          let dx = a.x - b.x, dy = a.y - b.y;
-          let d2 = dx * dx + dy * dy;
-          if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-          const k = 5000 / (d2 * Math.sqrt(d2));
-          f.get(ids[i])!.x += dx * k; f.get(ids[i])!.y += dy * k;
-          f.get(ids[j])!.x -= dx * k; f.get(ids[j])!.y -= dy * k;
-        }
-      }
-      for (const [a, b] of graph.edges) {
-        const pa = pos.current.get(a), pb = pos.current.get(b);
-        if (!pa || !pb) continue;
-        const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.max(1, Math.hypot(dx, dy)), k = 0.04 * (d - 110) / d;
-        f.get(a)!.x += dx * k; f.get(a)!.y += dy * k; f.get(b)!.x -= dx * k; f.get(b)!.y -= dy * k;
-      }
-      for (const id of ids) {
-        const p = pos.current.get(id)!, fo = f.get(id)!;
-        p.vx = (p.vx + (fo.x - p.x * 0.012) * alpha) * 0.82;
-        p.vy = (p.vy + (fo.y - p.y * 0.012) * alpha) * 0.82;
-        p.x += p.vx; p.y += p.vy;
-      }
-      alpha *= 0.985;
-      setFrame((n) => n + 1);
-      if (alpha > 0.02) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [graph]);
+  useGraphSim(graph, pos, setFrame);
 
   const onWheel = (e: React.WheelEvent) => setView((v) => ({ ...v, k: Math.max(0.2, Math.min(4, v.k * (e.deltaY < 0 ? 1.1 : 1 / 1.1))) }));
   const onPan = (e: React.PointerEvent) => {
@@ -156,4 +92,78 @@ export function GraphView({ focusId }: { focusId: number }) {
       </div>
     </div>
   );
+}
+
+/** The nodes and links to draw: the chosen types, around the focused item when there is one (shared with the phone). */
+export function buildGraph(s: Snapshot, types: Set<ItemType>, orphans: boolean, focus: number, depth: number) {
+  const ids = new Set(s.items.filter((i) => types.has(i.type)).map((i) => i.id));
+  let edges = [...new Set(s.links.filter((l) => ids.has(l.sourceId) && ids.has(l.targetId) && l.sourceId !== l.targetId)
+    .map((l) => (l.sourceId < l.targetId ? `${l.sourceId}:${l.targetId}` : `${l.targetId}:${l.sourceId}`)))]
+    .map((k) => k.split(":").map(Number) as [number, number]);
+  let keep: Set<number> = ids;
+  if (focus && s.byId.has(focus)) {
+    const adj = new Map<number, number[]>();
+    for (const [a, b] of edges) { adj.set(a, [...(adj.get(a) ?? []), b]); adj.set(b, [...(adj.get(b) ?? []), a]); }
+    keep = new Set([focus]);
+    let frontier = [focus];
+    for (let i = 0; i < depth; i++) {
+      frontier = frontier.flatMap((n) => adj.get(n) ?? []).filter((n) => !keep.has(n));
+      frontier.forEach((n) => keep.add(n));
+    }
+    edges = edges.filter(([a, b]) => keep.has(a) && keep.has(b));
+  }
+  const degree = new Map<number, number>();
+  for (const [a, b] of edges) { degree.set(a, (degree.get(a) ?? 0) + 1); degree.set(b, (degree.get(b) ?? 0) + 1); }
+  const nodes = s.items.filter((i) => keep.has(i.id) && (orphans || focus || (degree.get(i.id) ?? 0) > 0));
+  return { nodes, edges, degree };
+}
+
+export type Graph = ReturnType<typeof buildGraph>;
+
+/** Runs the layout physics on [pos] for [graph], redrawing through [setFrame] each step. */
+export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number, P>>, setFrame: (f: (n: number) => number) => void) {
+  // Physics: repulsion between all nodes, springs along links, a gentle pull to the centre.
+  useEffect(() => {
+    const ids = graph.nodes.map((n) => n.id);
+    const r = 40 * Math.sqrt(ids.length + 1);
+    for (const id of ids) {
+      if (!pos.current.has(id)) {
+        const a = (id % 997) / 997 * Math.PI * 2, d = ((id % 389) / 389) * r;
+        pos.current.set(id, { x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0 });
+      }
+    }
+    let alpha = 1, raf = 0;
+    const tick = () => {
+      const f = new Map(ids.map((id) => [id, { x: 0, y: 0 }]));
+      for (let i = 0; i < ids.length; i++) {
+        const a = pos.current.get(ids[i])!;
+        for (let j = i + 1; j < ids.length; j++) {
+          const b = pos.current.get(ids[j])!;
+          let dx = a.x - b.x, dy = a.y - b.y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
+          const k = 5000 / (d2 * Math.sqrt(d2));
+          f.get(ids[i])!.x += dx * k; f.get(ids[i])!.y += dy * k;
+          f.get(ids[j])!.x -= dx * k; f.get(ids[j])!.y -= dy * k;
+        }
+      }
+      for (const [a, b] of graph.edges) {
+        const pa = pos.current.get(a), pb = pos.current.get(b);
+        if (!pa || !pb) continue;
+        const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.max(1, Math.hypot(dx, dy)), k = 0.04 * (d - 110) / d;
+        f.get(a)!.x += dx * k; f.get(a)!.y += dy * k; f.get(b)!.x -= dx * k; f.get(b)!.y -= dy * k;
+      }
+      for (const id of ids) {
+        const p = pos.current.get(id)!, fo = f.get(id)!;
+        p.vx = (p.vx + (fo.x - p.x * 0.012) * alpha) * 0.82;
+        p.vy = (p.vy + (fo.y - p.y * 0.012) * alpha) * 0.82;
+        p.x += p.vx; p.y += p.vy;
+      }
+      alpha *= 0.985;
+      setFrame((n) => n + 1);
+      if (alpha > 0.02) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [graph]);
 }

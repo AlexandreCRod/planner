@@ -1,38 +1,54 @@
-// Shared phone page chrome: the Material top app bar and its actions, and the icons the native app
-// uses there (Compose's material-icons paths, so they're drawn exactly alike).
-import { type ReactNode } from "react";
+// Shared phone chrome, drawn like the native app's Material 3 Compose pieces: the top app bar, icon
+// buttons, filter chips, segmented buttons, section headers, list rows, menus and dialogs. Sizes are
+// Compose's (1 CSS px = 1 dp) and text uses the M3 type scale classes in phone.css (.t-title-large...).
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { go } from "../common.tsx";
+import { ICONS } from "./icons.ts";
+import { pushBack } from "./native.ts";
 
-/** Material Icons (24 dp viewBox), as in androidx.compose.material.icons. */
-const M: Record<string, string> = {
-  arrowLeft: "M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z",
-  arrowRight: "M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z",
-  back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
-  search: "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
-  settings: "M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
-  today: "M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V9h14v10zm0-12H5V5h14v2zM7 11h5v5H7z",
-  add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
-  editNote: "M3 10h11v2H3v-2zm0-2h11V6H3v2zm0 8h7v-2H3v2zm15.01-3.13.71-.71c.39-.39 1.02-.39 1.41 0l.71.71c.39.39.39 1.02 0 1.41l-.71.71-2.12-2.12zm-.71.71-5.3 5.3V21h2.12l5.3-5.3-2.12-2.12z",
+/** Older short names used around the phone code, mapped to the Compose icons. */
+const ALIAS: Record<string, string> = {
+  arrowLeft: "fKeyboardArrowLeft", arrowRight: "fKeyboardArrowRight", back: "fArrowBack", forward: "fArrowForward",
+  search: "oSearch", settings: "oSettings", today: "oToday", add: "fAdd", editNote: "oEditNote",
 };
 
-/** A Material icon, 24 dp unless told otherwise, in the current text colour. */
-export function MIcon({ name, size = 24 }: { name: keyof typeof M | string; size?: number }) {
+/** A Material icon (Compose's own path data), 24 dp unless told otherwise, in the current text colour. */
+export function MIcon({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: "none", display: "block" }}>
-      <path d={M[name] ?? ""} fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="p-svg" style={color ? { color } : undefined}>
+      <path d={ICONS[ALIAS[name] ?? name] ?? ""} fill="currentColor" />
     </svg>
   );
 }
 
-/** Material top app bar with search and settings, then the page's scrolling content. */
-export function Scaffold({ title, children, flush, back }: { title: ReactNode; children: ReactNode; flush?: boolean; back?: boolean }) {
+/** Material 3 icon button: a 48 dp touch target with a 40 dp circular state layer. */
+export function IconButton({ icon, label, onClick, className = "", children }: {
+  icon?: string; label: string; onClick: () => void; className?: string; children?: ReactNode;
+}) {
+  return <button className={`p-icon ${className}`} aria-label={label} onClick={onClick}>{children ?? <MIcon name={icon!} />}</button>;
+}
+
+/**
+ * Material 3 small top app bar (64 dp): an optional back arrow, the title (titleLarge, 16 dp in, or
+ * after the arrow), then the actions. [title] may be any node (Search puts its field there).
+ */
+export function TopAppBar({ title, back, actions, tall, className = "" }: {
+  title: ReactNode; back?: boolean; actions?: ReactNode; tall?: boolean; className?: string;
+}) {
+  return (
+    <header className={`p-appbar ${tall ? "tall" : ""} ${className}`}>
+      {back && <IconButton icon="fArrowBack" label="Back" onClick={() => history.back()} />}
+      <div className={`p-appbar-title ${back ? "" : "inset"}`}>{title}</div>
+      {actions}
+    </header>
+  );
+}
+
+/** A page: the top app bar with search and settings (or a back arrow), then its scrolling content. */
+export function Scaffold({ title, children, flush, back, actions }: { title: ReactNode; children: ReactNode; flush?: boolean; back?: boolean; actions?: ReactNode }) {
   return (
     <div className="p-scaffold">
-      <header className="p-appbar">
-        {back && <button className="p-icon" aria-label="Back" onClick={() => history.back()}><MIcon name="back" /></button>}
-        <h1 className={back ? "" : "pad"}>{title}</h1>
-        {!back && <AppBarActions />}
-      </header>
+      <TopAppBar title={title} back={back} actions={actions ?? (back ? null : <AppBarActions />)} />
       <div className={`p-content ${flush ? "flush" : ""}`}>{children}</div>
     </div>
   );
@@ -40,7 +56,144 @@ export function Scaffold({ title, children, flush, back }: { title: ReactNode; c
 
 export function AppBarActions() {
   return <>
-    <button className="p-icon" aria-label="Search and browse" onClick={() => go("browse")}><MIcon name="search" /></button>
-    <button className="p-icon" aria-label="Settings" onClick={() => go("settings")}><MIcon name="settings" /></button>
+    <IconButton icon="oSearch" label="Search and browse" onClick={() => go("browse")} />
+    <IconButton icon="oSettings" label="Settings" onClick={() => go("settings")} />
   </>;
+}
+
+/** Material 3 filter chip: 32 dp, 8 dp corners, outlined until picked, then secondary container. */
+export function FilterChip({ selected, onClick, children, check }: { selected: boolean; onClick: () => void; children: ReactNode; check?: boolean }) {
+  return (
+    <button className={`p-chip ${selected ? "on" : ""} ${selected && check ? "check" : ""}`} aria-pressed={selected} onClick={onClick}>
+      {selected && check && <MIcon name="fCheck" size={18} />}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+/** A row of chips that scrolls sideways, as Compose's horizontalScroll Row (12 dp in, 8 dp apart). */
+export function ChipRow({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`p-chiprow ${className}`}>{children}</div>;
+}
+
+/** Material 3 single-choice segmented buttons (40 dp, full width, a tick on the chosen one). */
+export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+  return (
+    <div className="p-segmented" role="radiogroup">
+      {options.map(([k, l]) => (
+        <button key={k} role="radio" aria-checked={value === k} className={value === k ? "on" : ""} onClick={() => onChange(k)}>
+          <span className="p-seg-check">{value === k && <MIcon name="fCheck" size={18} />}</span>
+          <span>{l}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Section title (titleSmall in primary), optionally tappable with an expand arrow, like SectionHeader in Common.kt. */
+export function SectionHeader({ children, onClick, expanded, className = "" }: { children: ReactNode; onClick?: () => void; expanded?: boolean; className?: string }) {
+  const body = <><span className="grow">{children}</span>{expanded !== undefined && <MIcon name={expanded ? "fExpandLess" : "fExpandMore"} />}</>;
+  return onClick
+    ? <button className={`p-section ${className}`} onClick={onClick}>{body}</button>
+    : <div className={`p-section ${className}`}>{body}</div>;
+}
+
+export function EmptyHint({ children }: { children: ReactNode }) {
+  return <div className="p-empty">{children}</div>;
+}
+
+export interface MenuItem { label: string; onClick: () => void; icon?: string; checked?: boolean; divider?: boolean }
+
+/**
+ * Material 3 dropdown menu anchored under the top-right corner of its parent (which must be
+ * position: relative), with the M3 open animation; back and a tap outside close it.
+ */
+export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose: () => void; items: MenuItem[] }) {
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  useLayoutEffect(() => {
+    if (open) { setShown(true); setLeaving(false); }
+    else if (shown) { setLeaving(true); const t = window.setTimeout(() => { setShown(false); setLeaving(false); }, 75); return () => clearTimeout(t); }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => (open ? pushBack(onClose) : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!shown) return null;
+  return <>
+    <div className="p-menu-scrim" onPointerDown={onClose} />
+    <div className={`p-menu ${leaving ? "out" : ""}`} role="menu">
+      {items.map((it, i) => (
+        <div key={i}>
+          {it.divider && <div className="p-menu-divider" />}
+          <button role="menuitem" className={it.icon ? "lead" : ""} onClick={() => { onClose(); it.onClick(); }}>
+            {it.icon && <MIcon name={it.icon} />}
+            <span className="grow">{it.label}</span>
+            {it.checked && <span className="p-menu-tick">✓</span>}
+          </button>
+        </div>
+      ))}
+    </div>
+  </>;
+}
+
+/** Material 3 basic dialog: title, content, and text buttons at the end. */
+export function Dialog({ title, children, actions, onClose }: { title: ReactNode; children: ReactNode; actions: ReactNode; onClose: () => void }) {
+  useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="p-dialog-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="p-dialog" role="dialog">
+        <h2 className="p-dialog-title">{title}</h2>
+        <div className="p-dialog-body">{children}</div>
+        <div className="p-dialog-actions">{actions}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Material 3 checkbox (20 dp box in a 40 dp target), as a plain input styled in phone.css. */
+export function Checkbox({ checked, onChange, color }: { checked: boolean; onChange: (v: boolean) => void; color?: string }) {
+  return <input type="checkbox" className="p-checkbox" checked={checked} style={color ? { ["--c" as string]: color } : undefined}
+    onClick={(e) => e.stopPropagation()} onChange={(e) => onChange(e.target.checked)} />;
+}
+
+/** Keeps a value's last non-null version for a moment, so something can animate out with its content. */
+export function useLatched<T>(v: T | null): T | null {
+  const r = useRef(v);
+  if (v !== null) r.current = v;
+  return r.current;
+}
+
+// ---------- Bottom bar icons (TabIcons.kt) ----------
+
+/** The calendar page outline the Today and Calendar tabs share: body, rings and header line. */
+const PAGE = "M6 5H18a2.5 2.5 0 0 1 2.5 2.5V18a2.5 2.5 0 0 1 -2.5 2.5H6a2.5 2.5 0 0 1 -2.5 -2.5V7.5a2.5 2.5 0 0 1 2.5 -2.5ZM8 3V7M16 3V7M3.5 10H20.5";
+const dot = (x: number, y: number, r = 1.1) => `M${x - r} ${y}a${r} ${r} 0 1 1 ${2 * r} 0a${r} ${r} 0 1 1 ${-2 * r} 0`;
+const DOTS = [dot(8, 14), dot(12, 14), dot(16, 14), dot(8, 17.5), dot(12, 17.5)].join("");
+const FILLED_PAGE = "M6 4.1H18a3.4 3.4 0 0 1 3.4 3.4V18a3.4 3.4 0 0 1 -3.4 3.4H6a3.4 3.4 0 0 1 -3.4 -3.4V7.5a3.4 3.4 0 0 1 3.4 -3.4ZM4.4 9.3H19.6V10.5H4.4Z";
+const TASK_FILLED = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM6.3 12.4L7.7 11L10.5 13.8L16.3 8L17.7 9.4L10.5 16.6Z";
+
+/** One tab's icon, outlined or solid (TabIcons.kt and the Material icons HomeScreen.kt picks). */
+export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolean; day: number }) {
+  const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const };
+  let body: ReactNode;
+  switch (tab) {
+    case "today":
+    case "calendar":
+      body = selected
+        ? <>
+            <path d="M8 3V6M16 3V6" {...stroke} />
+            <path d={FILLED_PAGE + (tab === "calendar" ? DOTS : "")} fill="currentColor" fillRule="evenodd" />
+          </>
+        : <>
+            <path d={PAGE} {...stroke} />
+            {tab === "calendar" && <path d={DOTS} fill="currentColor" />}
+          </>;
+      if (tab === "today") {
+        body = <>{body}<text x="12" y="18.65" textAnchor="middle" fontSize="8.5" fontWeight="700" letterSpacing="-0.25"
+          fill={selected ? "var(--p-sec-container)" : "currentColor"} fontFamily="Roboto, sans-serif">{day}</text></>;
+      }
+      break;
+    case "tasks": body = <path d={selected ? TASK_FILLED : ICONS.oTaskAlt} fill="currentColor" fillRule="evenodd" />; break;
+    case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
+    default: body = <path d={selected ? ICONS.fHub : ICONS.oHub} fill="currentColor" />;
+  }
+  return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="p-svg">{body}</svg>;
 }

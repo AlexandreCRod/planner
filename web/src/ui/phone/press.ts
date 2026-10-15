@@ -2,17 +2,17 @@
 // (like Compose's clickable), on anything tappable. One listener for the whole document, so no
 // component has to opt in, and nothing re-renders: the ripple is a plain element added and removed here.
 //
-// Timing follows Compose: outside a scrolling list the ripple shows on touch-down; inside one it waits
-// for the tap timeout (100 ms) so a scroll doesn't flash every row it starts on, and a tap released
-// before that still shows it. A finger moving past the touch slop, or the browser taking the touch for
+// Timing: outside a scrolling list the ripple shows on touch-down; inside one it waits a moment (50 ms,
+// half of Compose's tap timeout: about the least that keeps a scroll from flashing the row it starts on),
+// and a tap released before that still shows it at once. A finger moving past the touch slop, or the browser taking the touch for
 // scrolling, cancels it.
 
 /** What gets a ripple. Bottom-bar tabs don't (the native bar has none); text fields and checkboxes neither. */
-const PRESSABLE = "button, a[href], [role=button], label.p-dayswitch, .task, .event, .note-preview, .note-card, .pick";
+const PRESSABLE = "button, a[href], [role=button], label.p-dayswitch, label.p-check-row, .task, .event, .note-preview, .note-card, .pick";
 const SKIP = "input, textarea, select, [contenteditable=true], .p-bar, .pg";
-/** Android's touch slop (8 dp) and tap timeout. */
+/** Android's touch slop (8 dp), and the wait before a ripple inside a scrolling list. */
 export const TOUCH_SLOP = 8;
-const TAP_TIMEOUT = 100;
+const TAP_TIMEOUT = 50;
 /** How long a ripple stays fully shown at least, then how long it fades. */
 const MIN_SHOWN = 120;
 const FADE = 150;

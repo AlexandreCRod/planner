@@ -105,10 +105,14 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-scaffold { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .phone .p-statusbar { flex: none; height: var(--sat); }
 .phone .p-appbar { flex: none; display: flex; align-items: center; gap: 0; padding: var(--sat) 4px 0 4px; height: calc(64px + var(--sat)); background: var(--bg); }
-.phone .p-appbar h1 { flex: 1; min-width: 0; margin: 0; font-size: 22px; line-height: 28px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
-.phone .p-appbar h1.pad { padding-left: 12px; }
-.phone .p-appbar.today { height: calc(76px + var(--sat)); }
-.phone .p-icon { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); padding: 0; }
+.phone .p-appbar.tall { height: calc(76px + var(--sat)); }
+/* TopAppBar's title: titleLarge, 16 dp in (4 after a back arrow). */
+.phone .p-appbar-title { flex: 1; min-width: 0; padding-left: 4px; font-size: 22px; line-height: 28px; font-weight: 400; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-appbar-title.inset { padding-left: 12px; }
+/* M3 icon button: a 48 dp target, a 40 dp round state layer, the icon in onSurfaceVariant. */
+.phone .p-icon { flex: none; width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); padding: 0; }
+.phone .p-icon > .p-ripple { inset: 4px; border-radius: 50%; }
+.phone .p-svg { flex: none; display: block; }
 /* Today's bar (HomeScreen.kt: TopAppBar with expandedHeight 76 dp, DaySwitcher as its title, which
    M3 insets 16 dp; the arrows sit in the title slot, so they take the title's colour, onSurface). */
 .phone .p-dayrow { display: flex; align-items: center; min-width: 0; margin-left: 12px; }
@@ -135,36 +139,36 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .today-list .hint.empty { padding: 6px 16px; margin: 0 !important; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
 .phone .today-list .hint.anytime { padding: 6px 16px; margin: 0 !important; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 
-.phone .today-list .task { padding: 2px 8px; gap: 0; border-radius: 0; align-items: center; }
-.phone .today-list .task .bar { width: 4px; height: 36px; align-self: center; border-radius: 2px; flex: none; }
+.phone :is(.today-list, .p-rows) .task { padding: 2px 8px; gap: 0; border-radius: 0; align-items: center; }
+.phone :is(.today-list, .p-rows) .task .bar { width: 4px; height: 36px; align-self: center; border-radius: 2px; flex: none; }
 /* Material 3 checkbox: a 20 dp box with a 2 dp border in a 40 dp touch target, filled with the item's colour. */
-.phone .today-list .task input[type=checkbox] {
+.phone :is(.today-list, .p-rows) .task input[type=checkbox] {
   -webkit-appearance: none; appearance: none; flex: none; margin: 10px; width: 20px; height: 20px;
   border: 2px solid var(--muted); border-radius: 2px; background: transparent;
 }
-.phone .today-list .task input[type=checkbox]:checked { border-color: var(--c, var(--p-primary)); background: var(--c, var(--p-primary)) var(--p-check) center / 20px no-repeat; }
-.phone .today-list .task .grow { padding: 5px 0; }
-.phone .today-list .task .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.phone .today-list .task .title.done { color: var(--muted); }
-.phone .today-list .task .sub { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; margin-top: 0; color: var(--muted); }
-.phone .today-list .task .sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.phone .today-list .task .rem-emoji, .phone .today-list .fire-emoji { display: none; }
-.phone .today-list .task .sub .sub-icon { display: inline-flex; flex: none; }
-.phone .today-list .task .pills { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 8px; }
-.phone .today-list .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
-.phone .today-list .pill .sub-icon.fire { display: inline-flex; margin-right: 3px; }
-.phone .today-list .rep { width: 17px; height: 17px; margin-right: 4px; vertical-align: -3px; }
+.phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked { border-color: var(--c, var(--p-primary)); background: var(--c, var(--p-primary)) var(--p-check) center / 20px no-repeat; }
+.phone :is(.today-list, .p-rows) .task .grow { padding: 5px 0; }
+.phone :is(.today-list, .p-rows) .task .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.phone :is(.today-list, .p-rows) .task .title.done { color: var(--muted); }
+.phone :is(.today-list, .p-rows) .task .sub { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; letter-spacing: .4px; margin-top: 0; color: var(--muted); }
+.phone :is(.today-list, .p-rows) .task .sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone :is(.today-list, .p-rows) .task .rem-emoji, .phone :is(.today-list, .p-rows) .fire-emoji { display: none; }
+.phone :is(.today-list, .p-rows) .task .sub .sub-icon { display: inline-flex; flex: none; }
+.phone :is(.today-list, .p-rows) .task .pills { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 8px; }
+.phone :is(.today-list, .p-rows) .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+.phone :is(.today-list, .p-rows) .pill .sub-icon.fire { display: inline-flex; margin-right: 3px; }
+.phone :is(.today-list, .p-rows) .rep { width: 17px; height: 17px; margin-right: 4px; vertical-align: -3px; }
 
-.phone .today-list .event { padding: 7px 16px; gap: 0; border-radius: 0; align-items: center; }
-.phone .today-list .event .time { width: 60px; flex: none; display: flex; flex-direction: column; }
-.phone .today-list .event .time br { display: none; }
-.phone .today-list .event .time .t1 { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); }
-.phone .today-list .event .time .t2 { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
-.phone .today-list .event .time .t0 { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--text); }
-.phone .today-list .event > span:not(.p-ripple) { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
-.phone .today-list .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
-.phone .today-list .event .grow .hint { font-size: 12px !important; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
-.phone .today-list .event .grow .hint:empty { display: none; }
+.phone :is(.today-list, .p-rows) .event { padding: 7px 16px; gap: 0; border-radius: 0; align-items: center; }
+.phone :is(.today-list, .p-rows) .event .time { width: 60px; flex: none; display: flex; flex-direction: column; }
+.phone :is(.today-list, .p-rows) .event .time br { display: none; }
+.phone :is(.today-list, .p-rows) .event .time .t1 { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); }
+.phone :is(.today-list, .p-rows) .event .time .t2 { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone :is(.today-list, .p-rows) .event .time .t0 { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--text); }
+.phone :is(.today-list, .p-rows) .event > span:not(.p-ripple) { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
+.phone :is(.today-list, .p-rows) .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone :is(.today-list, .p-rows) .event .grow .hint { font-size: 12px !important; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+.phone :is(.today-list, .p-rows) .event .grow .hint:empty { display: none; }
 
 .phone .today-list .note-preview {
   margin: 2px 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 12px;
@@ -176,12 +180,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-cal { position: relative; }
 .phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px 0 16px; }
 .phone .p-calhead h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.phone .p-menu-scrim { position: fixed; inset: 0; z-index: 29; }
-.phone .p-menu { position: absolute; right: 8px; top: 44px; z-index: 30; min-width: 180px; padding: 8px 0; border-radius: 4px; background: var(--p-sc); box-shadow: 0 2px 6px rgb(0 0 0 / .2), 0 6px 18px rgb(0 0 0 / .14); animation: p-menu .14s ease-out; transform-origin: top right; }
-@keyframes p-menu { from { opacity: 0; transform: scale(.9); } }
-.phone .p-menu button { display: flex; width: 100%; height: 48px; align-items: center; padding: 0 16px; border: 0; background: none; font-size: 14px; color: var(--text); text-align: left; }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
-.phone .p-month { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .phone .pg { display: flex; flex-direction: column; height: 100%; min-height: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .phone .pg-gutter { width: 44px; flex: none; }
@@ -235,7 +234,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-slot b { font-size: 12px; line-height: 14px; font-weight: 500; white-space: nowrap; }
 .phone .pg-slot span { font-size: 11px; line-height: 12px; opacity: .9; white-space: nowrap; }
 .phone .pg-now { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--danger); z-index: 2; pointer-events: none; }
-.phone .pg-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
 
 /* ---------- Add panel (GrowingPanel.kt, NewEventSheet.kt, QuickAddSheet.kt) ---------- */
 .phone .gp-root { position: fixed; inset: 0; z-index: 50; overflow: hidden; }
@@ -300,7 +298,195 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 
 /* The row icons drawn with the native app's glyphs (Compose material-icons: Outlined.Alarm, Outlined.Link,
    Filled.Repeat, Filled.LocalFireDepartment); the shared rows keep their own paths on the PC. */
-.phone .today-list .sub-icon.alarm path { d: path("M22 5.72l-4.6-3.86-1.29 1.53 4.6 3.86L22 5.72zM7.88 3.39L6.6 1.86 2 5.71l1.29 1.53 4.59-3.85zM12.5 8H11v6l4.75 2.85.75-1.23-4-2.37V8zM12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"); }
-.phone .today-list .sub-icon.link path { d: path("M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"); }
-.phone .today-list .rep path { d: path("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"); }
-.phone .today-list .sub-icon.fire path { d: path("M19.48 12.35c-1.57-4.08-7.16-4.3-5.81-10.23.1-.44-.37-.78-.75-.55C9.29 3.71 6.68 8 8.87 13.62c.18.46-.36.89-.75.59-1.81-1.37-2-3.34-1.84-4.75.06-.52-.62-.77-.91-.34C4.69 10.16 4 11.84 4 14.37c.38 5.6 5.11 7.32 6.81 7.54 2.43.31 5.06-.14 6.95-1.87 2.08-1.93 2.84-5.01 1.72-7.69zm-9.28 5.03c1.44-.35 2.18-1.39 2.38-2.31.33-1.43-.96-2.83-.09-5.09.33 1.87 3.27 3.04 3.27 5.08.08 2.53-2.66 4.7-5.56 2.32z"); }
+.phone :is(.today-list, .p-rows) .sub-icon.alarm path { d: path("M22 5.72l-4.6-3.86-1.29 1.53 4.6 3.86L22 5.72zM7.88 3.39L6.6 1.86 2 5.71l1.29 1.53 4.59-3.85zM12.5 8H11v6l4.75 2.85.75-1.23-4-2.37V8zM12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"); }
+.phone :is(.today-list, .p-rows) .sub-icon.link path { d: path("M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"); }
+.phone :is(.today-list, .p-rows) .rep path { d: path("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"); }
+.phone :is(.today-list, .p-rows) .sub-icon.fire path { d: path("M19.48 12.35c-1.57-4.08-7.16-4.3-5.81-10.23.1-.44-.37-.78-.75-.55C9.29 3.71 6.68 8 8.87 13.62c.18.46-.36.89-.75.59-1.81-1.37-2-3.34-1.84-4.75.06-.52-.62-.77-.91-.34C4.69 10.16 4 11.84 4 14.37c.38 5.6 5.11 7.32 6.81 7.54 2.43.31 5.06-.14 6.95-1.87 2.08-1.93 2.84-5.01 1.72-7.69zm-9.28 5.03c1.44-.35 2.18-1.39 2.38-2.31.33-1.43-.96-2.83-.09-5.09.33 1.87 3.27 3.04 3.27 5.08.08 2.53-2.66 4.7-5.56 2.32z"); }
+
+/* ---------- Material 3 type scale (Typography defaults, as the native theme uses them) ---------- */
+.phone .t-title-large { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; }
+.phone .t-title-medium { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; }
+.phone .t-title-small { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.phone .t-body-large, .phone .body-large { font-size: 16px; line-height: 24px; font-weight: 400; letter-spacing: .5px; }
+.phone .t-body-medium { font-size: 14px; line-height: 20px; font-weight: 400; letter-spacing: .25px; }
+.phone .t-body-small { font-size: 12px; line-height: 16px; font-weight: 400; letter-spacing: .4px; }
+.phone .t-label-large { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.phone .t-label-medium { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+.phone .t-label-small { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+.phone .muted { color: var(--muted); }
+.phone .clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.phone .p-endspace { height: 88px; }
+.phone .p-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.phone .p-divider { flex: none; height: 1px; background: var(--line); }
+
+/* ---------- Shared M3 pieces (chrome.tsx) ---------- */
+/* Filter chip: 32 dp tall in a 48 dp touch row, 8 dp corners, outlined until picked. */
+.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.phone .p-chiprow::-webkit-scrollbar { display: none; }
+.phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph { padding-top: 8px; padding-bottom: 4px; }
+.phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
+.phone .p-chip {
+  flex: none; height: 32px; margin: 8px 0; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 8px; background: none;
+  display: inline-flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px;
+  color: var(--muted); white-space: nowrap; transition: background-color .15s, border-color .15s, color .15s;
+}
+.phone .p-chip.on { background: var(--p-sec-container); border-color: transparent; color: var(--p-on-sec-container); }
+.phone .p-chip.check { padding-left: 8px; }
+/* Segmented buttons: 40 dp in a 48 dp row, outlined, the chosen one filled with a tick. */
+.phone .p-seg-wrap { flex: none; padding: 8px 16px 0; }
+.phone .p-segmented { display: flex; height: 40px; margin: 4px 0; border: 1px solid var(--p-outline); border-radius: 20px; overflow: hidden; }
+.phone .p-segmented button { flex: 1; min-width: 0; border: 0; background: none; padding: 0 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); transition: background-color .15s; }
+.phone .p-segmented button + button { border-left: 1px solid var(--p-outline); }
+.phone .p-segmented button.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
+.phone .p-seg-check { display: inline-flex; width: 0; overflow: hidden; transition: width .15s, margin .15s; }
+.phone .p-segmented button.on .p-seg-check { width: 18px; margin-right: 8px; }
+/* SectionHeader (Common.kt): titleSmall in primary, 16 dp in, 10 above, 2 below. */
+.phone .p-section { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 10px 8px 2px 16px; border: 0; background: none; text-align: left; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary); }
+.phone .p-section svg { color: var(--muted); }
+.phone .p-empty { padding: 6px 16px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .p-empty.pad16 { padding: 16px; }
+.phone .p-text-btn.icon { gap: 4px; padding: 0 12px; }
+/* Dropdown menu: surfaceContainer, 4 dp corners, 48 dp items in labelLarge, under the button's end. */
+.phone .p-menu-anchor { position: relative; flex: none; }
+.phone .p-menu-scrim { position: fixed; inset: 0; z-index: 39; }
+.phone .p-menu {
+  position: absolute; right: 0; top: 48px; z-index: 40; min-width: 112px; max-width: 280px; padding: 8px 0; border-radius: 4px; background: var(--p-sc);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .3), 0 4px 8px 3px rgb(0 0 0 / .15); transform-origin: top right; animation: p-menu-in .12s cubic-bezier(.2, 0, 0, 1);
+}
+.phone .p-menu.out { animation: p-menu-out .075s linear forwards; }
+@keyframes p-menu-in { from { opacity: 0; transform: scale(.8); } }
+@keyframes p-menu-out { to { opacity: 0; } }
+.phone .p-menu button { display: flex; width: 100%; height: 48px; align-items: center; gap: 12px; padding: 0 12px; border: 0; background: none; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); text-align: left; white-space: nowrap; }
+.phone .p-menu button svg { color: var(--muted); }
+.phone .p-menu-tick { width: 24px; margin: 0 6px 0 12px; text-align: center; font-size: 16px; font-weight: 400; }
+.phone .p-menu-divider { height: 1px; background: var(--line); }
+/* Basic dialog: surfaceContainerHigh, 28 dp corners, 24 dp padding, headlineSmall title. */
+.phone .p-dialog-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / .32); animation: p-fade .15s linear; }
+@keyframes p-fade { from { opacity: 0; } }
+.phone .p-dialog { width: 100%; min-width: 280px; max-width: 560px; max-height: 80vh; display: flex; flex-direction: column; padding: 24px 24px 18px; border-radius: 28px; background: var(--p-sc-high); box-shadow: 0 4px 12px rgb(0 0 0 / .2); animation: p-dialog-in .2s cubic-bezier(.2, 0, 0, 1); }
+@keyframes p-dialog-in { from { opacity: 0; transform: scale(.9); } }
+.phone .p-dialog-title { margin: 0 0 16px; font-size: 24px; line-height: 32px; font-weight: 400; color: var(--text); }
+.phone .p-dialog-body { flex: 1; min-height: 0; overflow-y: auto; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .p-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; margin-right: -12px; }
+.phone .p-check-row { display: flex; align-items: center; min-height: 48px; color: var(--text); font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+.phone .p-check-row .p-checkbox { margin-left: -10px; }
+.phone .p-dialog .p-divider { margin: 4px 0; }
+/* Checkbox: a 20 dp box with a 2 dp border in a 40 dp target, filled when ticked. */
+.phone .p-checkbox {
+  -webkit-appearance: none; appearance: none; flex: none; margin: 10px; width: 20px; height: 20px;
+  border: 2px solid var(--muted); border-radius: 2px; background: transparent;
+}
+.phone .p-checkbox:checked { border-color: var(--c, var(--p-primary)); background: var(--c, var(--p-primary)) var(--p-check) center / 20px no-repeat; }
+
+/* ---------- Bottom bar (HomeScreen.kt): icons cross-fade outlined/solid, the pill grows in on a jump ---------- */
+.phone .p-tab-icon { position: relative; }
+.phone .p-ico { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity .3s linear; }
+.phone .p-ico.sel, .phone .p-tab.on .p-ico.off { opacity: 0; }
+.phone .p-tab.on .p-ico.sel { opacity: 1; }
+.phone .p-pill.pop { animation: p-pill .15s cubic-bezier(.2, 0, 0, 1); }
+@keyframes p-pill { from { transform: scaleX(0); opacity: 0; } }
+
+/* ---------- Today: the day pager ---------- */
+.phone .p-daypager { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.phone .p-daytrack { position: absolute; inset: 0; }
+.phone .p-content.p-daypage { position: absolute; top: 0; bottom: 0; width: 100%; contain: layout paint style; background: var(--bg); }
+.phone .today-list .note-preview > svg { color: var(--muted); }
+.phone .note-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.phone .note-line { display: flex; align-items: center; min-width: 0; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--text); }
+.phone .note-line .mark { flex: none; color: var(--muted); }
+.phone .note-line .mark.b { width: 14px; }
+.phone .note-line .mark.n { width: 20px; }
+.phone .note-line .mark.c { display: inline-flex; margin-right: 6px; }
+.phone .note-line .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .note-line .txt.ticked { color: var(--muted); text-decoration: line-through; }
+
+/* ---------- Compact rows (Rows.kt without roomy): Tasks, the calendar's day list, Agenda ---------- */
+.phone .p-rows .task { padding: 1px 8px; }
+.phone .p-rows .task .bar { width: 3px; height: 30px; }
+.phone .p-rows .task .grow { padding: 4px 0; }
+.phone .p-rows .task .title { font-size: 15px; line-height: 20px; letter-spacing: .25px; }
+.phone .p-rows .task .title.done { text-decoration: line-through; }
+.phone .p-rows .event { padding: 5px 16px; }
+.phone .p-rows .event > span:not(.p-ripple) { width: 3px !important; height: 30px; }
+.phone .p-rows .event .grow > .ellipsis:first-child { font-size: 15px; line-height: 20px; letter-spacing: .25px; }
+
+/* ---------- Calendar ---------- */
+.phone .p-calhead { padding: 0 4px 0 16px; }
+.phone .p-calhead h2 { margin: 0; }
+.phone .p-hpager { position: relative; flex: none; overflow: hidden; touch-action: pan-y; }
+.phone .p-yearview { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.phone .p-hstrip { position: relative; }
+.phone .p-hpanel { position: absolute; top: 0; width: 100%; }
+.phone .p-hpanel.cur { position: relative; }
+.phone .p-monthview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.phone .p-mgrid { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; background: var(--bg); }
+.phone .p-mweek { display: flex; padding: 4px 0; }
+.phone .p-mweek span { flex: 1; text-align: center; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .p-mrow { display: flex; }
+.phone .p-mcell { flex: 1; min-width: 0; padding: 2px; box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--line) 50%, transparent); overflow: hidden; }
+.phone .p-mcell.sel { background: color-mix(in srgb, var(--p-primary-container) 45%, transparent); }
+.phone .p-mnum-row { display: flex; align-items: center; color: var(--muted); }
+.phone .p-mnum { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12px; line-height: 16px; color: var(--text); }
+.phone .p-mnum.out { color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.phone .p-mnum.today { background: var(--p-primary); color: var(--p-on-primary); font-weight: 700; }
+.phone .p-mchip { display: block; margin-top: 1px; padding: 0 2px; border-radius: 3px; font-size: 9px; line-height: 10px; white-space: nowrap; overflow: hidden; }
+.phone .p-mmore { display: block; font-size: 9px; line-height: 12px; color: var(--muted); }
+.phone .p-dayagenda { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.phone .p-dayagenda-head { display: flex; align-items: center; padding: 4px 4px 0 16px; }
+.phone .p-ygrid { display: grid; grid-template-columns: 1fr 1fr; padding: 8px 8px 96px; }
+.phone .p-ymonth { padding: 6px; }
+.phone .p-ytitle { padding: 0 2px 4px; color: var(--text); }
+.phone .p-ytitle.now { color: var(--p-primary); }
+.phone .p-yweek, .phone .p-yrow { display: flex; }
+.phone .p-yweek span { flex: 1; text-align: center; font-size: 9px; line-height: 12px; color: var(--muted); }
+.phone .p-yday { flex: 1; aspect-ratio: 1; display: grid; place-items: center; min-width: 0; }
+.phone .p-yday > span { width: calc(100% - 2px); height: calc(100% - 2px); border-radius: 50%; display: grid; place-items: center; font-size: 9px; line-height: 10px; color: var(--text); }
+.phone .p-yday > span.today { color: var(--p-on-primary); font-weight: 700; }
+.phone .p-agenda { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.phone .p-agenda-day { padding: 6px 16px; background: var(--p-sc-low); color: var(--p-primary); }
+.phone .pg-dh .note { padding: 0; border: 0; background: none; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
+
+/* ---------- Tasks: the to-do line ---------- */
+.phone .p-todo-add { display: flex; align-items: center; padding: 8px 8px 0 20px; color: var(--p-primary); }
+.phone .p-todo-add input { flex: 1; min-width: 0; margin-left: 16px; padding: 14px 0; border: 0; background: none; outline: none; font-size: 16px; line-height: 24px; color: var(--text); caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .p-todo-add input::placeholder { color: var(--muted); }
+
+/* ---------- Notes: staggered cards ---------- */
+.phone .p-list.notes { padding: 0 12px; }
+.phone .p-notegrid { display: flex; gap: 8px; align-items: flex-start; }
+.phone .p-notecol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.phone .p-notecard { position: relative; border-radius: 12px; overflow: hidden; background: var(--p-sc-high); color: var(--text); }
+.phone .p-notecard .accent { height: 4px; }
+.phone .p-notecard .in { padding: 12px; }
+.phone .p-notecard .head { display: flex; align-items: center; gap: 4px; }
+.phone .p-notecard .head svg { opacity: .7; }
+.phone .p-notecard .title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: .1px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.phone .p-notecard .text { margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; opacity: .85; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.phone .p-notecard .foot { display: flex; align-items: center; gap: 2px; margin-top: 6px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; opacity: .6; }
+.phone .p-notecard .foot .grow { min-width: 0; overflow: hidden; white-space: nowrap; }
+
+/* ---------- Links: the graph canvas ---------- */
+.phone .p-graph { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.phone .p-graph svg { display: block; position: absolute; inset: 0; }
+.phone .p-graph line { stroke: color-mix(in srgb, var(--p-outline) 45%, transparent); stroke-width: 1; }
+.phone .p-graph line.hot { stroke: var(--p-primary); stroke-width: 2; }
+.phone .p-graph .ring { fill: none; stroke: color-mix(in srgb, var(--text) 60%, transparent); stroke-width: 1.5; }
+.phone .p-graph .dot { fill: color-mix(in srgb, var(--text) 25%, transparent); }
+.phone .p-graph .hl { fill: none; stroke: var(--p-primary); stroke-width: 2; }
+.phone .p-graph text { font-size: 11px; dominant-baseline: hanging; text-anchor: middle; fill: color-mix(in srgb, var(--text) 90%, transparent); }
+.phone .p-graph text.dim { fill: color-mix(in srgb, var(--text) 35%, transparent); }
+.phone .p-graph-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 32px; text-align: center; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .p-graph-reset { position: absolute; top: 0; right: 0; }
+.phone .p-graphcard { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 16px 16px 8px; border-radius: 12px; background: var(--p-sc-highest); color: var(--text); }
+.phone .p-graphcard .actions { display: flex; margin: 4px 0 0 -12px; }
+
+/* ---------- Search (BrowseScreen.kt) ---------- */
+.phone .p-appbar.search .p-appbar-title { padding-left: 4px; overflow: visible; }
+.phone .p-searchfield { display: flex; align-items: center; height: 56px; padding-left: 12px; color: var(--muted); }
+.phone .p-searchfield input { flex: 1; min-width: 0; height: 100%; margin-left: 16px; border: 0; background: none; outline: none; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .p-searchfield input::placeholder { color: var(--muted); }
+.phone .p-count { flex: none; padding: 4px 16px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .p-itemrow { display: flex; align-items: center; gap: 14px; padding: 7px 16px; }
+.phone .p-itemrow .grow { flex: 1; min-width: 0; }
+.phone .p-itemrow .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-itemrow .sub { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

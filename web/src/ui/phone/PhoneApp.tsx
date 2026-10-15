@@ -2,36 +2,38 @@
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
 import { animated, useSpring, type SpringValue } from "@react-spring/web";
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
-import { BrowseView } from "../BrowseView.tsx";
-import { Icon, go, useRoute } from "../common.tsx";
-import { GraphView } from "../GraphView.tsx";
+import { go, useRoute } from "../common.tsx";
 import { ItemEditor } from "../ItemEditor.tsx";
-import { NoteEditor, NotesView } from "../NotesView.tsx";
+import { NoteEditor } from "../NotesView.tsx";
 import { SettingsView } from "../SettingsView.tsx";
-import { TasksView } from "../TasksView.tsx";
-import { TodayView, todayViewedDay } from "../TodayView.tsx";
+import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest } from "./AddPanel.tsx";
-import { MIcon, Scaffold } from "./chrome.tsx";
+import { MIcon, Scaffold, TabGlyph } from "./chrome.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing } from "./native.ts";
-import { PhoneCalendar, calendarSelectedDay } from "./PhoneCalendar.tsx";
+import { PhoneCalendar, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
+import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.tsx";
 import "./phone.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
+import { startLatencyLog } from "./latency.ts";
 
-const TABS: { key: string; label: string; icon: string }[] = [
-  { key: "today", label: "Today", icon: "today" },
-  { key: "calendar", label: "Calendar", icon: "calendar" },
-  { key: "tasks", label: "Tasks", icon: "tasks" },
-  { key: "notes", label: "Notes", icon: "lightbulb" },
-  { key: "graph", label: "Links", icon: "graph" },
+// The native app's tabs, less Alarms (left out of the web app for now).
+const TABS: { key: string; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "calendar", label: "Calendar" },
+  { key: "tasks", label: "Tasks" },
+  { key: "notes", label: "Notes" },
+  { key: "graph", label: "Links" },
 ];
 const LAST = TABS.length - 1;
+/** Two taps on the same tab closer than this reset its page (HomeScreen.kt). */
+const DOUBLE_TAP_MS = 400;
 /** Compose's pager snap: stiffness 400, critically damped. */
 const PAGER_SPRING = { tension: 400, friction: 40 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -53,8 +55,12 @@ export function PhoneApp() {
   // Pages already shown stay mounted, so sliding back to them is instant. The rest arrive once the
   // app has settled, so a first slide across them doesn't build them mid-gesture.
   const [mounted, setMounted] = useState(() => new Set([tab, 0, 1]));
-  useEffect(() => { const t = window.setTimeout(() => setMounted(new Set(TABS.map((_, i) => i))), 1200); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = window.setTimeout(() => startTransition(() => setMounted(new Set(TABS.map((_, i) => i)))), 1200); return () => clearTimeout(t); }, []);
+  // Bumped by a double tap on a tab: that page is built afresh (scroll, filters, search all reset).
+  const [resets, setResets] = useState<Record<string, number>>({});
   const selectListeners = useRef(new Set<(i: number) => void>());
+  const popBar = useRef<() => void>();
+  const lastTap = useRef({ i: -1, at: 0 });
   const shownRef = useRef(tab);
   const [{ pos }, api] = useSpring(() => ({
     pos: tab,
@@ -66,21 +72,44 @@ export function PhoneApp() {
   }));
   const [adding, setAdding] = useState<AddRequest | null>(null);
 
-  useLayoutEffect(() => { startPhonePlumbing(); }, []);
+  useLayoutEffect(() => { startPhonePlumbing(); startLatencyLog(); }, []);
 
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
    * ms), or at once for a tap on a tab, as the native bar does (sliding past every page in between
-   * would be slower and draw them all).
+   * would be slower and draw them all). The shell's own re-render (the + button) waits its turn, so the
+   * pages and the bar move first.
    */
   const settle = (i: number, velocity = 0, jump = false) => {
     i = clamp(i, 0, LAST);
+    const moved = i !== tabRef.current;
     tabRef.current = i;
-    setTab(i);
-    setMounted((m) => (m.has(i) ? m : new Set([...m, i])));
-    if (jump) api.start({ pos: i, immediate: true });
-    else api.start({ pos: i, config: { ...PAGER_SPRING, velocity } });
+    if (jump) {
+      api.start({ pos: i, immediate: true });
+      if (moved) popBar.current?.();
+    } else api.start({ pos: i, config: { ...PAGER_SPRING, velocity } });
+    startTransition(() => {
+      setTab(i);
+      setMounted((m) => (m.has(i) ? m : new Set([...m, i])));
+    });
     if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", `#/${TABS[i].key}`);
+  };
+
+  /** Back to the page's base view, like a double tap on a native tab. */
+  const resetPage = (i: number) => {
+    const key = TABS[i].key;
+    if (key === "today") resetToday();
+    if (key === "calendar") resetCalendar();
+    setResets((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 }));
+  };
+
+  /** A tap on a tab goes there; a second tap on it within 400 ms puts it back to its base view. */
+  const onTabTap = (i: number) => {
+    const now = performance.now();
+    const prev = lastTap.current;
+    lastTap.current = { i, at: now };
+    if (prev.i === i && now - prev.at < DOUBLE_TAP_MS && tabRef.current === i) { resetPage(i); return; }
+    settle(i, 0, true);
   };
 
   // A route to a page (go("calendar"), the back button...) turns the pager there.
@@ -116,14 +145,14 @@ export function PhoneApp() {
         <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
-              {mounted.has(i) && <Page tabKey={t.key} onNewAt={setNewAt(setAdding)} pending={adding?.mode === "slot" ? adding : null} />}
+              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding)} pending={adding?.mode === "slot" ? adding : null} />}
             </div>
           ))}
         </animated.div>
       </div>
-      <BottomBar pos={pos} start={tab} listeners={selectListeners.current} onSettle={settle} />
+      <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
       {TABS[tab].key !== "graph" && !overlay && (
-        <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="add" /></button>
+        <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
       )}
       {overlay && <Overlay route={route} path={path} query={query} />}
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onClose={() => setAdding(null)} />}
@@ -131,16 +160,22 @@ export function PhoneApp() {
   );
 }
 
-const setNewAt = (setAdding: (r: AddRequest) => void) => (day: number, min: number) => setAdding({ mode: "slot", type: "EVENT", day, min });
+/** One stable callback per setter, so the memoised pages don't redraw when the shell does. */
+const newAtCache = new WeakMap<object, (day: number, min: number) => void>();
+function onNewAt(setAdding: (r: AddRequest) => void) {
+  let f = newAtCache.get(setAdding);
+  if (!f) { f = (day: number, min: number) => setAdding({ mode: "slot", type: "EVENT", day, min }); newAtCache.set(setAdding, f); }
+  return f;
+}
 
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
 const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: AddRequest | null }) {
   switch (tabKey) {
     case "today": return <TodayView phone />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
-    case "tasks": return <Scaffold title="Tasks"><TasksView /></Scaffold>;
-    case "notes": return <Scaffold title="Notes"><NotesView /></Scaffold>;
-    default: return <Scaffold title="Links" flush><GraphView focusId={0} /></Scaffold>;
+    case "tasks": return <PhoneTasks />;
+    case "notes": return <PhoneNotes />;
+    default: return <PhoneGraph />;
   }
 }, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending));
 
@@ -155,7 +190,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
       <NoteEditor key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />
     </div></div>;
   } else if (route === "browse") {
-    body = <Scaffold title="Search" back><BrowseView initialKind={query.get("kind") ?? ""} /></Scaffold>;
+    body = <PhoneSearch initialKind={query.get("kind") ?? ""} />;
   } else if (route === "settings") {
     body = <Scaffold title="Settings" back><SettingsView /></Scaffold>;
   }
@@ -163,20 +198,32 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
 }
 
 /**
- * Material 3 navigation bar. A tap on a tab goes there at once. A finger slid along the bar (past the
- * touch slop) drags the pages instead, one tab width per page, with the selection pill riding along;
- * letting go settles on the nearest page, carried on by the finger's speed. Like the native bar, the
- * slide is watched before the buttons see it, and a tap that wobbles less than the slop stays a tap.
+ * Material 3 navigation bar, as HomeScreen.kt draws it. A tap on a tab goes there at once (the
+ * indicator grows into place, as M3's does); a finger slid along the bar (past the touch slop) drags
+ * the pages instead, one tab width per page, with the indicator riding along, and letting go settles
+ * on the nearest page, carried on by the finger's speed. Icons cross-fade between outlined and solid
+ * and their colour follows the selection, like the native bar. The slide is watched before the
+ * buttons see it, and a tap that wobbles less than the slop stays a tap.
  */
-function BottomBar({ pos, start, listeners, onSettle }: {
-  pos: SpringValue<number>; start: number; listeners: Set<(i: number) => void>; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
+function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
+  pos: SpringValue<number>; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
+  onTap: (i: number) => void; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
 }) {
   const [selected, setSelected] = useState(start);
   useEffect(() => { listeners.add(setSelected); return () => { listeners.delete(setSelected); }; }, [listeners]);
   const bar = useRef<HTMLElement>(null);
+  const pill = useRef<HTMLSpanElement>(null);
   const settleRef = useRef(onSettle);
   settleRef.current = onSettle;
   const day = ymd(todayEpoch()).d;
+  // M3's indicator: on a jump it grows from the middle of the new tab and fades in.
+  pop.current = () => {
+    const el = pill.current;
+    if (!el) return;
+    el.classList.remove("pop");
+    void el.offsetWidth;
+    el.classList.add("pop");
+  };
 
   useEffect(() => {
     const el = bar.current;
@@ -196,6 +243,7 @@ function BottomBar({ pos, start, listeners, onSettle }: {
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
+      if (!g.sliding) pill.current?.classList.remove("pop");
       g.sliding = true;
       pos.start(clamp(g.from + dx / tabW(), 0, LAST), { immediate: true });
     };
@@ -226,26 +274,17 @@ function BottomBar({ pos, start, listeners, onSettle }: {
     <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
       <animated.span className="p-pill-track" style={{ width: `${100 / TABS.length}%`, transform: pos.to((p) => slide(p, 1)) }}>
-        <span className="p-pill" />
+        <span className="p-pill" ref={pill} />
       </animated.span>
       {TABS.map((t, i) => (
-        <button key={t.key} className={`p-tab ${selected === i ? "on" : ""}`} onClick={() => onSettle(i, 0, true)}>
+        <button key={t.key} className={`p-tab ${selected === i ? "on" : ""}`} onClick={() => onTap(i)} aria-label={t.label} aria-current={selected === i ? "page" : undefined}>
           <span className="p-tab-icon">
-            {t.key === "today" ? <TodayGlyph day={day} /> : <Icon name={t.icon} size={24} />}
+            <span className="p-ico off"><TabGlyph tab={t.key} selected={false} day={day} /></span>
+            <span className="p-ico sel"><TabGlyph tab={t.key} selected day={day} /></span>
           </span>
           <span className="p-tab-label">{t.label}</span>
         </button>
       ))}
     </nav>
-  );
-}
-
-/** The Today tab's icon: a calendar page with today's date, like the native app. */
-function TodayGlyph({ day }: { day: number }) {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 22q-.825 0-1.412-.587Q3 20.825 3 20V6q0-.825.588-1.412Q4.175 4 5 4h1V2h2v2h8V2h2v2h1q.825 0 1.413.588Q21 5.175 21 6v14q0 .825-.587 1.413Q19.825 22 19 22Zm0-2h14V10H5Z" fill="currentColor" />
-      <text x="12" y="18.6" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="currentColor" fontFamily="Roboto, system-ui, sans-serif">{day}</text>
-    </svg>
   );
 }

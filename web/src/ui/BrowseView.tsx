@@ -7,7 +7,7 @@ import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { RepeatBadge, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
 
-const KINDS: [string, string, (i: Item) => boolean][] = [
+export const KINDS: [string, string, (i: Item) => boolean][] = [
   ["ALL", "All", () => true],
   ["EVENTS", "Events", (i) => i.type === "EVENT" && !isRecurring(i)],
   ["RECURRING_EVENTS", "Recurring events", (i) => i.type === "EVENT" && isRecurring(i)],
@@ -17,7 +17,7 @@ const KINDS: [string, string, (i: Item) => boolean][] = [
   ["DAILY_NOTES", "Daily notes", (i) => i.type === "NOTE" && i.noteDay !== null],
 ];
 
-function subtitle(i: Item, s: Snapshot) {
+export function subtitle(i: Item, s: Snapshot) {
   const parts = [typeLabel(i)];
   if (i.noteDay !== null) parts.push(formatDate(i.noteDay));
   else if (isRecurring(i)) parts.push(describe(i));
