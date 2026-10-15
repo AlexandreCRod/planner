@@ -7,13 +7,13 @@ import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
 import { typeLabel } from "./LinksSection.tsx";
 import { checkedLinger, showDoneOnToday } from "./common.tsx";
 
-export const ACCENTS: [string, string][] = [["Indigo", "#3f51b5"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"], ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"]];
+export const ACCENTS: [string, string][] = [["Blue", "#1a73e8"], ["Indigo", "#3f51b5"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"], ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"]];
 
 export function applyTheme() {
   const theme = localStorage.getItem("theme") ?? "system";
   if (theme === "system") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", theme);
-  document.documentElement.style.setProperty("--accent", localStorage.getItem("accent") ?? "#3f51b5");
+  document.documentElement.style.setProperty("--accent", localStorage.getItem("accent") ?? "#1a73e8");
 }
 
 export function useSyncStatus(): SyncStatus {
@@ -26,7 +26,7 @@ export function SettingsView() {
   const s = useSnapshot();
   const sync = useSyncStatus();
   const [theme, setTheme] = useState(localStorage.getItem("theme") ?? "system");
-  const [accent, setAccent] = useState(localStorage.getItem("accent") ?? "#3f51b5");
+  const [accent, setAccent] = useState(localStorage.getItem("accent") ?? "#1a73e8");
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [notify, setNotify] = useState(notificationsEnabled());
   const [clock, setClock] = useState<ClockFormat>(clockFormat());

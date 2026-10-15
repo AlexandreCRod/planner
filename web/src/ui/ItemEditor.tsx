@@ -1,6 +1,6 @@
 // Side panel for tasks and events: a simple view when opened, the full editor after Edit (same fields as the phone's).
 import { useEffect, useRef, useState } from "react";
-import { epochOf, formatDate, formatTime, offsetLabel, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
 import { preview } from "../domain/text.ts";
@@ -37,7 +37,16 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const s = useSnapshot();
   const original = s.byId.get(id) ?? null;
   const [d, setD] = useState<Item | null>(original);
-  const [reminders, setReminders] = useState<Reminder[]>(() => (s.reminders.get(id) ?? []).map((r) => ({ ...r })));
+  const [reminders, setReminders] = useState<Reminder[]>(() => {
+    const saved = (s.reminders.get(id) ?? []).map((r) => ({ ...r }));
+    // A new item starts with one alert, like Google Calendar: a reminder 15 minutes before an event,
+    // a silent notification when a dated task is due.
+    if (isNewPlaceholder && !saved.length && original?.startDay != null) {
+      const ev = original.type === "EVENT";
+      return [{ id: 0, itemId: id, offsetMin: ev && original.startMin !== null ? 15 : 0, type: ev ? "REMINDER" : "NOTIFICATION", soundUri: null }];
+    }
+    return saved;
+  });
   const [tags, setTags] = useState(() => (s.tagsByItem.get(id) ?? []).map((t) => t.name).join(" "));
   const [scopeFor, setScopeFor] = useState<"save" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -158,18 +167,18 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
                 <span style={{ color: done ? color : undefined }}>{done ? "Done" : "Mark done"}{forDay}</span>
               </label>
             )}
-            <Info icon="🕒">{whenText(o, day)}</Info>
+            <Info icon={<Icon name="schedule" size={16} />}>{whenText(o, day)}</Info>
             {(o.location ?? "").trim() && <Info icon={<Icon name="place" size={16} />}><a href={mapsUrl(o)} target="_blank" rel="noreferrer">{o.location}</a></Info>}
-            {isRecurring(o) && <Info icon={<span style={{ color }}>↻</span>}>{describe(o)}</Info>}
+            {isRecurring(o) && <Info icon={<Icon name="repeat" size={16} color={color} />}>{describe(o)}</Info>}
             {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
             {!oEvent && o.startDay !== null && o.overduePolicy !== "SHOW_OVERDUE" && (
-              <Info icon="⏭">{o.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"}</Info>
+              <Info icon={<Icon name="update" size={16} />}>{o.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"}</Info>
             )}
             {oReminders.length > 0 && (
-              <Info icon="⏰">{oReminders.map((r, i) => <div key={i}>{r.type === "ALARM" ? "Alarm" : r.type === "REMINDER" ? "Reminder" : "Silent notification"} · {offsetLabel(r.offsetMin).toLowerCase()}</div>)}</Info>
+              <Info icon={<Icon name="bell" size={16} />}>{oReminders.map((r, i) => <div key={i}>{r.type === "ALARM" ? "Alarm" : r.type === "REMINDER" ? "Reminder" : "Notification (silent)"} · {offsetText(r.offsetMin).toLowerCase()}</div>)}</Info>
             )}
-            {oTags.length > 0 && <Info icon="#">{oTags.map((x) => `#${x.name}`).join("  ")}</Info>}
-            {hasNotes && <Info icon="☰"><div className="view-notes rich" dangerouslySetInnerHTML={{ __html: sanitize(o.content) }} /></Info>}
+            {oTags.length > 0 && <Info icon={<Icon name="label" size={16} />}>{oTags.map((x) => `#${x.name}`).join("  ")}</Info>}
+            {hasNotes && <Info icon={<Icon name="subject" size={16} />}><div className="view-notes rich" dangerouslySetInnerHTML={{ __html: sanitize(o.content) }} /></Info>}
             {st && (
               <div className="field">
                 <label>History</label>
@@ -190,27 +199,11 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const monthMask = d.months || (d.startDay !== null ? 1 << (ymd(d.startDay).m - 1) : 0);
   const upcoming = d.freq !== "NONE" ? occurrences(d, todayEpoch(), todayEpoch() + 400).slice(0, 4) : [];
 
-  // Only what this item uses is shown; everything else waits behind the "Add" chips at the bottom.
-  const showCategory = d.categoryId !== null || d.color !== null || added.has("category");
   const showRepeat = d.freq !== "NONE" || added.has("repeat");
-  const showPriority = !isEvent && (d.priority > 0 || added.has("priority"));
-  const showMissed = !isEvent && d.startDay !== null && (d.overduePolicy !== "SHOW_OVERDUE" || added.has("missed"));
-  const showAlerts = reminders.length > 0 || added.has("alerts");
-  const showTags = tags.trim() !== "" || added.has("tags");
-  const showNotes = preview(initialHtml, 10).trim() !== "" || added.has("notes");
-  const showLinks = hasLinks || added.has("links");
-  const showPlace = (d.location ?? "").trim() !== "" || added.has("place");
-  const newAlert = (t: AlertType) => setReminders([...reminders, { id: 0, itemId: id, offsetMin: t === "REMINDER" && isEvent && !d.allDay ? 15 : 0, type: t, soundUri: null }]);
-  const chips: [string, () => void][] = [
-    ...(!showAlerts ? [["🔔 Reminder", () => newAlert("REMINDER")], ["⏰ Alarm", () => newAlert("ALARM")]] as [string, () => void][] : []),
-    ...(!isEvent && !showPriority ? [["⚑ Priority", () => add("priority")]] as [string, () => void][] : []),
-    ...(!isEvent && d.startDay !== null && !showMissed ? [["⏭ If missed", () => add("missed")]] as [string, () => void][] : []),
-    ...(!showNotes ? [["☰ Notes", () => add("notes")]] as [string, () => void][] : []),
-    ...(!showPlace ? [["📍 Place", () => add("place")]] as [string, () => void][] : []),
-    ...(!showTags ? [["# Tags", () => add("tags")]] as [string, () => void][] : []),
-    ...(!showCategory ? [["◆ Category", () => add("category")]] as [string, () => void][] : []),
-    ...(!showLinks ? [["🔗 Link", () => add("links")]] as [string, () => void][] : []),
-  ];
+  // Alerts follow the kind: reminders for events, silent notifications for tasks (the alarm button makes one ring).
+  const kindAlert = (type: Item["type"]): AlertType => (type === "EVENT" ? "REMINDER" : "NOTIFICATION");
+  const newAlert = () => setReminders([...reminders, { id: 0, itemId: id, offsetMin: isEvent && !d.allDay ? 15 : 0, type: kindAlert(d.type), soundUri: null }]);
+  const untimed = d.allDay || d.startMin === null;
 
   return (
     <div className="panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}>
@@ -221,175 +214,169 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
           {!isNewPlaceholder && <button className="icon-btn" title="Delete" onClick={() => setConfirmDelete(true)}><Icon name="trash" /></button>}
           <button className="btn primary" disabled={!d.title.trim()} onClick={() => save()}>Save</button>
         </header>
-        <div className="body">
+        {/* Laid out like Google Calendar's editor: one row per field, each with its icon, all visible. */}
+        <div className="body gform">
           {isNewPlaceholder && (
-            <div className="seg" style={{ marginTop: 12 }}>
-              {(["TASK", "EVENT"] as const).map((t) => (
-                <button key={t} className={d.type === t ? "on" : ""} onClick={() => set(t === "EVENT"
-                  ? { type: t, startDay: d.startDay ?? todayEpoch(), endDay: d.startDay ?? todayEpoch(), allDay: d.startMin === null, endMin: d.startMin !== null ? Math.min(d.startMin + 60, 1439) : null }
-                  : { type: t })}>{t === "TASK" ? "Task" : "Event"}</button>
-              ))}
+            <div className="frow"><span />
+              <div className="row">
+                {(["EVENT", "TASK"] as const).map((t) => (
+                  <button key={t} className={`chip ${d.type === t ? "on" : ""}`} onClick={() => {
+                    set(t === "EVENT"
+                      ? { type: t, startDay: d.startDay ?? todayEpoch(), endDay: d.startDay ?? todayEpoch(), allDay: d.startMin === null, endMin: d.startMin !== null ? Math.min(d.startMin + 60, 1439) : null }
+                      : { type: t });
+                    setReminders(reminders.map((r) => (r.type === "ALARM" ? r : { ...r, type: kindAlert(t) })));
+                  }}>{t === "TASK" ? "Task" : "Event"}</button>
+                ))}
+              </div>
             </div>
           )}
-          <input className="title-input" autoFocus placeholder="Title" value={d.title} onChange={(e) => set({ title: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter" && d.title.trim()) save(); }} />
+          <div className="frow"><span className="swatch" style={{ background: d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf(d) }} />
+            <input className="title-input" autoFocus placeholder="Add title" value={d.title} onChange={(e) => set({ title: e.target.value })}
+              onKeyDown={(e) => { if (e.key === "Enter" && d.title.trim()) save(); }} />
+          </div>
+          <hr />
 
-          {showCategory && (
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <select className="input" value={d.categoryId ?? ""} onChange={(e) => set({ categoryId: e.target.value ? Number(e.target.value) : null })}>
-                <option value="">No category</option>
-                {s.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <label className="row hint" title="Own colour (overrides the category)">
-                Colour <input type="color" value={d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : "#26a69a"} onChange={(e) => set({ color: argbOf(e.target.value) })} />
-              </label>
-              {d.color !== null && <button className="btn small" onClick={() => set({ color: null })}>Use category colour</button>}
+          {isEvent ? <>
+            <div className="frow"><Icon name="schedule" size={20} /><label className="row grow">All-day <span className="grow" /><input type="checkbox" checked={d.allDay} onChange={(e) => set({ allDay: e.target.checked, startMin: e.target.checked ? null : d.startMin ?? 540, endMin: e.target.checked ? null : d.endMin ?? 600 })} /></label></div>
+            <div className="frow"><span />
+              <div className="row"><input type="date" className="input" value={toInput(d.startDay)} onChange={(e) => { const v = fromInput(e.target.value); if (v !== null) set({ startDay: v, endDay: v + ((d.endDay ?? d.startDay ?? v) - (d.startDay ?? v)) }); }} />
+                {!d.allDay && <input type="time" className="input" value={timeInput(d.startMin)} onChange={(e) => { const v = fromTime(e.target.value); const dur = d.startMin !== null && d.endMin !== null ? d.endMin - d.startMin : 60; set({ startMin: v, endMin: v !== null ? Math.min(v + Math.max(15, dur), 1439) : null }); }} />}
+                <span className="hint">to</span>
+                <input type="date" className="input" value={toInput(d.endDay ?? d.startDay)} onChange={(e) => { const v = fromInput(e.target.value); if (v !== null) set({ endDay: Math.max(v, d.startDay ?? v) }); }} />
+                {!d.allDay && <input type="time" className="input" value={timeInput(d.endMin)} onChange={(e) => set({ endMin: fromTime(e.target.value) })} />}
+              </div>
             </div>
-          )}
-
-          <div className="field">
-            <label>When</label>
-            {isEvent ? <>
-              <label className="row"><input type="checkbox" checked={d.allDay} onChange={(e) => set({ allDay: e.target.checked, startMin: e.target.checked ? null : d.startMin ?? 540, endMin: e.target.checked ? null : d.endMin ?? 600 })} /> All day</label>
-              <div className="row">Starts <input type="date" className="input" value={toInput(d.startDay)} onChange={(e) => { const v = fromInput(e.target.value); if (v !== null) set({ startDay: v, endDay: v + ((d.endDay ?? d.startDay ?? v) - (d.startDay ?? v)) }); }} />
-                {!d.allDay && <input type="time" className="input" value={timeInput(d.startMin)} onChange={(e) => { const v = fromTime(e.target.value); const dur = d.startMin !== null && d.endMin !== null ? d.endMin - d.startMin : 60; set({ startMin: v, endMin: v !== null ? Math.min(v + Math.max(15, dur), 1439) : null }); }} />}</div>
-              <div className="row">Ends&nbsp; <input type="date" className="input" value={toInput(d.endDay ?? d.startDay)} onChange={(e) => { const v = fromInput(e.target.value); if (v !== null) set({ endDay: Math.max(v, d.startDay ?? v) }); }} />
-                {!d.allDay && <input type="time" className="input" value={timeInput(d.endMin)} onChange={(e) => set({ endMin: fromTime(e.target.value) })} />}</div>
-            </> : (
+          </> : (
+            <div className="frow"><Icon name="schedule" size={20} />
               <div className="row">
                 <input type="date" className="input" value={toInput(d.startDay)} onChange={(e) => set({ startDay: fromInput(e.target.value) })} />
                 {d.startDay !== null && <input type="time" className="input" value={timeInput(d.startMin)} onChange={(e) => set({ startMin: fromTime(e.target.value) })} />}
                 {d.startDay !== null && <button className="btn small" onClick={() => set({ startDay: null, startMin: null, freq: "NONE" })}>No date</button>}
               </div>
-            )}
-          </div>
-
-          {showPlace && (
-            <div className="field">
-              <label>Place</label>
-              <div className="row">
-                {/* A typed place has no coordinates; only "my location" sets them. */}
-                <input className="input grow" placeholder="Place" value={d.location ?? ""} onChange={(e) => set({ location: e.target.value, lat: null, lng: null })} />
-                <button className="icon-btn" title="Use this computer's location" onClick={locate}><Icon name="myLocation" size={18} /></button>
-                {(d.location ?? "").trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl(d)} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
-              </div>
             </div>
           )}
 
-          <div className="field">
-            {/* "Doesn't repeat" stays one line until clicked. */}
-            <label style={{ cursor: showRepeat ? undefined : "pointer" }} onClick={() => { if (!showRepeat) add("repeat"); }}>
-              Repeat — {describe(d)}{!showRepeat && <span style={{ textTransform: "none", fontWeight: 400 }}> (click to set)</span>}
-            </label>
-            {showRepeat && <div className="seg">
-              {(["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as Freq[]).map((f) => (
-                <button key={f} className={d.freq === f ? "on" : ""} onClick={() => set({ freq: f, startDay: f === "NONE" ? d.startDay : d.startDay ?? todayEpoch(), weekDays: 0, monthDays: "", months: 0, interval: 1 })}>
-                  {f === "NONE" ? "Once" : f[0] + f.slice(1).toLowerCase()}
-                </button>
-              ))}
-            </div>}
-            {d.freq !== "NONE" && <>
-              <div className="row">Every <input type="number" min={1} max={99} className="input" style={{ width: 64 }} value={d.interval} onChange={(e) => set({ interval: Math.max(1, Number(e.target.value) || 1) })} />
-                {({ DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" } as Record<string, string>)[d.freq]}{d.interval > 1 ? "s" : ""}</div>
-              {d.freq === "WEEKLY" && <div className="daydots">
-                {[1, 2, 3, 4, 5, 6, 7].map((w) => <button key={w} title={["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][w - 1]} className={hasWeekDay(mask, w) ? "on" : ""} onClick={() => { const n = mask ^ dayBit(w); if (n) set({ weekDays: n }); }}>{"MTWTFSS"[w - 1]}</button>)}
-                <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b0011111 })}>Weekdays</button>
-                <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b1100000 })}>Weekends</button>
-              </div>}
-              {d.freq === "YEARLY" && <div className="daydots">
-                {"JFMAMJJASOND".split("").map((l, i) => <button key={i} className={hasMonth(monthMask, i + 1) ? "on" : ""} onClick={() => { const n = monthMask ^ (1 << i); if (n) set({ months: n }); }} title={String(i + 1)}>{l}</button>)}
-              </div>}
-              {(d.freq === "MONTHLY" || d.freq === "YEARLY") && <div className="daydots">
-                {[...Array.from({ length: 31 }, (_, i) => i + 1), LAST_DAY_OF_MONTH].map((md) => (
-                  <button key={md} className={monthDays.has(md) ? "on" : ""} style={md === LAST_DAY_OF_MONTH ? { width: 48, borderRadius: 16 } : undefined}
-                    onClick={() => { const n = new Set(monthDays); if (n.has(md)) n.delete(md); else n.add(md); if (n.size) set({ monthDays: [...n].sort((a, b) => a - b).join(",") }); }}>
-                    {md === LAST_DAY_OF_MONTH ? "Last" : md}
+          <div className="frow"><Icon name="repeat" size={20} />
+            <div className="grow">
+              {/* "Does not repeat" stays one line until clicked. */}
+              <div style={{ cursor: showRepeat ? undefined : "pointer", padding: "4px 0" }} onClick={() => { if (!showRepeat) add("repeat"); }}>{describe(d)}</div>
+              {showRepeat && <div className="seg">
+                {(["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as Freq[]).map((f) => (
+                  <button key={f} className={d.freq === f ? "on" : ""} onClick={() => set({ freq: f, startDay: f === "NONE" ? d.startDay : d.startDay ?? todayEpoch(), weekDays: 0, monthDays: "", months: 0, interval: 1 })}>
+                    {f === "NONE" ? "Once" : f[0] + f.slice(1).toLowerCase()}
                   </button>
                 ))}
               </div>}
-              <div className="row">Ends <input type="date" className="input" value={toInput(d.untilDay)} onChange={(e) => set({ untilDay: fromInput(e.target.value) })} />
-                {d.untilDay !== null && <button className="btn small" onClick={() => set({ untilDay: null })}>Never</button>}</div>
-              {upcoming.length > 0 && <div className="hint">Next: {upcoming.map(formatDate).join(", ")}</div>}
-            </>}
+              {d.freq !== "NONE" && <>
+                <div className="row">Every <input type="number" min={1} max={99} className="input" style={{ width: 64 }} value={d.interval} onChange={(e) => set({ interval: Math.max(1, Number(e.target.value) || 1) })} />
+                  {({ DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" } as Record<string, string>)[d.freq]}{d.interval > 1 ? "s" : ""}</div>
+                {d.freq === "WEEKLY" && <div className="daydots">
+                  {[1, 2, 3, 4, 5, 6, 7].map((w) => <button key={w} title={["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][w - 1]} className={hasWeekDay(mask, w) ? "on" : ""} onClick={() => { const n = mask ^ dayBit(w); if (n) set({ weekDays: n }); }}>{"MTWTFSS"[w - 1]}</button>)}
+                  <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b0011111 })}>Weekdays</button>
+                  <button className="chip" style={{ width: "auto" }} onClick={() => set({ weekDays: 0b1100000 })}>Weekends</button>
+                </div>}
+                {d.freq === "YEARLY" && <div className="daydots">
+                  {"JFMAMJJASOND".split("").map((l, i) => <button key={i} className={hasMonth(monthMask, i + 1) ? "on" : ""} onClick={() => { const n = monthMask ^ (1 << i); if (n) set({ months: n }); }} title={String(i + 1)}>{l}</button>)}
+                </div>}
+                {(d.freq === "MONTHLY" || d.freq === "YEARLY") && <div className="daydots">
+                  {[...Array.from({ length: 31 }, (_, i) => i + 1), LAST_DAY_OF_MONTH].map((md) => (
+                    <button key={md} className={monthDays.has(md) ? "on" : ""} style={md === LAST_DAY_OF_MONTH ? { width: 48, borderRadius: 16 } : undefined}
+                      onClick={() => { const n = new Set(monthDays); if (n.has(md)) n.delete(md); else n.add(md); if (n.size) set({ monthDays: [...n].sort((a, b) => a - b).join(",") }); }}>
+                      {md === LAST_DAY_OF_MONTH ? "Last" : md}
+                    </button>
+                  ))}
+                </div>}
+                <div className="row">Ends <input type="date" className="input" value={toInput(d.untilDay)} onChange={(e) => set({ untilDay: fromInput(e.target.value) })} />
+                  {d.untilDay !== null && <button className="btn small" onClick={() => set({ untilDay: null })}>Never</button>}</div>
+                {upcoming.length > 0 && <div className="hint">Next: {upcoming.map(formatDate).join(", ")}</div>}
+              </>}
+            </div>
           </div>
+          <hr />
 
-          {showPriority && (
-            <div className="field">
-              <label>Priority</label>
-              <div className="seg">
-                {PRIORITIES.map((p, i) => <button key={p} className={d.priority === i ? "on" : ""} style={{ color: i && d.priority === i ? PRIORITY_COLORS[i] : undefined }} onClick={() => set({ priority: i })}>{i ? "⚑ " : ""}{p}</button>)}
+          <div className="frow"><Icon name="place" size={20} />
+            {/* A typed place has no coordinates; only "my location" sets them. */}
+            <input className="plain grow" placeholder="Add location" value={d.location ?? ""} onChange={(e) => set({ location: e.target.value, lat: null, lng: null })} />
+            <button className="icon-btn" title="Use this computer's location" onClick={locate}><Icon name="myLocation" size={18} /></button>
+            {(d.location ?? "").trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl(d)} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
+          </div>
+          <hr />
+
+          {/* Alerts: a plain list of "15 minutes before" lines, like Google Calendar's notifications. */}
+          {reminders.map((r, i) => (
+            <div key={i} className="frow">{i === 0 ? <Icon name="bell" size={20} /> : <span />}
+              <select className="plain grow" value={r.offsetMin} onChange={(e) => setReminders(reminders.map((x, j) => j === i ? { ...x, offsetMin: Number(e.target.value) } : x))}>
+                {OFFSETS.map((o) => <option key={o} value={o}>{offsetText(o)}{untimed ? "" : ""}</option>)}
+              </select>
+              <button className={`icon-btn ${r.type === "ALARM" ? "on" : ""}`} title={r.type === "ALARM" ? "Rings as an alarm on the phone (click for a notification)" : "Ring as an alarm on the phone"}
+                onClick={() => setReminders(reminders.map((x, j) => j === i ? { ...x, type: x.type === "ALARM" ? kindAlert(d.type) : "ALARM" } : x))}><Icon name="alarm" size={18} /></button>
+              <button className="icon-btn" title="Remove" onClick={() => setReminders(reminders.filter((_, j) => j !== i))}><Icon name="close" size={16} /></button>
+            </div>
+          ))}
+          <div className="frow clickable" onClick={newAlert}>{reminders.length === 0 ? <Icon name="bell" size={20} /> : <span />}
+            <span className="hint" style={{ fontSize: 14 }}>{isEvent ? "Add notification" : "Add notification (silent)"}</span>
+          </div>
+          <hr />
+
+          <div className="frow"><Icon name="palette" size={20} />
+            <select className="plain" value={d.categoryId ?? ""} onChange={(e) => set({ categoryId: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">No category</option>
+              {s.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <span className="grow" />
+            <label className="row hint" title="Own colour (overrides the category)">
+              Colour <input type="color" value={d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : "#1a73e8"} onChange={(e) => set({ color: argbOf(e.target.value) })} />
+            </label>
+            {d.color !== null && <button className="btn small" onClick={() => set({ color: null })}>Use category colour</button>}
+          </div>
+          {!isEvent && <>
+            <div className="frow"><Icon name="flag" size={20} />
+              <select className="plain" value={d.priority} onChange={(e) => set({ priority: Number(e.target.value) })}>
+                {PRIORITIES.map((p, i) => <option key={p} value={i}>{i ? `${p} priority` : "No priority"}</option>)}
+              </select>
+            </div>
+            {d.startDay !== null && (
+              <div className="frow"><Icon name="update" size={20} />
+                <select className="plain" value={d.overduePolicy} onChange={(e) => set({ overduePolicy: e.target.value as OverduePolicy })}>
+                  <option value="SHOW_OVERDUE">If missed: stays overdue</option>
+                  <option value="CARRY_OVER">If missed: moves to the next day</option>
+                  <option value="SKIP">If missed: skip it</option>
+                </select>
               </div>
-            </div>
-          )}
-          {showMissed && (
-            <div className="field">
-              <label>If missed</label>
-              {([["SHOW_OVERDUE", "Show as overdue until done (default)"], ["CARRY_OVER", "Carry over to the next day automatically"], ["SKIP", "Skip it silently (counts as missed)"]] as [OverduePolicy, string][]).map(([p, l]) => (
-                <label key={p} className="row"><input type="radio" checked={d.overduePolicy === p} onChange={() => set({ overduePolicy: p })} /> {l}</label>
-              ))}
-            </div>
-          )}
+            )}
+          </>}
+          <hr />
 
-          {showAlerts && (
-            <div className="field">
-              <label>Reminders <span style={{ textTransform: "none", fontWeight: 400 }}>(they ring on the phone)</span></label>
-              <div className="row">
-                {([["REMINDER", "🔔 Reminder"], ["ALARM", "⏰ Alarm"], ["NOTIFICATION", "🔕 Silent"]] as [AlertType, string][]).map(([t, l]) => (
-                  <button key={t} className="btn small" onClick={() => newAlert(t)}>+ {l}</button>
-                ))}
-              </div>
-              {d.startDay === null && <div className="hint">Set a date for reminders to go off.</div>}
-              {reminders.map((r, i) => (
-                <div key={i} className="row">
-                  <select className="input" value={r.offsetMin} onChange={(e) => setReminders(reminders.map((x, j) => j === i ? { ...x, offsetMin: Number(e.target.value) } : x))}>
-                    {OFFSETS.map((o) => <option key={o} value={o}>{offsetLabel(o)}</option>)}
-                  </select>
-                  <div className="seg">
-                    {(["NOTIFICATION", "REMINDER", "ALARM"] as AlertType[]).map((t) => (
-                      <button key={t} className={r.type === t ? "on" : ""} onClick={() => setReminders(reminders.map((x, j) => j === i ? { ...x, type: t } : x))}>
-                        {t === "NOTIFICATION" ? "Silent" : t[0] + t.slice(1).toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                  <button className="icon-btn" title="Remove" onClick={() => setReminders(reminders.filter((_, j) => j !== i))}><Icon name="close" size={16} /></button>
-                </div>
-              ))}
+          {/* Notes: always there, a plain box until you click into it; then the formatting buttons appear. */}
+          <div className="frow top"><Icon name="subject" size={20} />
+            <div className="grow notes-box">
+              <RichEditor ref={rich} initialHtml={initialHtml} onChange={() => {}} minHeight={80} compact toolbarOnFocus placeholder="Add notes" />
             </div>
-          )}
+          </div>
+          <hr />
 
-          {showTags && (
-            <div className="field">
-              <label>Tags</label>
-              <input className="input" placeholder="tags, space separated" value={tags} onChange={(e) => setTags(e.target.value)} />
-            </div>
-          )}
+          <div className="frow"><Icon name="label" size={20} />
+            <input className="plain grow" placeholder="Add tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
+          </div>
+          <hr />
 
-          {showNotes && (
-            <div className="field">
-              <label>☰ Notes</label>
-              {/* A plain box until you click into it; then the formatting buttons appear. */}
-              <div className="card" style={{ overflow: "hidden" }}>
-                <RichEditor ref={rich} initialHtml={initialHtml} onChange={() => {}} minHeight={100} compact toolbarOnFocus />
-              </div>
-            </div>
-          )}
-
-          {showLinks && <LinksSection id={id} s={s} ensureSaved={() => id} />}
-
-          {chips.length > 0 && (
-            <div className="field">
-              <label>Add</label>
-              <div className="add-chips">
-                {chips.map(([label, fn]) => <button key={label} className="chip" onClick={fn}>{label}</button>)}
-              </div>
-            </div>
-          )}
+          <LinksSection id={id} s={s} ensureSaved={() => id} />
         </div>
       </div>
       {scopeFor && <ScopeDialog title="Save changes to" onCancel={() => setScopeFor(null)} onPick={(sc) => { setScopeFor(null); save(sc); }} />}
       {deleteDialog}
     </div>
   );
+}
+
+/** "At the time", "15 minutes before", "1 day before"... */
+function offsetText(min: number): string {
+  const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""} before`;
+  if (min === 0) return "At the time";
+  if (min % 10080 === 0) return plural(min / 10080, "week");
+  if (min % 1440 === 0) return plural(min / 1440, "day");
+  if (min % 60 === 0) return plural(min / 60, "hour");
+  return `${min} minutes before`;
 }
 
 /** "Thu, 15 Oct · 15:00–16:00", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 09:00"... */

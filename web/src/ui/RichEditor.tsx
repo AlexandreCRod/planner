@@ -96,9 +96,11 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   initialHtml: string; onChange: () => void; minHeight?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
   /** Show the formatting bar only once the text has been clicked into. */
   toolbarOnFocus?: boolean;
-}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus }, ref) {
+}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder }, ref) {
   const el = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState(!toolbarOnFocus);
+  const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
+  const checkEmpty = () => setEmpty(!(el.current?.textContent ?? "").trim());
 
   useEffect(() => {
     if (el.current) el.current.innerHTML = sanitize(initialHtml);
@@ -240,8 +242,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
           <B label="⌫" title="Clear formatting" onClick={() => exec("removeFormat")} />
         </>}
       </div>}
-      <div ref={el} className="rich" contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onFocus={() => setToolbar(true)} onInput={onChange} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
+      <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
+        style={{ minHeight, fontFamily }} onFocus={() => setToolbar(true)} onInput={() => { checkEmpty(); onChange(); }}
+        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
     </>
   );
 });

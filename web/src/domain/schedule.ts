@@ -12,6 +12,8 @@ export interface Occurrence {
   completed: boolean;
   timed: boolean;
   multiDay: boolean;
+  /** A one-time task whose day has passed, shown on today instead (see forCalendar). */
+  overdue?: boolean;
 }
 
 /** MISSED: not ticked on a day that has passed (Today looking at an earlier day). */
@@ -57,6 +59,20 @@ export function occurrencesIn(items: Item[], done: CompletionIndex, from: number
     }
   }
   return out.sort((a, b) => a.day - b.day || (a.startMin ?? -1) - (b.startMin ?? -1) || a.item.title.localeCompare(b.item.title));
+}
+
+/**
+ * Occurrences for the calendar: like occurrencesIn, except that an unticked one-time task whose day has
+ * passed moves forward to today, untimed (like Google Calendar), unless it's set to be skipped when missed.
+ */
+export function forCalendar(items: Item[], done: CompletionIndex, from: number, to: number, today: number): Occurrence[] {
+  const late = items.filter((i) => i.type === "TASK" && !isRecurring(i) && i.startDay !== null && i.startDay < today &&
+    i.overduePolicy !== "SKIP" && !done.isDone(i.id, i.startDay));
+  const lateIds = new Set(late.map((i) => i.id));
+  const rest = occurrencesIn(items.filter((i) => !lateIds.has(i.id)), done, from, to);
+  if (today < from || today > to) return rest;
+  const moved = late.map((item): Occurrence => ({ item, day: today, startMin: null, endDay: today, endMin: null, completed: false, timed: false, multiDay: false, overdue: true }));
+  return [...moved, ...rest].sort((a, b) => a.day - b.day || (a.startMin ?? -1) - (b.startMin ?? -1) || a.item.title.localeCompare(b.item.title));
 }
 
 function missedSince(item: Item, done: CompletionIndex, today: number): number {

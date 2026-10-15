@@ -44,6 +44,8 @@ export function TodayView() {
     dayTasks = tasks.filter((e) => e.status === "DUE" || e.status === "CARRIED" || e.status === "DONE");
     anytime = tasks.filter((e) => e.status === "ANYTIME").length;
   } else {
+    // Tasks still overdue today carry on to the days ahead until they're ticked.
+    if (day > t) overdue = tasksForDay(s.items, s.done, t).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
     dayTasks = tasksOnDay(s.items, s.done, day, t);
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);

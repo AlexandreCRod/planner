@@ -1,5 +1,5 @@
 :root {
-  --accent: #3f51b5;
+  --accent: #1a73e8;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   --bg: #fbf8fd;
   --surface: #ffffff;
@@ -93,6 +93,22 @@ button.chip:hover { background: var(--surface-2); }
 
 /* Today's note card: only what fits on two lines */
 .note-preview { padding: 12px 14px; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Task / event editor, laid out like Google Calendar's: one row per field, icon on the left */
+.gform .frow { display: flex; align-items: center; gap: 20px; min-height: 46px; }
+.gform .frow > svg, .gform .frow > span:first-child { width: 20px; flex: none; color: var(--muted); }
+.gform .frow.top { align-items: flex-start; padding-top: 10px; }
+.gform .frow.clickable { cursor: pointer; }
+.gform .frow.clickable:hover { background: var(--surface-2); border-radius: 8px; }
+.gform hr { border: 0; border-top: 1px solid var(--line); margin: 6px -4px; }
+.gform .title-input { margin: 0; }
+.gform .swatch { width: 16px; height: 16px; border-radius: 4px; }
+.plain { border: 0; background: transparent; font-size: 14.5px; padding: 8px 0; outline: none; min-width: 0; }
+select.plain { cursor: pointer; }
+.notes-box .rich { padding: 6px 0; }
+.rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; position: absolute; }
+.rich { position: relative; }
+.icon-btn.on { color: var(--accent); }
 
 /* Task / event view (before Edit) */
 .info-row { display: flex; gap: 14px; align-items: flex-start; padding: 7px 0; font-size: 14.5px; }

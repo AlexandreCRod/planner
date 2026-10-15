@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, dayShort, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
-import { type Occurrence, occurrencesIn } from "../domain/schedule.ts";
+import { type Occurrence, forCalendar } from "../domain/schedule.ts";
 import { type Item, displayTitle, isRecurring, newItem } from "../domain/types.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../store/store.ts";
 import { EventRow, Icon, go, openItem } from "./common.tsx";
@@ -8,7 +8,6 @@ import { ScopeDialog } from "./ItemEditor.tsx";
 
 type Mode = "day" | "3day" | "week" | "month" | "agenda";
 const MODES: [Mode, string][] = [["day", "Day"], ["3day", "3 days"], ["week", "Week"], ["month", "Month"], ["agenda", "Agenda"]];
-const MAX_HOUR = 160;
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 
 export function CalendarView() {
@@ -63,7 +62,7 @@ function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; an
   const start = startOfWeek(first, mondayFirst());
   const days = Array.from({ length: 42 }, (_, i) => start + i);
   const rows = ymd(days[35]).m !== m ? 5 : 6;
-  const occ = occurrencesIn(items, s.done, days[0], days[rows * 7 - 1]);
+  const occ = forCalendar(items, s.done, days[0], days[rows * 7 - 1], todayEpoch());
   const t = todayEpoch();
   const byDay = new Map<number, Occurrence[]>();
   for (const o of occ) for (let d = o.day; d <= o.endDay; d++) byDay.set(d, [...(byDay.get(d) ?? []), o]);
@@ -77,7 +76,7 @@ function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; an
             onClick={() => onDay(d)} onDoubleClick={(e) => { e.stopPropagation(); newEventAt(d, null); }}>
             <span className="num">{ymd(d).d}</span>
             {list.slice(0, 4).map((o) => {
-              const c = s.colorOf(o.item);
+              const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
               const isTask = o.item.type === "TASK";
               return (
                 <div key={o.item.id + "-" + o.day} className="ev" onClick={(e) => { e.stopPropagation(); openItem(o.item, o.day); }}
@@ -95,7 +94,7 @@ function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; an
 }
 
 function Agenda({ s, items, from }: { s: Snapshot; items: Item[]; from: number }) {
-  const occ = occurrencesIn(items, s.done, from, from + 90);
+  const occ = forCalendar(items, s.done, from, from + 90, todayEpoch());
   const byDay = new Map<number, Occurrence[]>();
   for (const o of occ) byDay.set(o.day, [...(byDay.get(o.day) ?? []), o]);
   return (
@@ -145,7 +144,7 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
   // The clicked empty slot (one across all columns): outlined first, a second click creates the event.
   const [slot, setSlot] = useState<{ day: number; min: number } | null>(null);
   const t = todayEpoch();
-  const occ = useMemo(() => occurrencesIn(items, s.done, days[0], days[days.length - 1]), [items, s, days]);
+  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[days.length - 1], todayEpoch()), [items, s, days]);
   const allDay = days.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
   const timed = days.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d)));
   const headH = 52 + (allDay.some((l) => l.length) ? Math.min(3, Math.max(...allDay.map((l) => l.length))) * 22 + 6 : 0);
@@ -160,34 +159,8 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
     return () => ro.disconnect();
   }, [headH]);
   useEffect(() => { localStorage.setItem("hourHeight", String(hour)); }, [hour]);
-  // Each time the calendar opens: 06:00 to 23:00 fills the view, scrolled to 06:00 (Ctrl + scroll still zooms).
-  useLayoutEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const waking = Math.max(12, (el.clientHeight - headH) / 17);
-    setHour(() => waking);
-    requestAnimationFrame(() => { el.scrollTop = 6 * waking; });
-  }, []);
-
-  // Ctrl + mouse wheel (or a touchpad pinch) zooms, keeping the time under the pointer in place.
-  useEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      setHour((h) => {
-        const next = Math.max(fit, Math.min(MAX_HOUR, h * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
-        const y = e.clientY - el.getBoundingClientRect().top + el.scrollTop - headH;
-        el.scrollTop += y * (next / h - 1);
-        return next;
-      });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [fit, headH]);
-
-  const h = Math.max(hour, fit);
+  // On the computer the grid always shows the whole day, sized to the window.
+  const h = fit;
   const cols = `52px repeat(${days.length}, 1fr)`;
 
   const commit = (o: Occurrence, dDay: number, dStart: number, dEnd: number) => {
@@ -218,7 +191,7 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
           {allDay.map((list, i) => (
             <div key={i} style={{ padding: 2, minWidth: 0 }}>
               {list.slice(0, 3).map((o) => {
-                const c = s.colorOf(o.item);
+                const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
                 const isTask = o.item.type === "TASK";
                 return (
                   <div key={o.item.id} className="ev ellipsis" onClick={() => openItem(o.item, o.day)}
