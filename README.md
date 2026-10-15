@@ -118,6 +118,7 @@ app/src/main/java/…/planner/
 |---|---|
 | Phone tests | `gradlew test` (with `JAVA_HOME` set to a JDK 17 or 21) |
 | PC tests | `npm test` in `web/` |
+| Shared scheduling cases | `shared/schedule-cases.json` holds examples (repeats, overdue tasks, task states, streaks) that both the phone and PC tests check, so the two apps give the same answers. Add a case there when changing scheduling logic. |
 | Server tests | `npm test` and `npm run typecheck` in `server/`; `npm run e2e` against a local server |
 | Local server | `npm run dev` in `server/` (needs a `.dev.vars` file with `API_TOKEN=dev-token`) |
 | PC app with live reload | `npx vite` in `web/`, then open http://127.0.0.1:5173 (it forwards `/api` to the local server) |

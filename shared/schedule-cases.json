@@ -1,0 +1,606 @@
+{
+  "about": [
+    "Shared test cases for the scheduling logic, run by BOTH the phone tests (app/src/test/.../SharedScheduleCasesTest.kt)",
+    "and the PC tests (web/test/shared-schedule.test.ts). The phone (Kotlin) is the reference implementation.",
+    "Dates are YYYY-MM-DD, times HH:MM. Items list only non-default fields (type defaults to TASK; defaults otherwise match",
+    "the Kotlin Item / web newItem: interval 1, overduePolicy SHOW_OVERDUE, allDay false, priority 0...).",
+    "weekDays: list of MON..SUN; months: list of 1..12; monthDays: list of 1..31 or 32 (last day); excludedDays: list of dates.",
+    "done: completions; day null = undated (NO_DAY); 'at' = local wall time it was ticked (optional).",
+    "fn: days (Recurrence.occurrences of the first item) | occurrences | forCalendar | tasksForDay | tasksOnDay | entriesFor |",
+    "currentEntry | tickedDuring | streak. entriesFor/currentEntry/streak use itemId (default: first item).",
+    "Expected occurrences: endDay defaults to day, startMin/endMin to null, completed/overdue to false.",
+    "Expected task entries: day defaults to null, missed to 0."
+  ],
+  "cases": [
+    {
+      "name": "days: non-repeating occurs on its start day only",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-10" }],
+      "from": "2026-03-01", "to": "2026-03-31",
+      "expect": ["2026-03-10"]
+    },
+    {
+      "name": "days: non-repeating outside the range",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-10" }],
+      "from": "2026-03-11", "to": "2026-03-31",
+      "expect": []
+    },
+    {
+      "name": "days: daily every 3 days",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-01", "freq": "DAILY", "interval": 3 }],
+      "from": "2026-03-05", "to": "2026-03-15",
+      "expect": ["2026-03-07", "2026-03-10", "2026-03-13"]
+    },
+    {
+      "name": "days: daily range starting before the start day",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-10", "freq": "DAILY" }],
+      "from": "2026-03-01", "to": "2026-03-12",
+      "expect": ["2026-03-10", "2026-03-11", "2026-03-12"]
+    },
+    {
+      "name": "days: weekly with no days chosen uses the start weekday",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-10-14", "freq": "WEEKLY" }],
+      "from": "2026-10-12", "to": "2026-10-31",
+      "expect": ["2026-10-14", "2026-10-21", "2026-10-28"]
+    },
+    {
+      "name": "days: weekly on Monday and Thursday",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-10-12", "freq": "WEEKLY", "weekDays": ["MON", "THU"] }],
+      "from": "2026-10-12", "to": "2026-10-25",
+      "expect": ["2026-10-12", "2026-10-15", "2026-10-19", "2026-10-22"]
+    },
+    {
+      "name": "days: every other week, weeks start on Monday",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-10-18", "freq": "WEEKLY", "weekDays": ["MON", "SUN"], "interval": 2 }],
+      "from": "2026-10-12", "to": "2026-11-15",
+      "expect": ["2026-10-18", "2026-10-26", "2026-11-01", "2026-11-09", "2026-11-15"]
+    },
+    {
+      "name": "days: every other week stops at the until day",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-10-12", "freq": "WEEKLY", "interval": 2, "untilDay": "2026-11-08" }],
+      "from": "2026-10-01", "to": "2026-12-31",
+      "expect": ["2026-10-12", "2026-10-26"]
+    },
+    {
+      "name": "days: monthly on the 31st skips short months",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-01-31", "freq": "MONTHLY" }],
+      "from": "2026-01-01", "to": "2026-12-31",
+      "expect": ["2026-01-31", "2026-03-31", "2026-05-31", "2026-07-31", "2026-08-31", "2026-10-31", "2026-12-31"]
+    },
+    {
+      "name": "days: monthly on the last day",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-01-15", "freq": "MONTHLY", "monthDays": [32] }],
+      "from": "2026-01-01", "to": "2026-06-30",
+      "expect": ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    },
+    {
+      "name": "days: monthly on the 1st and 15th every 2 months",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-01-10", "freq": "MONTHLY", "monthDays": [1, 15], "interval": 2 }],
+      "from": "2026-01-01", "to": "2026-06-30",
+      "expect": ["2026-01-15", "2026-03-01", "2026-03-15", "2026-05-01", "2026-05-15"]
+    },
+    {
+      "name": "days: monthly on the 29th hits February only in a leap year",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2027-01-29", "freq": "MONTHLY" }],
+      "from": "2027-01-01", "to": "2028-03-31",
+      "expect": ["2027-01-29", "2027-03-29", "2027-04-29", "2027-05-29", "2027-06-29", "2027-07-29", "2027-08-29",
+        "2027-09-29", "2027-10-29", "2027-11-29", "2027-12-29", "2028-01-29", "2028-02-29", "2028-03-29"]
+    },
+    {
+      "name": "days: yearly in January and July on the 15th",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-01-15", "freq": "YEARLY", "months": [1, 7], "monthDays": [15] }],
+      "from": "2026-01-01", "to": "2027-12-31",
+      "expect": ["2026-01-15", "2026-07-15", "2027-01-15", "2027-07-15"]
+    },
+    {
+      "name": "days: yearly from Feb 29 only in leap years",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2024-02-29", "freq": "YEARLY" }],
+      "from": "2024-01-01", "to": "2032-12-31",
+      "expect": ["2024-02-29", "2028-02-29", "2032-02-29"]
+    },
+    {
+      "name": "days: yearly every 2 years",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-05-05", "freq": "YEARLY", "interval": 2 }],
+      "from": "2026-01-01", "to": "2031-12-31",
+      "expect": ["2026-05-05", "2028-05-05", "2030-05-05"]
+    },
+    {
+      "name": "days: yearly in February and November on the last day",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-02-10", "freq": "YEARLY", "months": [2, 11], "monthDays": [32] }],
+      "from": "2026-01-01", "to": "2028-03-31",
+      "expect": ["2026-02-28", "2026-11-30", "2027-02-28", "2027-11-30", "2028-02-29"]
+    },
+    {
+      "name": "days: until day ends a daily series",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-01", "freq": "DAILY", "untilDay": "2026-03-04" }],
+      "from": "2026-03-01", "to": "2026-03-31",
+      "expect": ["2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04"]
+    },
+    {
+      "name": "days: excluded days are removed",
+      "fn": "days",
+      "items": [{ "id": 1, "startDay": "2026-03-01", "freq": "DAILY", "excludedDays": ["2026-03-02", "2026-03-04"] }],
+      "from": "2026-03-01", "to": "2026-03-05",
+      "expect": ["2026-03-01", "2026-03-03", "2026-03-05"]
+    },
+
+    {
+      "name": "occurrences: multi-day event overlapping the range start",
+      "fn": "occurrences",
+      "items": [{ "id": 1, "type": "EVENT", "title": "trip", "startDay": "2026-03-08", "endDay": "2026-03-11" }],
+      "from": "2026-03-10", "to": "2026-03-20",
+      "expect": [{ "id": 1, "day": "2026-03-08", "endDay": "2026-03-11" }]
+    },
+    {
+      "name": "occurrences: weekly multi-day event overlapping the range start",
+      "fn": "occurrences",
+      "items": [{ "id": 1, "type": "EVENT", "title": "weekend", "startDay": "2026-10-10", "endDay": "2026-10-12",
+        "startMin": "18:00", "endMin": "08:00", "freq": "WEEKLY" }],
+      "from": "2026-10-12", "to": "2026-10-18",
+      "expect": [
+        { "id": 1, "day": "2026-10-10", "startMin": "18:00", "endDay": "2026-10-12", "endMin": "08:00" },
+        { "id": 1, "day": "2026-10-17", "startMin": "18:00", "endDay": "2026-10-19", "endMin": "08:00" }
+      ]
+    },
+    {
+      "name": "occurrences: all-day item with a time comes out untimed",
+      "fn": "occurrences",
+      "items": [{ "id": 1, "type": "EVENT", "title": "holiday", "startDay": "2026-03-10", "startMin": "09:00",
+        "endMin": "10:00", "allDay": true }],
+      "from": "2026-03-01", "to": "2026-03-31",
+      "expect": [{ "id": 1, "day": "2026-03-10" }]
+    },
+    {
+      "name": "occurrences: by day, then untimed before timed, then title",
+      "fn": "occurrences",
+      "items": [
+        { "id": 1, "type": "EVENT", "title": "a", "startDay": "2026-03-10", "startMin": "09:00", "endMin": "10:00" },
+        { "id": 2, "title": "z", "startDay": "2026-03-10" },
+        { "id": 3, "type": "EVENT", "title": "m", "startDay": "2026-03-10", "startMin": "08:00" },
+        { "id": 4, "type": "EVENT", "title": "b", "startDay": "2026-03-10", "startMin": "07:00", "allDay": true },
+        { "id": 5, "type": "EVENT", "title": "late", "startDay": "2026-03-09", "startMin": "23:00" }
+      ],
+      "from": "2026-03-01", "to": "2026-03-31",
+      "expect": [
+        { "id": 5, "day": "2026-03-09", "startMin": "23:00" },
+        { "id": 4, "day": "2026-03-10" },
+        { "id": 2, "day": "2026-03-10" },
+        { "id": 3, "day": "2026-03-10", "startMin": "08:00" },
+        { "id": 1, "day": "2026-03-10", "startMin": "09:00", "endMin": "10:00" }
+      ]
+    },
+    {
+      "name": "occurrences: titles differing by case sort by code unit (capitals first)",
+      "fn": "occurrences",
+      "items": [
+        { "id": 1, "title": "apple", "startDay": "2026-03-10" },
+        { "id": 2, "title": "Banana", "startDay": "2026-03-10" },
+        { "id": 3, "title": "cherry", "startDay": "2026-03-10" },
+        { "id": 4, "title": "Apple", "startDay": "2026-03-10" }
+      ],
+      "from": "2026-03-10", "to": "2026-03-10",
+      "expect": [
+        { "id": 4, "day": "2026-03-10" },
+        { "id": 2, "day": "2026-03-10" },
+        { "id": 1, "day": "2026-03-10" },
+        { "id": 3, "day": "2026-03-10" }
+      ]
+    },
+    {
+      "name": "occurrences: completed only for ticked task occurrences",
+      "fn": "occurrences",
+      "items": [
+        { "id": 1, "title": "once", "startDay": "2026-03-10" },
+        { "id": 2, "title": "daily", "startDay": "2026-03-10", "freq": "DAILY" },
+        { "id": 3, "type": "EVENT", "title": "event", "startDay": "2026-03-10" }
+      ],
+      "done": [{ "itemId": 1, "day": "2026-03-10" }, { "itemId": 2, "day": "2026-03-11" }, { "itemId": 3, "day": "2026-03-10" }],
+      "from": "2026-03-10", "to": "2026-03-11",
+      "expect": [
+        { "id": 2, "day": "2026-03-10" },
+        { "id": 3, "day": "2026-03-10" },
+        { "id": 1, "day": "2026-03-10", "completed": true },
+        { "id": 2, "day": "2026-03-11", "completed": true }
+      ]
+    },
+    {
+      "name": "occurrences: notes and undated tasks are left out",
+      "fn": "occurrences",
+      "items": [
+        { "id": 1, "type": "NOTE", "title": "note", "startDay": "2026-03-10" },
+        { "id": 2, "title": "someday" }
+      ],
+      "from": "2026-03-01", "to": "2026-03-31",
+      "expect": []
+    },
+
+    {
+      "name": "forCalendar: unticked overdue one-time task moves to today, untimed",
+      "fn": "forCalendar",
+      "items": [
+        { "id": 1, "title": "late", "startDay": "2026-10-10", "startMin": "09:00" },
+        { "id": 2, "type": "EVENT", "title": "e", "startDay": "2026-10-15", "startMin": "08:00" }
+      ],
+      "from": "2026-10-12", "to": "2026-10-18", "today": "2026-10-15",
+      "expect": [
+        { "id": 1, "day": "2026-10-15", "overdue": true },
+        { "id": 2, "day": "2026-10-15", "startMin": "08:00" }
+      ]
+    },
+    {
+      "name": "forCalendar: ticked overdue task stays on its day",
+      "fn": "forCalendar",
+      "items": [{ "id": 1, "title": "done", "startDay": "2026-10-13", "startMin": "09:00" }],
+      "done": [{ "itemId": 1, "day": "2026-10-13" }],
+      "from": "2026-10-12", "to": "2026-10-18", "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-13", "startMin": "09:00", "completed": true }]
+    },
+    {
+      "name": "forCalendar: SKIP task is not moved",
+      "fn": "forCalendar",
+      "items": [{ "id": 1, "title": "skip", "startDay": "2026-10-13", "overduePolicy": "SKIP" }],
+      "from": "2026-10-12", "to": "2026-10-18", "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-13" }]
+    },
+    {
+      "name": "forCalendar: today outside the range drops the late task",
+      "fn": "forCalendar",
+      "items": [
+        { "id": 1, "title": "late", "startDay": "2026-10-01" },
+        { "id": 2, "type": "EVENT", "title": "e", "startDay": "2026-10-03" }
+      ],
+      "from": "2026-10-01", "to": "2026-10-07", "today": "2026-10-15",
+      "expect": [{ "id": 2, "day": "2026-10-03" }]
+    },
+    {
+      "name": "forCalendar: recurring and future tasks stay, carry-over one-time task moves",
+      "fn": "forCalendar",
+      "items": [
+        { "id": 1, "title": "daily", "startDay": "2026-10-13", "freq": "DAILY" },
+        { "id": 2, "title": "carry", "startDay": "2026-10-14", "overduePolicy": "CARRY_OVER" },
+        { "id": 3, "title": "future", "startDay": "2026-10-16" }
+      ],
+      "from": "2026-10-14", "to": "2026-10-16", "today": "2026-10-15",
+      "expect": [
+        { "id": 1, "day": "2026-10-14" },
+        { "id": 2, "day": "2026-10-15", "overdue": true },
+        { "id": 1, "day": "2026-10-15" },
+        { "id": 1, "day": "2026-10-16" },
+        { "id": 3, "day": "2026-10-16" }
+      ]
+    },
+
+    {
+      "name": "tasksForDay: overdue daily task counts missed occurrences",
+      "fn": "tasksForDay",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-11" }],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 1, "day": "2026-10-14", "status": "OVERDUE", "missed": 3 },
+        { "id": 1, "day": "2026-10-15", "status": "DUE" }
+      ]
+    },
+    {
+      "name": "tasksForDay: overdue weekly task counts missed weeks",
+      "fn": "tasksForDay",
+      "items": [{ "id": 1, "title": "weekly", "startDay": "2026-09-21", "freq": "WEEKLY" }],
+      "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-12", "status": "OVERDUE", "missed": 4 }]
+    },
+    {
+      "name": "tasksForDay: carry-over is CARRIED only when there is no occurrence today",
+      "fn": "tasksForDay",
+      "items": [
+        { "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY", "overduePolicy": "CARRY_OVER" },
+        { "id": 2, "title": "weekly", "startDay": "2026-10-12", "freq": "WEEKLY", "overduePolicy": "CARRY_OVER" }
+      ],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 1, "day": "2026-10-15", "status": "DUE" },
+        { "id": 2, "day": "2026-10-12", "status": "CARRIED" }
+      ]
+    },
+    {
+      "name": "tasksForDay: SKIP shows only today's occurrence",
+      "fn": "tasksForDay",
+      "items": [
+        { "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY", "overduePolicy": "SKIP" },
+        { "id": 2, "title": "once", "startDay": "2026-10-13", "overduePolicy": "SKIP" }
+      ],
+      "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-15", "status": "DUE" }]
+    },
+    {
+      "name": "tasksForDay: status order overdue, due, carried, done, anytime",
+      "fn": "tasksForDay",
+      "items": [
+        { "id": 1, "title": "done today", "startDay": "2026-10-15" },
+        { "id": 2, "title": "anytime" },
+        { "id": 3, "title": "anytime done" },
+        { "id": 4, "title": "overdue", "startDay": "2026-10-13" },
+        { "id": 5, "title": "future", "startDay": "2026-10-20" },
+        { "id": 6, "title": "past done", "startDay": "2026-10-13" },
+        { "id": 7, "title": "carried", "startDay": "2026-10-12", "overduePolicy": "CARRY_OVER" },
+        { "id": 8, "type": "EVENT", "title": "event", "startDay": "2026-10-15" },
+        { "id": 9, "title": "due today", "startDay": "2026-10-15" }
+      ],
+      "done": [{ "itemId": 1, "day": "2026-10-15" }, { "itemId": 3, "day": null }, { "itemId": 6, "day": "2026-10-13" }],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 4, "day": "2026-10-13", "status": "OVERDUE", "missed": 1 },
+        { "id": 9, "day": "2026-10-15", "status": "DUE" },
+        { "id": 7, "day": "2026-10-12", "status": "CARRIED" },
+        { "id": 1, "day": "2026-10-15", "status": "DONE" },
+        { "id": 2, "day": null, "status": "ANYTIME" }
+      ]
+    },
+    {
+      "name": "tasksForDay: then priority, then time (untimed last), then title by code unit",
+      "fn": "tasksForDay",
+      "items": [
+        { "id": 1, "title": "a", "startDay": "2026-10-15" },
+        { "id": 2, "title": "b", "startDay": "2026-10-15", "startMin": "10:00", "priority": 2 },
+        { "id": 3, "title": "c", "startDay": "2026-10-15", "startMin": "08:00", "priority": 2 },
+        { "id": 4, "title": "d", "startDay": "2026-10-15", "priority": 2 },
+        { "id": 5, "title": "B", "startDay": "2026-10-15" }
+      ],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 3, "day": "2026-10-15", "status": "DUE" },
+        { "id": 2, "day": "2026-10-15", "status": "DUE" },
+        { "id": 4, "day": "2026-10-15", "status": "DUE" },
+        { "id": 5, "day": "2026-10-15", "status": "DUE" },
+        { "id": 1, "day": "2026-10-15", "status": "DUE" }
+      ]
+    },
+    {
+      "name": "tasksForDay: recurring task ticked today but missed yesterday",
+      "fn": "tasksForDay",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-13", "freq": "DAILY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-15" }],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 1, "day": "2026-10-14", "status": "OVERDUE", "missed": 2 },
+        { "id": 1, "day": "2026-10-15", "status": "DONE" }
+      ]
+    },
+
+    {
+      "name": "entriesFor: monthly on the 31st, last occurrence two months back",
+      "fn": "entriesFor",
+      "items": [{ "id": 1, "title": "rent", "startDay": "2026-08-31", "freq": "MONTHLY" }],
+      "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-08-31", "status": "OVERDUE", "missed": 1 }]
+    },
+    {
+      "name": "entriesFor: series ended by until day is still overdue",
+      "fn": "entriesFor",
+      "items": [{ "id": 1, "title": "ended", "startDay": "2026-10-01", "freq": "DAILY", "untilDay": "2026-10-10" }],
+      "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-10", "status": "OVERDUE", "missed": 10 }]
+    },
+    {
+      "name": "entriesFor: today excluded and yesterday ticked gives nothing",
+      "fn": "entriesFor",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY", "excludedDays": ["2026-10-15"] }],
+      "done": [{ "itemId": 1, "day": "2026-10-14" }],
+      "today": "2026-10-15",
+      "expect": []
+    },
+
+    {
+      "name": "tasksOnDay: earlier day shows MISSED and DONE",
+      "fn": "tasksOnDay",
+      "items": [
+        { "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY" },
+        { "id": 2, "title": "once", "startDay": "2026-10-13" },
+        { "id": 3, "title": "mondays", "startDay": "2026-10-12", "freq": "WEEKLY" },
+        { "id": 4, "title": "other day", "startDay": "2026-10-14" },
+        { "id": 5, "title": "undated" },
+        { "id": 6, "title": "Zeta", "startDay": "2026-10-10", "freq": "DAILY", "priority": 1 }
+      ],
+      "done": [{ "itemId": 1, "day": "2026-10-13" }],
+      "day": "2026-10-13", "today": "2026-10-15",
+      "expect": [
+        { "id": 6, "day": "2026-10-13", "status": "MISSED" },
+        { "id": 2, "day": "2026-10-13", "status": "MISSED" },
+        { "id": 1, "day": "2026-10-13", "status": "DONE" }
+      ]
+    },
+    {
+      "name": "tasksOnDay: later day shows DUE, early tick DONE, timed first, titles by code unit",
+      "fn": "tasksOnDay",
+      "items": [
+        { "id": 1, "title": "beta", "startDay": "2026-10-10", "freq": "DAILY" },
+        { "id": 2, "title": "Alpha", "startDay": "2026-10-20" },
+        { "id": 3, "title": "alpha", "startDay": "2026-10-20" },
+        { "id": 4, "title": "gamma", "startDay": "2026-10-10", "freq": "DAILY" },
+        { "id": 5, "title": "zed", "startDay": "2026-10-20", "startMin": "07:00" }
+      ],
+      "done": [{ "itemId": 4, "day": "2026-10-20" }],
+      "day": "2026-10-20", "today": "2026-10-15",
+      "expect": [
+        { "id": 5, "day": "2026-10-20", "status": "DUE" },
+        { "id": 2, "day": "2026-10-20", "status": "DUE" },
+        { "id": 3, "day": "2026-10-20", "status": "DUE" },
+        { "id": 1, "day": "2026-10-20", "status": "DUE" },
+        { "id": 4, "day": "2026-10-20", "status": "DONE" }
+      ]
+    },
+    {
+      "name": "tasksOnDay: today itself is DUE",
+      "fn": "tasksOnDay",
+      "items": [{ "id": 1, "title": "once", "startDay": "2026-10-15" }],
+      "day": "2026-10-15", "today": "2026-10-15",
+      "expect": [{ "id": 1, "day": "2026-10-15", "status": "DUE" }]
+    },
+
+    {
+      "name": "currentEntry: overdue occurrence comes before today's",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-15" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-14", "status": "OVERDUE", "missed": 5 }
+    },
+    {
+      "name": "currentEntry: today when nothing is overdue",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-13", "freq": "DAILY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-13" }, { "itemId": 1, "day": "2026-10-14" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-15", "status": "DUE" }
+    },
+    {
+      "name": "currentEntry: today's occurrence ticked stays DONE",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "mon thu", "startDay": "2026-10-12", "freq": "WEEKLY", "weekDays": ["MON", "THU"] }],
+      "done": [{ "itemId": 1, "day": "2026-10-12" }, { "itemId": 1, "day": "2026-10-15" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-15", "status": "DONE" }
+    },
+    {
+      "name": "currentEntry: next upcoming occurrence",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "mondays", "startDay": "2026-10-12", "freq": "WEEKLY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-12" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-19", "status": "UPCOMING" }
+    },
+    {
+      "name": "currentEntry: early-ticked future occurrence shows DONE",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "mondays", "startDay": "2026-10-12", "freq": "WEEKLY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-12" }, { "itemId": 1, "day": "2026-10-19" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-19", "status": "DONE" }
+    },
+    {
+      "name": "currentEntry: ended series falls back to its start day, DONE",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "ended", "startDay": "2026-10-01", "freq": "DAILY", "untilDay": "2026-10-10" }],
+      "done": [{ "itemId": 1, "day": "2026-10-10" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-01", "status": "DONE" }
+    },
+    {
+      "name": "currentEntry: future one-time task is UPCOMING",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "later", "startDay": "2026-10-20" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-20", "status": "UPCOMING" }
+    },
+    {
+      "name": "currentEntry: ticked undated task",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "someday" }],
+      "done": [{ "itemId": 1, "day": null }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": null, "status": "DONE" }
+    },
+    {
+      "name": "currentEntry: ticked past one-time task",
+      "fn": "currentEntry",
+      "items": [{ "id": 1, "title": "once", "startDay": "2026-10-10" }],
+      "done": [{ "itemId": 1, "day": "2026-10-10" }],
+      "today": "2026-10-15",
+      "expect": { "id": 1, "day": "2026-10-10", "status": "DONE" }
+    },
+
+    {
+      "name": "tickedDuring: in tick order, undated has no day, ticks outside the day and non-tasks ignored",
+      "fn": "tickedDuring",
+      "items": [
+        { "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY" },
+        { "id": 2, "title": "someday" },
+        { "id": 3, "title": "overdue", "startDay": "2026-10-12" },
+        { "id": 4, "title": "ahead", "startDay": "2026-10-10", "freq": "DAILY" },
+        { "id": 5, "type": "EVENT", "title": "event", "startDay": "2026-10-15" }
+      ],
+      "done": [
+        { "itemId": 1, "day": "2026-10-15", "at": "2026-10-15T18:00" },
+        { "itemId": 2, "day": null, "at": "2026-10-15T07:30" },
+        { "itemId": 3, "day": "2026-10-12", "at": "2026-10-15T12:00" },
+        { "itemId": 1, "day": "2026-10-14", "at": "2026-10-14T23:59" },
+        { "itemId": 4, "day": "2026-10-16", "at": "2026-10-16T00:00" },
+        { "itemId": 5, "day": "2026-10-15", "at": "2026-10-15T09:00" },
+        { "itemId": 99, "day": "2026-10-15", "at": "2026-10-15T10:00" },
+        { "itemId": 4, "day": "2026-10-17", "at": "2026-10-15T00:00" }
+      ],
+      "day": "2026-10-15",
+      "expect": [
+        { "id": 4, "day": "2026-10-17", "status": "DONE" },
+        { "id": 2, "day": null, "status": "DONE" },
+        { "id": 3, "day": "2026-10-12", "status": "DONE" },
+        { "id": 1, "day": "2026-10-15", "status": "DONE" }
+      ]
+    },
+
+    {
+      "name": "streak: run broken by a miss, today not yet ticked keeps the current run",
+      "fn": "streak",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-01", "freq": "DAILY" }],
+      "done": [
+        { "itemId": 1, "day": "2026-10-01" }, { "itemId": 1, "day": "2026-10-02" }, { "itemId": 1, "day": "2026-10-03" },
+        { "itemId": 1, "day": "2026-10-04" }, { "itemId": 1, "day": "2026-10-06" }, { "itemId": 1, "day": "2026-10-07" },
+        { "itemId": 1, "day": "2026-10-08" }, { "itemId": 1, "day": "2026-10-09" }, { "itemId": 1, "day": "2026-10-10" },
+        { "itemId": 1, "day": "2026-10-11" }, { "itemId": 1, "day": "2026-10-12" }, { "itemId": 1, "day": "2026-10-13" },
+        { "itemId": 1, "day": "2026-10-14" }
+      ],
+      "today": "2026-10-15",
+      "expect": { "current": 9, "best": 9, "rate30": 0.9285714, "total": 13 }
+    },
+    {
+      "name": "streak: ticked today counts",
+      "fn": "streak",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2026-10-10", "freq": "DAILY" }],
+      "done": [{ "itemId": 1, "day": "2026-10-13" }, { "itemId": 1, "day": "2026-10-14" }, { "itemId": 1, "day": "2026-10-15" }],
+      "today": "2026-10-15",
+      "expect": { "current": 3, "best": 3, "rate30": 0.5, "total": 3 }
+    },
+    {
+      "name": "streak: non-repeating task only counts ticks",
+      "fn": "streak",
+      "items": [{ "id": 1, "title": "once", "startDay": "2026-10-10" }],
+      "done": [{ "itemId": 1, "day": "2026-10-10" }],
+      "today": "2026-10-15",
+      "expect": { "current": 0, "best": 0, "rate30": 0, "total": 1 }
+    },
+    {
+      "name": "streak: rate30 covers the last 30 occurrences",
+      "fn": "streak",
+      "items": [{ "id": 1, "title": "mondays", "startDay": "2026-01-05", "freq": "WEEKLY" }],
+      "done": [{ "itemId": 1, "day": "2026-03-16" }, { "itemId": 1, "day": "2026-03-23" }, { "itemId": 1, "day": "2026-03-30" }],
+      "today": "2026-10-15",
+      "expect": { "current": 0, "best": 3, "rate30": 0.0666667, "total": 3 }
+    },
+    {
+      "name": "streak: looks back exactly 3 calendar years",
+      "fn": "streak",
+      "items": [{ "id": 1, "title": "daily", "startDay": "2020-01-01", "freq": "DAILY" }],
+      "done": [
+        { "itemId": 1, "day": "2023-10-13" }, { "itemId": 1, "day": "2023-10-14" }, { "itemId": 1, "day": "2023-10-15" },
+        { "itemId": 1, "day": "2023-10-16" }, { "itemId": 1, "day": "2023-10-17" }
+      ],
+      "today": "2026-10-15",
+      "expect": { "current": 0, "best": 3, "rate30": 0, "total": 5 }
+    }
+  ]
+}
