@@ -97,12 +97,16 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
   const [ghost, setGhost] = useState<{ key: string; start: number; dDay: number; length: number; color: string; isTask: boolean } | null>(null);
   const [pendingMove, setPendingMove] = useState<{ series: Item; day: number; edited: Item } | null>(null);
 
-  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[days.length - 1], t), [items, s, days, t]);
-  const allDay = days.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
-  const timed = useMemo(() => days.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d))), [occ, days]);
+  // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
+  // (like a pager) instead of empty space. Index `count` is the first day in view.
+  const all = useMemo(() => Array.from({ length: count * 3 }, (_, i) => first - count + i), [first, count]);
+  const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t), [items, s, all, t]);
+  const allDay = all.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
+  const timed = useMemo(() => all.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d))), [occ, all]);
   const placed = useRef(new Map<string, { p: Placed; di: number }>());
   placed.current = new Map();
-  timed.forEach((list, di) => list.forEach((p) => placed.current.set(`${p.o.item.id}-${p.o.day}`, { p, di })));
+  // Only blocks of the days in view can be picked up.
+  timed.slice(count, count * 2).forEach((list, di) => list.forEach((p) => placed.current.set(`${p.o.item.id}-${p.o.day}`, { p, di })));
 
   const pxPerMin = hourH / 60;
   const pxRef = useRef(pxPerMin);
@@ -113,25 +117,27 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
   props.current = { onStep, onNewAt, s };
 
   // Opening: 06:00 to 24:00 fills the grid, scrolled to 06:00 (as the native app does).
+  // (Measured once it has a real height; later size changes, like the keyboard, keep the zoom.)
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const h = Math.max(240, el.clientHeight) / 18;
-    setHourH(h);
-    el.scrollTop = h * 6;
+    let done = false;
+    const fit = () => {
+      if (done || el.clientHeight < 200) return;
+      done = true;
+      const h = el.clientHeight / 18;
+      setHourH(h);
+      requestAnimationFrame(() => { el.scrollTop = h * 6; });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  // A new range slid in from the side the finger pushed it.
-  const incoming = useRef(0);
+  // After a swipe the layers sit one range over; the new days now render there, so the offset goes.
   useLayoutEffect(() => {
-    const dir = incoming.current;
-    if (!dir) return;
-    incoming.current = 0;
-    const w = layer.current?.clientWidth ?? 300;
-    for (const el of [layer.current, headDays.current, allDayDays.current]) {
-      el?.animate([{ transform: `translate3d(${dir * w * 0.35}px,0,0)`, opacity: 0.3 }, { transform: "translate3d(0,0,0)", opacity: 1 }], { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" });
-      if (el) el.style.transform = "";
-    }
+    for (const el of [layer.current, headDays.current, allDayDays.current]) if (el) el.style.transform = "";
   }, [first]);
 
   // A moved block keeps its dragged position until the grid has redrawn it in its new place.
@@ -268,10 +274,19 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
         const w = layer.current?.clientWidth ?? 300;
         const dir = cur.dx < -w * 0.25 || cur.vx < -0.45 ? 1 : cur.dx > w * 0.25 || cur.vx > 0.45 ? -1 : 0;
         if (dir) {
-          hapticLight();
-          incoming.current = dir;
-          moveLayers(0);
-          props.current.onStep(dir);
+          // Carry on at the finger's speed to the next range, then step there (already drawn, so no jump).
+          const target = -dir * w;
+          const speed = Math.max(1.6, Math.abs(cur.vx));
+          const ms = Math.max(90, Math.min(260, Math.abs(target - cur.dx) / speed));
+          let done = false;
+          const finish = () => { if (done) return; done = true; moveLayers(target); hapticLight(); props.current.onStep(dir); };
+          for (const l of [layer.current, headDays.current, allDayDays.current]) {
+            if (!l) continue;
+            const a = l.animate([{ transform: `translate3d(${cur.dx}px,0,0)` }, { transform: `translate3d(${target}px,0,0)` }], { duration: ms, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+            if (l === layer.current) a.onfinish = finish;
+            l.style.transform = `translate3d(${target}px,0,0)`;
+          }
+          window.setTimeout(finish, ms + 60);
         } else {
           for (const l of [layer.current, headDays.current, allDayDays.current]) {
             if (!l) continue;
@@ -323,7 +338,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
     };
   }, []);
 
-  const colPct = 100 / days.length;
+  const colPct = 100 / count;
   const compact = days.length > 3;
   const hasAllDay = allDay.some((l) => l.length);
 
@@ -331,26 +346,26 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
     <div className="pg">
       <div className="pg-head">
         <div className="pg-gutter" />
-        <div className="pg-head-days" ref={headDays}>
-          {days.map((d) => (
+        <div className="pg-head-days"><div className="pg-strip" ref={headDays}>
+          {all.map((d) => (
             <button key={d} className={`pg-dh ${d === t ? "today" : ""}`} onClick={() => onDayHeader(d)}>
               <span className="wd">{NARROW[weekday(d) - 1]}</span>
               <span className="num">{ymd(d).d}</span>
             </button>
           ))}
-        </div>
+        </div></div>
       </div>
       {hasAllDay && (
         <div className="pg-allday">
           <div className="pg-gutter">all-day</div>
-          <div className="pg-allday-days" ref={allDayDays}>
+          <div className="pg-allday-days"><div className="pg-strip" ref={allDayDays}>
             {allDay.map((list, i) => (
               <div key={i} className="pg-adcol">
                 {list.slice(0, 3).map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
                 {list.length > 3 && <span className="more">+{list.length - 3}</span>}
               </div>
             ))}
-          </div>
+          </div></div>
         </div>
       )}
       <div className="pg-scroll" ref={scroller} style={{ visibility: hourH ? undefined : "hidden" }}>
@@ -360,9 +375,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, onDayHeade
           </div>
           <div className="pg-grid">
             <div className="pg-layer" ref={layer}>
-              {days.map((d, di) => (
-                <div key={d} className="pg-col" style={{ left: `${di * colPct}%`, width: `${colPct}%` }}>
-                  {timed[di].map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}
+              {all.map((d, j) => (
+                <div key={d} className={`pg-col ${j === count ? "first" : ""}`} style={{ left: `${(j - count) * colPct}%`, width: `${colPct}%` }}>
+                  {timed[j].map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}
                   {d === t && <div className="pg-now" style={{ transform: `translate3d(0,${now * pxPerMin}px,0)` }} />}
                 </div>
               ))}

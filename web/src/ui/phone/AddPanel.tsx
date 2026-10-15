@@ -13,7 +13,7 @@ import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS, n
 import { saveItem } from "../../store/store.ts";
 import { Icon, go } from "../common.tsx";
 import { type Draft, ItemEditor } from "../ItemEditor.tsx";
-import { hapticLight, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
+import { hapticLight, hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
 export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
 
@@ -22,6 +22,8 @@ const SETTLE = { tension: 600, friction: 49 };
 /** 900 dp/s, in px per ms. */
 const FLING = 0.9;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+/** Close to Android's keyboard animation (fast out, slow in). */
+const imeCurve = (t: number) => 1 - Math.pow(1 - t, 3.2);
 
 /** A new item's first alert, as the editor gives it: a reminder 15 min before an event, a silent notification for a dated task. */
 function defaultAlerts(item: Item): Reminder[] {
@@ -41,6 +43,8 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
   const [editorReady, setEditorReady] = useState(false);
   const [grown, setGrown] = useState(false);
   const closing = useRef(false);
+  // The tap that opened the panel (on a calendar slot) ends with a click that lands on the new scrim.
+  const openedAt = useRef(performance.now());
   const grownRef = useRef(false);
 
   // ---------- What's being added ----------
@@ -96,15 +100,26 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
   };
 
   // ---------- Geometry ----------
-  const [sp, api] = useSpring(() => ({ p: 0, down: 0, hidden: 1, kb: 0, ch: 0, h: window.innerHeight, nav: 0 }));
+  const [sp, api] = useSpring(() => ({ p: 0, down: 0, hidden: 1, kb: 0, ch: 0, h: window.innerHeight, nav: 0, lag: 0 }));
   useLayoutEffect(() => {
     const n = probe.current?.offsetHeight ?? 0;
     setNav(n);
     api.start({ nav: n, immediate: true });
-    const onResize = () => { setWinH(window.innerHeight); api.start({ h: window.innerHeight, immediate: true }); };
+    // In the app the page shrinks at once when the keyboard starts to rise (and grows at once when it
+    // starts to fall), while the keyboard itself takes ~300 ms. The jump is taken back and eased away
+    // with the keyboard's own curve, so the panel rides on top of it instead of leaping ahead.
+    const onResize = () => {
+      const old = sp.h.get(), h = window.innerHeight;
+      setWinH(h);
+      api.start({ h, immediate: true });
+      if (Math.abs(old - h) > 80) {
+        api.start({ lag: sp.lag.get() + old - h, immediate: true });
+        api.start({ lag: 0, config: { duration: 300, easing: imeCurve } });
+      }
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [api]);
+  }, [api, sp]);
   // The keyboard's own animation is about a quarter of a second; the panel rides on it.
   useEffect(() => { api.start({ kb, config: { duration: kb ? 260 : 220, easing: easings.easeOutCubic } }); }, [kb, api]);
   useLayoutEffect(() => {
@@ -119,11 +134,11 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
 
   const bottomOf = (k: number, n: number) => Math.max(k, n);
   const range = () => Math.max(1, sp.h.get() - bottomOf(sp.kb.get(), sp.nav.get()) - sp.ch.get());
-  const y = to([sp.p, sp.down, sp.hidden, sp.kb, sp.ch, sp.h, sp.nav], (p, down, hidden, k, ch, h, n) => {
+  const y = to([sp.p, sp.down, sp.hidden, sp.kb, sp.ch, sp.h, sp.nav, sp.lag], (p, down, hidden, k, ch, h, n, lag) => {
     const b = bottomOf(k, n);
     const avail = h - b;
     const visible = ch + p * Math.max(0, avail - ch);
-    return avail - visible + down + hidden * (ch + b);
+    return avail - visible + down + hidden * (ch + b) + lag;
   });
   const availH = winH - bottomOf(kb, nav);
 
@@ -136,7 +151,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
     const t = window.setTimeout(() => setEditorReady(true), 250);
     return () => clearTimeout(t);
   }, [api]);
-  useEffect(() => () => { (document.activeElement as HTMLElement | null)?.blur?.(); }, []);
+  useEffect(() => () => { (document.activeElement as HTMLElement | null)?.blur?.(); hideKeyboard(); }, []);
 
   const dismiss = () => {
     if (closing.current) return;
@@ -199,7 +214,8 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
     <div className="gp-root">
       <div ref={probe} className="gp-probe" />
       <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
-        onClick={() => { if (!grownRef.current) dismiss(); }} />
+        onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
+        onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350) dismiss(); }} />
       <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${v}px,0)`) }} {...(grown ? {} : bind())}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
         {editorReady && canGrow && (

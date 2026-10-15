@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Behind the WebView: shows for a moment under the keyboard while it moves, so it matches the add panel. -->
+    <color name="windowBehind">#F7F2FA</color>
+</resources>

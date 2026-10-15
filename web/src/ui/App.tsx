@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { formatClock } from "../domain/dates.ts";
 import { DEFAULT_SERVER, getServer, isNative, setServer, usePhone } from "../platform.ts";
 import { testToken, setToken, startAutoSync, syncNow } from "../store/sync.ts";
@@ -25,8 +25,9 @@ export function App() {
   // Phones (the Capacitor app, or a phone-narrow browser) get their own shell; the PC layout is unchanged.
   const phone = usePhone();
   const sync = useSyncStatus();
-  // All phone CSS hangs off html.phone, so the PC layout never sees it.
-  useLayoutEffect(() => { document.documentElement.classList.toggle("phone", phone); }, [phone]);
+  // All phone CSS hangs off html.phone, so the PC layout never sees it. Set while rendering, so the
+  // phone pages measure themselves with it already applied.
+  document.documentElement.classList.toggle("phone", phone);
   if (sync.state === "signed-out") return <Login message={sync.message} />;
   return phone ? <PhoneApp /> : <DesktopApp />;
 }

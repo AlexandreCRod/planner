@@ -11,15 +11,15 @@ export const hapticTick = () => { if (isNative) void Haptics.selectionChanged().
 export const hapticLight = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); };
 
 // ---------- Keyboard ----------
-// How much of the bottom of the page the keyboard covers, in CSS px. In the app the WebView keeps its
-// size (the plugin reports the height as the keyboard starts to move); in a phone browser the visual
-// viewport shrinks instead.
-let pluginHeight = 0;
+// How much of the bottom of the page the keyboard covers, in CSS px. In the app, Capacitor's
+// SystemBars pads the WebView by the keyboard's height as soon as it starts to come up, so the page
+// itself shrinks and nothing is covered (the add panel rides the keyboard by animating that jump away,
+// see AddPanel). In a phone browser only the visual viewport shrinks, which is measured here.
 let viewportCover = 0;
 let kb = 0;
 const kbListeners = new Set<() => void>();
 function update() {
-  const next = Math.max(pluginHeight, viewportCover);
+  const next = viewportCover;
   if (next === kb) return;
   kb = next;
   kbListeners.forEach((l) => l());
@@ -42,8 +42,6 @@ export function startPhonePlumbing() {
     vv.addEventListener("scroll", measure);
   }
   if (isNative) {
-    void Keyboard.addListener("keyboardWillShow", (info) => { pluginHeight = info.keyboardHeight; update(); });
-    void Keyboard.addListener("keyboardWillHide", () => { pluginHeight = 0; update(); });
     void CapApp.addListener("backButton", () => onBack());
   }
 }
@@ -63,3 +61,4 @@ function onBack() {
 }
 export const minimizeApp = () => { if (isNative) void CapApp.minimizeApp().catch(() => {}); };
 export const showKeyboard = () => { if (isNative) void Keyboard.show().catch(() => {}); };
+export const hideKeyboard = () => { if (isNative) void Keyboard.hide().catch(() => {}); };
