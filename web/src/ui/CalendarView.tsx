@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, dayShort, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, occurrencesIn } from "../domain/schedule.ts";
-import { type Item, isRecurring, newItem } from "../domain/types.ts";
+import { type Item, displayTitle, isRecurring, newItem } from "../domain/types.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../store/store.ts";
 import { EventRow, Icon, go, openItem } from "./common.tsx";
 import { ScopeDialog } from "./ItemEditor.tsx";
@@ -86,7 +86,7 @@ function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; an
               return (
                 <div key={o.item.id + "-" + o.day} className="ev" onClick={(e) => { e.stopPropagation(); openItem(o.item, o.day); }}
                   style={{ background: isTask ? `color-mix(in srgb, ${c} 16%, transparent)` : c, color: isTask ? c : "#fff", textDecoration: o.completed ? "line-through" : undefined }}>
-                  {o.timed && !o.multiDay ? `${formatTime(o.startMin!)} ` : ""}{o.item.title || "Untitled"}
+                  {o.timed && !o.multiDay ? `${formatTime(o.startMin!)} ` : ""}{displayTitle(o.item)}
                 </div>
               );
             })}
@@ -218,7 +218,7 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
                 return (
                   <div key={o.item.id} className="ev ellipsis" onClick={() => openItem(o.item, o.day)}
                     style={{ fontSize: 11.5, borderRadius: 4, padding: "1px 6px", marginBottom: 2, cursor: "pointer", background: isTask ? `color-mix(in srgb, ${c} 16%, transparent)` : c, color: isTask ? c : "#fff", textDecoration: o.completed ? "line-through" : undefined }}>
-                    {o.item.title || "Untitled"}
+                    {displayTitle(o.item)}
                   </div>
                 );
               })}
@@ -306,7 +306,7 @@ function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit }: {
               padding: tiny ? "0 5px" : undefined, fontSize: tiny ? 10.5 : 12, lineHeight: tiny ? `${height}px` : undefined,
               textDecoration: p.o.completed ? "line-through" : undefined,
             }}>
-            <b style={{ fontWeight: 600 }}>{p.o.item.title || "Untitled"}</b>
+            <b style={{ fontWeight: 600 }}>{displayTitle(p.o.item)}</b>
             {height >= 40 && !isTask && <div style={{ opacity: 0.85, fontSize: 11 }}>{formatTime(p.start)}–{formatTime(Math.min(1439, p.end))}</div>}
             {!isTask && height >= 30 && (
               <div onPointerDown={(e) => startDrag(e, p, true)} title="Drag to change length"

@@ -1,5 +1,5 @@
 // Small shared pieces: icons, task and event rows, the hash router.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
@@ -78,7 +78,54 @@ export function Pill({ children, color }: { children: ReactNode; color: string }
   return <span className="pill" style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}>{children}</span>;
 }
 
-export function TaskRow({ entry, s, now, streakInfo, showDay }: { entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean }) {
+/** Seconds a ticked task stays where it was (Settings → Checked tasks); -1 until the page is left. */
+export function checkedLinger(): number {
+  const v = Number(localStorage.getItem("checkedLinger") ?? "3");
+  return Number.isFinite(v) ? v : 3;
+}
+
+/**
+ * Keeps ticked tasks where they were for a while, so ticking doesn't make a row jump or vanish under
+ * the pointer. Rows are identified by a list name plus a key that `arrange` computes the same way.
+ */
+export function useCheckedHold() {
+  const [held, setHeld] = useState<Map<string, { index: number; entry: TaskEntry }>>(new Map());
+  const timers = useRef(new Map<string, number>());
+  useEffect(() => () => { for (const t of timers.current.values()) clearTimeout(t); }, []);
+  const drop = (k: string) => setHeld((prev) => { const n = new Map(prev); n.delete(k); return n; });
+  return {
+    onToggle(list: string, key: string, entry: TaskEntry, index: number, done: boolean) {
+      const k = `${list}|${key}`;
+      clearTimeout(timers.current.get(k));
+      timers.current.delete(k);
+      const secs = checkedLinger();
+      if (!done || secs === 0) { drop(k); return; }
+      setHeld((prev) => new Map(prev).set(k, { index, entry: { ...entry, status: "DONE" } }));
+      if (secs > 0) timers.current.set(k, window.setTimeout(() => { timers.current.delete(k); drop(k); }, secs * 1000));
+    },
+    /** `real` with the held rows of `list` put back where they were, shown as ticked. */
+    arrange(list: string, real: TaskEntry[], key: (e: TaskEntry) => string): TaskEntry[] {
+      const prefix = `${list}|`;
+      const mine = [...held].filter(([k]) => k.startsWith(prefix)).sort((a, b) => a[1].index - b[1].index);
+      if (!mine.length) return real;
+      const keys = new Set(mine.map(([k]) => k.slice(prefix.length)));
+      const out = real.filter((e) => !keys.has(key(e)));
+      for (const [, h] of mine) out.splice(Math.min(h.index, out.length), 0, h.entry);
+      return out;
+    },
+  };
+}
+
+/** The "repeats" mark in front of a repeating item's title. */
+export function RepeatBadge({ color }: { color: string }) {
+  return <span className="rep" title="Repeats" style={{ color, background: `color-mix(in srgb, ${color} 20%, transparent)` }}><Icon name="repeat" size={12} /></span>;
+}
+
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
+  entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** Called with the new state before the tick is saved. */
+  onToggle?: (done: boolean) => void;
+}) {
   const { item, status } = entry;
   const done = status === "DONE";
   const color = s.colorOf(item);
@@ -92,9 +139,10 @@ export function TaskRow({ entry, s, now, streakInfo, showDay }: { entry: TaskEnt
     <div className="task" onClick={() => openItem(item, entry.day)}>
       <span className="bar" style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
-        onChange={(e) => toggleCompletion(item.id, completionDay(entry), e.target.checked)} />
+        onChange={(e) => { onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
+          {isRecurring(item) && <RepeatBadge color={color} />}
           {item.priority > 0 && !done && <span title={`${PRIORITIES[item.priority]} priority`} style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS[item.priority]} /></span>}
           {item.title || "Untitled"}
         </div>
@@ -102,6 +150,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay }: { entry: TaskEnt
       </div>
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="#7d5260">Carried over</Pill>}
+      {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}
       {status === "DUE" && due !== null && <Pill color={due < now ? "var(--danger)" : color}>{dueCountdown(due, now)}</Pill>}
       {status === "UPCOMING" && entry.day !== null && <Pill color="var(--muted)">{relativeDay(entry.day)}</Pill>}
       {streakInfo && streakInfo.current > 0 && <Pill color="#ff7043">🔥 {streakInfo.current}</Pill>}
@@ -115,7 +164,7 @@ export function EventRow({ o, s, showDay }: { o: Occurrence; s: Snapshot; showDa
       <div className="time">{o.timed ? <>{formatTime(o.startMin!)}{o.endMin !== null && <><br />{formatTime(o.endMin)}</>}</> : "All day"}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
-        <div className="ellipsis">{o.item.title || "Untitled"}</div>
+        <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
         <div className="hint ellipsis" style={{ fontSize: 12 }}>
           {[showDay ? relativeDay(o.day) : null, o.multiDay ? `until ${relativeDay(o.endDay)}` : null, isRecurring(o.item) ? describe(o.item) : null].filter(Boolean).join(" · ")}
         </div>

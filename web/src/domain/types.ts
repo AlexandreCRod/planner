@@ -91,3 +91,6 @@ export function argbOf(hex: string): number {
 }
 
 export const TYPE_COLORS: Record<ItemType, string> = { TASK: "#26a69a", EVENT: "#5c6bc0", NOTE: "#ffa726" };
+
+/** The title with "↻" in front for repeating items, for places too small for a badge. */
+export const displayTitle = (item: Item) => (isRecurring(item) ? "↻ " : "") + (item.title || "Untitled");

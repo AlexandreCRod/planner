@@ -5,6 +5,7 @@ import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCatego
 import { type SyncStatus, getStatus, onStatus, resetLocal, signOut, syncNow } from "../store/sync.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
 import { typeLabel } from "./LinksSection.tsx";
+import { checkedLinger } from "./common.tsx";
 
 export const ACCENTS: [string, string][] = [["Indigo", "#3f51b5"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"], ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"]];
 
@@ -30,6 +31,7 @@ export function SettingsView() {
   const [notify, setNotify] = useState(notificationsEnabled());
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
+  const [linger, setLinger] = useState(String(checkedLinger()));
   const [editing, setEditing] = useState<Category | null>(null);
   useEffect(() => { localStorage.setItem("theme", theme); localStorage.setItem("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { localStorage.setItem("weekStartsMonday", String(monday)); }, [monday]);
@@ -57,6 +59,13 @@ export function SettingsView() {
         <div className="seg">{DATE_STYLES.map(([v, l]) => (
           <button key={v} className={dates === v ? "on" : ""} onClick={() => { setDates(v); localStorage.setItem("dateFormat", v); changed(true); }}>{l}</button>
         ))}</div>
+      </div>
+
+      <div className="section">Tasks</div>
+      <div className="row">Checked tasks
+        <select className="input" value={linger} onChange={(e) => { setLinger(e.target.value); localStorage.setItem("checkedLinger", e.target.value); }}>
+          {([["-1", "Stay until you leave the page"], ["10", "Move away after 10 seconds"], ["5", "Move away after 5 seconds"], ["3", "Move away after 3 seconds"], ["1", "Move away after 1 second"], ["0", "Move away right away"]]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
       </div>
 
       <div className="section">Notifications on this computer</div>

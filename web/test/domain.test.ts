@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { epochOf, weekday } from "../src/domain/dates.ts";
+import { epochOf, toTimestamp, weekday } from "../src/domain/dates.ts";
 import { tagIdFor, newId } from "../src/domain/ids.ts";
 import { parseQuickAdd } from "../src/domain/quickadd.ts";
 import { LAST_DAY_OF_MONTH, dayBit, occurrences, occursOn } from "../src/domain/recurrence.ts";
-import { CompletionIndex, currentEntry, entriesFor, streak } from "../src/domain/schedule.ts";
+import { CompletionIndex, currentEntry, entriesFor, streak, tasksOnDay, tickedDuring } from "../src/domain/schedule.ts";
 import { newItem } from "../src/domain/types.ts";
 import { wikiTitles } from "../src/domain/text.ts";
 
@@ -48,6 +48,19 @@ test("overdue policies and streaks", () => {
   const done = new CompletionIndex([0, 2, 3, 4].map((i) => ({ itemId: 1, day: mon + i, completedAt: 0 })));
   const s = streak(task(mon, { freq: "DAILY" }), done, mon + 5);
   assert.deepEqual([s.current, s.best], [3, 3]);
+});
+
+test("Today on other days: due, ticked, missed, and ticked during the day", () => {
+  const daily = task(mon, { freq: "DAILY" });
+  const once = newItem({ type: "TASK", id: 2, title: "o", startDay: mon + 1 });
+  const completions = [
+    { itemId: 1, day: mon + 1, completedAt: toTimestamp(mon + 1, 720) },
+    { itemId: 1, day: mon, completedAt: toTimestamp(mon + 2, 720) }, // Monday's, ticked late on Wednesday
+  ];
+  const done = new CompletionIndex(completions);
+  assert.deepEqual(tasksOnDay([daily, once], done, mon + 1, mon + 3).map((e) => [e.item.id, e.status]), [[2, "MISSED"], [1, "DONE"]]);
+  assert.deepEqual(tasksOnDay([daily, once], done, mon + 4, mon + 3).map((e) => [e.item.id, e.status]), [[1, "DUE"]]);
+  assert.deepEqual(tickedDuring([daily, once], completions, mon + 2).map((e) => [e.item.id, e.day]), [[1, mon]]);
 });
 
 test("ticking a future task shows it done", () => {

@@ -14,8 +14,9 @@ export interface Occurrence {
   multiDay: boolean;
 }
 
-export type TaskStatus = "OVERDUE" | "DUE" | "CARRIED" | "DONE" | "UPCOMING" | "ANYTIME";
-const order = (s: TaskStatus) => ["OVERDUE", "DUE", "CARRIED", "DONE", "UPCOMING", "ANYTIME"].indexOf(s);
+/** MISSED: not ticked on a day that has passed (Today looking at an earlier day). */
+export type TaskStatus = "OVERDUE" | "DUE" | "CARRIED" | "DONE" | "UPCOMING" | "ANYTIME" | "MISSED";
+const order = (s: TaskStatus) => ["OVERDUE", "DUE", "CARRIED", "DONE", "UPCOMING", "ANYTIME", "MISSED"].indexOf(s);
 
 export interface TaskEntry {
   item: Item;
@@ -88,6 +89,31 @@ export function entriesFor(item: Item, done: CompletionIndex, today: number): Ta
   }
   if (todayOcc) out.push({ item, day: today, status: done.isDone(item.id, today) ? "DONE" : "DUE", missed: 0 });
   return out;
+}
+
+/**
+ * Tasks scheduled on `day`, ticked or not, for Today looking at a day other than today:
+ * MISSED on earlier days, DUE on later ones.
+ */
+export function tasksOnDay(items: Item[], done: CompletionIndex, day: number, today: number): TaskEntry[] {
+  return items
+    .filter((i) => i.type === "TASK" && i.startDay !== null && (isRecurring(i) ? occursOn(i, day) : i.startDay === day))
+    .map((item): TaskEntry => ({ item, day, status: done.isDone(item.id, day) ? "DONE" : day < today ? "MISSED" : "DUE", missed: 0 }))
+    .sort((a, b) => Number(a.status === "DONE") - Number(b.status === "DONE") || b.item.priority - a.item.priority ||
+      (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || a.item.title.localeCompare(b.item.title));
+}
+
+/** Tasks ticked during `day` by the clock, whichever occurrence they completed, in the order they were ticked. */
+export function tickedDuring(items: Item[], completions: Completion[], day: number): TaskEntry[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const from = toTimestamp(day, 0), to = toTimestamp(day + 1, 0);
+  return completions
+    .filter((c) => c.completedAt >= from && c.completedAt < to)
+    .sort((a, b) => a.completedAt - b.completedAt)
+    .flatMap((c): TaskEntry[] => {
+      const item = byId.get(c.itemId);
+      return item && item.type === "TASK" ? [{ item, day: c.day === NO_DAY ? null : c.day, status: "DONE", missed: 0 }] : [];
+    });
 }
 
 export function tasksForDay(items: Item[], done: CompletionIndex, today: number): TaskEntry[] {

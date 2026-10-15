@@ -4,7 +4,7 @@ import { describe } from "../domain/recurrence.ts";
 import { preview } from "../domain/text.ts";
 import { type Item, isRecurring } from "../domain/types.ts";
 import { type Snapshot, useSnapshot } from "../store/store.ts";
-import { openItem } from "./common.tsx";
+import { RepeatBadge, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
 
 const KINDS: [string, string, (i: Item) => boolean][] = [
@@ -65,7 +65,7 @@ export function BrowseView({ initialKind }: { initialKind: string }) {
         <div key={i.id} className="task" onClick={() => openItem(i)}>
           <span className="bar" style={{ background: s.colorOf(i) }} />
           <div className="grow">
-            <div className="ellipsis">{i.title || (i.noteDay !== null ? formatDate(i.noteDay) : "Untitled")}</div>
+            <div className="ellipsis">{isRecurring(i) && <RepeatBadge color={s.colorOf(i)} />}{i.title || (i.noteDay !== null ? formatDate(i.noteDay) : "Untitled")}</div>
             <div className="sub ellipsis">{subtitle(i, s)}</div>
             {preview(i.content, 100) && <div className="sub ellipsis">{preview(i.content, 100)}</div>}
           </div>

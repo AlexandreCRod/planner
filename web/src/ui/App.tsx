@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { formatClock, formatDate, today } from "../domain/dates.ts";
+import { formatClock } from "../domain/dates.ts";
 import { testToken, setToken, startAutoSync, syncNow } from "../store/sync.ts";
 import { BrowseView } from "./BrowseView.tsx";
 import { CalendarView } from "./CalendarView.tsx";
@@ -31,7 +31,7 @@ export function App() {
 
   if (sync.state === "signed-out") return <Login message={sync.message} />;
 
-  const title = ({ today: formatDate(today()), calendar: "Calendar", tasks: "Tasks", notes: "Notes", graph: "Links", browse: "Search", settings: "Settings", note: "Note" } as Record<string, string>)[mainPage] ?? "Planner";
+  const title = ({ today: "Planner", calendar: "Calendar", tasks: "Tasks", notes: "Notes", graph: "Links", browse: "Search", settings: "Settings", note: "Note" } as Record<string, string>)[mainPage] ?? "Planner";
   const flush = mainPage === "calendar" || mainPage === "graph";
 
   return (

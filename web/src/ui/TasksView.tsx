@@ -3,7 +3,7 @@ import { today as todayEpoch } from "../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../domain/schedule.ts";
 import { isRecurring } from "../domain/types.ts";
 import { useSnapshot } from "../store/store.ts";
-import { TaskRow, useNow } from "./common.tsx";
+import { TaskRow, useCheckedHold, useNow } from "./common.tsx";
 
 const GROUPS = ["Daily", "Weekly", "Monthly", "Yearly", "One-time", "Anytime"] as const;
 
@@ -24,6 +24,7 @@ export function TasksView() {
   const [showDone, setShowDone] = useState(false);
   const [category, setCategory] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const hold = useCheckedHold();
 
   const entries = s.items
     .filter((i) => i.type === "TASK" && (category === null || i.categoryId === category))
@@ -43,7 +44,8 @@ export function TasksView() {
       </div>
       {entries.length === 0 && <div className="hint">No tasks yet. Try typing "Stretch every day 7am" in the bar at the top.</div>}
       {GROUPS.map((g) => {
-        const list = sorted(entries.filter((e) => groupOf(e) === g));
+        // A ticked task stays in place for a while instead of jumping or vanishing at once.
+        const list = hold.arrange(g, sorted(entries.filter((e) => groupOf(e) === g)), (e) => String(e.item.id));
         if (!list.length) return null;
         const isCollapsed = collapsed.has(g);
         return (
@@ -53,8 +55,9 @@ export function TasksView() {
               if (isCollapsed) n.delete(g); else n.add(g);
               setCollapsed(n);
             }}>{isCollapsed ? "▸" : "▾"} {g} ({list.length})</div>
-            {!isCollapsed && list.map((e) => (
-              <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={isRecurring(e.item) ? streak(e.item, s.done, t) : undefined} />
+            {!isCollapsed && list.map((e, index) => (
+              <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={isRecurring(e.item) ? streak(e.item, s.done, t) : undefined}
+                onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
             ))}
           </div>
         );
