@@ -39,7 +39,12 @@ async function api(path: string, init: RequestInit = {}): Promise<unknown> {
 
 /** Checks a password against the server without syncing. */
 export async function testToken(token: string): Promise<{ items: number }> {
-  const res = await fetch(apiUrl("/api/status"), { headers: { Authorization: `Bearer ${token.trim()}` } });
+  let res: Response;
+  try {
+    res = await fetch(apiUrl("/api/status"), { headers: { Authorization: `Bearer ${token.trim()}` }, signal: AbortSignal.timeout(10_000) });
+  } catch {
+    throw new Error(`Can't reach the server${apiUrl("") ? ` at ${apiUrl("")}` : ""}`);
+  }
   if (res.status === 401) throw new Error("Wrong password");
   if (!res.ok) throw new Error(`Server error ${res.status}`);
   const body = await res.json() as { counts?: { items?: number } };

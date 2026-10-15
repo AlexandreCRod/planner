@@ -19,12 +19,15 @@ export function usePhone(): boolean {
 // The PC app is served by the Worker itself, so it calls relative /api/... paths. The phone app is
 // loaded from its own files (https://localhost), so it needs the server's full address.
 
-/** Debug default: the emulator's alias for the computer running `wrangler dev`. */
-export const DEFAULT_SERVER = (import.meta.env.VITE_DEFAULT_SERVER as string | undefined) ?? "http://10.0.2.2:8787";
+/** Pre-filled server address. Empty unless set at build time, e.g. VITE_DEFAULT_SERVER=http://10.0.2.2:8787
+ *  (the emulator's alias for the computer running `wrangler dev`). */
+export const DEFAULT_SERVER = (import.meta.env.VITE_DEFAULT_SERVER as string | undefined) ?? "";
 
 export const getServer = () => (isNative ? (localStorage.getItem("serverUrl") || DEFAULT_SERVER) : "");
 export function setServer(url: string) {
-  localStorage.setItem("serverUrl", url.trim().replace(/\/+$/, ""));
+  let u = url.trim().replace(/\/+$/, "");
+  if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
+  localStorage.setItem("serverUrl", u);
 }
 
 /** Full URL for an API path: unchanged (relative) on the PC, prefixed with the server on the phone. */
