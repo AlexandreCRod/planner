@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { addMonths, dayShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { addMonths, dayShort, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, occurrencesIn } from "../domain/schedule.ts";
 import { type Item, isRecurring, newItem } from "../domain/types.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../store/store.ts";
@@ -25,7 +25,7 @@ export function CalendarView() {
   const step = (dir: number) => setAnchor((a) =>
     mode === "day" ? a + dir : mode === "3day" ? a + 3 * dir : mode === "week" ? a + 7 * dir : mode === "month" ? addMonths(a, dir) : a + 7 * dir);
   const { y, m } = ymd(anchor);
-  const title = mode === "day" ? `${ymd(anchor).d} ${monthShort(m)} ${y}` : mode === "month" || mode === "agenda" ? `${monthLong(m)} ${y}` : `${monthShort(ymd(mode === "week" ? startOfWeek(anchor, mondayFirst()) : anchor).m)} ${y}`;
+  const title = mode === "day" ? formatDateShort(anchor) : mode === "month" || mode === "agenda" ? `${monthLong(m)} ${y}` : `${monthShort(ymd(mode === "week" ? startOfWeek(anchor, mondayFirst()) : anchor).m)} ${y}`;
 
   const days = mode === "day" ? [anchor] : mode === "3day" ? [anchor, anchor + 1, anchor + 2]
     : Array.from({ length: 7 }, (_, i) => startOfWeek(anchor, mondayFirst()) + i);

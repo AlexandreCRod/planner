@@ -1,7 +1,7 @@
 // contenteditable editor that reads and writes the same HTML as the Android editor, including
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
-import { formatClock } from "../domain/dates.ts";
+import { formatDateTime } from "../domain/dates.ts";
 import { Icon } from "./common.tsx";
 
 const BOX = "☐", TICK = "☑";
@@ -239,7 +239,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
           <span className="sep" />
           <B label="🔗" title="Web link" onClick={() => { const url = prompt("Link address", "https://"); if (url) exec("createLink", url); }} />
           <B label="[[ ]]" title="Link to another item: type its title inside" onClick={() => exec("insertText", "[[]]")} />
-          <B label="🕒" title="Insert date and time" onClick={() => exec("insertText", new Date().toLocaleDateString(undefined, { dateStyle: "medium" }) + ", " + formatClock(Date.now()))} />
+          <B label="🕒" title="Insert date and time" onClick={() => exec("insertText", formatDateTime(Date.now()))} />
           <B label="⌫" title="Clear formatting" onClick={() => exec("removeFormat")} />
         </>}
       </div>

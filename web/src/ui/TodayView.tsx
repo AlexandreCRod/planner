@@ -1,4 +1,4 @@
-import { formatDate, today as todayEpoch } from "../domain/dates.ts";
+import { today as todayEpoch } from "../domain/dates.ts";
 import { occurrencesIn, streak, tasksForDay } from "../domain/schedule.ts";
 import { preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
@@ -21,13 +21,12 @@ export function TodayView() {
 
   return (
     <div style={{ maxWidth: 820 }}>
-      <h2 style={{ margin: "4px 0 6px", fontWeight: 500 }}>{formatDate(t)}</h2>
       {due.length > 0 && (
-        <div style={{ margin: "6px 0 4px" }}>
-          <div style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
+        <div className="row" style={{ margin: "2px 0" }}>
+          <div className="grow" style={{ height: 4, borderRadius: 2, background: "var(--surface-2)", overflow: "hidden" }}>
             <div style={{ width: `${(doneCount / due.length) * 100}%`, height: "100%", background: "var(--accent)" }} />
           </div>
-          <div className="hint" style={{ marginTop: 4 }}>{doneCount} of {due.length} tasks done</div>
+          <span className="hint" style={{ fontSize: 12 }}>{doneCount}/{due.length} done</span>
         </div>
       )}
       {overdue.length > 0 && <>

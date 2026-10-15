@@ -65,7 +65,37 @@ export const monthShort = (m: number) => MONTHS[m - 1];
 export const monthLong = (m: number) => MONTHS_LONG[m - 1];
 export const dayShort = (wd: number) => DAYS[wd - 1];
 
+/** "written" (Thu, 15 Oct), "dmy" (15/10/2026), "mdy" (10/15/2026) or "ymd" (2026-10-15); chosen in Settings. */
+export type DateStyle = "written" | "dmy" | "mdy" | "ymd";
+export const DATE_STYLES: [DateStyle, string][] = [["written", "Written (Thu, 15 Oct)"], ["dmy", "DD/MM/YYYY"], ["mdy", "MM/DD/YYYY"], ["ymd", "YYYY-MM-DD"]];
+export function dateStyle(): DateStyle {
+  try {
+    const v = globalThis.localStorage?.getItem("dateFormat");
+    return DATE_STYLES.some(([k]) => k === v) ? (v as DateStyle) : "written";
+  } catch {
+    return "written";
+  }
+}
+
+function numericDate(epoch: number, style: DateStyle): string | null {
+  const { y, m, d } = ymd(epoch);
+  const dd = String(d).padStart(2, "0"), mm = String(m).padStart(2, "0");
+  if (style === "dmy") return `${dd}/${mm}/${y}`;
+  if (style === "mdy") return `${mm}/${dd}/${y}`;
+  if (style === "ymd") return `${y}-${mm}-${dd}`;
+  return null;
+}
+
+/** The date alone: "15 Oct 2026" or "15/10/2026". */
+export function formatDateShort(epoch: number): string {
+  const { y, m, d } = ymd(epoch);
+  return numericDate(epoch, dateStyle()) ?? `${d} ${monthShort(m)} ${y}`;
+}
+
+/** Weekday and date: "Thu, 15 Oct" (year added when it isn't this year) or "Thu, 15/10/2026". */
 export function formatDate(epoch: number): string {
+  const numeric = numericDate(epoch, dateStyle());
+  if (numeric) return `${dayShort(weekday(epoch))}, ${numeric}`;
   const { y, m, d } = ymd(epoch);
   const base = `${dayShort(weekday(epoch))}, ${d} ${monthShort(m)}`;
   return y === ymd(today()).y ? base : `${base} ${y}`;
@@ -111,7 +141,8 @@ export function formatClock(ts: number): string {
 
 /** Date and time of a timestamp, e.g. "15/10/2026, 09:30". */
 export function formatDateTime(ts: number): string {
-  return `${new Date(ts).toLocaleDateString()}, ${formatClock(ts)}`;
+  const t = new Date(ts);
+  return `${formatDateShort(epochOf(t.getFullYear(), t.getMonth() + 1, t.getDate()))}, ${formatClock(ts)}`;
 }
 
 export function dueCountdown(dueTs: number, now = Date.now()): string {

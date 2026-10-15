@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type ClockFormat, clockFormat, formatDateTime } from "../domain/dates.ts";
+import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatDateTime } from "../domain/dates.ts";
 import { type AlertType, type Category, argbOf, cssColor } from "../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../store/store.ts";
 import { type SyncStatus, getStatus, onStatus, resetLocal, signOut, syncNow } from "../store/sync.ts";
@@ -29,6 +29,7 @@ export function SettingsView() {
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [notify, setNotify] = useState(notificationsEnabled());
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
+  const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [editing, setEditing] = useState<Category | null>(null);
   useEffect(() => { localStorage.setItem("theme", theme); localStorage.setItem("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { localStorage.setItem("weekStartsMonday", String(monday)); }, [monday]);
@@ -50,6 +51,11 @@ export function SettingsView() {
             localStorage.setItem("clockFormat", v);
             changed(true); // redraw every view with the new format
           }}>{l}</button>
+        ))}</div>
+      </div>
+      <div className="row" style={{ marginTop: 10 }}>Date format
+        <div className="seg">{DATE_STYLES.map(([v, l]) => (
+          <button key={v} className={dates === v ? "on" : ""} onClick={() => { setDates(v); localStorage.setItem("dateFormat", v); changed(true); }}>{l}</button>
         ))}</div>
       </div>
 
@@ -94,7 +100,7 @@ export function SettingsView() {
       {s.trash.length === 0 && <div className="hint">Trash is empty.</div>}
       {s.trash.map((i) => (
         <div key={i.id} className="task">
-          <div className="grow">{i.title || "Untitled"}<div className="sub">{typeLabel(i)} · deleted {new Date(i.deletedAt!).toLocaleDateString()}</div></div>
+          <div className="grow">{i.title || "Untitled"}<div className="sub">{typeLabel(i)} · deleted {formatDateTime(i.deletedAt!)}</div></div>
           <button className="btn small" onClick={() => restore(i.id)}>Restore</button>
           <button className="btn small danger" onClick={() => { if (confirm("Delete forever?")) deleteForever(i.id); }}>Delete</button>
         </div>
