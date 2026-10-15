@@ -59,9 +59,17 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const category = d.categoryId !== null ? s.categoryById.get(d.categoryId) : undefined;
   const tagList = () => tags.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
   const add = (k: string) => setAdded(new Set([...added, k]));
+  const locate = () => {
+    if (!navigator.geolocation) { alert("This browser can't tell where you are."); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { const { latitude: lat, longitude: lng } = pos.coords; setD((x) => x && { ...x, location: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng }); },
+      () => alert("Couldn't get this computer's location (permission refused or not available)."),
+      { timeout: 15000 },
+    );
+  };
 
   const finalItem = (): Item => {
-    let it: Item = { ...d, title: d.title.trim(), content: rich.current?.html() ?? d.content };
+    let it: Item = { ...d, title: d.title.trim(), content: rich.current?.html() ?? d.content, location: (d.location ?? "").trim() };
     if (it.type === "EVENT") {
       const sd = it.startDay ?? todayEpoch();
       const ed = Math.max(it.endDay ?? sd, sd);
@@ -151,6 +159,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
               </label>
             )}
             <Info icon="🕒">{whenText(o, day)}</Info>
+            {(o.location ?? "").trim() && <Info icon={<Icon name="place" size={16} />}><a href={mapsUrl(o)} target="_blank" rel="noreferrer">{o.location}</a></Info>}
             {isRecurring(o) && <Info icon={<span style={{ color }}>↻</span>}>{describe(o)}</Info>}
             {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
             {!oEvent && o.startDay !== null && o.overduePolicy !== "SHOW_OVERDUE" && (
@@ -190,12 +199,14 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const showTags = tags.trim() !== "" || added.has("tags");
   const showNotes = preview(initialHtml, 10).trim() !== "" || added.has("notes");
   const showLinks = hasLinks || added.has("links");
+  const showPlace = (d.location ?? "").trim() !== "" || added.has("place");
   const newAlert = (t: AlertType) => setReminders([...reminders, { id: 0, itemId: id, offsetMin: t === "REMINDER" && isEvent && !d.allDay ? 15 : 0, type: t, soundUri: null }]);
   const chips: [string, () => void][] = [
     ...(!showAlerts ? [["🔔 Reminder", () => newAlert("REMINDER")], ["⏰ Alarm", () => newAlert("ALARM")]] as [string, () => void][] : []),
     ...(!isEvent && !showPriority ? [["⚑ Priority", () => add("priority")]] as [string, () => void][] : []),
     ...(!isEvent && d.startDay !== null && !showMissed ? [["⏭ If missed", () => add("missed")]] as [string, () => void][] : []),
     ...(!showNotes ? [["☰ Notes", () => add("notes")]] as [string, () => void][] : []),
+    ...(!showPlace ? [["📍 Place", () => add("place")]] as [string, () => void][] : []),
     ...(!showTags ? [["# Tags", () => add("tags")]] as [string, () => void][] : []),
     ...(!showCategory ? [["◆ Category", () => add("category")]] as [string, () => void][] : []),
     ...(!showLinks ? [["🔗 Link", () => add("links")]] as [string, () => void][] : []),
@@ -252,6 +263,18 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
               </div>
             )}
           </div>
+
+          {showPlace && (
+            <div className="field">
+              <label>Place</label>
+              <div className="row">
+                {/* A typed place has no coordinates; only "my location" sets them. */}
+                <input className="input grow" placeholder="Place" value={d.location ?? ""} onChange={(e) => set({ location: e.target.value, lat: null, lng: null })} />
+                <button className="icon-btn" title="Use this computer's location" onClick={locate}><Icon name="myLocation" size={18} /></button>
+                {(d.location ?? "").trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl(d)} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
+              </div>
+            </div>
+          )}
 
           <div className="field">
             {/* "Doesn't repeat" stays one line until clicked. */}
@@ -380,6 +403,8 @@ function whenText(item: Item, day: number | null): string {
   if (item.allDay) return span ? `All day, ${formatDate(start)} – ${formatDate(end)}` : `${formatDate(start)} · all day`;
   return span ? `${formatDate(start)} ${time(item.startMin)} – ${formatDate(end)} ${time(item.endMin)}` : `${formatDate(start)} · ${time(item.startMin)}–${time(item.endMin)}`;
 }
+
+const mapsUrl = (i: Item) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.lat !== null && i.lng !== null ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
 
 function Info({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return <div className="info-row"><span className="ico">{icon}</span><div className="grow">{children}</div></div>;

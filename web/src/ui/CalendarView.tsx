@@ -38,10 +38,6 @@ export function CalendarView() {
         <button className="btn small" onClick={() => setAnchor(todayEpoch())}>Today</button>
         <button className="icon-btn" onClick={() => step(1)} title="Next"><Icon name="right" /></button>
         <span className="grow" />
-        {gridMode && <>
-          <button className="icon-btn" title="Show whole day" onClick={() => setHour(fit)}><Icon name="fit" size={18} /></button>
-          <button className="icon-btn" title="Zoom in (or Ctrl + scroll)" onClick={() => setHour(Math.min(MAX_HOUR, Math.max(hour, fit) * 1.4))}><Icon name="zoomIn" size={18} /></button>
-        </>}
         <button className={`chip ${showTasks ? "on" : ""}`} onClick={() => setShowTasks(!showTasks)}>Tasks</button>
         <div className="seg">
           {MODES.map(([k, l]) => <button key={k} className={mode === k ? "on" : ""} onClick={() => setMode(k)}>{l}</button>)}
@@ -164,7 +160,14 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
     return () => ro.disconnect();
   }, [headH]);
   useEffect(() => { localStorage.setItem("hourHeight", String(hour)); }, [hour]);
-  useEffect(() => { if (wrap.current && hour > fit) wrap.current.scrollTop = 7 * hour; }, []); // start around 7:00
+  // Each time the calendar opens: 06:00 to 23:00 fills the view, scrolled to 06:00 (Ctrl + scroll still zooms).
+  useLayoutEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const waking = Math.max(12, (el.clientHeight - headH) / 17);
+    setHour(() => waking);
+    requestAnimationFrame(() => { el.scrollTop = 6 * waking; });
+  }, []);
 
   // Ctrl + mouse wheel (or a touchpad pinch) zooms, keeping the time under the pointer in place.
   useEffect(() => {
