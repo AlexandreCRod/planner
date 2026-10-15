@@ -47,6 +47,33 @@ function monthDay(d: number, mon: string, today: number): number | null {
   return e;
 }
 
+const UNIT = "(m|mins?|minutes?|h|hrs?|hours?|d|days?|w|weeks?)";
+const UNIT_NC = "(?:m|mins?|minutes?|h|hrs?|hours?|d|days?|w|weeks?)";
+
+/**
+ * An alert phrase: [free] words count anywhere ("remind me"); [guarded] words ("alarm") only after
+ * "!" or "with/set/add", before a lead time or "at time", or as the last word. An optional lead
+ * time ("10 min before") is captured in groups 1-2.
+ */
+function alertPhrase(guarded: string, free: string): RegExp {
+  const g = `(?:${guarded})`, f = `(?:${free})`;
+  return new RegExp(
+    String.raw`\s(?:!(?:${g}|${f})|(?:with|set|add|plus|and)\s+(?:an?\s+)?(?:${g}|${f})|${f}|${g}(?=\s+\d+\s*${UNIT_NC}|\s+at\s+(?:the\s+)?time|\s*$))` +
+      String.raw`(?:\s+(\d+)\s*${UNIT}(?:\s+(?:before|early|earlier))?)?(?:\s+at\s+(?:the\s+)?time)?(?=\s)`,
+    "i",
+  );
+}
+
+/** Tidies what's left once dates, times and options are taken out, including dangling "with" or "and". */
+function cleanTitle(text: string): string {
+  let title = text.replace(/\s+/g, " ").trim();
+  for (let prev = ""; prev !== title;) {
+    prev = title;
+    title = title.replace(/[\s,;-]+$/, "").replace(/\s+(and|with|at|on|plus|by)$/i, "").replace(/^(and|with|plus)\s+/i, "").trim();
+  }
+  return title;
+}
+
 export function parseQuickAdd(input: string, today = todayEpoch()): QuickAdd {
   let text = ` ${input} `;
   let day: number | null = null, start: number | null = null, end: number | null = null;
@@ -65,19 +92,32 @@ export function parseQuickAdd(input: string, today = todayEpoch()): QuickAdd {
   const ci = (p: string) => new RegExp(p, "i");
 
   takeAll(/(?<=\s)#([\p{L}\d_-]+)/u, (m) => tags.push(m[1]));
-  takeAll(ci("\\s!(alarm|alert|remind|reminder|notify|notification)\\b"), (m) => {
-    const w = m[1].toLowerCase();
-    if (w === "alarm" || w === "alert") alarm = true;
-    else if (w.startsWith("notif")) silent = true;
-    else atTime = true;
+  // Alerts. "!alarm", "with alarm", "alarm 10 min before" or a final "alarm" add an alarm;
+  // "remind me", "reminder 1h before" or "with reminder" add a reminder; "notify" / "silent" make
+  // reminders silent. Plain words like "alarm" only count in those positions, so "Buy alarm clock"
+  // stays a title. Whatever is understood is removed from the title.
+  const alarmOffsets: number[] = [];
+  let reminderAsked = false;
+  takeAll(alertPhrase("alarms?|alerts?", "(?!)"), (m) => {
+    alarm = true;
+    alarmOffsets.push(m[1] ? parseInt(m[1], 10) * unitMinutes(m[2]) : 0);
   });
-  take(ci("\\s!(low|med|medium|high|urgent)\\b"), (m) => {
-    priority = ({ low: 1, med: 2, medium: 2, high: 3 } as Record<string, number>)[m[1].toLowerCase()] ?? 4;
+  takeAll(alertPhrase("reminders?", String.raw`remind(?:\s+me)?`), (m) => {
+    reminderAsked = true;
+    if (m[1]) offsets.push(parseInt(m[1], 10) * unitMinutes(m[2])); else atTime = true;
   });
-  takeAll(ci("\\sremind(?:\\s+me)?\\s+(\\d+)\\s*(m|min|mins|minutes?|h|hrs?|hours?|d|days?|w|weeks?)\\s*(?:before|early)?\\b"), (m) => {
-    offsets.push(parseInt(m[1], 10) * unitMinutes(m[2]));
+  takeAll(alertPhrase(String.raw`notifications?|silent(?:ly)?`, String.raw`notify(?:\s+me)?`), (m) => {
+    silent = true;
+    if (m[1]) offsets.push(parseInt(m[1], 10) * unitMinutes(m[2]));
   });
-  take(ci("\\sremind(?:\\s+me)?(?:\\s+at\\s+time)?\\b"), () => { atTime = true; });
+  // More times for the same alert: "remind 1 day before and 1 hour before".
+  takeAll(ci(String.raw`\s(?:and\s+|,\s*)?(\d+)\s*${UNIT}\s+(?:before|early|earlier)\b`), (m) => {
+    const o = parseInt(m[1], 10) * unitMinutes(m[2]);
+    if (alarm && !reminderAsked && !silent) alarmOffsets.push(o); else offsets.push(o);
+  });
+  take(ci(String.raw`\s(?:!(low|med|medium|high|urgent)|(low|medium|high|urgent)\s+priority|priority\s+(low|medium|high|urgent))\b`), (m) => {
+    priority = ({ low: 1, med: 2, medium: 2, high: 3 } as Record<string, number>)[(m[1] ?? m[2] ?? m[3]).toLowerCase()] ?? 4;
+  });
 
   take(ci("\\s(?:every\\s+weekday|weekdays)\\b"), () => { freq = "WEEKLY"; weekDays = 0b0011111; });
   take(ci("\\severy\\s+(\\d+)\\s+(days?|weeks?|months?|years?)\\b"), (m) => { interval = parseInt(m[1], 10); freq = freqOf(m[2]); });
@@ -141,7 +181,7 @@ export function parseQuickAdd(input: string, today = todayEpoch()): QuickAdd {
   if (atTime || (silent && offsets.length === 0)) offsets.push(0);
   const remindType: AlertType = silent ? "NOTIFICATION" : "REMINDER";
   const alerts: [number, AlertType][] = [...new Set(offsets)].map((o) => [o, remindType]);
-  if (alarm) alerts.push([0, "ALARM"]);
-  const title = text.replace(/\s+/g, " ").trim().replace(/[,-]+$/, "").trim();
+  for (const o of new Set(alarmOffsets)) alerts.push([o, "ALARM"]);
+  const title = cleanTitle(text);
   return { title, day, startMin: start, endMin: end, freq, interval, weekDays, alerts, priority, tags };
 }

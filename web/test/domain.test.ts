@@ -73,6 +73,20 @@ test("quick add with reminder, alarm and priority", () => {
   assert.deepEqual([d.title, d.day, d.freq], ["Pay rent", epochOf(2026, 11, 1), "MONTHLY"]);
 });
 
+test("alert and priority words leave the title", () => {
+  const p = (s: string) => { const r = parseQuickAdd(s, mon); return [r.title, r.alerts]; };
+  assert.deepEqual(p("Wake up 7am alarm"), ["Wake up", [[0, "ALARM"]]]);
+  assert.deepEqual(p("Dentist 3pm with alarm"), ["Dentist", [[0, "ALARM"]]]);
+  assert.deepEqual(p("Call mom tomorrow 6pm reminder 30 min before"), ["Call mom", [[30, "REMINDER"]]]);
+  assert.deepEqual(p("Pay rent 1/11 remind me 1 day before and 1 hour before"), ["Pay rent", [[1440, "REMINDER"], [60, "REMINDER"]]]);
+  assert.deepEqual(p("Gym 18:30 alarm 10 min before"), ["Gym", [[10, "ALARM"]]]);
+  assert.deepEqual(p("Flight 6am set an alarm and reminder 2h before"), ["Flight", [[120, "REMINDER"], [0, "ALARM"]]]);
+  assert.deepEqual(p("Standup 9am silent"), ["Standup", [[0, "NOTIFICATION"]]]);
+  assert.deepEqual(p("Buy alarm clock"), ["Buy alarm clock", []]);
+  const r = parseQuickAdd("Report fri high priority remind me", mon);
+  assert.deepEqual([r.title, r.priority], ["Report", 3]);
+});
+
 test("ids match the Android app", () => {
   assert.equal(tagIdFor("health"), 2767149324806608);
   assert.equal(tagIdFor("Health "), tagIdFor("health"));

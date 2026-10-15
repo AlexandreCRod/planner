@@ -1,6 +1,7 @@
 # Checks that the deployed sync server accepts your API_TOKEN.
 # The token is read as hidden input and never stored or printed.
-param([string]$Url = "https://planner-sync.alex-planner.workers.dev")
+# Usage: .\check-server.ps1 -Url https://planner-sync.<your-subdomain>.workers.dev
+param([Parameter(Mandatory = $true)][string]$Url)
 
 $secure = Read-Host "Paste your API_TOKEN (input is hidden)" -AsSecureString
 $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))

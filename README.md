@@ -1,68 +1,120 @@
 # Planner
 
-A personal planner with recurring tasks, a calendar and rich notes, all linked together. There are two apps:
+A personal planner with recurring tasks, a calendar and rich notes, all linked together. It comes in two apps that share the same data:
 
-- **Android app** (`app/`): the full app, with alarms, reminders, widgets and backups.
-- **PC app** (`web/`): runs in any browser at your Worker's address, and can be installed as a desktop app from Chrome or Edge.
+- **Android app** (`app/`): the full app, with alarms, reminders, home-screen widgets and backups.
+- **PC app** (`web/`): runs in any browser, and can be installed as a desktop app from Chrome or Edge.
 
-Each keeps its own full copy and works offline. They sync both ways through your own Cloudflare Worker (`server/`). A user guide is in the shared "Planner — How it works" document.
+Each app keeps its own full copy and works offline. They sync both ways through a small server you run on your own free Cloudflare account (`server/`). The server also hosts the PC app.
 
-## Build and install
-
-1. Install [Android Studio](https://developer.android.com/studio) and finish its setup wizard. The wizard installs the Android SDK.
-2. In Android Studio, choose **File → Open** and pick this folder (`C:\Alex\Claude\Calendar`). Wait for the Gradle sync to finish.
-   - **Java version:** the build needs **JDK 17 or 21**. Android Studio's bundled Java 25 is too new for this project's Gradle and Kotlin versions. If the sync fails, go to **Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK** and choose JDK 21. It's installed at `C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot`.
-3. Install on your phone:
-   1. On the phone, enable **Developer options**: go to **Settings → About phone** and tap **Build number** seven times.
-   2. In **Developer options**, turn on **USB debugging** (or **Wireless debugging**).
-   3. Connect the phone, choose it in the device dropdown, and press **Run ▶**.
-
-From a terminal (with `JAVA_HOME` set to JDK 21), `gradlew installDebug` builds the app and installs it on the connected phone. `gradlew test` runs the unit tests.
-
-On first launch, allow notifications. For alarms that are never delayed, open **Settings → Battery optimization** in the app and exclude Planner. On Android 14 and later, also allow **Full-screen alarms** on the same screen.
-
-## What's inside
+## What it does
 
 | Area | Features |
 |---|---|
-| **Tasks** | Grouped as Daily, Weekly, Monthly, Yearly, one-time and anytime. Any subset of weekdays, days of the month (including "last day") or months. Repeat every N days, weeks, months or years, with an optional end date. Each task chooses what happens when it is missed: **show as overdue** (the default), **carry over**, or **skip**. Streaks, best streak, completion rate and a 16-week history heatmap. Due-time countdowns. |
-| **Calendar** | Day, 3-day, week, month, year and agenda views. Swipe to change period. Long-press to drag events to another time or day, and drag the bottom edge to resize. Tap an empty slot to create an event. Supports all-day and multi-day events. Editing one occurrence of a recurring item asks whether to change this occurrence only, this and following, or all. Public holidays for PT, BR, US, GB, FR, ES and DE. Filter by type or category. |
-| **Reminders** | Each reminder is a **Notification** (silent), a **Reminder** (pops up with sound and snooze), or an **Alarm** (full screen, rings through silent mode, with its own sound). An item can have several reminders. Each category has a default reminder type. Quiet hours. Reminders are restored after a reboot. From 23 hours before an alarm, a silent notification lets you **snooze** it (it rings later) or **stop** it (that time only) before it rings; this can be turned off in Settings. |
-| **Notes** | Bold, italic, underline, strikethrough, text color, highlight, text sizes, bulleted and numbered lists, indentation, alignment, code, web links, undo and redo. Each note can have its own page color, a page pattern (lines, grid or dots) and a font. Templates, pinned notes, tags, version history and sharing. A daily note for every day, reachable from Today or any calendar day. **Pictures**: add from the gallery on the phone, or pick, paste or drop them on the PC; they are shrunk to 1600 px and synced. **Place**: type one, or fill in your current position, and open it in Maps. |
-| **Connections** | Link any note, task or event to any other. Typing `[[Title]]` in text links automatically. Selecting text in a note and choosing **Make task** or **Make event** creates a linked item. An Obsidian-style graph view supports focus mode, depth and type filters. |
+| **Tasks** | Repeat daily, weekly, monthly or yearly, on any subset of days (including "last day of the month"), every N days, weeks, months or years, with an optional end date. Each task chooses what happens when it's missed: **show as overdue** (the default), **carry over** to the next day, or **skip**. Priority (none, low, medium, high, urgent), streaks, a 16-week history grid, and due-time countdowns. |
+| **Calendar** | Day, 3-day, week, month, year and agenda views. Pinch or use the buttons to zoom the day grid until the whole day fits. Items with a time sit at their hour; all-day and multi-day items sit in the all-day row. Drag events to move them, drag their bottom edge to resize. Editing one occurrence of a repeating item asks: this one only, this and following, or all. Public holidays for PT, BR, US, GB, FR, ES and DE. |
+| **Alerts** | Each alert is a **silent notification**, a **reminder** (pops up with sound and snooze) or an **alarm** (full screen, rings through silent mode). An item can have several, so a reminder an hour before and an alarm at the time both work. From 23 hours before an alarm, a notification lets you **snooze** it or **stop** it (that time only) before it rings. Quiet hours. Alerts survive reboots. |
+| **Notes** | Bold, italic, underline, strikethrough, colours, highlight, text sizes, lists, multi-level checklists, alignment, links, undo and redo. Page colour, pattern and font per note. **Pictures** (from the gallery on the phone; picked, pasted or dropped on the PC) and a **place** (typed, or your current position, opens in Maps). Templates, pins, tags, version history, and a daily note for every day. Empty notes aren't kept. |
+| **Connections** | Link any note, task or event to any other. Typing `[[Title]]` links automatically. Select text in a note and choose **Make task** or **Make event** to create a linked item. A graph view shows everything that's connected. |
+| **Quick add** | Type a whole item in one line, such as `Dentist tue 3pm remind 1h before with alarm #health !high`. Dates, times, repeats, alerts, priority and tags are taken out, and what's left becomes the title. See [Quick add](#quick-add). |
 | **Browse** | Search everything, filter by type (events, recurring events, tasks, recurring tasks, notes, daily notes), category or tag, and sort by date, title or number of links. |
-| **Quick add** | Type plain text such as `Dentist tue 3pm remind 1h before #health !alarm` or `Gym every mon, wed and fri 18:30`. Dates with slashes are read as day/month. |
-| **Other** | Home-screen widgets (today's tasks with checkboxes, and upcoming events). Light, dark and pure-black modes, 8 accent colors and Material You. 24-hour or 12-hour clock (or follow the device). Long-press an icon (hover on the PC) to see its name. Trash with restore. |
+| **Other** | Widgets (today's tasks with checkboxes, and upcoming events). Light, dark and pure-black themes, 8 accent colours and Material You. 24-hour or 12-hour clock, and date format (written, DD/MM/YYYY, MM/DD/YYYY or YYYY-MM-DD). Long-press an icon (or hover on the PC) to see its name. Trash with restore. |
+
+## Tasks or events?
+
+Both can have a date, a time, repeats, alerts, tags and links. The difference is what "done" means.
+
+| | Task | Event |
+|---|---|---|
+| **What it is** | Something you have to **do** | Something that **happens** at a time |
+| **Finished when** | You tick it | Its time passes, with nothing to tick |
+| **If you don't act** | Shows as overdue, carries over or is skipped (your choice per task) | Nothing; it simply passes |
+| **Time** | Optional: a due time, or just a day, or no date at all | A start and an end, or all day; can span several days |
+| **Tracks** | Streaks, completion history, priority | Its place in the calendar |
+| **Shows in** | Today's task list, the Tasks tab, the widget, and the calendar (optional) | Today's schedule, the calendar, the upcoming widget |
+
+Use a **task** for "take vitamins every morning", "pay rent on the 1st" or "send the report by Friday": things that stay on your list until you do them. Use an **event** for "dentist Tuesday 15:00–16:00", "flight at 06:40" or "holiday 3–10 August": things that take up time whether or not you do anything. If you're not sure, ask yourself whether you would want to tick it off. Quick add makes a task by default (an event when you start it from the phone's calendar); quick add and the editor both let you switch.
+
+## Quick add
+
+| You type | It means |
+|---|---|
+| `today`, `tomorrow`, `fri`, `next mon`, `in 3 days`, `12/3`, `3 dec` | The day (dates with slashes are day/month) |
+| `3pm`, `15:30`, `15h30`, `at 9`, `3pm-4:30pm`, `for 45m` | The time, end time or length (otherwise 1 hour) |
+| `every day`, `weekdays`, `every mon, thu`, `every 2 weeks`, `monthly` | A repeat |
+| `remind me`, `reminder 30 min before`, `remind 1 day before and 1 hour before` | Reminders |
+| `!alarm`, `with alarm`, `alarm 10 min before`, or `alarm` as the last word | An alarm |
+| `!notify`, `silent` | Makes the reminders silent notifications |
+| `!high`, `high priority`, `!urgent` (also low, medium) | Priority |
+| `#health` | A tag |
+
+Everything that is understood is removed from the title: `Gym 18:30 every mon, wed and fri with alarm` creates a task called **Gym**. Words like "alarm" only count in the positions above, so `Buy alarm clock` stays as typed.
+
+## Setting it up
+
+You need a free [Cloudflare](https://dash.cloudflare.com/sign-up) account, [Node.js](https://nodejs.org) 22 or newer, and (to build the phone app) [Android Studio](https://developer.android.com/studio).
+
+### 1. The server and the PC app
+
+```bash
+cd server
+npm install
+npx wrangler login                     # sign in to Cloudflare in the browser
+npx wrangler secret put API_TOKEN      # paste a long random string: this is your sync password
+cd ../web && npm install && npm run build && cd ../server
+npx wrangler deploy                    # prints your address, https://planner-sync.<your-subdomain>.workers.dev
+```
+
+Open that address in Chrome or Edge and enter the same password. To install it as a desktop app, use **Install Planner** in the address bar. More detail is in [server/README.md](server/README.md).
+
+### 2. The phone app
+
+1. In Android Studio, choose **File → Open** and pick the folder where you cloned this repository. Wait for the Gradle sync to finish.
+   - The build needs **JDK 17 or 21**. If Android Studio's bundled Java is newer and the sync fails, set **Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK** to a JDK 21.
+2. On the phone, enable **Developer options** (tap **Settings → About phone → Build number** seven times), then turn on **USB debugging** or **Wireless debugging**.
+3. Connect the phone, choose it in the device list, and press **Run ▶**. From a terminal, `gradlew installDebug` does the same.
+4. In the app, open **Settings → Cloud sync**, turn it on, enter your server address and password, then tap **Save** and **Test**.
+
+On first launch, allow notifications. For alarms that are never delayed, open **Settings → Battery optimization** in the app and set Planner to unrestricted. On Android 14 and later, also allow **Full-screen alarms** there.
+
+### Updating the phone app
+
+- **From the computer:** run the app again from Android Studio, or `gradlew installDebug`, over USB or wireless debugging. Your data stays.
+- **From a GitHub release:** if an `.apk` is attached to a release of this repository, open the release page on the phone (signed in to GitHub, since the repository is private), download the file and open it. Allow your browser to install apps when Android asks. Android then offers to **update** Planner, and your data stays.
+  - This only works when the new `.apk` is signed with the same key as the installed app. Debug builds are signed with the debug key of the computer that built them, so build releases on the same computer. An `.apk` signed with a different key can't update the app: Android would ask you to uninstall first, which removes the phone's copy (you can bring it back afterwards with **Restore** from the cloud).
+
+## Sync
+
+Each device sends what changed since its last sync and receives what changed elsewhere. The phone syncs about 20 seconds after a change, whenever you open the app, and hourly in the background. The PC syncs a moment after a change, every 30 seconds while open, and when the window regains focus.
+
+When the same thing was changed on both devices before they synced, an edit always beats a delete, and otherwise the **phone's version wins**. The server refuses a sync that would delete all items, or more than half of 20 or more, until you confirm, and it keeps a full copy per day for 14 days.
 
 ## Backups
 
-Automatic backups run every hour or every day (configurable), or never. Each backup is a JSON file saved in `Android/data/com.alex.planner/files/backups`. You can also pick a second folder that receives a copy; Downloads or a folder your PC syncs both work. You can export to a file or restore from one at any time. Before a restore, the current data is saved as `before-restore.json`.
+The phone also writes a backup file every hour or every day (or never), saved in the app's folder under `Android/data`, plus a copy in a folder you choose, such as Downloads. The last 10 are kept. You can export or restore a file at any time; before a restore, the current data is saved as `before-restore.json`. Backup files hold everything except picture files, which come back from the cloud.
 
 ## Project layout
 
 ```
-server/      Cloudflare Worker + Durable Object: two-way sync, and hosts the PC app
+server/      Cloudflare Worker + Durable Object: sync, picture storage, hosts the PC app
 web/         PC app (React + TypeScript, built into web/dist)
-app/src/main/java/com/alex/planner/
-  data/      Room entities, DAO, repository, settings
-  domain/    recurrence engine, overdue/streak logic, quick-add parser, holidays
-  alarm/     AlarmManager scheduling, notifications, full-screen alarm
-  backup/    JSON backup/restore + WorkManager schedule
-  sync/      client for the Cloudflare server
-  widget/    Glance home-screen widgets
-  ui/        Compose screens (today, calendar, tasks, notes, graph, browse, settings)
+app/src/main/java/…/planner/
+  data/      Room database, repository, settings, picture files
+  domain/    repeats, overdue and streak logic, quick add, date and time formats, holidays
+  alarm/     alarm scheduling, notifications, full-screen alarm, early snooze and stop
+  backup/    backup files and their schedule
+  sync/      sync with the server
+  widget/    home-screen widgets
+  ui/        screens (today, calendar, tasks, notes, graph, browse, settings)
 ```
 
-## PC app
+## Development
 
-```bash
-cd web
-npm install
-npm install-scripts approve esbuild   # npm 11+ only
-npm run build      # outputs web/dist, which the Worker serves
-npm test           # domain tests (same cases as the Android tests)
-```
-
-To develop it, run `npm run dev` in `server/` (local Worker on :8787), then `npx vite` in `web/`, and open http://127.0.0.1:5173. The dev server forwards `/api` to the local Worker.
-
-To publish it, run `npm run build` in `web/`, then `npx wrangler deploy` in `server/`.
+| | Command |
+|---|---|
+| Phone tests | `gradlew test` (with `JAVA_HOME` set to a JDK 17 or 21) |
+| PC tests | `npm test` in `web/` |
+| Server tests | `npm test` and `npm run typecheck` in `server/`; `npm run e2e` against a local server |
+| Local server | `npm run dev` in `server/` (needs a `.dev.vars` file with `API_TOKEN=dev-token`) |
+| PC app with live reload | `npx vite` in `web/`, then open http://127.0.0.1:5173 (it forwards `/api` to the local server) |
+| Publish the PC app and server | `npm run build` in `web/`, then `npx wrangler deploy` in `server/` |

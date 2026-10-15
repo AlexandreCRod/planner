@@ -14,8 +14,8 @@ Browser ───────── GET / ────────────�
   1. A device sends `{since, changes}`: what changed on its side since the sequence number it last saw.
   2. The server applies each change, unless another device changed the same record in the meantime and wins the conflict. Rules, in `src/records.ts`: an edit beats a delete, between edits from the phone and the PC the phone wins, between two edits of an item from the same device the later one wins, and otherwise the syncing device wins.
   3. The reply carries everything the device is missing.
-- Note pictures travel separately: `PUT /api/blobs/<sha256>` stores a file (images only, up to ~1.9 MB, the hash must match the bytes) and `GET /api/blobs/<sha256>` fetches it. The "images" records only carry the hash. A device uploads a picture before syncing its record, and downloads any it lacks after a sync. Files no note uses are removed after two days, during the daily safety copy.
   4. The Durable Object handles one request at a time, so nothing can slip in between.
+- **Pictures** on notes travel separately: `PUT /api/blobs/<sha256>` stores a file (images only, up to ~1.9 MB, and the hash must match the bytes) and `GET /api/blobs/<sha256>` fetches it. The "images" records only carry the hash. A device uploads a picture before syncing its record, and downloads any it lacks after a sync. Files no note uses are removed after two days, during the daily safety copy.
 - **Safety:** a sync that would delete everything, or more than half of 20+ items, is refused unless forced. One compressed full copy is kept per day for 14 days.
 
 ## Deploy (one time)
@@ -29,12 +29,12 @@ npm install-scripts approve esbuild workerd   # npm 11+ only: lets wrangler fetc
 npx wrangler login                      # opens the browser to sign in to Cloudflare
 npx wrangler secret put API_TOKEN       # paste a long random string; this is your password
 (cd ../web && npm install && npm run build)   # the PC app the Worker serves
-npx wrangler deploy                     # prints https://planner-sync.<you>.workers.dev
+npx wrangler deploy                     # prints https://planner-sync.<your-subdomain>.workers.dev
 ```
 
 To generate a good token, run `node -e "console.log(crypto.randomUUID()+crypto.randomUUID())"`.
 
-Then open **Settings → Cloud sync** in the app. Turn it on, paste the URL and the token, and tap **Save**, then **Test**. After that, the app syncs about 30 seconds after any change, and every 6 hours as a fallback.
+Then open **Settings → Cloud sync** in the phone app. Turn it on, paste the URL and the token, and tap **Save**, then **Test**. On the PC, open the URL in a browser and enter the token. The phone syncs about 20 seconds after a change, when the app opens, and hourly; the PC every 30 seconds while open. To check the token from Windows, run `.\check-server.ps1 -Url <your URL>`.
 
 ## Develop
 
@@ -42,7 +42,7 @@ Then open **Settings → Cloud sync** in the app. Turn it on, paste the URL and 
 npm test            # unit tests for the record/diff helpers
 npm run typecheck
 echo API_TOKEN=dev-token > .dev.vars && npm run dev   # local server on http://localhost:8787
-npm run e2e         # in a second terminal: 11 end-to-end checks against the local server
+npm run e2e         # in a second terminal: 12 end-to-end checks against the local server
 ```
 
 Don't point `npm run e2e` at your real deployment: it overwrites the stored data.
@@ -60,6 +60,8 @@ All requests need the header `Authorization: Bearer <API_TOKEN>`.
 | GET | `/api/changes?since=N&limit=1000` | Records changed after sequence N; deleted records have `data: null` |
 | GET | `/api/history` | List of the server's daily safety copies |
 | GET | `/api/history/:id` | Download one safety copy |
+| PUT | `/api/blobs/:sha256` | Store a picture file (body = its bytes, `Content-Type: image/*`) |
+| GET | `/api/blobs/:sha256` | Fetch a picture file |
 
 ## Cost and limits
 
