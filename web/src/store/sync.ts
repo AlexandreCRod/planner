@@ -1,6 +1,7 @@
 // Two-way sync with the Worker: same protocol as the phone (app/.../sync/CloudSync.kt).
 // Compare local records with the last synced copy ("base"), send the differences, apply what
 // comes back. The server settles conflicts; deletes are sent as data: null.
+import { apiUrl, deviceName } from "../platform.ts";
 import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
 import { type Kind, allRecords, applyRemote } from "./store.ts";
@@ -25,9 +26,9 @@ export function signOut() { localStorage.removeItem("apiToken"); setStatus({ sta
 class HttpError extends Error { constructor(public code: number, msg: string) { super(msg); } }
 
 async function api(path: string, init: RequestInit = {}): Promise<unknown> {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...init,
-    headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", "X-Device": "PC browser", ...(init.headers ?? {}) },
+    headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", "X-Device": deviceName(), ...(init.headers ?? {}) },
   });
   const text = await res.text();
   let body: unknown = text;
@@ -38,7 +39,7 @@ async function api(path: string, init: RequestInit = {}): Promise<unknown> {
 
 /** Checks a password against the server without syncing. */
 export async function testToken(token: string): Promise<{ items: number }> {
-  const res = await fetch("/api/status", { headers: { Authorization: `Bearer ${token.trim()}` } });
+  const res = await fetch(apiUrl("/api/status"), { headers: { Authorization: `Bearer ${token.trim()}` } });
   if (res.status === 401) throw new Error("Wrong password");
   if (!res.ok) throw new Error(`Server error ${res.status}`);
   const body = await res.json() as { counts?: { items?: number } };

@@ -33,11 +33,36 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
   );
 }
 
-export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: number; occurrence: number | null; isNewPlaceholder: boolean; onClose: () => void }) {
+/**
+ * An unsaved item edited from outside (the phone's add panel, which grows into this editor): the
+ * panel and the editor share it, so whatever is typed in one shows in the other.
+ */
+export interface Draft { item: Item; reminders: Reminder[]; tags: string }
+
+export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, onDraft, embedded, saveRef }: {
+  id: number; occurrence: number | null; isNewPlaceholder: boolean; onClose: () => void;
+  /** Controlled mode (phone add panel): edits an unsaved item (id 0) held by the caller. */
+  draft?: Draft; onDraft?: (d: Draft) => void;
+  /** Only the panel's content, without the backdrop (it sits inside the phone's growing panel). */
+  embedded?: boolean;
+  /** Filled with this editor's save, so the small panel's Save keeps what was set here. */
+  saveRef?: { current: (() => void) | null };
+}) {
   const s = useSnapshot();
-  const original = s.byId.get(id) ?? null;
-  const [d, setD] = useState<Item | null>(original);
-  const [reminders, setReminders] = useState<Reminder[]>(() => {
+  const original = draft ? draft.item : s.byId.get(id) ?? null;
+  const [dLocal, setDLocal] = useState<Item | null>(original);
+  const d = draft ? draft.item : dLocal;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const setD = (u: Item | null | ((x: Item | null) => Item | null)) => {
+    const cur = draftRef.current;
+    if (!cur || !onDraft) { setDLocal(u); return; }
+    const next = typeof u === "function" ? u(cur.item) : u;
+    if (next) emit({ ...cur, item: next });
+  };
+  // Several changes in one click each build on the last (the prop only updates on the next render).
+  const emit = (n: Draft) => { draftRef.current = n; onDraft?.(n); };
+  const [remindersLocal, setRemindersLocal] = useState<Reminder[]>(() => {
     const saved = (s.reminders.get(id) ?? []).map((r) => ({ ...r }));
     // A new item starts with one alert, like Google Calendar: a reminder 15 minutes before an event,
     // a silent notification when a dated task is due.
@@ -47,7 +72,11 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
     }
     return saved;
   });
-  const [tags, setTags] = useState(() => (s.tagsByItem.get(id) ?? []).map((t) => t.name).join(" "));
+  const reminders = draft ? draft.reminders : remindersLocal;
+  const setReminders = (r: Reminder[]) => { const cur = draftRef.current; if (cur && onDraft) emit({ ...cur, reminders: r }); else setRemindersLocal(r); };
+  const [tagsLocal, setTagsLocal] = useState(() => (s.tagsByItem.get(id) ?? []).map((t) => t.name).join(" "));
+  const tags = draft ? draft.tags : tagsLocal;
+  const setTags = (t: string) => { const cur = draftRef.current; if (cur && onDraft) emit({ ...cur, tags: t }); else setTagsLocal(t); };
   const [scopeFor, setScopeFor] = useState<"save" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const rich = useRef<RichEditorHandle>(null);
@@ -111,7 +140,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   };
 
   function cancel() {
-    if (isNewPlaceholder) { deleteForever(id); onClose(); }
+    if (isNewPlaceholder) { if (!draft) deleteForever(id); onClose(); }
     else if (editing) setEditing(false); // back to the view, changes dropped
     else onClose();
   }
@@ -125,6 +154,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
     } else saveItem(item, { reminders, tags: tagList() });
     if (isNewPlaceholder) onClose(); else setEditing(false);
   };
+  if (saveRef) saveRef.current = () => save();
 
   const deleteDialog = confirmDelete && (
     <div className="panel-backdrop" style={{ justifyContent: "center", alignItems: "center" }} onClick={() => setConfirmDelete(false)}>
@@ -230,9 +260,8 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
   const newAlert = () => setReminders([...reminders, { id: 0, itemId: id, offsetMin: isEvent && !d.allDay ? 15 : 0, type: kindAlert(d.type), soundUri: null }]);
   const untimed = d.allDay || d.startMin === null;
 
-  return (
-    <div className="panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}>
-      <div className="panel">
+  const form = (
+      <div className={`panel ${embedded ? "embedded" : ""}`}>
         <header>
           <button className="icon-btn" onClick={cancel} title={isNewPlaceholder ? "Close without saving" : "Back without saving"}><Icon name={isNewPlaceholder ? "close" : "left"} /></button>
           <b className="grow">{isNewPlaceholder ? `New ${isEvent ? "event" : "task"}` : `Edit ${isEvent ? "event" : "task"}`}</b>
@@ -256,7 +285,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
             </div>
           )}
           <div className="frow"><span className="swatch" style={{ background: d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf(d) }} />
-            <input className="title-input" autoFocus placeholder="Add title" value={d.title} onChange={(e) => set({ title: e.target.value })}
+            <input className="title-input" autoFocus={!embedded} placeholder="Add title" value={d.title} onChange={(e) => set({ title: e.target.value })}
               onKeyDown={(e) => { if (e.key === "Enter" && d.title.trim()) save(); }} />
           </div>
           <hr />
@@ -391,9 +420,14 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose }: { id: 
           </div>
           <hr />
 
-          <LinksSection id={id} s={s} ensureSaved={() => id} />
+          {!draft && <LinksSection id={id} s={s} ensureSaved={() => id} />}
         </div>
       </div>
+  );
+  if (embedded) return <>{form}{deleteDialog}</>;
+  return (
+    <div className="panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) cancel(); }}>
+      {form}
       {scopeFor && <ScopeDialog title="Save changes to" onCancel={() => setScopeFor(null)} onPick={(sc) => { setScopeFor(null); save(sc); }} />}
       {deleteDialog}
     </div>

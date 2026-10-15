@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { formatClock } from "../domain/dates.ts";
+import { DEFAULT_SERVER, getServer, isNative, setServer, usePhone } from "../platform.ts";
 import { testToken, setToken, startAutoSync, syncNow } from "../store/sync.ts";
 import { BrowseView } from "./BrowseView.tsx";
 import { CalendarView } from "./CalendarView.tsx";
@@ -7,6 +8,7 @@ import { Icon, go, useRoute } from "./common.tsx";
 import { GraphView } from "./GraphView.tsx";
 import { ItemEditor } from "./ItemEditor.tsx";
 import { NoteEditor, NotesView } from "./NotesView.tsx";
+import { PhoneApp } from "./phone/PhoneApp.tsx";
 import { QuickAdd } from "./QuickAdd.tsx";
 import { SettingsView, useSyncStatus } from "./SettingsView.tsx";
 import { TasksView } from "./TasksView.tsx";
@@ -20,6 +22,16 @@ const NAV: [string, string, string][] = [
 const SYNC_COLORS: Record<string, string> = { idle: "#43a047", syncing: "#fb8c00", offline: "#9e9e9e", error: "var(--danger)", "needs-confirm": "var(--danger)", "signed-out": "var(--danger)" };
 
 export function App() {
+  // Phones (the Capacitor app, or a phone-narrow browser) get their own shell; the PC layout is unchanged.
+  const phone = usePhone();
+  const sync = useSyncStatus();
+  // All phone CSS hangs off html.phone, so the PC layout never sees it.
+  useLayoutEffect(() => { document.documentElement.classList.toggle("phone", phone); }, [phone]);
+  if (sync.state === "signed-out") return <Login message={sync.message} />;
+  return phone ? <PhoneApp /> : <DesktopApp />;
+}
+
+function DesktopApp() {
   const [path, query] = useRoute();
   const sync = useSyncStatus();
   const lastMain = useRef<string[]>(["today"]);
@@ -86,11 +98,14 @@ export function App() {
 
 function Login({ message }: { message: string }) {
   const [token, setTok] = useState("");
+  // The phone app isn't served by the Worker, so it asks where the server is.
+  const [server, setSrv] = useState(() => getServer() || DEFAULT_SERVER);
   const [error, setError] = useState(message);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
     try {
+      if (isNative) setServer(server);
       const { items } = await testToken(token);
       setToken(token);
       setError("");
@@ -108,7 +123,8 @@ function Login({ message }: { message: string }) {
       <div className="card">
         <div className="row"><img src="/icon.svg" alt="" width={36} /><b style={{ fontSize: 20 }}>Planner</b></div>
         <div className="hint">Enter the sync password you set with <code>wrangler secret put API_TOKEN</code>. It is kept only in this browser.</div>
-        <input className="input" type="password" autoFocus placeholder="Sync password" value={token} onChange={(e) => setTok(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} />
+        {isNative && <input className="input" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" placeholder="Server address" aria-label="Server address" value={server} onChange={(e) => setSrv(e.target.value)} />}
+        <input className="input" type="password" autoFocus={!isNative} placeholder="Sync password" value={token} onChange={(e) => setTok(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} />
         {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
         <button className="btn primary" disabled={!token || busy} onClick={() => void submit()}>{busy ? "Connecting…" : "Connect"}</button>
       </div>

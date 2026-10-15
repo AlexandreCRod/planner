@@ -2,6 +2,7 @@
 // through the server's /api/blobs/<hash> (the "images" records only carry the hash), the same
 // way the phone does it.
 import { useEffect, useState } from "react";
+import { apiUrl } from "../platform.ts";
 import * as db from "./db.ts";
 import { getToken } from "./sync.ts";
 
@@ -72,7 +73,7 @@ export function useImageUrl(hash: string): string | null {
 export async function uploadBlob(hash: string, mime: string): Promise<void> {
   const blob = await getBlob(hash);
   if (!blob) return;
-  const res = await fetch(`/api/blobs/${hash}`, {
+  const res = await fetch(apiUrl(`/api/blobs/${hash}`), {
     method: "PUT",
     headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": mime },
     body: blob,
@@ -85,7 +86,7 @@ export async function fetchMissing(hashes: Iterable<string>): Promise<void> {
   for (const hash of new Set(hashes)) {
     if (await getBlob(hash)) continue;
     try {
-      const res = await fetch(`/api/blobs/${hash}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const res = await fetch(apiUrl(`/api/blobs/${hash}`), { headers: { Authorization: `Bearer ${getToken()}` } });
       if (!res.ok) continue;
       const blob = await res.blob();
       if ((await sha256(blob)) === hash) await putBlob(hash, blob);

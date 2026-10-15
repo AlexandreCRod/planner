@@ -56,7 +56,7 @@ function newEventAt(day: number, min: number | null) {
   go(`item/${id}?new=1`);
 }
 
-function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; anchor: number; onDay: (d: number) => void }) {
+export function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; anchor: number; onDay: (d: number) => void }) {
   const { y, m } = ymd(anchor);
   const first = anchor - ymd(anchor).d + 1;
   const start = startOfWeek(first, mondayFirst());
@@ -93,7 +93,7 @@ function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Item[]; an
   );
 }
 
-function Agenda({ s, items, from }: { s: Snapshot; items: Item[]; from: number }) {
+export function Agenda({ s, items, from }: { s: Snapshot; items: Item[]; from: number }) {
   const occ = forCalendar(items, s.done, from, from + 90, todayEpoch());
   const byDay = new Map<number, Occurrence[]>();
   for (const o of occ) byDay.set(o.day, [...(byDay.get(o.day) ?? []), o]);
@@ -110,10 +110,10 @@ function Agenda({ s, items, from }: { s: Snapshot; items: Item[]; from: number }
   );
 }
 
-interface Placed { o: Occurrence; start: number; end: number; col: number; cols: number }
+export interface Placed { o: Occurrence; start: number; end: number; col: number; cols: number }
 
 /** Side-by-side columns for overlapping items within one day (same as the phone). */
-function layoutDay(list: Occurrence[]): Placed[] {
+export function layoutDay(list: Occurrence[]): Placed[] {
   const spans = list.map((o) => {
     const start = o.startMin ?? 0;
     let end = o.item.type === "TASK" ? start + 30 : o.endMin ?? start + 60;

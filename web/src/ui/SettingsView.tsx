@@ -4,6 +4,7 @@ import { type AlertType, type Category, argbOf, cssColor } from "../domain/types
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../store/store.ts";
 import { type SyncStatus, getStatus, onStatus, resetLocal, signOut, syncNow } from "../store/sync.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
+import { getServer, isNative } from "../platform.ts";
 import { typeLabel } from "./LinksSection.tsx";
 import { checkedLinger, showDoneOnToday } from "./common.tsx";
 
@@ -74,16 +75,18 @@ export function SettingsView() {
         Show completed tasks on Today
       </label>
 
+      {!isNative && <>
       <div className="section">Notifications on this computer</div>
       <label className="row">
         <input type="checkbox" checked={notify} onChange={async (e) => setNotify(await setNotificationsEnabled(e.target.checked))} />
         Show reminders as desktop notifications while Planner is open
       </label>
       <div className="hint">Alarms and reminders always ring on the phone; this adds a desktop pop-up too.</div>
+      </>}
 
       <div className="section">Sync</div>
       <div className="card" style={{ padding: 14 }}>
-        <div>Server: <code>{location.origin}</code></div>
+        <div>Server: <code>{getServer() || location.origin}</code></div>
         <div className="hint" style={{ margin: "6px 0" }}>Last sync: {sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"} {sync.message && `· ${sync.message}`}</div>
         <div className="row">
           <button className="btn" onClick={() => void syncNow()}>Sync now</button>
