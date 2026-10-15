@@ -8,7 +8,11 @@ const BOX = "☐", TICK = "☑";
 const INDENT = "⠀⠀⠀";
 const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 
-export interface RichEditorHandle { html(): string; focus(): void; insertText(t: string): void }
+export interface RichEditorHandle {
+  html(): string; focus(): void; insertText(t: string): void;
+  /** The formatting commands, for a toolbar drawn elsewhere (the phone's, above the keyboard). */
+  exec(cmd: string, value?: string): void; toggleChecklist(): void; indent(deeper: boolean): void; setSize(px: number | null): void;
+}
 
 export function sanitize(html: string): string {
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
@@ -96,7 +100,11 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   initialHtml: string; onChange: () => void; minHeight?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
   /** Show the formatting bar only once the text has been clicked into. */
   toolbarOnFocus?: boolean;
-}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder }, ref) {
+  /** No toolbar of its own (the phone draws one through the handle). */
+  noToolbar?: boolean;
+  /** Told when the text gains or loses the focus. */
+  onFocusChange?: (focused: boolean) => void;
+}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder, noToolbar, onFocusChange }, ref) {
   const el = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState(!toolbarOnFocus);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
@@ -111,6 +119,10 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     html: () => (el.current ? normalize(el.current) : ""),
     focus: () => el.current?.focus(),
     insertText: (t: string) => { el.current?.focus(); document.execCommand("insertText", false, t); },
+    exec: (cmd: string, value?: string) => exec(cmd, value),
+    toggleChecklist: () => toggleChecklist(),
+    indent: (deeper: boolean) => indent(deeper),
+    setSize: (px: number | null) => setSize(px),
   }));
 
   const exec = (cmd: string, value?: string) => {
@@ -209,7 +221,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
 
   return (
     <>
-      {toolbar && <div className="toolbar">
+      {toolbar && !noToolbar && <div className="toolbar">
         {!compact && <><B icon="undo" title="Undo (Ctrl+Z)" onClick={() => exec("undo")} /><B icon="redo" title="Redo (Ctrl+Y)" onClick={() => exec("redo")} /><span className="sep" /></>}
         <B label="B" title="Bold (Ctrl+B)" onClick={() => exec("bold")} />
         <B label="I" title="Italic (Ctrl+I)" onClick={() => exec("italic")} />
@@ -243,7 +255,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
         </>}
       </div>}
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onFocus={() => setToolbar(true)} onInput={() => { checkEmpty(); onChange(); }}
+        style={{ minHeight, fontFamily }} onFocus={() => { setToolbar(true); onFocusChange?.(true); }} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
         data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
     </>
   );

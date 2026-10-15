@@ -2,7 +2,7 @@
 // keyboard and sits right on top of it. Dragging it up grows it continuously into the full editor
 // (which is already there underneath, at full size, revealed as the panel grows); it follows the finger
 // and rests anywhere until let go, then finishes opening or springs back by position and speed.
-// Dragged down, it closes.
+// Dragged down, it closes. Once open, the editor's own handle drags it back down the same way.
 import { animated, easings, to, useSpring } from "@react-spring/web";
 import { useDrag } from "@use-gesture/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -10,32 +10,35 @@ import { describe } from "../../domain/recurrence.ts";
 import { formatDate, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { parseQuickAdd } from "../../domain/quickadd.ts";
 import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS, newItem } from "../../domain/types.ts";
-import { saveItem } from "../../store/store.ts";
-import { Icon, go } from "../common.tsx";
-import { type Draft, ItemEditor } from "../ItemEditor.tsx";
-import { hapticLight, hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
+import { saveItem, snapshot } from "../../store/store.ts";
+import { go } from "../common.tsx";
+import { FilterChip, MIcon } from "./chrome.tsx";
+import { AssistChip, ColorPickerDialog, TextButton } from "./m3.tsx";
+import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
+import { type Draft, PhoneItemEditor, firstAlerts, switchType } from "./PhoneItem.tsx";
+import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 
 /** Whole device pixels: the panel is its own GPU layer, and one left at a fractional offset is drawn soft. */
 const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRatio;
 
 export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
+/** Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box). */
+export interface SlotPreview { day: number; min: number; end: number; color: string }
 
 /** Native: spring(stiffness = 600), critically damped. */
 const SETTLE = { tension: 600, friction: 49 };
 /** 900 dp/s, in px per ms. */
 const FLING = 0.9;
+const DAY_END = 24 * 60 - 1;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /** Close to Android's keyboard animation (fast out, slow in). */
 const imeCurve = (t: number) => 1 - Math.pow(1 - t, 3.2);
 
-/** A new item's first alert, as the editor gives it: a reminder 15 min before an event, a silent notification for a dated task. */
-function defaultAlerts(item: Item): Reminder[] {
-  if (item.startDay === null) return [];
-  const ev = item.type === "EVENT";
-  return [{ id: 0, itemId: 0, offsetMin: ev && item.startMin !== null ? 15 : 0, type: ev ? "REMINDER" : "NOTIFICATION", soundUri: null }];
-}
+/** What the quick panel's own date, time, all-day and colour controls changed (they win over the typed line). */
+interface Overrides { startDay?: number | null; startMin?: number | null; endMin?: number | null; allDay?: boolean; color?: number | null }
+type Pick = { kind: "date" | "start" | "end" } | null;
 
-export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => void }) {
+export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose: () => void; onPreview?: (p: SlotPreview | null) => void }) {
   const kb = useKeyboardHeight();
   const [winH, setWinH] = useState(window.innerHeight);
   const [nav, setNav] = useState(0);
@@ -45,56 +48,83 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
   const saveRef = useRef<(() => void) | null>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [grown, setGrown] = useState(false);
+  // Once it has been the full editor, the small panel shows the editor's draft (title, type, when).
+  const [everGrown, setEverGrown] = useState(false);
   const closing = useRef(false);
   // The tap that opened the panel (on a calendar slot) ends with a click that lands on the new scrim.
   const openedAt = useRef(performance.now());
   const grownRef = useRef(false);
+  const [pick, setPick] = useState<Pick>(null);
+  const [colorOpen, setColorOpen] = useState(false);
 
   // ---------- What's being added ----------
   const [type, setType] = useState<ItemType>(req.type);
   const [text, setText] = useState("");
+  const [ov, setOv] = useState<Overrides>({});
   const parsed = useMemo(() => parseQuickAdd(text), [text]);
   const quick = req.mode === "quick";
   const buildQuick = (): Draft => {
-    const day = parsed.day ?? (type === "EVENT" ? req.day : null);
+    const ev = type === "EVENT";
+    const day = parsed.day ?? (ev ? req.day : null);
     const start = parsed.startMin;
-    const item = newItem({
+    const item: Item = newItem({
       type: type === "NOTE" ? "TASK" : type,
       title: parsed.title || text.trim(),
       startDay: day ?? (parsed.freq !== "NONE" ? req.day : null),
       startMin: start,
-      endDay: type === "EVENT" ? day : null,
-      endMin: type === "EVENT" ? parsed.endMin ?? (start !== null ? Math.min(start + 60, 1439) : null) : null,
-      allDay: type === "EVENT" && start === null,
+      endDay: ev ? day : null,
+      endMin: ev ? parsed.endMin ?? (start !== null ? Math.min(start + 60, DAY_END) : null) : null,
+      allDay: ev && start === null,
       freq: parsed.freq, interval: parsed.interval, weekDays: parsed.weekDays,
       priority: type === "TASK" ? parsed.priority : 0,
     });
+    if ("startDay" in ov) { item.startDay = ov.startDay ?? null; if (ev) item.endDay = item.startDay; }
+    if ("startMin" in ov) {
+      item.startMin = ov.startMin ?? null;
+      if (ev) { item.allDay = item.startMin === null; item.endMin = ov.endMin ?? (item.startMin !== null ? Math.min(item.startMin + 60, DAY_END) : null); }
+    }
+    if ("allDay" in ov && ev) {
+      item.allDay = !!ov.allDay;
+      if (item.allDay) { item.startMin = null; item.endMin = null; }
+      else if (item.startMin === null) { item.startMin = req.min ?? 540; item.endMin = Math.min(item.startMin + 60, DAY_END); }
+    }
+    if ("color" in ov) item.color = ov.color ?? null;
+    if (item.startDay === null) item.startMin = null;
     const reminders = parsed.alerts.length
       ? parsed.alerts.map(([offsetMin, t]): Reminder => ({ id: 0, itemId: 0, offsetMin, type: t, soundUri: null }))
-      : defaultAlerts(item);
+      : firstAlerts(item);
     return { item, reminders, tags: parsed.tags.join(" ") };
   };
   const [draft, setDraft] = useState<Draft>(() => {
     if (quick) return { item: newItem({ type: req.type, startDay: req.type === "EVENT" ? req.day : null, allDay: req.type === "EVENT" }), reminders: [], tags: "" };
     const min = req.min ?? 540;
-    const item = newItem({ type: "EVENT", startDay: req.day, endDay: req.day, startMin: min, endMin: Math.min(min + 60, 1439) });
-    return { item, reminders: defaultAlerts(item), tags: "" };
+    const item = newItem({ type: "EVENT", startDay: req.day, endDay: req.day, startMin: min, endMin: Math.min(min + 60, DAY_END) });
+    return { item, reminders: firstAlerts(item), tags: "" };
   });
-  // While small, the quick panel's line is what the editor will open with.
-  useEffect(() => { if (quick && !grownRef.current) setDraft(buildQuick()); }, [text, type]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While small (and never grown), the quick panel's line and controls are what the editor opens with.
+  const lineMode = quick && !everGrown;
+  useEffect(() => { if (lineMode) setDraft(buildQuick()); }, [text, type, ov]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = draft.item;
+  const setItem = (patch: Partial<Item>) => setDraft((x) => ({ ...x, item: { ...x.item, ...patch } }));
   const canGrow = !(quick && type === "NOTE");
-  const canSave = quick ? text.trim() !== "" || type === "NOTE" : d.title.trim() !== "";
+  const canSave = lineMode ? text.trim() !== "" || type === "NOTE" : d.title.trim() !== "";
+
+  // The outline on the calendar follows the slot panel's day, time and colour.
+  useEffect(() => {
+    if (!onPreview || req.mode !== "slot") return;
+    if (d.startDay === null || d.allDay || d.startMin === null) { onPreview(null); return; }
+    const end = d.type === "EVENT" && d.endMin !== null && d.endMin > d.startMin ? d.endMin : Math.min(d.startMin + (d.type === "EVENT" ? 60 : 30), DAY_END);
+    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d) });
+  }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
-    if (quick && type === "NOTE") {
+    if (lineMode && type === "NOTE") {
       const id = saveItem(newItem({ type: "NOTE", title: text.trim() }));
       onClose();
       go(`note/${id}`);
       return;
     }
     if (!canSave) return;
-    hapticLight();
     // The editor saves what it holds (notes typed there included); before it exists, save the draft.
     if (saveRef.current) { saveRef.current(); return; }
     const it = d.type === "EVENT" ? { ...d, endDay: d.startDay, title: d.title.trim() } : { ...d, endDay: null, endMin: null, title: d.title.trim() };
@@ -133,7 +163,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [api, sp, grown]);
+  }, [api, sp]);
 
   const bottomOf = (k: number, n: number) => Math.max(k, n);
   const range = () => Math.max(1, sp.h.get() - bottomOf(sp.kb.get(), sp.nav.get()) - sp.ch.get());
@@ -160,6 +190,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
     if (closing.current) return;
     closing.current = true;
     (document.activeElement as HTMLElement | null)?.blur?.();
+    onPreview?.(null);
     api.start({ down: sp.ch.get() + bottomOf(sp.kb.get(), sp.nav.get()) + 40, config: { duration: 150, easing: easings.easeInCubic }, onRest: () => onClose() });
   };
   useEffect(() => pushBack(() => dismiss()), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -173,8 +204,9 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
         // The editor's title takes the keyboard over if the small panel had it.
         const hadFocus = document.activeElement === inputRef.current;
         setGrown(true);
+        setEverGrown(true);
         requestAnimationFrame(() => {
-          const title = document.querySelector<HTMLInputElement>(".gp-full .title-input");
+          const title = document.querySelector<HTMLInputElement>(".gp-full .pe-titleinput");
           if (hadFocus && title) title.focus({ preventScroll: true });
         });
       },
@@ -183,10 +215,20 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
   const grow = () => { if (canGrow) settleTo(1); };
 
   // ---------- The drag ----------
+  // Small, the whole panel drags; grown, only the editor's handle strip does (its content scrolls).
+  const downOnHandle = useRef(false);
+  const dragging = useRef(false);
   // A tap that wobbles less than the touch slop (8 dp) is still a tap (use-gesture's default of 3 px,
   // counted along the finger's whole path, swallowed the clicks of real fingers).
-  const bind = useDrag(({ delta: [, dy], last, tap, velocity: [, vy], direction: [, dirY] }) => {
-    if (tap || grownRef.current || closing.current) return;
+  const bind = useDrag(({ first, delta: [, dy], last, tap, velocity: [, vy], direction: [, dirY] }) => {
+    if (first) dragging.current = !closing.current && (!grownRef.current || downOnHandle.current);
+    if (tap || !dragging.current) return;
+    if (grownRef.current) {
+      // Pulled back down from the full editor: the small panel comes back as it shrinks.
+      grownRef.current = false;
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      setGrown(false);
+    }
     if (!last) {
       let p = sp.p.get(), down = sp.down.get();
       // Finger up: first undo any pull-down, then grow. Finger down: shrink, then pull away.
@@ -201,6 +243,7 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
       api.start({ p, down, immediate: true });
       return;
     }
+    dragging.current = false;
     // Decided on release only: where it is, and a fling wins over that.
     const v = vy * dirY; // px per ms, positive downwards
     const p = sp.p.get(), down = sp.down.get();
@@ -213,7 +256,52 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
     }
   }, { axis: "y", threshold: 8, filterTaps: true, tapsThreshold: 10, pointer: { capture: false } });
 
-  const parsedItem = quick && text.trim() && type !== "NOTE" ? draft.item : null;
+  // ---------- Pickers (the keyboard steps aside while one is open, and comes back after) ----------
+  const openPick = (p: Pick) => { inputRef.current?.blur(); setPick(p); };
+  const closePick = () => { setPick(null); setColorOpen(false); if (!grownRef.current) { inputRef.current?.focus({ preventScroll: true }); showKeyboard(); } };
+  const pickDay = (e: number) => {
+    if (lineMode) setOv((o) => ({ ...o, startDay: e }));
+    else { const span = (d.endDay ?? d.startDay ?? e) - (d.startDay ?? e); setItem({ startDay: e, endDay: d.type === "EVENT" ? e + span : null }); }
+  };
+  const pickStart = (m: number) => {
+    const len = d.startMin !== null && d.endMin !== null ? Math.max(15, d.endMin - d.startMin) : 60;
+    const end = d.type === "EVENT" ? Math.min(DAY_END, m + len) : null;
+    if (lineMode) setOv((o) => ({ ...o, startMin: m, endMin: end, allDay: false }));
+    else setItem({ startMin: m, endMin: end, allDay: false });
+  };
+  const pickEnd = (m: number) => {
+    const s = d.startMin ?? 0;
+    const end = m > s ? m : Math.min(DAY_END, s + 15);
+    if (lineMode) setOv((o) => ({ ...o, startMin: s, endMin: end, allDay: false }));
+    else setItem({ endMin: end });
+  };
+  const setAllDay = (v: boolean) => {
+    if (lineMode) setOv((o) => ({ ...o, allDay: v }));
+    else setItem(v ? { allDay: true, startMin: null, endMin: null } : { allDay: false, startMin: d.startMin ?? req.min ?? 540, endMin: d.endMin ?? Math.min((d.startMin ?? req.min ?? 540) + 60, DAY_END) });
+  };
+  const color = snapshot().colorOf(d);
+  /** Keeps the keyboard up through taps on the panel's own controls. */
+  const keepFocus = (e: React.MouseEvent) => { if (!(e.target as Element).closest("input")) e.preventDefault(); };
+
+  const parsedItem = lineMode && text.trim() && type !== "NOTE" ? d : null;
+  const isEvent = d.type === "EVENT";
+
+  /** Date, time, all day and colour: the settings the small panel can change. */
+  const settings = (
+    <div className="gp-chips edit">
+      {(isEvent || d.startDay !== null || lineMode) && (
+        <AssistChip icon="oCalendarToday" label={d.startDay !== null ? relativeDay(d.startDay) : "Date"} onClick={() => openPick({ kind: "date" })} />
+      )}
+      {d.startDay !== null && !d.allDay && (
+        <AssistChip icon="oSchedule" label={d.startMin !== null ? `${formatTime(d.startMin)}${isEvent && d.endMin !== null ? ` – ${formatTime(d.endMin)}` : ""}` : "Time"}
+          onClick={() => openPick({ kind: "start" })} />
+      )}
+      {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
+      <button className="p-assist" onClick={() => { inputRef.current?.blur(); setColorOpen(true); }}>
+        <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
+      </button>
+    </div>
+  );
 
   return (
     <div className="gp-root">
@@ -221,88 +309,73 @@ export function AddPanel({ req, onClose }: { req: AddRequest; onClose: () => voi
       <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
         onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
         onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350) dismiss(); }} />
-      <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }} {...(grown ? {} : bind())}>
+      <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }}
+        onPointerDownCapture={(e) => { downOnHandle.current = !!(e.target as Element).closest(".gp-drag"); }} {...bind()}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
         {editorReady && canGrow && (
           <animated.div className={`gp-full ${grown ? "live" : ""}`} style={{ height: availH, opacity: sp.p.to((p) => clamp01(p * 12 - 0.6)) }}>
-            <ItemEditor id={0} occurrence={null} isNewPlaceholder draft={draft} onDraft={setDraft} embedded saveRef={saveRef} onClose={onClose} />
+            <PhoneItemEditor id={0} occ={null} draft={draft} onDraft={setDraft} saveRef={saveRef} onClose={dismiss}
+              header={<div className="gp-drag" aria-label="Drag down for the small panel"><span className="gp-handle" /></div>} />
           </animated.div>
         )}
-        {!grown && (
-          <animated.div ref={compactRef} className={`gp-compact ${quick ? "quick" : "slot"}`} style={{ opacity: sp.p.to((p) => 1 - clamp01(p * 12)) }}>
-            <div className="gp-handle" />
-            {quick ? <>
-              <div className="p-seg">
-                {(["TASK", "EVENT", "NOTE"] as ItemType[]).map((t) => (
-                  <button key={t} className={type === t ? "on" : ""} onClick={() => setType(t)}>{type === t && <span className="tick">✓</span>}{t[0] + t.slice(1).toLowerCase()}</button>
-                ))}
-              </div>
-              <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
-                placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
-                onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
-              {parsedItem && <>
-                <div className="gp-chips">
-                  {parsedItem.startDay !== null && <span className="p-assist"><Icon name="calendar" size={16} /> {relativeDay(parsedItem.startDay)}</span>}
-                  {parsedItem.startMin !== null && <span className="p-assist"><Icon name="schedule" size={16} /> {formatTime(parsedItem.startMin)}{parsedItem.endMin !== null ? ` – ${formatTime(parsedItem.endMin)}` : ""}</span>}
-                  {parsedItem.freq !== "NONE" && <span className="p-assist"><Icon name="repeat" size={16} /> {describe(parsedItem)}</span>}
-                  {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist"><Icon name={t === "ALARM" ? "alarm" : "bell"} size={16} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
-                  {parsedItem.priority > 0 && <span className="p-assist"><Icon name="flag" size={16} color={PRIORITY_COLORS[parsedItem.priority]} /> {PRIORITIES[parsedItem.priority]} priority</span>}
-                  {parsed.tags.map((t) => <span key={t} className="p-assist"><Icon name="label" size={16} /> {t}</span>)}
-                </div>
-                <div className="gp-tip">Tip: dates (tomorrow, fri, 12/3), times (3pm, 15:30), "every mon, wed", "remind 30m before", !alarm, !high, #tag</div>
-              </>}
-            </> : <>
-              <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
-                onChange={(e) => setDraft({ ...draft, item: { ...d, title: e.target.value } })} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
-              <div className="gp-row">
-                {(["EVENT", "TASK"] as const).map((t) => (
-                  <button key={t} className={`p-filter ${d.type === t ? "on" : ""}`} onClick={() => {
-                    const item = t === "EVENT"
-                      ? { ...d, type: t, endDay: d.startDay, endMin: d.startMin !== null ? Math.min(d.startMin + 60, 1439) : null }
-                      : { ...d, type: t, endDay: null, endMin: null };
-                    setDraft({ ...draft, item, reminders: defaultAlerts(item) });
-                  }}>{d.type === t && <span className="tick">✓</span>}{t === "EVENT" ? "Event" : "Task"}</button>
-                ))}
-              </div>
-              <div className="gp-row when">
-                <Icon name="schedule" size={22} />
-                <PickButton kind="date" label={formatDate(d.startDay ?? req.day)} value={d.startDay} onPick={(v) => setDraft({ ...draft, item: { ...d, startDay: v, endDay: d.type === "EVENT" ? v : null } })} />
-                <PickButton kind="time" label={formatTime(d.startMin ?? 540)} value={d.startMin} onPick={(v) => {
-                  const len = Math.max(15, (d.endMin ?? (d.startMin ?? 540) + 60) - (d.startMin ?? 540));
-                  setDraft({ ...draft, item: { ...d, startMin: v, endMin: d.type === "EVENT" ? Math.min(1439, v + len) : null } });
-                }} />
-                {d.type === "EVENT" && <>
-                  <span>–</span>
-                  <PickButton kind="time" label={formatTime(d.endMin ?? 600)} value={d.endMin} onPick={(v) => setDraft({ ...draft, item: { ...d, endMin: v > (d.startMin ?? 0) ? v : Math.min(1439, (d.startMin ?? 0) + 15) } })} />
-                </>}
-              </div>
-            </>}
-            <div className="gp-actions">
-              <button className="p-text-btn" onClick={() => { if (canGrow) grow(); else save(); }}>More options</button>
-              <span className="grow" />
-              <button className="p-filled-btn" disabled={!canSave} onClick={save}>{quick ? "Add" : "Save"}</button>
+        <animated.div ref={compactRef} className={`gp-compact ${lineMode ? "quick" : "slot"} ${grown ? "off" : ""}`} style={{ opacity: sp.p.to((p) => 1 - clamp01(p * 12)) }}
+          onMouseDown={keepFocus}>
+          <div className="gp-handle" />
+          {lineMode ? <>
+            <div className="p-seg">
+              {(["TASK", "EVENT", "NOTE"] as ItemType[]).map((t) => (
+                <button key={t} className={type === t ? "on" : ""} onClick={() => setType(t)}>{type === t && <span className="tick">✓</span>}{t[0] + t.slice(1).toLowerCase()}</button>
+              ))}
             </div>
-          </animated.div>
-        )}
+            <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
+              placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            {type !== "NOTE" && settings}
+            {parsedItem && <>
+              {(parsedItem.freq !== "NONE" || parsed.alerts.length > 0 || parsedItem.priority > 0 || parsed.tags.length > 0) && (
+                <div className="gp-chips">
+                  {parsedItem.freq !== "NONE" && <span className="p-assist static"><MIcon name="oRepeat" size={18} /> {describe(parsedItem)}</span>}
+                  {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
+                  {parsedItem.priority > 0 && <span className="p-assist static"><MIcon name="oFlag" size={18} color={PRIORITY_COLORS[parsedItem.priority]} /> {PRIORITIES[parsedItem.priority]} priority</span>}
+                  {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
+                </div>
+              )}
+              <div className="gp-tip">Tip: dates (tomorrow, fri, 12/3), times (3pm, 15:30), "every mon, wed", "remind 30m before", !alarm, !high, #tag</div>
+            </>}
+          </> : <>
+            <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
+              onChange={(e) => setItem({ title: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            <div className="gp-row">
+              {(["EVENT", "TASK"] as const).map((t) => (
+                <FilterChip key={t} selected={d.type === t} onClick={() => setDraft((x) => switchType(x, t))}>{t === "EVENT" ? "Event" : "Task"}</FilterChip>
+              ))}
+              {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
+              <button className="p-assist" onClick={() => { inputRef.current?.blur(); setColorOpen(true); }}>
+                <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
+              </button>
+            </div>
+            <div className="gp-row when">
+              <MIcon name="oSchedule" />
+              <TextButton onClick={() => openPick({ kind: "date" })}>{d.startDay !== null ? formatDate(d.startDay) : "Add date"}</TextButton>
+              {d.startDay !== null && !d.allDay && <TextButton onClick={() => openPick({ kind: "start" })}>{formatTime(d.startMin ?? req.min ?? 540)}</TextButton>}
+              {isEvent && !d.allDay && <>
+                <span>–</span>
+                <TextButton onClick={() => openPick({ kind: "end" })}>{formatTime(d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END))}</TextButton>
+              </>}
+            </div>
+          </>}
+          <div className="gp-actions">
+            <TextButton onClick={() => { if (canGrow) grow(); else save(); }}>More options</TextButton>
+            <span className="grow" />
+            <button className="p-filled-btn" disabled={!canSave} onClick={save}>{lineMode ? "Add" : "Save"}</button>
+          </div>
+        </animated.div>
       </animated.div>
+      {pick?.kind === "date" && <DatePickerDialog value={d.startDay ?? req.day} onClose={closePick} onPick={pickDay} />}
+      {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} />}
+      {pick?.kind === "end" && <TimePickerDialog value={d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END)} onClose={closePick} onPick={pickEnd} />}
+      {colorOpen && <ColorPickerDialog title="Colour" selected={d.color} onClose={closePick}
+        onPick={(c) => { if (lineMode) setOv((o) => ({ ...o, color: c })); else setItem({ color: c }); }} />}
     </div>
-  );
-}
-
-/** A text button that opens Android's own date or time picker. */
-function PickButton({ kind, label, value, onPick }: { kind: "date" | "time"; label: string; value: number | null; onPick: (v: number) => void }) {
-  const v = value === null ? "" : kind === "time"
-    ? `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`
-    : new Date(value * 86_400_000).toISOString().slice(0, 10);
-  return (
-    <label className="p-text-btn pick">
-      {label}
-      <input type={kind} value={v} onChange={(e) => {
-        const s = e.target.value;
-        if (!s) return;
-        if (kind === "time") { const [h, m] = s.split(":").map(Number); onPick(h * 60 + m); }
-        else { const [y, m, dd] = s.split("-").map(Number); onPick(Math.round(Date.UTC(y, m - 1, dd) / 86_400_000)); }
-      }} />
-    </label>
   );
 }

@@ -542,7 +542,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-colorgrid { display: flex; flex-wrap: wrap; gap: 8px; }
 .phone .p-colorgrid button { position: relative; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--text); }
 .phone .p-colorgrid button.none { border: 1px solid var(--p-outline); background: none; }
-.phone .p-colorgrid button.on { box-shadow: 0 0 0 2px var(--p-sc-high), 0 0 0 4px var(--text); }
+.phone .p-colorgrid button.on { box-shadow: inset 0 0 0 3px var(--text); }
 
 /* Modal bottom sheet: surfaceContainerLow, 28 dp top corners, a 32x4 handle in a 48 dp strip. */
 .phone .p-sheet-root { position: fixed; inset: 0; z-index: 55; }
@@ -616,3 +616,119 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 /* The + button moves up out of the snackbar's way, as Scaffold does it. */
 .phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
 .phone .p-root:has(> .p-snackbar:not(.raised)) > .p-fab { transform: translateY(-64px); }
+.phone .p-snack-close { width: 40px; height: 40px; margin-right: -4px; color: var(--p-inverse-on-surface); }
+.phone .p-icon.primary { color: var(--p-primary); }
+.phone .p-menu-anchor.start { display: inline-block; }
+.phone .p-menu-anchor.start.block { display: block; }
+.phone .p-menu-anchor.start > .p-menu { left: 0; right: auto; top: 100%; transform-origin: top left; }
+.phone .p-menu button.lead .p-menu-dot { width: 24px; display: grid; place-items: center; }
+.phone .p-menu-dot > span { width: 12px; height: 12px; border-radius: 50%; }
+.phone .p-appbar.nosat { padding-top: 0; height: 64px; }
+.phone .p-sheet-title.small { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; padding-bottom: 4px; }
+.phone .p-li .supporting.small { font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.phone .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Task / event view and editor (ItemViewScreen, ItemEditorScreen, FieldEditors) ---------- */
+.phone .pe-body { padding: 0; }
+.phone .pe-editor, .phone .pe-view { position: relative; background: var(--bg); }
+.phone .gp-full .pe-editor, .phone .gp-full .pe-editor .p-appbar { background: var(--p-sc-low); }
+/* View: the colour bar and title, then a row per field. */
+.phone .pe-head { display: flex; align-items: center; gap: 12px; padding: 4px 16px 8px; }
+.phone .pe-bar { flex: none; width: 5px; height: 32px; padding: 0; border: 0; border-radius: 3px; }
+.phone .pe-title { position: relative; overflow: hidden; display: block; max-width: 100%; padding: 0; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 24px; line-height: 32px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.phone .pe-cat { position: relative; overflow: hidden; padding: 2px 0; border: 0; border-radius: 6px; background: none; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .pe-done { position: relative; display: flex; align-items: center; padding: 0 4px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone .pe-done .p-checkbox { margin: 14px; }
+.phone .pe-info { position: relative; display: flex; align-items: flex-start; gap: 16px; padding: 9px 16px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone .pe-info > svg { flex: none; margin-top: 1px; color: var(--muted); }
+.phone .pe-info.trailing { align-items: center; padding-right: 4px; }
+.phone .pe-info > .grow { flex: 1; white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
+.phone .pe-info .ph { color: var(--muted); }
+.phone .pe-trail { flex: none; display: flex; margin: -12px 0; }
+.phone .pe-notes { font-size: 16px; line-height: 24px; }
+.phone .pe-notes > :first-child { margin-top: 0; }
+.phone .pe-notes > :last-child { margin-bottom: 0; }
+.phone .pe-flow { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone .pe-flow.tight { gap: 4px; }
+.phone .pe-flow.pad { padding: 4px 16px; }
+.phone .pe-small { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+.phone .pe-small.pad { padding: 4px 24px 8px; }
+.phone .pe-links .pe-small.pad { padding: 0 16px 4px; }
+.phone .pe-small.indent { padding: 0 16px 12px 72px; margin-top: -4px; }
+.phone .pe-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+.phone .p-li .lead .pe-dot { margin: 0 6px; }
+.phone .pe-stats { padding: 0 16px 8px; }
+.phone .pe-stats-row { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; font-size: 14px; line-height: 20px; color: var(--text); }
+.phone .pe-stats-row .fire { display: inline-flex; align-items: center; gap: 2px; font-weight: 500; }
+.phone .pe-heat { display: flex; gap: 3px; margin: 8px 0 4px; }
+.phone .pe-heat > div { display: flex; flex-direction: column; gap: 3px; }
+.phone .pe-heat span { width: 14px; height: 14px; border-radius: 3px; background: var(--p-sc-highest); }
+.phone .pe-heat span.done { background: var(--p-primary); }
+.phone .pe-heat span.missed { background: color-mix(in srgb, var(--danger) 35%, transparent); }
+.phone .pe-heat span.future { background: transparent; }
+.phone .pe-links { padding-bottom: 8px; }
+.phone .pe-links-head { display: flex; align-items: center; padding-right: 8px; }
+.phone .pe-links-head .p-section { flex: 1; padding-bottom: 10px; }
+.phone .pe-pick-list { max-height: 60vh; overflow-y: auto; margin-top: 8px; }
+.phone .pe-scope { display: flex; flex-direction: column; align-items: flex-start; margin-left: -12px; }
+
+/* Editor rows: icon column 24 dp in, 24 dp gap, at least 52 dp tall. */
+.phone .pe-row { position: relative; display: flex; align-items: center; min-height: 52px; padding: 0 8px 0 24px; color: var(--text); }
+.phone .pe-row.top { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; }
+.phone .pe-ico { flex: none; width: 24px; height: 24px; margin-right: 24px; color: var(--muted); }
+.phone .pe-label { font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+.phone .pe-label.ph { color: var(--muted); }
+.phone .pe-text { position: relative; overflow: hidden; padding: 8px 4px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone .pe-text.ph { color: var(--muted); }
+.phone .pe-text.grow { flex: 1; }
+.phone .pe-row .grow { flex: 1; min-width: 0; }
+.phone .pe-input { min-width: 0; height: 40px; padding: 0; border: 0; background: none; font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .pe-input::placeholder, .phone .pe-titleinput::placeholder { color: var(--muted); }
+.phone .pe-types { display: flex; gap: 8px; padding: 4px 16px 0 72px; }
+.phone .pe-titlerow { display: flex; align-items: center; padding: 8px 16px 12px 24px; }
+.phone .pe-swatch { flex: none; width: 18px; height: 18px; margin-right: 30px; padding: 0; border: 0; border-radius: 5px; }
+.phone .pe-titleinput { flex: 1; min-width: 0; padding: 0; border: 0; background: none; font: inherit; font-size: 24px; line-height: 32px; color: var(--text); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .pe-save { margin: 0 8px 0 4px; }
+.phone .pe-indent { padding: 0 16px 8px 72px; }
+.phone .pe-freq .p-segmented button { padding: 0 2px; font-size: 11px; }
+.phone .pe-freq .p-segmented button.on .p-seg-check { width: 0; margin: 0; }
+.phone .pe-rec { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; font-size: 14px; line-height: 20px; color: var(--text); }
+.phone .pe-rec-row { display: flex; align-items: center; }
+.phone .pe-rec-row > b { min-width: 16px; text-align: center; }
+.phone .pe-rec-row > span:first-child { margin-right: 4px; }
+.phone .pe-rec-label { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.phone .pe-circles { display: flex; gap: 4px; }
+.phone .pe-circles.wrap { flex-wrap: wrap; }
+.phone .pe-circles button { position: relative; overflow: hidden; flex: none; width: 36px; height: 36px; padding: 0; border: 1px solid var(--p-outline); border-radius: 18px; background: none; font-size: 12px; color: var(--text); }
+.phone .pe-circles button.wide { width: 52px; }
+.phone .pe-circles button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
+.phone .pe-notes-edit { min-width: 0; padding-top: 1px; }
+.phone .pe-notes-edit .rich { font-size: 16px; line-height: 22px; color: var(--text); outline: none; user-select: text; -webkit-user-select: text; }
+.phone .p-sheet .pe-notes-edit { margin-top: 4px; }
+
+/* ---------- Rich text bar (RichToolbar) ---------- */
+.phone .p-richbar { flex: none; background: var(--p-sc-low); }
+.phone .p-richbar.inline { margin: -6px 0 4px -10px; background: none; }
+.phone .p-rb-main { display: flex; padding: 0 2px; }
+.phone .p-rb-more { display: flex; flex-wrap: wrap; padding: 0 4px; border-bottom: 1px solid var(--line); }
+.phone .p-rb-btn { position: relative; overflow: hidden; flex: 1; min-width: 0; height: 48px; padding: 0; border: 0; border-radius: 24px; background: none; display: grid; place-items: center; color: var(--muted); }
+.phone .p-rb-more .p-rb-btn { flex: none; width: 48px; }
+.phone .p-rb-btn.on { color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 12%, transparent); background-clip: content-box; padding: 4px; }
+.phone .rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); opacity: 1; }
+/* While the days slide: a line before every day (none is missing at the edge of the old range), and a
+   thicker one where one range meets the next, through the header, the all-day strip and the grid. */
+.phone .pg.swiping .pg-col.first { border-left: 1px solid var(--line); }
+.phone .pg.swiping .pg-col.range { border-left: 2px solid var(--p-outline); }
+.phone .pg.swiping .pg-dh.range, .phone .pg.swiping .pg-adcol.range { box-shadow: inset 2px 0 0 var(--p-outline); }
+/* The slot tapped for a new event: just its outline, in the event's colour. */
+.phone .pg-slot { box-sizing: border-box; background: none; border: 2px solid #039be5; padding: 0; color: inherit; }
+/* Add panel: the small panel's settings chips, and the full editor's handle strip. */
+.phone .gp-compact.off { pointer-events: none; }
+.phone .gp-chips.edit { margin-top: 12px; }
+.phone .gp-compact.slot .gp-chips.edit { margin-top: 0; }
+.phone .gp-chips > .p-chip { margin: 0; }
+.phone .gp-colordot { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+.phone .p-assist.static { pointer-events: none; }
+.phone .gp-drag { flex: none; height: calc(var(--sat) + 22px); padding-top: var(--sat); display: grid; place-items: center; touch-action: none; }
+.phone .gp-drag .gp-handle { margin: 0; }
+.phone .gp-row { flex-wrap: wrap; }

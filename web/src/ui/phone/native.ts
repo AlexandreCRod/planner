@@ -66,3 +66,12 @@ function onBack() {
 export const minimizeApp = () => { if (isNative) void CapApp.minimizeApp().catch(() => {}); };
 export const showKeyboard = () => { if (isNative) void Keyboard.show().catch(() => {}); };
 export const hideKeyboard = () => { if (isNative) void Keyboard.hide().catch(() => {}); };
+
+/**
+ * Opens a link outside the app: in the app the WebView hands any address that isn't the app's own to
+ * Android, which picks the app for it (Maps for a map link, the browser otherwise). Nothing is fetched here.
+ */
+export function openExternal(url: string) {
+  if (isNative) location.href = url;
+  else window.open(url, "_blank", "noopener");
+}

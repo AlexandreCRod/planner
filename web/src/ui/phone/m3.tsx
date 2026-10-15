@@ -228,15 +228,18 @@ export function SheetButtons({ onCancel, onSave, enabled = true }: { onCancel: (
 
 // ---------- Snackbar ----------
 
-interface Snack { id: number; text: string; action?: string; onAction?: () => void }
+interface Snack { id: number; text: string; action?: string; onAction?: () => void; ms: number }
 let snack: Snack | null = null;
 let snackId = 0;
 const snackListeners = new Set<() => void>();
 const setSnack = (s: Snack | null) => { snack = s; snackListeners.forEach((l) => l()); };
 
-/** Shows a message at the bottom for a few seconds, with an optional action (Undo). */
+/**
+ * Shows a message at the bottom, with an optional action (Undo). Like the native one: 4 s on its own,
+ * 10 s (SnackbarDuration.Long) with an action, which also gets a close button.
+ */
 export function showSnackbar(text: string, action?: string, onAction?: () => void) {
-  setSnack({ id: ++snackId, text, action, onAction });
+  setSnack({ id: ++snackId, text, action, onAction, ms: action ? 10000 : 4000 });
 }
 
 /** Where snackbars appear: above the bottom bar, or near the bottom edge over a full-screen page. */
@@ -246,8 +249,8 @@ export function SnackbarHost({ raised }: { raised: boolean }) {
   useEffect(() => {
     if (!s) return;
     setLeaving(false);
-    const t1 = window.setTimeout(() => setLeaving(true), 4000);
-    const t2 = window.setTimeout(() => { if (snack?.id === s.id) setSnack(null); }, 4150);
+    const t1 = window.setTimeout(() => setLeaving(true), s.ms);
+    const t2 = window.setTimeout(() => { if (snack?.id === s.id) setSnack(null); }, s.ms + 150);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [s]);
   if (!s) return null;
@@ -255,6 +258,7 @@ export function SnackbarHost({ raised }: { raised: boolean }) {
     <div className={`p-snackbar ${raised ? "raised" : ""} ${leaving ? "out" : ""}`} key={s.id} role="status">
       <span className="grow">{s.text}</span>
       {s.action && <button className="p-snack-action" onClick={() => { s.onAction?.(); setSnack(null); }}>{s.action}</button>}
+      {s.action && <button className="p-icon p-snack-close" aria-label="Dismiss" onClick={() => setSnack(null)}><MIcon name="fClose" /></button>}
     </div>
   );
 }

@@ -32,13 +32,13 @@ export function IconButton({ icon, label, onClick, className = "", children }: {
  * Material 3 small top app bar (64 dp): an optional back arrow, the title (titleLarge, 16 dp in, or
  * after the arrow), then the actions. [title] may be any node (Search puts its field there).
  */
-export function TopAppBar({ title, back, actions, tall, className = "" }: {
-  title: ReactNode; back?: boolean; actions?: ReactNode; tall?: boolean; className?: string;
+export function TopAppBar({ title, back, actions, tall, className = "", navIcon }: {
+  title: ReactNode; back?: boolean; actions?: ReactNode; tall?: boolean; className?: string; navIcon?: ReactNode;
 }) {
   return (
     <header className={`p-appbar ${tall ? "tall" : ""} ${className}`}>
-      {back && <IconButton icon="fArrowBack" label="Back" onClick={() => history.back()} />}
-      <div className={`p-appbar-title ${back ? "" : "inset"}`}>{title}</div>
+      {navIcon ?? (back && <IconButton icon="fArrowBack" label="Back" onClick={() => history.back()} />)}
+      <div className={`p-appbar-title ${back || navIcon ? "" : "inset"}`}>{title}</div>
       {actions}
     </header>
   );
@@ -102,7 +102,7 @@ export function EmptyHint({ children }: { children: ReactNode }) {
   return <div className="p-empty">{children}</div>;
 }
 
-export interface MenuItem { label: string; onClick: () => void; icon?: string; checked?: boolean; divider?: boolean }
+export interface MenuItem { label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean }
 
 /**
  * Material 3 dropdown menu anchored under the top-right corner of its parent (which must be
@@ -123,8 +123,9 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
       {items.map((it, i) => (
         <div key={i}>
           {it.divider && <div className="p-menu-divider" />}
-          <button role="menuitem" className={it.icon ? "lead" : ""} onClick={() => { onClose(); it.onClick(); }}>
-            {it.icon && <MIcon name={it.icon} />}
+          <button role="menuitem" className={it.icon || it.dot ? "lead" : ""} onClick={() => { onClose(); it.onClick(); }}>
+            {it.icon && <MIcon name={it.icon} color={it.iconColor} />}
+            {it.dot && <span className="p-menu-dot"><span style={{ background: it.dot }} /></span>}
             <span className="grow">{it.label}</span>
             {it.checked && <span className="p-menu-tick">✓</span>}
           </button>

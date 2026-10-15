@@ -12,7 +12,7 @@ import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } 
 import { type Placed, layoutDay } from "../CalendarView.tsx";
 import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
 import { ScopeDialog } from "../ItemEditor.tsx";
-import type { AddRequest } from "./AddPanel.tsx";
+import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { hapticLift } from "./native.ts";
 import { pageTarget, spring, useSwipePager } from "./pager.ts";
@@ -61,7 +61,7 @@ function openDailyNote(s: Snapshot, day: number) {
   go(n ? `note/${n.id}` : `note/new?day=${day}`);
 }
 
-export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min: number) => void; pending: AddRequest | null }) {
+export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min: number) => void; pending: SlotPreview | null }) {
   const s = useSnapshot();
   const [mode, setMode] = useState<Mode>(baseMode);
   const [anchor, setAnchorState] = useState(selected);
@@ -358,7 +358,7 @@ interface Gesture {
 
 function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, onDayHeader, onDayNote }: {
   s: Snapshot; items: Item[]; first: number; count: number; onStep: (dir: number) => void;
-  onNewAt: (day: number, min: number) => void; pending: AddRequest | null; noteDays: Set<number>;
+  onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
   const days = useMemo(() => Array.from({ length: count }, (_, i) => first + i), [first, count]);
@@ -425,6 +425,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   // After a swipe the layers sit one range over; the new days now render there, so the offset goes.
   useLayoutEffect(() => {
     for (const el of [layer.current, headDays.current, allDayDays.current]) if (el) el.style.transform = "";
+    scroller.current?.parentElement?.classList.remove("swiping");
   }, [first]);
 
   // A moved block keeps its dragged position until the grid has redrawn it in its new place.
@@ -437,7 +438,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   // The new event's slot stays in view above the add panel.
   useEffect(() => {
     const el = scroller.current;
-    if (!pending || pending.min === null || !el || !pxPerMin) return;
+    if (!pending || !el || !pxPerMin) return;
     const top = pending.min * pxPerMin;
     if (top < el.scrollTop || top > el.scrollTop + el.clientHeight * 0.3) el.scrollTo({ top: Math.max(0, top - el.clientHeight * 0.12), behavior: "smooth" });
   }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -453,8 +454,12 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     let zoomRaf = 0;
     let settling: { stop: () => void; end: () => void } | null = null;
     const layers = () => [layer.current, headDays.current, allDayDays.current];
+    // While the days slide, every day keeps its line (the one before the first day in view too), and
+    // the lines between one range and the next are drawn thicker, so the step from week to week shows.
+    const root = el.parentElement;
     const moveLayers = (x: number) => {
       for (const l of layers()) if (l) l.style.transform = x ? `translate3d(${x}px,0,0)` : "";
+      root?.classList.toggle("swiping", x !== 0);
     };
     const colW = () => (layer.current?.clientWidth ?? 300) / daysRef.current.length;
 
@@ -676,8 +681,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       <div className="pg-head">
         <div className="pg-gutter" />
         <div className="pg-head-days"><div className="pg-strip" ref={headDays}>
-          {all.map((d) => (
-            <div key={d} className={`pg-dh ${d === t ? "today" : ""}`} role="button" onClick={() => onDayHeader(d)}>
+          {all.map((d, j) => (
+            <div key={d} className={`pg-dh ${d === t ? "today" : ""} ${j % count === 0 ? "range" : ""}`} role="button" onClick={() => onDayHeader(d)}>
               <span className="wd">{NARROW[weekday(d) - 1]}</span>
               <span className="num">{ymd(d).d}</span>
               {count <= 3 && (
@@ -692,7 +697,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           <div className="pg-gutter">all-day</div>
           <div className="pg-allday-days"><div className="pg-strip" ref={allDayDays}>
             {allDay.map((list, i) => (
-              <div key={i} className="pg-adcol">
+              <div key={i} className={`pg-adcol ${i % count === 0 ? "range" : ""}`}>
                 {list.slice(0, 3).map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
                 {list.length > 3 && <span className="more">+{list.length - 3}</span>}
               </div>
@@ -708,7 +713,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           <div className="pg-grid">
             <div className="pg-layer" ref={layer}>
               {all.map((d, j) => (
-                <div key={d} className={`pg-col ${j === count ? "first" : ""}`} style={{ left: `${(j - count) * colPct}%`, width: `${colPct}%` }}>
+                <div key={d} className={`pg-col ${j === count ? "first" : ""} ${j % count === 0 ? "range" : ""}`} style={{ left: `${(j - count) * colPct}%`, width: `${colPct}%` }}>
                   {timed[j].map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}
                   {d === t && <div className="pg-now" style={{ transform: `translate3d(0,${now * pxPerMin}px,0)` }} />}
                 </div>
@@ -724,11 +729,12 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
               })()}
-              {pending && pending.min !== null && days.includes(pending.day) && (
-                <div className="pg-slot" style={{ left: `${days.indexOf(pending.day) * colPct}%`, width: `${colPct}%`, top: pending.min * pxPerMin, height: Math.max(22, 60 * pxPerMin) }}>
-                  <b>(No title)</b>
-                  <span>{formatTime(pending.min)} – {formatTime(Math.min(DAY_MIN - 1, pending.min + 60))}</span>
-                </div>
+              {/* Where the new event goes: only its outline, in its colour, while the panel is open. */}
+              {pending && all.includes(pending.day) && (
+                <div className="pg-slot" style={{
+                  left: `calc(${(all.indexOf(pending.day) - count) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: pending.min * pxPerMin,
+                  height: Math.max(22, (pending.end - pending.min) * pxPerMin), borderColor: pending.color,
+                }} />
               )}
             </div>
           </div>

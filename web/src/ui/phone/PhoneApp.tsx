@@ -4,14 +4,14 @@
 import { animated, useSpring, type SpringValue } from "@react-spring/web";
 import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
-import { type ItemType } from "../../domain/types.ts";
+import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../common.tsx";
-import { ItemEditor } from "../ItemEditor.tsx";
 import { NoteEditor } from "../NotesView.tsx";
 import { SettingsView } from "../SettingsView.tsx";
 import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
-import { AddPanel, type AddRequest } from "./AddPanel.tsx";
+import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
+import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
 import { MIcon, Scaffold, TabGlyph } from "./chrome.tsx";
 import { SnackbarHost } from "./m3.tsx";
 import { swallowNextClick } from "./gesture.ts";
@@ -71,6 +71,8 @@ export function PhoneApp() {
     },
   }));
   const [adding, setAdding] = useState<AddRequest | null>(null);
+  // The outline the calendar draws where a new event from a slot will go (it follows the panel).
+  const [preview, setPreview] = useState<SlotPreview | null>(null);
 
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
 
@@ -145,7 +147,7 @@ export function PhoneApp() {
         <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
-              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding)} pending={adding?.mode === "slot" ? adding : null} />}
+              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} />}
             </div>
           ))}
         </animated.div>
@@ -154,23 +156,27 @@ export function PhoneApp() {
       {!overlay && (
         <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
       )}
-      {overlay && <Overlay route={route} path={path} query={query} />}
+      {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "")} route={route} path={path} query={query} />}
       <SnackbarHost raised={!!overlay} />
-      {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onClose={() => setAdding(null)} />}
+      {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onPreview={setPreview} onClose={() => { setAdding(null); setPreview(null); }} />}
     </div>
   );
 }
 
 /** One stable callback per setter, so the memoised pages don't redraw when the shell does. */
 const newAtCache = new WeakMap<object, (day: number, min: number) => void>();
-function onNewAt(setAdding: (r: AddRequest) => void) {
+function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview) => void) {
   let f = newAtCache.get(setAdding);
-  if (!f) { f = (day: number, min: number) => setAdding({ mode: "slot", type: "EVENT", day, min }); newAtCache.set(setAdding, f); }
+  if (!f) {
+    // The slot's outline shows in the same frame as the panel starts up (in the new event's default colour).
+    f = (day: number, min: number) => { setPreview({ day, min, end: Math.min(min + 60, 24 * 60 - 1), color: TYPE_COLORS.EVENT }); setAdding({ mode: "slot", type: "EVENT", day, min }); };
+    newAtCache.set(setAdding, f);
+  }
   return f;
 }
 
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
-const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: AddRequest | null }) {
+const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null }) {
   switch (tabKey) {
     case "today": return <TodayView phone />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
@@ -184,8 +190,10 @@ const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; 
 function Overlay({ route, path, query }: { route: string; path: string[]; query: URLSearchParams }) {
   let body: ReactNode = null;
   if (route === "item" && path[1]) {
-    body = <ItemEditor key={path[1]} id={Number(path[1])} occurrence={query.get("occ") ? Number(query.get("occ")) : null}
-      isNewPlaceholder={query.get("new") === "1"} onClose={() => history.back()} />;
+    const occ = query.get("occ") ? Number(query.get("occ")) : null;
+    body = query.get("edit") === "1"
+      ? <PhoneItemEditorPage key={`e${path[1]}`} id={Number(path[1])} occ={occ} dup={query.get("dup") === "1"} />
+      : <PhoneItemView key={path[1]} id={Number(path[1])} occ={occ} />;
   } else if (route === "note") {
     body = <div className="p-scaffold"><div className="p-statusbar" /><div className="p-content flush note-host">
       <NoteEditor key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />
