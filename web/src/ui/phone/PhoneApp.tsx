@@ -13,6 +13,7 @@ import { SettingsView } from "../SettingsView.tsx";
 import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest } from "./AddPanel.tsx";
 import { MIcon, Scaffold, TabGlyph } from "./chrome.tsx";
+import { SnackbarHost } from "./m3.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing } from "./native.ts";
@@ -22,13 +23,13 @@ import "./phone.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
 
-// The native app's tabs, less Alarms (left out of the web app for now).
+// The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
+// Links section. Alarms will be the fifth: a key here, its page in Page and its icon in TabGlyph.
 const TABS: { key: string; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "calendar", label: "Calendar" },
   { key: "tasks", label: "Tasks" },
   { key: "notes", label: "Notes" },
-  { key: "graph", label: "Links" },
 ];
 const LAST = TABS.length - 1;
 /** Two taps on the same tab closer than this reset its page (HomeScreen.kt). */
@@ -150,10 +151,11 @@ export function PhoneApp() {
         </animated.div>
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
-      {TABS[tab].key !== "graph" && !overlay && (
+      {!overlay && (
         <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
       )}
       {overlay && <Overlay route={route} path={path} query={query} />}
+      <SnackbarHost raised={!!overlay} />
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onClose={() => setAdding(null)} />}
     </div>
   );
@@ -174,7 +176,7 @@ const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; 
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
     case "tasks": return <PhoneTasks />;
     case "notes": return <PhoneNotes />;
-    default: return <PhoneGraph />;
+    default: return null;
   }
 }, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending));
 
@@ -188,6 +190,8 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
     body = <div className="p-scaffold"><div className="p-statusbar" /><div className="p-content flush note-host">
       <NoteEditor key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />
     </div></div>;
+  } else if (route === "graph") {
+    body = <PhoneGraph focusId={Number(query.get("focus")) || 0} />;
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} />;
   } else if (route === "settings") {

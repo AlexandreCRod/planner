@@ -9,10 +9,10 @@ import { preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { KINDS, subtitle } from "../BrowseView.tsx";
-import { TaskRow, openItem, useCheckedHold, useNow } from "../common.tsx";
+import { TaskRow, go, openItem, useCheckedHold, useNow } from "../common.tsx";
 import { type P, buildGraph, useGraphSim } from "../GraphView.tsx";
 import { typeLabel } from "../LinksSection.tsx";
-import { ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
 
@@ -154,7 +154,10 @@ export const PhoneNotes = memo(function PhoneNotes() {
     return out;
   }, [notes]);
   return (
-    <Scaffold title="Notes" flush>
+    <Scaffold title="Notes" flush actions={<>
+      <IconButton icon="oHub" label="Links" onClick={() => go("graph")} />
+      <AppBarActions />
+    </>}>
       <div className="p-list notes">
         <ChipRow className="notes">
           {(["notes", "pinned", "daily"] as const).map((k) => (
@@ -200,11 +203,12 @@ function NoteCard({ n, s }: { n: Item; s: Snapshot }) {
 
 // ---------- Links (graph) ----------
 
-export const PhoneGraph = memo(function PhoneGraph() {
+/** The links graph, a page of its own (from the Notes bar, or an item's Links section with that item in focus). */
+export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: number }) {
   const s = useSnapshot();
   const [types, setTypes] = useState<Set<ItemType>>(new Set(["NOTE", "TASK", "EVENT"]));
   const [orphans, setOrphans] = useState(false);
-  const [focus, setFocus] = useState(0);
+  const [focus, setFocus] = useState(focusId);
   const [depth, setDepth] = useState(2);
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
@@ -302,7 +306,7 @@ export const PhoneGraph = memo(function PhoneGraph() {
   const pv = sel ? preview(sel.content, 140) : "";
 
   return (
-    <Scaffold title="Links" flush>
+    <Scaffold title="Links" flush back>
       <ChipRow className="graph">
         {([["NOTE", "Notes"], ["TASK", "Tasks"], ["EVENT", "Events"]] as [ItemType, string][]).map(([t, l]) => (
           <FilterChip key={t} selected={types.has(t)} onClick={() => toggleType(t)}>{l}</FilterChip>

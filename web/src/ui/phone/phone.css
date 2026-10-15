@@ -85,8 +85,12 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-pill-track { position: absolute; left: 0; top: 0; height: var(--bar-h); pointer-events: none; }
 .phone .p-pill { position: absolute; left: 50%; margin-left: -28px; top: 7px; width: 56px; height: 30px; border-radius: 15px; background: var(--p-sec-container); }
 .phone .p-tab { flex: 1; min-width: 0; height: var(--bar-h); position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); }
-.phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s; }
-.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s; }
+/* The label shows under the selected tab only: unselected icons sit centred, and the chosen tab's icon
+   rises as its label fades in (M3 emphasized easing, 200 ms: it never holds up the tap or the page). */
+.phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s, transform .2s cubic-bezier(.2, 0, 0, 1); }
+.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s, opacity .15s linear, transform .2s cubic-bezier(.2, 0, 0, 1); }
+.phone .p-tab:not(.on) .p-tab-icon { transform: translateY(10px); }
+.phone .p-tab:not(.on) .p-tab-label { opacity: 0; transform: translateY(6px); }
 .phone .p-tab.on .p-tab-icon { color: var(--p-on-sec-container); }
 .phone .p-tab.on .p-tab-label { color: var(--text); }
 
@@ -261,7 +265,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-field:focus { border: 2px solid var(--p-primary); padding: 0 15px; }
 .phone .p-field::placeholder, .phone .gp-title::placeholder { color: var(--muted); }
 .phone .gp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.phone .p-assist { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.phone .p-assist { position: relative; overflow: hidden; flex: none; height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); white-space: nowrap; }
 .phone .p-assist svg { color: var(--p-primary); }
 .phone .gp-tip { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .gp-actions { display: flex; align-items: center; margin-top: 12px; }
@@ -490,3 +494,125 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-itemrow .grow { flex: 1; min-width: 0; }
 .phone .p-itemrow .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-itemrow .sub { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ---------- M3 pieces (m3.tsx) ---------- */
+/* Inverse roles for the snackbar (Theme.kt leaves them at Material's defaults). */
+html.phone { --p-inverse-surface: #322f35; --p-inverse-on-surface: #f5eff7; --p-inverse-primary: #a8c7fa; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; } }
+html.phone[data-theme="dark"] { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; }
+/* Pure black dark mode (Theme.kt with pureBlack): black background and darker containers. */
+@media (prefers-color-scheme: dark) { html.phone.pure-black:not([data-theme="light"]) { --bg: #000; --surface: #000; --p-sc-lowest: #000; --p-sc-low: #0b0b0d; --p-sc: #121214; --p-sc-high: #1a1a1d; --p-sc-highest: #232326; } }
+html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-lowest: #000; --p-sc-low: #0b0b0d; --p-sc: #121214; --p-sc-high: #1a1a1d; --p-sc-highest: #232326; }
+
+.phone .p-switch { flex: none; position: relative; width: 52px; height: 32px; margin: 0; padding: 0; border: 2px solid var(--p-outline); border-radius: 16px; background: var(--p-sc-highest); transition: background-color .15s, border-color .15s; }
+.phone .p-switch .thumb { position: absolute; left: 6px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--p-outline); transition: transform .2s cubic-bezier(.2, 0, 0, 1), width .15s, height .15s, background-color .15s; }
+.phone .p-switch.on { border-color: var(--p-primary); background: var(--p-primary); }
+.phone .p-switch.on .thumb { width: 24px; height: 24px; background: var(--p-on-primary); transform: translate(16px, -4px); }
+
+.phone .p-li { position: relative; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 24px 8px 16px; color: var(--text); }
+.phone .p-li.two { min-height: 72px; }
+.phone .p-li .lead { flex: none; display: flex; color: var(--muted); }
+.phone .p-li .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .p-li .headline { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
+.phone .p-li .supporting { font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); white-space: pre-line; }
+.phone .p-li .trail { flex: none; display: flex; align-items: center; color: var(--muted); }
+.phone .p-hr { height: 1px; margin: 0; border: 0; background: var(--line); }
+
+.phone .p-text-btn:disabled { color: color-mix(in srgb, var(--text) 38%, transparent); }
+.phone .p-outlined-btn { position: relative; overflow: hidden; height: 40px; padding: 0 24px; border: 1px solid var(--p-outline); border-radius: 20px; background: none; color: var(--p-primary); font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; display: inline-flex; align-items: center; gap: 8px; }
+.phone .p-outlined-btn.danger { color: var(--danger); }
+.phone .p-outlined-btn:disabled { color: color-mix(in srgb, var(--text) 38%, transparent); border-color: color-mix(in srgb, var(--text) 12%, transparent); }
+.phone .p-xfab {
+  position: absolute; right: 16px; bottom: calc(var(--sab) + 16px); z-index: 5; height: 56px; padding: 0 20px 0 16px; border: 0; border-radius: 16px; overflow: hidden;
+  display: inline-flex; align-items: center; gap: 12px; background: var(--p-primary-container); color: var(--p-on-primary-container);
+  font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px;
+  box-shadow: 0 3px 5px -1px rgb(0 0 0 / .2), 0 6px 10px 0 rgb(0 0 0 / .14), 0 1px 18px 0 rgb(0 0 0 / .12);
+}
+
+/* Outlined text field: 56 dp, 4 dp corners; the label rests inside until focused or filled, then sits on the border. */
+.phone .p-tf { position: relative; display: block; margin-top: 6px; --tf-bg: var(--p-sc-high); }
+.phone .p-tf input { display: block; width: 100%; height: 56px; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 4px; background: transparent; font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .p-tf input:focus { border: 2px solid var(--p-primary); padding: 0 15px; }
+.phone .p-tf-label { position: absolute; left: 12px; top: 16px; padding: 0 4px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--muted); background: var(--tf-bg); pointer-events: none; transform-origin: left center; transition: transform .15s cubic-bezier(.2, 0, 0, 1), color .15s; }
+.phone .p-tf input:focus + .p-tf-label, .phone .p-tf input:not(:placeholder-shown) + .p-tf-label { transform: translateY(-28px) scale(.75); }
+.phone .p-tf input:focus + .p-tf-label { color: var(--p-primary); }
+.phone .p-sheet .p-tf { --tf-bg: var(--p-sc-low); }
+
+/* Colour circles (ColorGrid): 36 dp, 8 apart; the chosen one gets a ring and a tick. */
+.phone .p-colorgrid { display: flex; flex-wrap: wrap; gap: 8px; }
+.phone .p-colorgrid button { position: relative; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--text); }
+.phone .p-colorgrid button.none { border: 1px solid var(--p-outline); background: none; }
+.phone .p-colorgrid button.on { box-shadow: 0 0 0 2px var(--p-sc-high), 0 0 0 4px var(--text); }
+
+/* Modal bottom sheet: surfaceContainerLow, 28 dp top corners, a 32x4 handle in a 48 dp strip. */
+.phone .p-sheet-root { position: fixed; inset: 0; z-index: 55; }
+.phone .p-sheet-scrim { position: absolute; inset: 0; background: rgb(0 0 0 / .32); animation: p-fade .2s linear; transition: opacity .2s linear; }
+.phone .p-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: calc(100% - var(--sat) - 48px); display: flex; flex-direction: column;
+  padding-bottom: var(--sab); border-radius: 28px 28px 0 0; background: var(--p-sc-low); color: var(--text);
+  box-shadow: 0 -1px 6px rgb(0 0 0 / .12); animation: p-sheet-in .3s cubic-bezier(.05, .7, .1, 1); will-change: transform;
+}
+@keyframes p-sheet-in { from { transform: translate3d(0, 100%, 0); } }
+.phone .p-sheet-top { flex: none; height: 48px; display: grid; place-items: center; touch-action: none; }
+.phone .p-sheet-handle { width: 32px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 40%, transparent); }
+.phone .p-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 16px; }
+.phone .p-sheet-title { padding: 0 24px 8px; font-size: 22px; line-height: 28px; font-weight: 400; }
+.phone .p-sheet-pad { padding: 0 24px; }
+.phone .p-sheet-buttons { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 16px 16px 0; }
+
+/* Snackbar: inverse surface, 4 dp corners, above the bottom bar (the + button moves up for it). */
+.phone .p-snackbar {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--bar-h) + var(--sab) + 12px); z-index: 70; min-height: 48px; padding: 4px 8px 4px 16px;
+  display: flex; align-items: center; gap: 8px; border-radius: 4px; background: var(--p-inverse-surface); color: var(--p-inverse-on-surface);
+  font-size: 14px; line-height: 20px; letter-spacing: .25px; box-shadow: 0 3px 5px -1px rgb(0 0 0 / .2), 0 6px 10px 0 rgb(0 0 0 / .14);
+  animation: p-snack-in .15s cubic-bezier(.2, 0, 0, 1); transition: opacity .15s linear;
+}
+.phone .p-snackbar > span { flex: 1; min-width: 0; padding: 10px 0; }
+.phone .p-snackbar.raised { bottom: calc(var(--sab) + 12px); }
+.phone .p-snackbar.out { opacity: 0; }
+@keyframes p-snack-in { from { opacity: 0; transform: translateY(8px); } }
+.phone .p-snack-action { position: relative; overflow: hidden; flex: none; height: 40px; padding: 0 12px; border: 0; border-radius: 20px; background: none; color: var(--p-inverse-primary); font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+
+/* ---------- Date picker (M3 DatePickerDialog) ---------- */
+.phone .p-datepicker { width: 360px; max-width: calc(100% - 32px); display: flex; flex-direction: column; border-radius: 28px; background: var(--p-sc-high); color: var(--text); overflow: hidden; }
+.phone .p-dp-title { padding: 16px 12px 0 24px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
+.phone .p-dp-headline { padding: 36px 12px 12px 24px; font-size: 32px; line-height: 40px; font-weight: 400; }
+.phone .p-datepicker .p-divider { height: 1px; background: var(--line); }
+.phone .p-dp-nav { display: flex; align-items: center; height: 56px; padding: 0 12px 0 16px; }
+.phone .p-dp-nav .grow { flex: 1; }
+.phone .p-dp-month { position: relative; overflow: hidden; height: 40px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border: 0; border-radius: 20px; background: none; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
+.phone .p-dp-week { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 12px; }
+.phone .p-dp-week span { height: 40px; display: grid; place-items: center; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+.phone .p-dp-pager { position: relative; height: 288px; overflow: hidden; touch-action: pan-y; }
+.phone .p-dp-days { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 48px; padding: 0 12px; }
+.phone .p-dp-days button { position: relative; padding: 0; border: 0; background: none; display: grid; place-items: center; color: var(--text); }
+.phone .p-dp-days button span { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; line-height: 24px; letter-spacing: .5px; }
+.phone .p-dp-days button.today span { box-shadow: inset 0 0 0 1px var(--p-primary); color: var(--p-primary); }
+.phone .p-dp-days button.sel span { background: var(--p-primary); color: var(--p-on-primary); box-shadow: none; }
+.phone .p-dp-years { height: 328px; overflow-y: auto; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 52px; padding: 0 12px; position: relative; }
+.phone .p-dp-years button { position: relative; padding: 0; border: 0; background: none; display: grid; place-items: center; color: var(--muted); }
+.phone .p-dp-years button span { width: 72px; height: 36px; border-radius: 18px; display: grid; place-items: center; font-size: 16px; line-height: 24px; }
+.phone .p-dp-years button.sel span { background: var(--p-primary); color: var(--p-on-primary); }
+.phone .p-dp-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 12px 8px; }
+
+/* ---------- Time picker (M3 dial) ---------- */
+.phone .p-timepicker { width: 328px; max-width: calc(100% - 32px); padding: 24px 24px 12px; border-radius: 28px; background: var(--p-sc-high); color: var(--text); }
+.phone .p-tp-title { margin-bottom: 20px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .p-tp-display { display: flex; align-items: center; justify-content: center; }
+.phone .p-tp-box { position: relative; overflow: hidden; width: 96px; height: 80px; padding: 0; border: 0; border-radius: 8px; background: var(--p-sc-highest); color: var(--text); font-size: 57px; line-height: 64px; font-weight: 400; letter-spacing: -.25px; font-variant-numeric: tabular-nums; }
+.phone .p-tp-box.on { background: var(--p-primary-container); color: var(--p-on-primary-container); }
+.phone .p-tp-colon { width: 24px; text-align: center; font-size: 57px; line-height: 64px; }
+.phone .p-tp-period { display: flex; flex-direction: column; width: 52px; height: 80px; margin-left: 12px; border: 1px solid var(--p-outline); border-radius: 8px; overflow: hidden; }
+.phone .p-tp-period button { position: relative; flex: 1; padding: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; }
+.phone .p-tp-period button + button { border-top: 1px solid var(--p-outline); }
+.phone .p-tp-period button.on { background: var(--p-sec-container); color: var(--text); }
+.phone .p-tp-dial { position: relative; width: 256px; height: 256px; margin: 36px auto 24px; border-radius: 50%; background: var(--p-sc-highest); touch-action: none; user-select: none; -webkit-user-select: none; }
+.phone .p-tp-dial svg { position: absolute; inset: 0; }
+.phone .p-tp-dial .hand { stroke: var(--p-primary); stroke-width: 2; }
+.phone .p-tp-dial .hub, .phone .p-tp-dial .knob { fill: var(--p-primary); }
+.phone .p-tp-dial .num { position: absolute; width: 48px; height: 48px; display: grid; place-items: center; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); pointer-events: none; }
+.phone .p-tp-dial .num.inner { font-size: 14px; color: var(--muted); }
+.phone .p-tp-dial .num.on { color: var(--p-on-primary); }
+/* The + button moves up out of the snackbar's way, as Scaffold does it. */
+.phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
+.phone .p-root:has(> .p-snackbar:not(.raised)) > .p-fab { transform: translateY(-64px); }
