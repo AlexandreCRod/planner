@@ -88,6 +88,14 @@ export function trashWithUndo(item: Item) {
   showSnackbar(`“${item.title.trim() || "Untitled"}” moved to trash`, "Undo", () => restore(item.id));
 }
 
+/** Moves several items to the trash at once (selected notes or search results); one Undo brings them all back. */
+export function trashManyWithUndo(items: Item[]) {
+  if (items.length === 0) return;
+  if (items.length === 1) { trashWithUndo(items[0]); return; }
+  for (const i of items) trash(i.id);
+  showSnackbar(`${items.length} items moved to trash`, "Undo", () => { for (const i of items) restore(i.id); });
+}
+
 /** Removes one day of a series at once; the snackbar can put it back. */
 export function deleteOccurrenceWithUndo(item: Item, day: number) {
   deleteOccurrence(item, day);

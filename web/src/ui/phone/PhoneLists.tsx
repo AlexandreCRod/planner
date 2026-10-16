@@ -18,6 +18,7 @@ import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
+import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 
@@ -212,8 +213,10 @@ export const PhoneNotes = memo(function PhoneNotes() {
     }
     return out;
   }, [notes]);
+  const shownIds = useMemo(() => notes.map((n) => n.id), [notes]);
+  const sel = useSelection(shownIds);
   return (
-    <Scaffold title="Notes" flush actions={<>
+    <Scaffold title="Notes" flush bar={sel.active ? <SelectionBar sel={sel} items={(ids) => notes.filter((n) => ids.has(n.id))} /> : undefined} actions={<>
       <IconButton icon="oHub" label="Links" onClick={() => go("graph")} />
       <AppBarActions />
     </>}>
@@ -226,7 +229,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
         </ChipRow>
         {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
         <div className="p-notegrid">
-          {cols.map((col, i) => <div key={i} className="p-notecol">{col.map((n) => <NoteCard key={n.id} n={n} s={s} />)}</div>)}
+          {cols.map((col, i) => <div key={i} className="p-notecol">{col.map((n) => <NoteCard key={n.id} n={n} s={s} sel={sel} />)}</div>)}
         </div>
         <div className="p-endspace" />
       </div>
@@ -234,7 +237,8 @@ export const PhoneNotes = memo(function PhoneNotes() {
   );
 });
 
-function NoteCard({ n, s }: { n: Item; s: Snapshot }) {
+function NoteCard({ n, s, sel }: { n: Item; s: Snapshot; sel: Selection }) {
+  const picked = sel.ids.has(n.id);
   const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
   const fg = bg ? onColor(bg) : undefined;
   const accentArgb = n.color ?? (n.categoryId !== null ? s.categoryById.get(n.categoryId)?.color ?? null : null);
@@ -243,8 +247,10 @@ function NoteCard({ n, s }: { n: Item; s: Snapshot }) {
   const links = s.neighbours(n.id).size;
   const updated = Math.floor((n.updatedAt - new Date(n.updatedAt).getTimezoneOffset() * 60000) / 86400000);
   return (
-    <div className="p-notecard" role="button" onClick={() => openItem(n)} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
+    <div className={`p-notecard ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined} {...sel.pressProps(n.id)}
+      onClick={() => sel.tap(n.id, () => openItem(n))} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
       {accentArgb !== null && <div className="accent" style={{ background: cssColor(accentArgb) }} />}
+      {picked && <SelectedMark />}
       <div className="in">
         <div className="head">
           <span className="title">{n.noteDay !== null ? formatDate(n.noteDay) : n.title || "Untitled"}</span>
@@ -450,10 +456,12 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
       .sort((a, b) => sort === "title" ? a.title.toLowerCase().localeCompare(b.title.toLowerCase()) : sort === "date" ? (a.startDay ?? a.noteDay ?? 1e9) - (b.startDay ?? b.noteDay ?? 1e9)
         : sort === "links" ? s.neighbours(b.id).size - s.neighbours(a.id).size : b.updatedAt - a.updatedAt);
   }, [s, q, kind, cat, tag, sort]);
+  const shownIds = useMemo(() => results.map((i) => i.id), [results]);
+  const sel = useSelection(shownIds);
 
   return (
     <div className="p-scaffold">
-      <TopAppBar back className="search" title={
+      {sel.active ? <SelectionBar sel={sel} items={(ids) => results.filter((i) => ids.has(i.id))} /> : <TopAppBar back className="search" title={
         <div className="p-searchfield">
           <MIcon name="oSearch" />
           <input ref={input} placeholder="Search everything" value={q} enterKeyHint="search" onChange={(e) => setQ(e.target.value)} />
@@ -464,7 +472,7 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
           <IconButton icon="fSort" label="Sort" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={SORTS.map(([k, l]) => ({ label: l, checked: sort === k, onClick: () => setSort(k) }))} />
         </div>
-      } />
+      } />}
       <div className="p-content flush">
         <ChipRow className="search">
           {KINDS.map(([k, l]) => <FilterChip key={k} selected={kind === k} onClick={() => setKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
@@ -479,13 +487,16 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
         <div className="p-list">
           {results.map((i) => {
             const pv = preview(i.content, 80);
+            const picked = sel.ids.has(i.id);
             return (
-              <div key={i.id} className="p-itemrow" role="button" onClick={() => openItem(i)}>
+              <div key={i.id} className={`p-itemrow ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined}
+                {...sel.pressProps(i.id)} onClick={() => sel.tap(i.id, () => openItem(i))}>
                 <MIcon name={TYPE_ICON[i.type]} size={20} color={s.colorOf(i)} />
                 <div className="grow">
                   <div className="title">{displayTitle(i)}</div>
                   <div className="sub">{subtitle(i, s)}{pv && <><br />{pv}</>}</div>
                 </div>
+                {picked && <SelectedMark />}
               </div>
             );
           })}

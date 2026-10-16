@@ -65,10 +65,14 @@ export function TopAppBar({ title, back, actions, tall, className = "", navIcon 
 }
 
 /** A page: the top app bar with search and settings (or a back arrow), then its scrolling content. */
-export function Scaffold({ title, children, flush, back, actions }: { title: ReactNode; children: ReactNode; flush?: boolean; back?: boolean; actions?: ReactNode }) {
+export function Scaffold({ title, children, flush, back, actions, bar }: {
+  title: ReactNode; children: ReactNode; flush?: boolean; back?: boolean; actions?: ReactNode;
+  /** Shown instead of the top app bar (the selection bar while picking notes). */
+  bar?: ReactNode;
+}) {
   return (
     <div className="p-scaffold">
-      <TopAppBar title={title} back={back} actions={actions ?? (back ? null : <AppBarActions />)} />
+      {bar ?? <TopAppBar title={title} back={back} actions={actions ?? (back ? null : <AppBarActions />)} />}
       <div className={`p-content ${flush ? "flush" : ""}`}>{children}</div>
     </div>
   );

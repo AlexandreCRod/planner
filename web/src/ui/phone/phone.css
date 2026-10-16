@@ -1024,3 +1024,15 @@ html.phone, html.phone body { user-select: none; -webkit-user-select: none; -web
 html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), [contenteditable]:not([contenteditable=false]) *) {
   user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
 }
+
+/* Selecting several notes or search results (Select.tsx): a thin accent outline and a small tick,
+   and the selection bar in place of the top bar. */
+.phone .p-selbar .p-appbar-title { padding-left: 8px; }
+.phone .p-notecard.sel { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+.phone .p-itemrow { position: relative; }
+.phone .p-itemrow.sel { background: color-mix(in srgb, var(--p-primary) 8%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--p-primary) 70%, transparent); border-radius: 12px; }
+.phone .p-selmark {
+  flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--p-primary); color: var(--p-on-primary);
+}
+.phone .p-notecard .p-selmark { position: absolute; top: 8px; right: 8px; z-index: 1; }

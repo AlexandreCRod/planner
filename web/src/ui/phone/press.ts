@@ -110,7 +110,7 @@ function hideTip() {
 }
 
 /** The click a long press ends in is dropped, so the button doesn't also act. */
-function swallowClick() {
+export function swallowClick() {
   const stop = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
   window.addEventListener("click", stop, { capture: true, once: true });
   window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 800);
