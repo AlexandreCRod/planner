@@ -6,6 +6,7 @@ import { cssColor } from "../../domain/types.ts";
 import { Dialog, MIcon } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { spring } from "./pager.ts";
+import { sheetCloses } from "./sheet.ts";
 import { TOUCH_SLOP } from "./press.ts";
 
 /** Material 3 switch: a 52×32 track; the thumb grows from 16 to 24 dp and slides across when on. */
@@ -180,7 +181,10 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
       if (dt > 0) { g.v = 0.7 * ((e.clientY - g.lastY) / dt) + 0.3 * g.v; g.lastT = e.timeStamp; }
       g.lastY = e.clientY;
       if (!g.moving && Math.abs(e.clientY - g.y0) <= TOUCH_SLOP) return;
-      if (!g.moving) { g.moving = true; g.y0 += Math.sign(e.clientY - g.y0) * TOUCH_SLOP; }
+      if (!g.moving) {
+        g.moving = true; g.y0 += Math.sign(e.clientY - g.y0) * TOUCH_SLOP;
+        try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
+      }
       g.dy = Math.max(0, e.clientY - g.y0);
       place(g.dy);
     };
@@ -189,7 +193,7 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
       const cur = g;
       g = null;
       if (!cur.moving) return;
-      if (cur.v > 0.9 || cur.dy > el.offsetHeight * 0.35) close();
+      if (sheetCloses(cur.dy, el.offsetHeight, e.type === "pointercancel" ? 0 : cur.v)) close();
       else stop = spring(cur.dy, 0, cur.v, place, () => { stop = null; });
     };
     el.addEventListener("pointerdown", onDown);

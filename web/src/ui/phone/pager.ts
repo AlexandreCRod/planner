@@ -61,6 +61,10 @@ export interface PagerOptions {
   canStep?: (dir: 1 | -1) => boolean;
   /** Told where the pages are as they move (px, negative towards the next page), e.g. to move a tab indicator. */
   onMove?: (x: number, w: number) => void;
+  /** At the first or last page, a drag towards no page is left alone (for a row's own swipe) instead of giving a little. */
+  yieldAtEdge?: boolean;
+  /** Told when a settle has finished (after onStep, if it turned), e.g. to put a tab indicator back. */
+  onSettled?: () => void;
 }
 
 /** Live pager on the element the returned ref goes on. */
@@ -91,6 +95,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
         stopAnim = null; finishAnim = null;
         if (dir) flushSync(() => o.current.onStep(dir));
         place(0);
+        o.current.onSettled?.();
       };
       finishAnim = end;
       stopAnim = spring(dx, -dir * w, vx, place, end);
@@ -110,6 +115,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       if (!g.dragging) {
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
+        if (o.current.yieldAtEdge && o.current.canStep && !o.current.canStep(dx < 0 ? 1 : -1)) { g.done = true; return; }
         g.dragging = true;
         el.addEventListener("touchmove", onTouchMove, { passive: false });
         g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
@@ -150,4 +156,24 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     };
   }, []);
   return ref;
+}
+
+/** The bottom bar's drag: the pages move this many tabs per tab width the finger slides along the bar. */
+export const BAR_GAIN = 1.45;
+/** A flick along the bar faster than this (px per ms) turns a page whatever the distance. */
+export const BAR_FLING = 0.3;
+
+/**
+ * Where the pager settles after a slide along the bottom bar: from page [from], the pages now at [pos]
+ * (fractional), the finger leaving at [vx] px/ms. A flick goes on to the next whole page its way
+ * (even after a short travel); otherwise the nearest page. Clamped to 0..[last].
+ */
+export function barTarget(from: number, pos: number, vx: number, last: number): number {
+  let i: number;
+  if (Math.abs(vx) > BAR_FLING && Math.sign(vx) === Math.sign(pos - from || vx)) {
+    i = vx > 0 ? Math.ceil(pos) : Math.floor(pos);
+    // Already sitting on a whole page beyond the start: that's where the flick ends.
+    if (i === from) i += Math.sign(vx);
+  } else i = Math.round(pos);
+  return Math.min(last, Math.max(0, i));
 }

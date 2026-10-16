@@ -375,6 +375,10 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   useEffect(() => { const i = setInterval(() => setNow(nowMinutes()), 60_000); return () => clearInterval(i); }, []);
   const [ghost, setGhost] = useState<{ key: string; start: number; dDay: number; length: number; color: string; isTask: boolean } | null>(null);
   const [pendingMove, setPendingMove] = useState<{ series: Item; day: number; edited: Item } | null>(null);
+  // An empty slot tapped once is only marked; a second tap on the marked slot opens the add panel there.
+  const [armed, setArmedState] = useState<{ day: number; min: number } | null>(null);
+  const armedRef = useRef(armed);
+  const setArmed = (a: { day: number; min: number } | null) => { armedRef.current = a; setArmedState(a); };
 
   // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
   // (like a pager) instead of empty space. Index `count` is the first day in view.
@@ -427,6 +431,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     for (const el of [layer.current, headDays.current, allDayDays.current]) if (el) el.style.transform = "";
     scroller.current?.parentElement?.classList.remove("swiping");
   }, [first]);
+  // A marked slot is forgotten once the panel has opened (or another range is shown).
+  useEffect(() => { if (pending) setArmed(null); }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setArmed(null); }, [first, count]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A moved block keeps its dragged position until the grid has redrawn it in its new place.
   const clearAfterRender = useRef<HTMLElement | null>(null);
@@ -596,7 +603,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           const r = layer.current.getBoundingClientRect();
           const di = Math.max(0, Math.min(daysRef.current.length - 1, Math.floor((e.clientX - r.left) / colW())));
           const min = Math.max(0, Math.min(DAY_MIN - 30, Math.floor((e.clientY - r.top) / pxRef.current / 30) * 30));
-          props.current.onNewAt(daysRef.current[di], min);
+          const day = daysRef.current[di], a = armedRef.current;
+          if (a && a.day === day && a.min === min) { setArmed(null); props.current.onNewAt(day, min); }
+          else setArmed({ day, min });
         }
       }
       end();
@@ -729,6 +738,13 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
               })()}
+              {/* The slot tapped once (tap it again to add there). */}
+              {armed && !pending && all.includes(armed.day) && (
+                <div className="pg-slot armed" style={{
+                  left: `calc(${(all.indexOf(armed.day) - count) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: armed.min * pxPerMin,
+                  height: Math.max(22, 60 * pxPerMin),
+                }}><MIcon name="fAdd" size={18} /></div>
+              )}
               {/* Where the new event goes: only its outline, in its colour, while the panel is open. */}
               {pending && all.includes(pending.day) && (
                 <div className="pg-slot" style={{

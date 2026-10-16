@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_HOUR_HEIGHT, openingHourHeight, pinchHourHeight, zoomScrollTop } from "../src/ui/phone/zoom.ts";
 import { noteLines } from "../src/domain/text.ts";
-import { pageTarget } from "../src/ui/phone/pager.ts";
+import { barTarget, pageTarget } from "../src/ui/phone/pager.ts";
+import { panelTarget, sheetCloses } from "../src/ui/phone/sheet.ts";
 
 test("pinch scales the hour height with the fingers' spread", () => {
   assert.equal(pinchHourHeight(50, 100, 200, 20), 100);
@@ -45,4 +46,38 @@ test("note lines keep bullets, numbers and checkboxes", () => {
     ["NUMBER", "one", 0, 1], ["NUMBER", "two", 0, 2], ["CHECK", "done", 0, 0],
   ]);
   assert.equal(l[6].checked, true);
+});
+
+test("a slide along the bottom bar settles on the nearest page, a flick on the next one", () => {
+  // Slow: the nearest page.
+  assert.equal(barTarget(1, 1.4, 0.05, 4), 1);
+  assert.equal(barTarget(1, 1.6, 0.05, 4), 2);
+  // A quick flick goes on even after a short travel, either way.
+  assert.equal(barTarget(1, 1.15, 0.8, 4), 2);
+  assert.equal(barTarget(2, 1.9, -0.8, 4), 1);
+  // A flick against the slide (the finger came back) doesn't turn the page.
+  assert.equal(barTarget(2, 1.9, 0.8, 4), 2);
+  // Never past the ends.
+  assert.equal(barTarget(4, 4, 1, 4), 4);
+  assert.equal(barTarget(0, 0, -1, 4), 0);
+});
+
+test("the add panel opens or closes after a short pull, and a flick decides", () => {
+  // From small: 60 px up of a 600 px range opens it; 30 px doesn't; a flick up does at once.
+  assert.equal(panelTarget("compact", 0.1, 0, 600, 0), "full");
+  assert.equal(panelTarget("compact", 0.05, 0, 600, 0), "compact");
+  assert.equal(panelTarget("compact", 0.02, 0, 600, -0.6), "full");
+  // From full: a short pull down or a flick down makes it small again.
+  assert.equal(panelTarget("full", 0.9, 0, 600, 0), "compact");
+  assert.equal(panelTarget("full", 0.97, 0, 600, 0), "full");
+  assert.equal(panelTarget("full", 0.98, 0, 600, 0.6), "compact");
+  // Pulled below its small place: closes past 48 px or on a flick down.
+  assert.equal(panelTarget("compact", 0, 50, 600, 0), "close");
+  assert.equal(panelTarget("compact", 0, 20, 600, 0.5), "close");
+  assert.equal(panelTarget("compact", 0, 20, 600, 0), "compact");
+  // Sheets close after 56 px (or a fifth of a short one), or a flick.
+  assert.equal(sheetCloses(60, 500, 0), true);
+  assert.equal(sheetCloses(40, 500, 0), false);
+  assert.equal(sheetCloses(10, 500, 0.5), true);
+  assert.equal(sheetCloses(45, 200, 0), true);
 });

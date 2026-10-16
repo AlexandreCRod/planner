@@ -1,11 +1,13 @@
-// The phone's add panel, after the native GrowingPanel: a small panel that comes up together with the
-// keyboard and sits right on top of it. Dragging it up grows it continuously into the full editor
-// (which is already there underneath, at full size, revealed as the panel grows); it follows the finger
-// and rests anywhere until let go, then finishes opening or springs back by position and speed.
-// Dragged down, it closes. Once open, the editor's own handle drags it back down the same way.
+// The phone's add panel, after the native GrowingPanel: a small panel over the bottom bar (the keyboard
+// only comes up when its title field is tapped, and the panel then rides on top of it). Dragging it up
+// grows it continuously into the full editor (already there underneath, at full size, revealed as the
+// panel grows); it follows the finger exactly (the transform is written straight from the pointer, no
+// redraw) and settles when let go: a short pull or a flick is enough (sheet.ts). Dragged down, it
+// closes. Once open, the editor's own handle drags it back down the same way. A sideways swipe on the
+// small panel switches between Task and Event, the switch's indicator following the finger.
 import { animated, easings, to, useSpring } from "@react-spring/web";
-import { useDrag } from "@use-gesture/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { describe } from "../../domain/recurrence.ts";
 import { formatDate, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
@@ -15,9 +17,15 @@ import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS, newItem } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
 import { go } from "../common.tsx";
-import { FilterChip, MIcon } from "./chrome.tsx";
+import { FilterChip, MIcon, Segmented } from "./chrome.tsx";
+import { pageTarget } from "./pager.ts";
+import { TOUCH_SLOP } from "./press.ts";
+import { swallowNextClick } from "./gesture.ts";
+import { panelTarget } from "./sheet.ts";
 import { AssistChip, ColorPickerDialog, TextButton, showSnackbar } from "./m3.tsx";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
+
+const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
 import { type Draft, PhoneItemEditor, firstAlerts, switchType } from "./PhoneItem.tsx";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 
@@ -53,8 +61,6 @@ export interface SlotPreview { day: number; min: number; end: number; color: str
 
 /** Native: spring(stiffness = 600), critically damped. */
 const SETTLE = { tension: 600, friction: 49 };
-/** 900 dp/s, in px per ms. */
-const FLING = 0.9;
 const DAY_END = 24 * 60 - 1;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /** Close to Android's keyboard animation (fast out, slow in). */
@@ -215,9 +221,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
 
   // ---------- Opening, closing ----------
   useLayoutEffect(() => {
-    // Focus first, in the same tap, so the keyboard comes up with the panel.
-    inputRef.current?.focus({ preventScroll: true });
-    showKeyboard();
+    // The panel comes up on its own: the keyboard only when the title field is tapped.
     api.start({ hidden: 0, config: { duration: 150, easing: easings.easeOutCubic } });
     const t = window.setTimeout(() => setEditorReady(true), 250);
     return () => clearTimeout(t);
@@ -255,50 +259,127 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const grow = () => { if (canGrow) settleTo(1); };
 
   // ---------- The drag ----------
-  // Small, the whole panel drags; grown, only the editor's handle strip does (its content scrolls).
-  const downOnHandle = useRef(false);
-  const dragging = useRef(false);
-  // A tap that wobbles less than the touch slop (8 dp) is still a tap (use-gesture's default of 3 px,
-  // counted along the finger's whole path, swallowed the clicks of real fingers).
-  const bind = useDrag(({ first, delta: [, dy], last, tap, velocity: [, vy], direction: [, dirY] }) => {
-    if (first) dragging.current = !closing.current && (!grownRef.current || downOnHandle.current);
-    if (tap || !dragging.current) return;
-    if (grownRef.current) {
-      // Pulled back down from the full editor: the small panel comes back as it shrinks.
-      grownRef.current = false;
-      (document.activeElement as HTMLElement | null)?.blur?.();
-      setGrown(false);
-    }
-    if (!last) {
-      let p = sp.p.get(), down = sp.down.get();
-      // Finger up: first undo any pull-down, then grow. Finger down: shrink, then pull away.
-      if (dy < 0) {
-        const up = -dy;
-        if (down > 0) down = Math.max(0, down - up);
-        else if (canGrow) p = Math.min(1, p + up / range());
-      } else {
-        if (p > 0) p = Math.max(0, p - dy / range());
-        else down += dy;
+  // Small, the whole panel drags (up and down: grow or close; sideways: Task or Event); grown, only the
+  // editor's handle strip does (its content scrolls). The panel's transform is written here, in the
+  // pointer's own event, so it never trails the finger; the springs are only told where it is.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const typeTrack = useRef<((p: number | null) => void) | null>(null);
+  const live = useRef({ canGrow, type, lineMode, setType: (t: ItemType) => {} });
+  live.current = {
+    canGrow, type: lineMode ? type : d.type, lineMode,
+    setType: (t: ItemType) => { if (lineMode) setType(t); else setDraft((x) => switchType(x, t)); },
+  };
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    type G = { id: number; x0: number; y0: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number; mode: "" | "y" | "x"; p0: number; down0: number; from: "compact" | "full"; segW: number };
+    let g: G | null = null;
+    const panelY = () => {
+      const b = bottomOf(sp.kb.get(), sp.nav.get());
+      const avail = sp.h.get() - b, ch = sp.ch.get();
+      return avail - (ch + sp.p.get() * Math.max(0, avail - ch)) + sp.down.get() + sp.hidden.get() * (ch + b) + sp.lag.get();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (g || closing.current || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      const t = e.target as Element;
+      if (grownRef.current && !t.closest(".gp-drag")) return;
+      if (t.closest(".p-dialog-scrim, .p-menu")) return;
+      const seg = el.querySelector<HTMLElement>(".gp-compact .p-segmented");
+      g = {
+        id: e.pointerId, x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: e.timeStamp, vx: 0, vy: 0, mode: "",
+        p0: sp.p.get(), down0: sp.down.get(), from: grownRef.current ? "full" : "compact", segW: seg ? seg.offsetWidth / TYPES.length : 120,
+      };
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      const dt = e.timeStamp - g.lastT;
+      if (dt > 0) {
+        g.vx = 0.6 * ((e.clientX - g.lastX) / dt) + 0.4 * g.vx;
+        g.vy = 0.6 * ((e.clientY - g.lastY) / dt) + 0.4 * g.vy;
+        g.lastT = e.timeStamp;
       }
-      api.start({ p, down, immediate: true });
-      return;
-    }
-    dragging.current = false;
-    // Decided on release only: where it is, and a fling wins over that.
-    const v = vy * dirY; // px per ms, positive downwards
-    const p = sp.p.get(), down = sp.down.get();
-    if (down > 0) {
-      if (v > FLING || down > sp.ch.get() * 0.35) dismiss();
-      else api.start({ down: 0, config: SETTLE });
-    } else if (p > 0) {
-      const target = v < -FLING ? 1 : v > FLING ? 0 : p > 0.5 ? 1 : 0;
-      settleTo(target, -v / range());
-    }
-  }, { axis: "y", threshold: 8, filterTaps: true, tapsThreshold: 10, pointer: { capture: false } });
+      g.lastX = e.clientX; g.lastY = e.clientY;
+      const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+      if (!g.mode) {
+        if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) {
+          g.mode = "y"; g.y0 += Math.sign(dy) * TOUCH_SLOP;
+          // Caught mid-settle: it carries on from where it is.
+          sp.p.stop(); sp.down.stop();
+          g.p0 = sp.p.get(); g.down0 = sp.down.get();
+        }
+        else if (Math.abs(dx) > TOUCH_SLOP && g.from === "compact") { g.mode = "x"; g.x0 += Math.sign(dx) * TOUCH_SLOP; }
+        else return;
+        try { el.setPointerCapture(e.pointerId); } catch { /* already gone */ }
+        if (g.mode === "y" && g.from === "full") {
+          // Pulled back down from the full editor: the small panel comes back as it shrinks (one redraw).
+          grownRef.current = false;
+          (document.activeElement as HTMLElement | null)?.blur?.();
+          setGrown(false);
+        }
+      }
+      if (g.mode === "x") {
+        const i = TYPES.findIndex(([k]) => k === live.current.type);
+        typeTrack.current?.(i + (e.clientX - g.x0) / g.segW);
+        return;
+      }
+      // Up: first undo any pull-down, then grow. Down: shrink, then pull away.
+      const total = e.clientY - g.y0, r = range();
+      let p = g.p0, down = g.down0;
+      if (total < 0) {
+        const up = -total;
+        down = Math.max(0, g.down0 - up);
+        const rest = up - (g.down0 - down);
+        if (live.current.canGrow) p = Math.min(1, g.p0 + rest / r);
+      } else {
+        p = Math.max(0, g.p0 - total / r);
+        down = g.down0 + Math.max(0, total - (g.p0 - p) * r);
+      }
+      sp.p.set(p);
+      sp.down.set(down);
+      el.style.transform = `translate3d(0,${snapPx(panelY())}px,0)`;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      const cur = g;
+      g = null;
+      if (!cur.mode) return;
+      swallowNextClick();
+      const cancelled = e.type === "pointercancel";
+      if (cur.mode === "x") {
+        const i = TYPES.findIndex(([k]) => k === live.current.type);
+        const dir = cancelled ? 0 : -pageTarget(e.clientX - cur.x0, cur.vx, cur.segW);
+        const next = TYPES[Math.max(0, Math.min(TYPES.length - 1, i + dir))][0];
+        if (next !== live.current.type) flushSync(() => live.current.setType(next));
+        typeTrack.current?.(null);
+        return;
+      }
+      const v = cancelled ? 0 : cur.vy;
+      const target = panelTarget(cur.from, sp.p.get(), sp.down.get(), range(), v);
+      if (target === "close") { dismiss(); return; }
+      if (sp.down.get() > 0) api.start({ down: 0, config: { ...SETTLE, velocity: v } });
+      if (sp.p.get() > 0 || target === "full") settleTo(target === "full" ? 1 : 0, -v / range());
+    };
+    el.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- Pickers (the keyboard steps aside while one is open, and comes back after) ----------
-  const openPick = (p: Pick) => { inputRef.current?.blur(); setPick(p); };
-  const closePick = () => { setPick(null); setColorOpen(false); if (!grownRef.current) { inputRef.current?.focus({ preventScroll: true }); showKeyboard(); } };
+  const typing = useRef(false);
+  const openPick = (p: Pick) => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setPick(p); };
+  const closePick = () => {
+    setPick(null); setColorOpen(false);
+    // The keyboard comes back only if it was up for the title before the picker opened.
+    if (!grownRef.current && typing.current) { inputRef.current?.focus({ preventScroll: true }); showKeyboard(); }
+    typing.current = false;
+  };
   const pickDay = (e: number) => {
     if (lineMode) setOv((o) => ({ ...o, startDay: e }));
     else { const span = (d.endDay ?? d.startDay ?? e) - (d.startDay ?? e); setItem({ startDay: e, endDay: d.type === "EVENT" ? e + span : null }); }
@@ -337,7 +418,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           onClick={() => openPick({ kind: "start" })} />
       )}
       {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
-      <button className="p-assist" onClick={() => { inputRef.current?.blur(); setColorOpen(true); }}>
+      <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
         <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
       </button>
     </div>
@@ -349,8 +430,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
         onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
         onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350) dismiss(); }} />
-      <animated.div className="gp-panel" style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }}
-        onPointerDownCapture={(e) => { downOnHandle.current = !!(e.target as Element).closest(".gp-drag"); }} {...bind()}>
+      <animated.div className="gp-panel" ref={panelRef} style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
         {editorReady && canGrow && (
           <animated.div className={`gp-full ${grown ? "live" : ""}`} style={{ height: availH, opacity: sp.p.to((p) => clamp01(p * 12 - 0.6)) }}>
@@ -361,12 +441,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
         <animated.div ref={compactRef} className={`gp-compact ${lineMode ? "quick" : "slot"} ${grown ? "off" : ""}`} style={{ opacity: sp.p.to((p) => 1 - clamp01(p * 12)) }}
           onMouseDown={keepFocus}>
           <div className="gp-handle" />
+          <Segmented<ItemType> value={lineMode ? type : d.type} options={TYPES} onChange={(t) => live.current.setType(t)} track={typeTrack} />
           {lineMode ? <>
-            <div className="p-seg">
-              {(["TASK", "EVENT", "NOTE"] as ItemType[]).map((t) => (
-                <button key={t} className={type === t ? "on" : ""} onClick={() => setType(t)}>{type === t && <span className="tick">✓</span>}{t[0] + t.slice(1).toLowerCase()}</button>
-              ))}
-            </div>
             <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
               placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
@@ -391,11 +467,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
             <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
               onChange={(e) => setItem({ title: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
             <div className="gp-row">
-              {(["EVENT", "TASK"] as const).map((t) => (
-                <FilterChip key={t} selected={d.type === t} onClick={() => setDraft((x) => switchType(x, t))}>{t === "EVENT" ? "Event" : "Task"}</FilterChip>
-              ))}
               {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
-              <button className="p-assist" onClick={() => { inputRef.current?.blur(); setColorOpen(true); }}>
+              <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
                 <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
               </button>
             </div>

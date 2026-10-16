@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  NARROW_DAYS, TIMER_PRESETS, bundle, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  NARROW_DAYS, TIMER_PRESETS, bundle, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts";
@@ -32,6 +32,11 @@ export function openAlarmSection(section: string) {
   wanted = s;
   wantListeners.forEach((l) => l());
 }
+
+// The shell's + button (fixed over every page) asks the Alarms page what to add.
+const addMenuListeners = new Set<() => void>();
+/** Opens the Alarms page's "what to add" menu (from the + button). */
+export function openAlarmAddMenu() { addMenuListeners.forEach((l) => l()); }
 
 /** Dialogs and sheets go to the top of the page, so the sliding sections don't carry or clip them. */
 const Layer = ({ children }: { children: ReactNode }) => createPortal(children, document.body);
@@ -138,6 +143,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const tabs = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLSpanElement>(null);
   const stopSlide = useRef<(() => void) | null>(null);
+  useEffect(() => { const open = () => setMenu(true); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
   /** Puts the tab indicator under the label at [p] (between two tabs while sliding). */
   const placeIndicator = (p: number) => {
@@ -221,8 +227,8 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           ))}
         </div>
       </div>
+      {/* Where the shell's + button sits: its menu opens above it. */}
       <div className="p-menu-anchor pa-fab-anchor">
-        <button className="p-fab pa-fab" aria-label="Add" onClick={() => setMenu(true)}><MIcon name="fAdd" /></button>
         <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
           { label: "New alarm", icon: "oAlarm", onClick: newAlarm },
           { label: "Start a timer", icon: "oTimer", onClick: () => { show(1); setNewTimer(true); } },
@@ -487,9 +493,10 @@ function StopwatchPane({ active }: { active: boolean }) {
   const total = elapsed(sw, now);
   const lengths = lapLengths(sw.laps);
   const run = (a: "start" | "pause" | "lap" | "reset") => void act(native.stopwatch(a));
+  const shown = stopwatchParts(total);
   return (
     <div className="pa-scroll pa-sw">
-      <div className="pa-sw-time">{formatDuration(total, true)}</div>
+      <div className="pa-sw-time">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
       <div className="pa-buttons center">
         {running ? <>
           <button className="p-outlined-btn" onClick={() => run("lap")}>Lap</button>

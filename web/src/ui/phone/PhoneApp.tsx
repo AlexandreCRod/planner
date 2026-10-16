@@ -3,6 +3,7 @@
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
 import { animated, useSpring, type SpringValue } from "@react-spring/web";
 import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
@@ -25,7 +26,8 @@ import "./phone.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
 import { hasAlarms } from "../../alarms/native.ts";
-import { PermissionHost, PhoneAlarms, openAlarmSection } from "./PhoneAlarms.tsx";
+import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
+import { BAR_GAIN, barTarget, spring } from "./pager.ts";
 import { InviteHost } from "./InviteHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
@@ -38,8 +40,8 @@ const TABS: { key: string; label: string }[] = [
   ...(hasAlarms ? [{ key: "alarms", label: "Alarms" }] : []),
 ];
 const LAST = TABS.length - 1;
-/** Two taps on the same tab closer than this reset its page (HomeScreen.kt). */
-const DOUBLE_TAP_MS = 400;
+/** Two taps on the same tab closer than this (finger lifts, ms) reset its page (HomeScreen.kt). */
+const DOUBLE_TAP_MS = 350;
 /** Compose's pager snap: stiffness 400, critically damped. */
 const PAGER_SPRING = { tension: 400, friction: 40 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -76,6 +78,7 @@ export function PhoneApp() {
       if (r !== shownRef.current) { shownRef.current = r; selectListeners.current.forEach((l) => l(r)); }
     },
   }));
+  const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
   // The outline the calendar draws where a new event from a slot will go (it follows the panel).
   const [preview, setPreview] = useState<SlotPreview | null>(null);
@@ -108,20 +111,46 @@ export function PhoneApp() {
     if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", `#/${TABS[i].key}`);
   };
 
-  /** Back to the page's base view, like a double tap on a native tab. */
+  /**
+   * Back to the page's base view, like a double tap on a native tab. On Today and Calendar, when that
+   * changes the day shown, today slides in as if swiped back to: a still copy of the old view moves out
+   * on one side while the new one comes in from the other, on the pager's spring.
+   */
   const resetPage = (i: number) => {
     const key = TABS[i].key;
+    const t = todayEpoch();
+    const from = key === "today" ? todayViewedDay() : key === "calendar" ? calendarSelectedDay() : t;
+    const page = pageEls.current[i];
+    const AREA = ".p-daypager, .p-calbody";
+    const old = from !== t ? page?.querySelector<HTMLElement>(AREA) : null;
+    const ghost = old && page ? stillCopy(old, page) : null;
     if (key === "today") resetToday();
     if (key === "calendar") resetCalendar();
-    setResets((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 }));
+    flushSync(() => setResets((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 })));
+    const area = page?.querySelector<HTMLElement>(AREA);
+    if (!ghost || !area) { ghost?.remove(); return; }
+    const w = area.offsetWidth, dir = t > from ? 1 : -1;
+    const place = (x: number) => {
+      area.style.transform = x ? `translate3d(${x}px,0,0)` : "";
+      ghost.style.transform = `translate3d(${x - dir * w}px,0,0)`;
+    };
+    place(dir * w);
+    spring(dir * w, 0, 0, place, () => { place(0); ghost.remove(); });
   };
 
-  /** A tap on a tab goes there; a second tap on it within 400 ms puts it back to its base view. */
+  /**
+   * A tap on a tab (taken as the finger lifts, never held back to wait for a second one) goes there; a
+   * second tap on the same tab within 350 ms puts it back to its base view.
+   */
   const onTabTap = (i: number) => {
     const now = performance.now();
     const prev = lastTap.current;
+    if (prev.i === i && now - prev.at < DOUBLE_TAP_MS && tabRef.current === i) {
+      lastTap.current = { i: -1, at: 0 };
+      resetPage(i);
+      return;
+    }
     lastTap.current = { i, at: now };
-    if (prev.i === i && now - prev.at < DOUBLE_TAP_MS && tabRef.current === i) { resetPage(i); return; }
     settle(i, 0, true);
   };
 
@@ -161,16 +190,18 @@ export function PhoneApp() {
       <div className="p-pager">
         <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
           {TABS.map((t, i) => (
-            <div key={t.key} className="p-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
+            <div key={t.key} className="p-page" ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
               {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay} />}
             </div>
           ))}
         </animated.div>
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
-      {/* The Alarms page has its own + button, which asks what to add. */}
-      {!overlay && TABS[tab].key !== "alarms" && (
-        <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
+      {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what to add. */}
+      {!overlay && (
+        <button className="p-fab" aria-label="Add" onClick={() => { if (TABS[tabRef.current].key === "alarms") openAlarmAddMenu(); else openAdd(); }}>
+          <MIcon name="fAdd" />
+        </button>
       )}
       {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
       <SnackbarHost raised={!!overlay} />
@@ -243,6 +274,8 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   const pill = useRef<HTMLSpanElement>(null);
   const settleRef = useRef(onSettle);
   settleRef.current = onSettle;
+  const tapRef = useRef(onTap);
+  tapRef.current = onTap;
   const day = ymd(todayEpoch()).d;
   // M3's indicator: on a jump it grows from the middle of the new tab and fades in.
   pop.current = () => {
@@ -271,19 +304,22 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
-      if (!g.sliding) pill.current?.classList.remove("pop");
+      if (!g.sliding) { pill.current?.classList.remove("pop"); g.x0 += Math.sign(dx) * TOUCH_SLOP; }
       g.sliding = true;
-      pos.start(clamp(g.from + dx / tabW(), 0, LAST), { immediate: true });
+      // The pages go a little further than the finger, so a short slide turns a page.
+      pos.start(clamp(g.from + (BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST), { immediate: true });
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       if (g.sliding) {
         swallowNextClick();
-        const target = clamp(g.from + (g.lastX - g.x0) / tabW(), 0, LAST);
-        // Where the fling would carry it: the speed (tabs per ms) over about a sixth of a second.
-        const v = g.vx / tabW();
-        const i = clamp(Math.round(target + v * 160), Math.floor(target), Math.ceil(target));
-        settleRef.current(i, v);
+        const at = clamp(g.from + (BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
+        // A flick turns a page whatever the distance; otherwise the nearest one.
+        settleRef.current(barTarget(g.from, at, g.vx, LAST), (BAR_GAIN * g.vx) / tabW());
+      } else if (e.type === "pointerup") {
+        // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
+        const tabEl = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab");
+        if (tabEl && el.contains(tabEl)) tapRef.current(Number(tabEl.dataset.i));
       }
       stop();
     };
@@ -305,7 +341,8 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
         <span className="p-pill" ref={pill} />
       </animated.span>
       {TABS.map((t, i) => (
-        <button key={t.key} className={`p-tab ${selected === i ? "on" : ""}`} onClick={() => onTap(i)} aria-label={t.label} aria-current={selected === i ? "page" : undefined}>
+        <button key={t.key} data-i={i} className={`p-tab ${selected === i ? "on" : ""}`} aria-label={t.label} aria-current={selected === i ? "page" : undefined}
+          onClick={(e) => { if (e.detail === 0) onTap(i); }}>
           <span className="p-tab-icon">
             <span className="p-ico off"><TabGlyph tab={t.key} selected={false} day={day} /></span>
             <span className="p-ico sel"><TabGlyph tab={t.key} selected day={day} /></span>
@@ -315,4 +352,22 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       ))}
     </nav>
   );
+}
+
+/**
+ * A still copy of [el] laid over it inside [host] (scroll positions included), to slide away while the
+ * real one is drawn afresh underneath.
+ */
+function stillCopy(el: HTMLElement, host: HTMLElement): HTMLElement {
+  const copy = el.cloneNode(true) as HTMLElement;
+  const a = el.getBoundingClientRect(), h = host.getBoundingClientRect();
+  Object.assign(copy.style, {
+    position: "absolute", left: `${a.left - h.left}px`, top: `${a.top - h.top}px`, width: `${a.width}px`, height: `${a.height}px`,
+    margin: "0", zIndex: "3", pointerEvents: "none", background: "var(--bg)", flex: "none",
+  });
+  copy.setAttribute("aria-hidden", "true");
+  host.appendChild(copy);
+  const from = el.querySelectorAll<HTMLElement>("*"), to = copy.querySelectorAll<HTMLElement>("*");
+  from.forEach((x, k) => { if ((x.scrollTop || x.scrollLeft) && to[k]) { to[k].scrollTop = x.scrollTop; to[k].scrollLeft = x.scrollLeft; } });
+  return copy;
 }

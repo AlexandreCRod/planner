@@ -12,6 +12,8 @@ export interface SwipeHandlers {
   onMove: (dx: number) => void;
   /** Lifted (or the browser took the touch): [dx] since touch-down and the speed in px/ms. */
   onEnd: (dx: number, vx: number) => void;
+  /** Whether a drag that has just passed the slop this way ([dx] < 0: leftwards) is this one's to take. */
+  accept?: (dx: number) => boolean;
 }
 
 /** Drops the next click if it comes within a moment (the one a drag ends in, with a mouse). */
@@ -51,6 +53,7 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
       if (!g.dragging) {
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
+        if (h.current.accept && !h.current.accept(dx)) { g.done = true; return; }
         g.dragging = true;
         h.current.onStart?.();
       }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   EVERY_DAY, WEEKDAYS, buildMirror, bundle, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
-  untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
+  stopwatchParts, untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
 } from "../src/domain/alarms.ts";
 import { epochOf } from "../src/domain/dates.ts";
 import { parseClockCommand, parseQuickAdd } from "../src/domain/quickadd.ts";
@@ -140,4 +140,10 @@ test("the item quick-add line reads alarms as before", () => {
   assert.deepEqual(r.alerts, [[0, "ALARM"]]);
   assert.equal(parseQuickAdd("Buy alarm clock", mon).title, "Buy alarm clock");
   assert.equal(parseQuickAdd("Kitchen timer batteries", mon).title, "Kitchen timer batteries");
+});
+
+test("the stopwatch reads 00:00:00 at rest, two digits each", () => {
+  assert.deepEqual(stopwatchParts(0), { main: "00:00:00", cs: "00" });
+  assert.deepEqual(stopwatchParts(3_723_456), { main: "01:02:03", cs: "45" });
+  assert.deepEqual(stopwatchParts(-5), { main: "00:00:00", cs: "00" });
 });

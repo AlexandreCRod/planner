@@ -17,7 +17,9 @@ import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
-import { SwipeToTrash } from "./SwipeRow.tsx";
+import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
+import { spring, useSwipePager } from "./pager.ts";
+import { flushSync } from "react-dom";
 
 // ---------- Tasks ----------
 
@@ -32,18 +34,61 @@ function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
   }
 }
 
+/**
+ * Tasks: Scheduled and To-do side by side. A sideways swipe turns between them, live like the other
+ * pagers (the lists follow the finger, the switch's indicator rides along, release settles). The rows'
+ * own swipe to the trash keeps the other way: on Scheduled a swipe left turns to To-do and a swipe right
+ * removes a row; on To-do a swipe right turns back and a swipe left removes one.
+ */
 export const PhoneTasks = memo(function PhoneTasks() {
   const [todo, setTodo] = useState(() => localStorage.getItem("tasksTab") === "todo");
-  const showTab = (v: "scheduled" | "todo") => { setTodo(v === "todo"); localStorage.setItem("tasksTab", v); };
+  const index = todo ? 1 : 0;
+  const idx = useRef(index);
+  idx.current = index;
+  const strip = useRef<HTMLDivElement>(null);
+  const track = useRef<((p: number | null) => void) | null>(null);
+  const stopSlide = useRef<(() => void) | null>(null);
+  const setIndex = (i: number) => { setTodo(i === 1); localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); };
+  // A tap on the switch slides there on the pager's spring.
+  const showTab = (v: "scheduled" | "todo") => {
+    const i = v === "todo" ? 1 : 0, from = idx.current;
+    if (i === from) return;
+    stopSlide.current?.();
+    const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
+    flushSync(() => setIndex(i));
+    if (!el || !w) return;
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
+    stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
+  };
+  const pager = useSwipePager<HTMLDivElement>({
+    layers: () => [strip.current],
+    onStep: (d) => setIndex(Math.min(1, Math.max(0, idx.current + d))),
+    canStep: (d) => idx.current + d >= 0 && idx.current + d <= 1,
+    yieldAtEdge: true,
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => track.current?.(null),
+    allow: (t) => !t.closest("input, textarea, .p-chiprow"),
+  });
   return (
     <Scaffold title="Tasks" flush>
       <div className="p-seg-wrap">
-        <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} />
+        <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} track={track} />
       </div>
-      <div className="p-list p-rows">{todo ? <TodoList /> : <ScheduledList />}</div>
+      <div className="p-tabpager" ref={pager}>
+        <div className="p-tabstrip" ref={strip} style={{ left: `${-index * 100}%` }}>
+          <div className="p-list p-rows p-tabpage" style={{ left: 0 }} aria-hidden={todo}>
+            <TrashSwipeWay.Provider value={swipeRight}><ScheduledList /></TrashSwipeWay.Provider>
+          </div>
+          <div className="p-list p-rows p-tabpage" style={{ left: "100%" }} aria-hidden={!todo}>
+            <TrashSwipeWay.Provider value={swipeLeft}><TodoList /></TrashSwipeWay.Provider>
+          </div>
+        </div>
+      </div>
     </Scaffold>
   );
 });
+const swipeRight = (dx: number) => dx > 0;
+const swipeLeft = (dx: number) => dx < 0;
 
 function ScheduledList() {
   const s = useSnapshot();

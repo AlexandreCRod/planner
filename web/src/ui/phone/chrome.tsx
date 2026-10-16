@@ -1,7 +1,7 @@
 // Shared phone chrome, drawn like the native app's Material 3 Compose pieces: the top app bar, icon
 // buttons, filter chips, segmented buttons, section headers, list rows, menus and dialogs. Sizes are
 // Compose's (1 CSS px = 1 dp) and text uses the M3 type scale classes in phone.css (.t-title-large...).
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { go } from "../common.tsx";
 import { ICONS } from "./icons.ts";
 import { pushBack } from "./native.ts";
@@ -76,13 +76,31 @@ export function ChipRow({ children, className = "" }: { children: ReactNode; cla
   return <div className={`p-chiprow ${className}`}>{children}</div>;
 }
 
-/** Material 3 single-choice segmented buttons (40 dp, full width, a tick on the chosen one). */
-export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+/**
+ * Single-choice segmented buttons (40 dp, full width): a calm indicator sits under the chosen one and
+ * slides to the next. [track], when given, receives a function that moves the indicator to a
+ * fractional position (a page being dragged) without redrawing anything, and null puts it back.
+ */
+export function Segmented<T extends string>({ value, options, onChange, track }: {
+  value: T; options: [T, string][]; onChange: (v: T) => void; track?: MutableRefObject<((p: number | null) => void) | null>;
+}) {
+  const ind = useRef<HTMLSpanElement>(null);
+  const index = Math.max(0, options.findIndex(([k]) => k === value));
+  const indexRef = useRef(index);
+  indexRef.current = index;
+  useLayoutEffect(() => { const el = ind.current; if (el) el.style.transform = `translate3d(${index * 100}%,0,0)`; }, [index]);
+  if (track) track.current = (p) => {
+    const el = ind.current;
+    if (!el) return;
+    el.style.transition = p === null ? "" : "none";
+    const at = p === null ? indexRef.current : Math.max(0, Math.min(options.length - 1, p));
+    el.style.transform = `translate3d(${at * 100}%,0,0)`;
+  };
   return (
     <div className="p-segmented" role="radiogroup">
+      <span className="p-seg-ind" ref={ind} style={{ width: `${100 / options.length}%` }} aria-hidden="true" />
       {options.map(([k, l]) => (
         <button key={k} role="radio" aria-checked={value === k} className={value === k ? "on" : ""} onClick={() => onChange(k)}>
-          <span className="p-seg-check">{value === k && <MIcon name="fCheck" size={18} />}</span>
           <span>{l}</span>
         </button>
       ))}

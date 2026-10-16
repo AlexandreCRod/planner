@@ -147,6 +147,14 @@ export function formatDuration(ms: number, hundredths = false): string {
   return hundredths ? `${base}.${p2(Math.floor(total / 10) % 100)}` : base;
 }
 
+/** The stopwatch's big readout: hours, minutes and seconds always two digits ("00:00:00"), and the hundredths. */
+export function stopwatchParts(ms: number): { main: string; cs: string } {
+  const total = Math.max(0, Math.floor(ms));
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const h = Math.floor(total / 3_600_000), m = Math.floor(total / 60_000) % 60, s = Math.floor(total / 1000) % 60;
+  return { main: `${p2(h)}:${p2(m)}:${p2(s)}`, cs: p2(Math.floor(total / 10) % 100) };
+}
+
 /** What's left on a timer at [now]. */
 export const timerLeft = (t: { endAt: number | null; remainingMs: number }, now: number) =>
   t.endAt !== null ? Math.max(0, t.endAt - now) : t.remainingMs;

@@ -922,3 +922,26 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-pick .grow { flex: 1; min-width: 0; }
 .phone .pe-pick .pe-dot { width: 8px; height: 8px; margin: 0; }
 .phone .pe-pick-type { flex: none; font-size: 12px; line-height: 16px; color: var(--muted); }
+
+/* ---------- Alarms: the shell's + button stands in for the page's own (fixed while pages slide) ---------- */
+.phone .pa-fab-anchor { width: 56px; height: 56px; pointer-events: none; }
+.phone .pa-fab-anchor > * { pointer-events: auto; }
+/* Stopwatch: 00:00:00 centred on the screen, the hundredths smaller beside it, digits that don't shift. */
+.phone .pa-sw-time { align-self: stretch; text-align: center; padding: 40px 16px 24px; font-family: Roboto, system-ui, sans-serif; font-weight: 300; font-size: 56px; line-height: 68px; font-variant-numeric: tabular-nums; }
+.phone .pa-sw-cs { font-size: 28px; color: var(--muted); }
+.phone .pa-presets { justify-content: center; }
+
+/* Segmented buttons: one calm indicator under the chosen segment, sliding between them (and following a
+   finger dragging the pages they choose), instead of a filled segment with a tick. */
+.phone .p-segmented { position: relative; border-color: var(--line); }
+.phone .p-segmented button { position: relative; z-index: 1; background: none !important; color: var(--muted); transition: color .2s; }
+.phone .p-segmented button.on { color: var(--text); }
+.phone .p-segmented button + button { border-left: 0; }
+.phone .p-seg-ind { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 20px; background: var(--p-sec-container); transition: transform .25s cubic-bezier(.2, 0, 0, 1); will-change: transform; }
+
+/* ---------- Tasks: Scheduled and To-do side by side, turned with a sideways swipe ---------- */
+.phone .p-tabpager { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.phone .p-tabstrip { position: absolute; top: 0; bottom: 0; width: 100%; }
+.phone .p-tabpage { position: absolute; top: 0; bottom: 0; width: 100%; contain: layout paint style; background: var(--bg); touch-action: pan-y; }
+/* The slot tapped once: an outline in the accent with a small +; a second tap there adds an event. */
+.phone .pg-slot.armed { border-color: var(--p-primary); display: grid; place-items: center; color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 8%, transparent); }

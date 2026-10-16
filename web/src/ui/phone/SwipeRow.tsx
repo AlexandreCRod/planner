@@ -2,7 +2,7 @@
 // touch slop the row follows the finger over a red strip with a bin; let go past 40% of the width (or
 // flung) it slides out, the gap closes and the item goes to the trash with an Undo snackbar. Less, and
 // it springs back. Vertical scrolling and taps are untouched (see gesture.ts).
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, createContext, useContext, useRef } from "react";
 import type { Item } from "../../domain/types.ts";
 import { MIcon } from "./chrome.tsx";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -10,10 +10,18 @@ import { trashWithUndo } from "./PhoneItem.tsx";
 
 const EASE = "cubic-bezier(.2, 0, 0, 1)";
 
+/**
+ * Which way rows may be swiped away ([dx] < 0: leftwards). On the Tasks page the other way turns the
+ * page (Scheduled ⇄ To-do), so each list leaves its rows only the way that has no page.
+ */
+export const TrashSwipeWay = createContext<(dx: number) => boolean>(() => true);
+
 export function SwipeToTrash({ item, children }: { item: Item; children: ReactNode }) {
   const front = useRef<HTMLDivElement>(null);
   const gone = useRef(false);
+  const way = useContext(TrashSwipeWay);
   const ref = useHorizontalSwipe<HTMLDivElement>({
+    accept: way,
     onStart: () => {
       const f = front.current;
       if (!f || gone.current) return;
