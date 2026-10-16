@@ -8,7 +8,7 @@
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { swallowNextClick } from "./gesture.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
 
 /** Compose's pager fling threshold, 400 dp/s, in px per ms. */
@@ -104,6 +104,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       if (!g.dragging) {
+        if (selectingText()) { g.done = true; return; }
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
         if (o.current.yieldAtEdge && o.current.canStep && !o.current.canStep(dx < 0 ? 1 : -1)) { g.done = true; return; }
@@ -135,6 +136,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       if (o.current.allow && !o.current.allow(e.target as Element)) return;
+      if (textTouch(e.target)) return; // selecting or editing text: the browser's
       // A finger landing while a page is still settling finishes that at once.
       if (stopAnim) { stopAnim(); finishAnim?.(); }
       g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vt: new VelocityTracker(), lastX: e.clientX, dx: 0 };

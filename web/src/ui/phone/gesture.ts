@@ -3,7 +3,7 @@
 // that wobbles a little is still a tap; once a drag has started, the click it would end in is dropped.
 // No pointer capture and no preventDefault: the browser keeps vertical scrolling (touch-action: pan-y).
 import { useEffect, useRef } from "react";
-import { TOUCH_SLOP } from "./press.ts";
+import { TOUCH_SLOP, textTouch } from "./press.ts";
 
 export interface SwipeHandlers {
   /** The drag has started (past the slop). */
@@ -63,6 +63,7 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
     const onCancel = (e: PointerEvent) => { if (g && e.pointerId === g.id) finish(true); };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      if (textTouch(e.target)) return; // selecting or editing text: the browser's
       g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vx: 0, lastX: e.clientX, lastT: e.timeStamp };
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });

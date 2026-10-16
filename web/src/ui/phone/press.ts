@@ -142,6 +142,24 @@ function endHold(e: PointerEvent, moved: boolean) {
 /** Where text may be selected on the phone: fields and the note editor. */
 const EDITABLE = "input, textarea, [contenteditable]:not([contenteditable=false])";
 
+/** Text is selected somewhere (the page's own text, or inside a field). */
+export function selectingText(): boolean {
+  const s = document.getSelection();
+  if (s && !s.isCollapsed) return true;
+  const a = document.activeElement;
+  try {
+    return (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) && a.selectionStart !== null && a.selectionStart !== a.selectionEnd;
+  } catch { return false; }
+}
+
+/**
+ * A touch that's about text, which the app's own drags (pages, sheets, swipes) leave to the browser:
+ * it starts in a field or the note editor, or text is selected.
+ */
+export function textTouch(target: EventTarget | null): boolean {
+  return (target instanceof Element && !!target.closest(EDITABLE)) || selectingText();
+}
+
 let started = false;
 export function startPressFeedback() {
   if (started) return;

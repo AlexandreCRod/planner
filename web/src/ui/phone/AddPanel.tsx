@@ -20,7 +20,7 @@ import { go } from "../common.tsx";
 import { FilterChip, MIcon, Segmented } from "./chrome.tsx";
 import { SWIPE_GAIN, pageTarget } from "./pager.ts";
 import { VelocityTracker } from "./motion.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { TOUCH_SLOP, selectingText } from "./press.ts";
 import { swallowNextClick } from "./gesture.ts";
 import { panelTarget } from "./sheet.ts";
 import { AssistChip, ColorPickerDialog, TextButton, showSnackbar } from "./m3.tsx";
@@ -285,6 +285,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       const t = e.target as Element;
       if (grownRef.current && !t.closest(".gp-drag")) return;
       if (t.closest(".p-dialog-scrim, .p-menu")) return;
+      if (selectingText()) return; // text selected in the field: the browser's
       const seg = el.querySelector<HTMLElement>(".gp-compact .p-segmented");
       g = {
         id: e.pointerId, x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: e.timeStamp, vx: 0, vy: 0, vt: new VelocityTracker(), mode: "",
@@ -293,6 +294,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     };
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
+      if (!g.mode && selectingText()) { g = null; return; }
       const dt = e.timeStamp - g.lastT;
       if (dt > 0) {
         g.vx = 0.6 * ((e.clientX - g.lastX) / dt) + 0.4 * g.vx;
