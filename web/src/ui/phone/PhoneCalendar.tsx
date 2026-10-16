@@ -226,9 +226,8 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
                   const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
                   const isTask = o.item.type === "TASK";
                   return (
-                    <span key={`${o.item.id}_${o.day}`} className="p-mchip" style={{
-                      background: isTask ? `color-mix(in srgb, ${c} 15%, transparent)` : c, color: isTask ? c : onColor(c),
-                      textDecoration: o.completed ? "line-through" : undefined,
+                    <span key={`${o.item.id}_${o.day}`} className={`p-mchip ${isTask ? "task" : ""}`} style={{
+                      ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined,
                     }}>{displayTitle(o.item)}</span>
                   );
                 })}
@@ -734,7 +733,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                 return (
                   <div className="pg-ghost" style={{
                     left: `${di * colPct}%`, width: `${colPct}%`, top: ghost.start * pxPerMin, height: Math.max(18, ghost.length * pxPerMin),
-                    borderColor: ghost.color, color: ghost.color, background: `color-mix(in srgb, ${ghost.color} 22%, transparent)`,
+                    ["--c" as string]: ghost.color,
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
               })()}
@@ -788,10 +787,9 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
   const h = Math.max(14, (p.end - p.start) * pxPerMin);
   const tiny = h < 22;
   return (
-    <div className={`pg-block ${tiny ? "tiny" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
+    <div className={`pg-block ${tiny ? "tiny" : ""} ${isTask ? "task" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
       style={{
-        top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`,
-        ["--c" as string]: c, background: isTask ? `color-mix(in srgb, ${c} 25%, var(--surface))` : c, color: isTask ? c : onColor(c),
+        top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`, ["--c" as string]: c,
       }}>
       <b className={h >= 36 ? "two" : ""} style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>{displayTitle(p.o.item)}</b>
       {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
@@ -803,8 +801,8 @@ function AllDayChip({ o, s }: { o: Occurrence; s: Snapshot }) {
   const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
   const isTask = o.item.type === "TASK";
   return (
-    <div className="pg-chip" role="button" onClick={() => openItem(o.item, o.day)}
-      style={{ background: isTask ? `color-mix(in srgb, ${c} 18%, transparent)` : c, color: isTask ? c : onColor(c), textDecoration: o.completed ? "line-through" : undefined }}>
+    <div className={`pg-chip ${isTask ? "task" : ""}`} role="button" onClick={() => openItem(o.item, o.day)}
+      style={{ ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined }}>
       {displayTitle(o.item)}
     </div>
   );

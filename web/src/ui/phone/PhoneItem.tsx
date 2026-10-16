@@ -607,7 +607,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <div className="grow">
             <button className="pe-title" onClick={() => setEditing("title")}>{item.title.trim() || "Untitled"}</button>
             <span className="p-menu-anchor start">
-              <button className="pe-cat" style={{ color: category ? color : undefined }} onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
+              <button className="pe-cat" onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
               <DropdownMenu open={catMenu} onClose={() => setCatMenu(false)} items={categoryItems(s, (c) => commit({ ...item, categoryId: c }))} />
             </span>
           </div>
@@ -616,7 +616,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {!isEvent && (
           <div className="pe-done" role="button" onClick={() => toggleCompletion(id, completion, !done)}>
             <Checkbox checked={done} color={color} onChange={(v) => toggleCompletion(id, completion, v)} />
-            <span style={{ color: done ? color : undefined }}>{done ? "Done" : "Mark done"}{forDay}</span>
+            <span>{done ? "Done" : "Mark done"}{forDay}</span>
           </div>
         )}
 

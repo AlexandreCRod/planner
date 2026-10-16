@@ -177,7 +177,7 @@ function RoutineSection({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; d
             <span className="title ellipsis">{e.item.title || "Untitled"}</span>
             {e.status === "MISSED" && <span className="missed">Missed</span>}
             {e.item.startMin !== null && <span className="time">{formatTime(e.item.startMin)}</span>}
-            {st && st.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={16} color="#FF7043" />{st.current}</span>}
+            {st && st.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={16} />{st.current}</span>}
           </div>
         );
       })}

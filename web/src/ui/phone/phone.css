@@ -956,3 +956,60 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
   animation: p-fade .1s linear; transition: opacity .15s linear;
 }
 .phone .p-tooltip.out { opacity: 0; }
+
+/* ---------- Calmer colours ----------
+   Neutral grey surfaces and text, one muted accent (the chosen accent mixed toward grey), and item
+   colours only as small markers: a thin stripe on calendar blocks and chips (on a lightly tinted
+   neutral surface, with ordinary text), the dot and bar on rows. Later rules here override the
+   Material roles above for light, dark and the phone's own dark switch alike. */
+html.phone {
+  --p-primary: color-mix(in oklab, var(--p-acc-light, #1a73e8) 66%, #6b6f76);
+  --p-primary-container: color-mix(in oklab, var(--p-acc-light-container, #d3e3fd) 50%, #e8e9eb);
+  --p-on-primary-container: #1f2328;
+  --p-sec-container: color-mix(in oklab, var(--p-acc-light-container, #d3e3fd) 42%, #e4e5e8);
+  --p-on-sec-container: #1f2328;
+  --bg: #fafafa; --surface: #fafafa; --surface-2: #ececed;
+  --p-sc-lowest: #ffffff; --p-sc-low: #f4f4f5; --p-sc: #efeff0; --p-sc-high: #e9e9ea; --p-sc-highest: #e3e3e5;
+  --text: #1c1c1e; --muted: #4c4d52; --p-outline: #7b7c82; --line: #d2d3d6;
+  --p-ripple: rgb(28 28 30 / 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  html.phone:not([data-theme="light"]) {
+    --p-primary: color-mix(in oklab, var(--p-acc-dark, #a8c7fa) 68%, #9da1a8);
+    --p-primary-container: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 40%, #2d2e31);
+    --p-on-primary-container: #e8e9ec;
+    --p-sec-container: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 34%, #333438);
+    --p-on-sec-container: #e8e9ec;
+    --bg: #131314; --surface: #131314; --surface-2: #2a2a2c;
+    --p-sc-lowest: #0e0e0f; --p-sc-low: #1b1b1d; --p-sc: #1f1f21; --p-sc-high: #2a2a2c; --p-sc-highest: #343437;
+    --text: #e5e5e7; --muted: #c3c4c8; --p-outline: #8f9096; --line: #45464a; --p-ripple: rgb(229 229 231 / 0.1);
+  }
+}
+html.phone[data-theme="dark"] {
+  --p-primary: color-mix(in oklab, var(--p-acc-dark, #a8c7fa) 68%, #9da1a8);
+  --p-primary-container: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 40%, #2d2e31);
+  --p-on-primary-container: #e8e9ec;
+  --p-sec-container: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 34%, #333438);
+  --p-on-sec-container: #e8e9ec;
+  --bg: #131314; --surface: #131314; --surface-2: #2a2a2c;
+  --p-sc-lowest: #0e0e0f; --p-sc-low: #1b1b1d; --p-sc: #1f1f21; --p-sc-high: #2a2a2c; --p-sc-highest: #343437;
+  --text: #e5e5e7; --muted: #c3c4c8; --p-outline: #8f9096; --line: #45464a; --p-ripple: rgb(229 229 231 / 0.1);
+}
+/* Section headers in plain text colours, not the accent. */
+.phone .p-section, .phone .today-list .section, .phone .p-agenda-day { color: var(--muted); }
+/* Calendar: a tinted neutral block with a thin stripe in the item's colour; tasks lighter still. */
+.phone .pg-block { background: color-mix(in srgb, var(--c) 16%, var(--p-sc-low)); color: var(--text); padding-left: 7px; }
+.phone .pg-block.task { background: color-mix(in srgb, var(--c) 8%, var(--p-sc-low)); }
+.phone .pg-block::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.phone .pg-block.tiny { padding-left: 6px; }
+.phone .pg-chip, .phone .p-mchip { background: color-mix(in srgb, var(--c) 14%, var(--p-sc-low)); color: var(--text); box-shadow: inset 2px 0 0 var(--c); padding-left: 4px; }
+.phone .pg-chip.task, .phone .p-mchip.task { background: color-mix(in srgb, var(--c) 7%, var(--p-sc-low)); }
+.phone .pg-ghost { border-color: var(--p-outline); color: var(--text); background: color-mix(in srgb, var(--c) 14%, var(--p-sc-low)); box-shadow: inset 3px 0 0 var(--c); }
+/* Rows: tags in neutral grey (late and missed stay red), the repeat badge and streak in grey, ticks in the accent. */
+.phone :is(.today-list, .p-rows) .pill { color: var(--muted) !important; background: var(--p-sc-high) !important; }
+.phone :is(.today-list, .p-rows) .pill[style*="--danger"] { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
+.phone :is(.today-list, .p-rows) .rep { color: var(--muted) !important; background: var(--p-sc-high) !important; }
+.phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked, .phone .p-checkbox:checked { border-color: var(--p-primary); background-color: var(--p-primary); }
+.phone .p-routine .streak { color: var(--muted); }
+/* The add button: a quiet raised surface with the accent's icon. */
+.phone .p-fab { background: var(--p-sc-high); color: var(--p-primary); }
