@@ -1108,3 +1108,17 @@ html.phone[data-theme="dark"] {
 .phone .pa-city .t-title-medium { font-size: 15px; line-height: 22px; }
 .phone .pa-city .pa-time26 { font-size: 23px; line-height: 28px; }
 .phone .pa-city .pa-wx { height: 36px; font-size: 13px; }
+
+/* The calendar slot tapped once: a soft rounded block in the muted accent with its hour and a +,
+   springing in and gliding between slots (PhoneCalendar's TimeGrid writes its transform). */
+.phone .pg-slot { border-color: var(--p-outline); }
+.phone .pg-slot.armed {
+  left: 0; top: 0; z-index: 8; box-sizing: border-box; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--p-primary) 40%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--p-primary) 30%, var(--p-sc-low)); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; animation: p-fade .12s linear;
+  transform-origin: 50% 50%; will-change: transform; box-shadow: 0 2px 8px rgb(0 0 0 / .12);
+}
+.phone .pg-slot.armed .pg-slot-time { font-size: 11px; line-height: 13px; font-weight: 500; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 1; }
+.phone .pg-slot.armed svg { color: var(--p-primary); flex: none; }
+.phone .pg-slot.armed.short { flex-direction: row; gap: 4px; }
+.phone .pg-slot.armed.short svg { width: 14px; height: 14px; }

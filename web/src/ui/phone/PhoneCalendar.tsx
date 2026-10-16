@@ -14,9 +14,9 @@ import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
 import { ScopeDialog } from "../ItemEditor.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
-import { hapticLift } from "./native.ts";
+import { hapticLift, hapticLight } from "./native.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
-import { VelocityTracker, frameWriter } from "./motion.ts";
+import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { openingHourHeight, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 
@@ -431,6 +431,39 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     for (const el of [layer.current, headDays.current, allDayDays.current]) if (el) el.style.transform = "";
     scroller.current?.parentElement?.classList.remove("swiping");
   }, [first]);
+  // The marked slot's block: placed with a transform, popping in on a spring the first time and gliding
+  // (carrying its speed) when another slot is tapped. Positions are sub-pixel; nothing re-renders as it moves.
+  const slotEl = useRef<HTMLDivElement>(null);
+  const slotAnim = useRef<{ x: Animation | null; y: Animation | null; s: Animation | null; pos: { x: number; y: number; s: number }; key: string } | null>(null);
+  useLayoutEffect(() => {
+    const el = slotEl.current;
+    if (!el || !armed || !layer.current) { if (!armed) { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); slotAnim.current = null; } return; }
+    const colW = layer.current.clientWidth / count;
+    const tx = (all.indexOf(armed.day) - count) * colW + 1, ty = armed.min * pxPerMin;
+    const draw = () => { const p = slotAnim.current!.pos; el.style.transform = `translate3d(${p.x}px,${p.y}px,0) scale(${p.s})`; };
+    const key = `${armed.day}|${armed.min}`;
+    let a = slotAnim.current;
+    if (!a) {
+      a = slotAnim.current = { x: null, y: null, s: null, pos: { x: tx, y: ty, s: 0.6 }, key };
+      a.s = animateSpring(0.6, 1, 0, (v) => { a!.pos.s = v; draw(); }, () => { a!.s = null; }, POP_SPRING);
+      hapticLight();
+    } else if (a.key !== key) {
+      a.key = key;
+      const glide = (axis: "x" | "y", to: number) => {
+        const cur = a![axis]?.now() ?? { x: a!.pos[axis], v: 0 };
+        a![axis]?.stop();
+        a![axis] = animateSpring(cur.x, to, cur.v, (v) => { a!.pos[axis] = v; draw(); }, () => { a![axis] = null; }, GLIDE_SPRING);
+      };
+      glide("x", tx); glide("y", ty);
+      hapticLight();
+    } else {
+      a.x?.stop(); a.y?.stop(); a.x = a.y = null;
+      a.pos.x = tx; a.pos.y = ty;
+    }
+    draw();
+  }, [armed, pxPerMin, count, first]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); }, []);
+
   // A marked slot is forgotten once the panel has opened (or another range is shown).
   useEffect(() => { if (pending) setArmed(null); }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setArmed(null); }, [first, count]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -612,7 +645,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           const di = Math.max(0, Math.min(daysRef.current.length - 1, Math.floor((e.clientX - r.left) / colW())));
           const min = Math.max(0, Math.min(DAY_MIN - 30, Math.floor((e.clientY - r.top) / pxRef.current / 30) * 30));
           const day = daysRef.current[di], a = armedRef.current;
-          if (a && a.day === day && a.min === min) { setArmed(null); props.current.onNewAt(day, min); }
+          // A tap anywhere on the marked block (it spans an hour) adds there.
+          const exact = (e.clientY - r.top) / pxRef.current;
+          if (a && a.day === day && exact >= a.min && exact < a.min + Math.max(60, 22 / pxRef.current)) { setArmed(null); props.current.onNewAt(day, a.min); }
           else setArmed({ day, min });
         }
       }
@@ -746,12 +781,12 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
               })()}
-              {/* The slot tapped once (tap it again to add there). */}
+              {/* The slot tapped once (tap it again to add there): springs in, and glides to the next one tapped. */}
               {armed && !pending && all.includes(armed.day) && (
-                <div className="pg-slot armed" style={{
-                  left: `calc(${(all.indexOf(armed.day) - count) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: armed.min * pxPerMin,
-                  height: Math.max(22, 60 * pxPerMin),
-                }}><MIcon name="fAdd" size={18} /></div>
+                <div className={`pg-slot armed ${60 * pxPerMin < 34 ? "short" : ""}`} ref={slotEl} style={{ width: `calc(${colPct}% - 2px)`, height: Math.max(22, 60 * pxPerMin) }}>
+                  <span className="pg-slot-time">{formatTime(armed.min)} – {formatTime(Math.min(DAY_MIN - 1, armed.min + 60))}</span>
+                  <MIcon name="fAdd" size={18} />
+                </div>
               )}
               {/* Where the new event goes: only its outline, in its colour, while the panel is open. */}
               {pending && all.includes(pending.day) && (
