@@ -63,11 +63,96 @@ function cancel(p: Press) {
   p.ripple = null;
 }
 
+// ---------- Long-press labels ----------
+// Holding an icon-only button shows its name (its aria-label) in a small tooltip by it, as Android does,
+// for a second and a half; the button itself then does nothing. One handler for the whole phone layout.
+
+const LONG_PRESS = 450;
+const TIP_SHOWN = 1500;
+interface Hold { host: HTMLElement; x0: number; y0: number; id: number; timer: number }
+let hold: Hold | null = null;
+let tip: HTMLElement | null = null;
+let tipTimer = 0;
+
+/** A button showing only an icon, with a name to show. */
+function iconButton(t: Element): HTMLElement | null {
+  const b = t.closest<HTMLElement>("button, [role=button]");
+  if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar")) return null;
+  const label = b.getAttribute("aria-label")?.trim();
+  return label && !(b.textContent ?? "").trim() ? b : null;
+}
+
+function showTip(host: HTMLElement) {
+  hideTip();
+  const el = document.createElement("div");
+  el.className = "p-tooltip";
+  el.setAttribute("role", "tooltip");
+  el.textContent = host.getAttribute("aria-label") ?? "";
+  document.body.appendChild(el);
+  const r = host.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  const sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sat")) || 0;
+  let top = r.top - h - 8;
+  if (top < sat + 8) top = r.bottom + 8;
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  tip = el;
+  tipTimer = window.setTimeout(hideTip, TIP_SHOWN);
+}
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  const el = tip;
+  tip = null;
+  if (!el) return;
+  el.classList.add("out");
+  window.setTimeout(() => el.remove(), 200);
+}
+
+/** The click a long press ends in is dropped, so the button doesn't also act. */
+function swallowClick() {
+  const stop = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+  window.addEventListener("click", stop, { capture: true, once: true });
+  window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 800);
+}
+
+function startHold(e: PointerEvent, t: Element) {
+  if (hold) { clearTimeout(hold.timer); hold = null; }
+  const host = iconButton(t);
+  if (!host) return;
+  const h: Hold = { host, x0: e.clientX, y0: e.clientY, id: e.pointerId, timer: 0 };
+  h.timer = window.setTimeout(() => {
+    if (hold !== h) return;
+    hold = null;
+    if (press) { cancel(press); press = null; }
+    swallowClick();
+    showTip(host);
+  }, LONG_PRESS);
+  hold = h;
+}
+
+function endHold(e: PointerEvent, moved: boolean) {
+  const h = hold;
+  if (!h || e.pointerId !== h.id) return;
+  if (moved && Math.abs(e.clientX - h.x0) <= TOUCH_SLOP && Math.abs(e.clientY - h.y0) <= TOUCH_SLOP) return;
+  clearTimeout(h.timer);
+  hold = null;
+}
+
 let started = false;
 export function startPressFeedback() {
   if (started) return;
   started = true;
+  document.addEventListener("pointermove", (e) => endHold(e, true), { capture: true, passive: true });
+  document.addEventListener("pointerup", (e) => endHold(e, false), { capture: true, passive: true });
+  document.addEventListener("pointercancel", (e) => endHold(e, false), { capture: true, passive: true });
+  // No long-press menu (or text selection) on an icon button: its label shows instead.
+  document.addEventListener("contextmenu", (e) => {
+    if (document.documentElement.classList.contains("phone") && e.target instanceof Element && iconButton(e.target)) e.preventDefault();
+  }, { capture: true });
   document.addEventListener("pointerdown", (e) => {
+    if (tip) hideTip();
+    if (document.documentElement.classList.contains("phone") && e.target instanceof Element && (e.pointerType !== "mouse" || e.button === 0)) startHold(e, e.target);
     if (press) { release(press); press = null; }
     if (e.pointerType === "mouse" && e.button !== 0) return;
     // Only in the phone layout (a browser window can be resized back to the PC one).

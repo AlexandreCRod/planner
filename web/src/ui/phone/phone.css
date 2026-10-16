@@ -945,3 +945,14 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-tabpage { position: absolute; top: 0; bottom: 0; width: 100%; contain: layout paint style; background: var(--bg); touch-action: pan-y; }
 /* The slot tapped once: an outline in the accent with a small +; a second tap there adds an event. */
 .phone .pg-slot.armed { border-color: var(--p-primary); display: grid; place-items: center; color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 8%, transparent); }
+
+/* Icon buttons with nothing to do (undo with no history...) look it: dimmed, no press feedback. */
+.phone .p-icon:disabled { opacity: .38; pointer-events: none; }
+
+/* Long-press label of an icon button (press.ts): Material's plain tooltip. */
+.phone .p-tooltip {
+  position: fixed; z-index: 100; max-width: 240px; padding: 4px 8px; border-radius: 4px; pointer-events: none;
+  background: var(--p-inverse-surface); color: var(--p-inverse-on-surface); font-size: 12px; line-height: 16px; letter-spacing: .4px;
+  animation: p-fade .1s linear; transition: opacity .15s linear;
+}
+.phone .p-tooltip.out { opacity: 0; }
