@@ -1,11 +1,13 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
-import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { epochOf, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
-import { type Snapshot, useSnapshot } from "../store/store.ts";
-import { EventRow, Icon, TaskRow, go, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
-import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
+import { routineProgress, routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
+import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
+import { showStreaks, useRoutines } from "../store/routines.ts";
+import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
+import { AppBarActions, Checkbox, IconButton, MIcon } from "./phone/chrome.tsx";
 import { useSwipePager } from "./phone/pager.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -76,16 +78,21 @@ function PcToday() {
 /** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
 function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
   const isToday = day === t;
+  // Routines (phone only): their own checklist, out of the task lists below, never overdue.
+  const marks = useRoutines();
+  const noRoutines = new Set<number>();
+  const routineMarks = phone ? marks : noRoutines;
+  const routines = phone ? routinesOnDay(s.items, routineMarks, s.done, day, t) : [];
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
-    const tasks = tasksForDay(s.items, s.done, t);
+    const tasks = withoutRoutines(tasksForDay(s.items, s.done, t), routineMarks);
     overdue = tasks.filter((e) => e.status === "OVERDUE");
     dayTasks = tasks.filter((e) => e.status === "DUE" || e.status === "CARRIED" || e.status === "DONE");
     anytime = tasks.filter((e) => e.status === "ANYTIME").length;
   } else {
     // Tasks still overdue today carry on to the days ahead until they're ticked.
-    if (day > t) overdue = tasksForDay(s.items, s.done, t).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
-    dayTasks = tasksOnDay(s.items, s.done, day, t);
+    if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t), routineMarks).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
+    dayTasks = withoutRoutines(tasksOnDay(s.items, s.done, day, t), routineMarks);
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);
   // "Show completed tasks on Today" off: ticked tasks leave today's list (after the hold).
@@ -93,7 +100,8 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   const shownTasks = hold.arrange(`t${day}`, hideDone ? dayTasks.filter((e) => e.status !== "DONE") : dayTasks, rowKey);
   // Ticked during this day but not listed above: overdue ones, undated ones, early ticks...
   const listed = new Set([...shownOverdue, ...shownTasks].map(rowKey));
-  const alsoDone = hideDone ? [] : tickedDuring(s.items, s.completions, day).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
+  for (const r of routines) listed.add(rowKey(r));
+  const alsoDone = hideDone ? [] : withoutRoutines(tickedDuring(s.items, s.completions, day), routineMarks).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
   const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day + 7);
   const dayEvents = events.filter((o) => o.day <= day && o.endDay >= day);
   const upcoming = isToday ? events.filter((o) => o.day > day).slice(0, 8) : [];
@@ -104,7 +112,8 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
     <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay}
-      streakInfo={isRecurring(e.item) && !showDay ? streak(e.item, s.done, day) : undefined}
+      // On the phone streaks belong to routines only (in their own section); the PC keeps them on repeating tasks.
+      streakInfo={!phone && isRecurring(e.item) && !showDay ? streak(e.item, s.done, day) : undefined}
       onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
   ));
 
@@ -122,6 +131,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
         <div className="section">Overdue</div>
         {rows(shownOverdue, `o${day}`, true)}
       </>}
+      {routines.length > 0 && <RoutineSection list={routines} s={s} day={day} t={t} />}
       <div className="section">Tasks</div>
       {shownTasks.length === 0 && <div className="hint empty">{isToday ? (phone ? "No tasks due today. Tap + to add one." : "No tasks due today. Use the bar at the top to add one.") : `No tasks were due ${dayWord}.`}</div>}
       {rows(shownTasks, `t${day}`, false)}
@@ -144,6 +154,34 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
         <div className="section">Next 7 days</div>
         {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay />)}
       </>}
+  </>;
+}
+
+/**
+ * Today's routines: "Routines · 3 of 5" and one compact line each, ticked in place (rows don't move).
+ * A routine missed on an earlier day isn't carried here; it only ends the streak.
+ */
+function RoutineSection({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
+  const { done, total } = routineProgress(list);
+  const streaks = showStreaks() && day >= t;
+  return <>
+    <div className="section">Routines · {done} of {total}</div>
+    <div className="p-routines">
+      {list.map((e) => {
+        const ticked = e.status === "DONE";
+        const color = s.colorOf(e.item);
+        const st = streaks ? routineStreak(e.item, s.done, t) : null;
+        return (
+          <div key={e.item.id} className={`p-routine ${ticked ? "done" : ""}`} role="button" onClick={() => openItem(e.item, e.day)}>
+            <Checkbox checked={ticked} color={color} onChange={(v) => toggleCompletion(e.item.id, day, v)} />
+            <span className="title ellipsis">{e.item.title || "Untitled"}</span>
+            {e.status === "MISSED" && <span className="missed">Missed</span>}
+            {e.item.startMin !== null && <span className="time">{formatTime(e.item.startMin)}</span>}
+            {st && st.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={16} color="#FF7043" />{st.current}</span>}
+          </div>
+        );
+      })}
+    </div>
   </>;
 }
 

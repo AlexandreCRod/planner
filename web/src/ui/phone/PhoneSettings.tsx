@@ -8,6 +8,7 @@ import { RETENTION_TEXT, NOTE_DAYS, TASK_EVENT_DAYS } from "../../domain/retenti
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
 import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
+import { setShowStreaks, showStreaks } from "../../store/routines.ts";
 import { getServer, setServer } from "../../platform.ts";
 import { typeLabel } from "../LinksSection.tsx";
 import { checkedLinger, go, showDoneOnToday } from "../common.tsx";
@@ -104,6 +105,7 @@ export function PhoneSettings() {
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
   const [showDone, setShowDone] = useState(showDoneOnToday());
+  const [streaks, setStreaks] = useState(showStreaks());
   const [dialog, setDialog] = useState<"" | "server" | "signout">("");
   const [server, setServerShown] = useState(getServer());
   const [busy, setBusy] = useState(false);
@@ -146,6 +148,8 @@ export function PhoneSettings() {
         <ChoiceRow title="Checked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
         <SwitchRow title="Show completed tasks on Today" supporting="Off: ticked tasks leave today's list once their moment is up" checked={showDone}
           onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
+        <SwitchRow title="Show streaks" supporting="Each routine's days-in-a-row on Today, and its history" checked={streaks}
+          onChange={(v) => { setStreaks(v); setShowStreaks(v); }} />
 
         {hasAlarms && <AlarmSettingsSection />}
 

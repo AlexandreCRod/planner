@@ -24,6 +24,8 @@ import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { RichBar } from "./RichBar.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
+import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
+import { isRoutine, setRoutine, showStreaks, useRoutines } from "../../store/routines.ts";
 
 // ---------- Shared bits ----------
 
@@ -471,25 +473,30 @@ function ItemPicker({ s, exclude, onPick, onClose }: { s: Snapshot; exclude: Set
   );
 }
 
-// ---------- History (recurring tasks) ----------
+// ---------- History (routines) ----------
 
+/** A routine's history and streak. Shown on routines only, and not with "Show streaks" off in Settings. */
 function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   const t = todayEpoch();
   const st = streak(item, s.done, t);
+  const rs = routineStreak(item, s.done, t);
   const done = s.done.days(item.id);
   const gridStart = t - 7 * 15 - (weekday(t) - 1);
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
-        <span className="fire"><MIcon name="fLocalFireDepartment" size={20} color="#FF7043" /> {st.current} current</span>
-        <span>Best {st.best}</span><span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
+        <span className="fire"><MIcon name="fLocalFireDepartment" size={20} color="#FF7043" /> {rs.current} current</span>
+        <span>Best {rs.best}</span>
+        <span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
       </div>
+      {rs.broken && <div className="pe-small">Last one was missed: the streak starts again</div>}
       <div className="pe-heat">
         {Array.from({ length: 16 }, (_, w) => (
           <div key={w}>
             {Array.from({ length: 7 }, (_, di) => {
               const day = gridStart + w * 7 + di;
-              const cls = day > t ? "future" : done.has(day) ? "done" : occursOn(item, day) ? "missed" : "";
+              // Today, still open, isn't missed yet.
+              const cls = day > t ? "future" : done.has(day) ? "done" : day < t && occursOn(item, day) ? "missed" : "";
               return <span key={di} className={cls} />;
             })}
           </div>
@@ -517,6 +524,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const [prioMenu, setPrioMenu] = useState(false);
   const [overdueMenu, setOverdueMenu] = useState(false);
   const [pendingScope, setPendingScope] = useState<Item | null>(null);
+  const routineMarks = useRoutines();
   if (!item) return null;
 
   const isEvent = item.type === "EVENT";
@@ -527,9 +535,11 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const notifications = reminders.filter((r) => r.type !== "ALARM");
   const tags = s.tagsByItem.get(id) ?? [];
   const hasLinks = s.neighbours(id).size > 0;
+  const routine = isRoutineItem(item, routineMarks);
   const t = todayEpoch();
   const timed = !(item.allDay || item.startMin === null);
-  const day = occ ?? (isEvent ? item.startDay : currentEntry(item, s.done, t).day);
+  // A routine is about today (or its next day); a missed day isn't something to tick any more.
+  const day = occ ?? (isEvent ? item.startDay : (routine ? routineEntry : currentEntry)(item, s.done, t).day);
   const shownStart = day ?? item.startDay;
   const commit = (edited: Item) => saveItem(edited);
   const commitReminders = (list: Reminder[]) => saveItem(item, { reminders: list });
@@ -597,7 +607,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
             <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
           </span>
         )}
-        {!isEvent && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
+        {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
+        {!isEvent && isRecurring(item) && (
+          <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
+            onClick={() => setRoutine(id, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(id, v)} label="Routine" />} />
+        )}
+        {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
             <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
             <DropdownMenu open={overdueMenu} onClose={() => setOverdueMenu(false)} items={overdueItems((p) => commit({ ...item, overduePolicy: p }))} />
@@ -628,7 +643,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           )}
         </div>
 
-        {!isEvent && isRecurring(item) && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
+        {routine && showStreaks() && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
         {hasLinks && <PhoneLinks id={id} s={s} />}
         <div style={{ height: 96 }} />
       </div>
@@ -766,6 +781,9 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const [notesFocused, setNotesFocused] = useState(false);
   const [notesEmpty, setNotesEmpty] = useState(() => !preview(d.content, 10).trim());
   const [currentId, setCurrentId] = useState(id);
+  // The Routine switch (kept on this phone, see store/routines.ts): saved with the task.
+  const [routine, setRoutineDraft] = useState(() => id !== 0 && isRoutine(id));
+  const canBeRoutine = d.type === "TASK" && d.freq !== "NONE";
   const rich = useRef<RichEditorHandle>(null);
   const [initialHtml] = useState(d.content);
   const category = d.categoryId !== null ? s.categoryById.get(d.categoryId) : undefined;
@@ -785,10 +803,14 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const save = (scope?: EditScope) => {
     const item = finalItem();
     if (original && isRecurring(original) && occ !== null && !scope) { setScopeOpen(true); return; }
+    let savedId: number;
     if (original && scope && occ !== null) {
       const edited = scope === "THIS" ? { ...item, startDay: item.startDay !== original.startDay ? item.startDay : occ } : item;
-      saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
-    } else saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
+      savedId = saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
+    } else savedId = saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
+    // A single changed day (THIS) doesn't repeat, so it isn't a routine; the series keeps its mark.
+    if (item.type === "TASK" && item.freq !== "NONE" && scope !== "THIS") setRoutine(savedId, routine);
+    else if (!original || original.id === savedId) setRoutine(savedId, false);
     onClose();
   };
   if (saveRef) saveRef.current = () => save();
@@ -832,6 +854,12 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
 
         <WhenFields d={d} set={set} />
         <RepeatEditor d={d} expanded={d.freq !== "NONE" || added.has("repeat")} onExpand={() => setAdded(new Set([...added, "repeat"]))} onChange={(i) => emit({ ...curRef.current, item: i })} />
+        {canBeRoutine && (
+          <FieldRow icon="oTaskAlt" onClick={() => setRoutineDraft(!routine)}>
+            <span className="pe-label grow">Routine<span className="pe-sublabel">On Today's checklist; a missed day ends the streak instead of piling up</span></span>
+            <Switch checked={routine} onChange={setRoutineDraft} label="Routine" />
+          </FieldRow>
+        )}
         <div className="p-divider" />
 
         <LocationField d={d} set={set} />
@@ -851,7 +879,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           <FieldRow icon="oFlag">
             <MenuText text={d.priority === 0 ? "No priority" : `${PRIORITIES[d.priority]} priority`} items={priorityItems((p) => set({ priority: p }))} />
           </FieldRow>
-          {d.startDay !== null && (
+          {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
+          {d.startDay !== null && !(canBeRoutine && routine) && (
             <FieldRow icon="oUpdate">
               <MenuText text={overdueText(d.overduePolicy)} items={overdueItems((p) => set({ overduePolicy: p }))} />
             </FieldRow>

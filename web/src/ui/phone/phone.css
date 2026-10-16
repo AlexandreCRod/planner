@@ -897,3 +897,16 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-early-text svg { flex: none; color: var(--p-primary); }
 .phone .pe-early-buttons { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; min-height: 40px; }
 .phone .pe-early-note { padding-right: 8px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+
+/* ---------- Routines on Today: a compact checklist ("Routines · 3 of 5") ---------- */
+.phone .p-routines { margin: 0 0 4px; }
+.phone .p-routine { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 16px 0 6px; }
+.phone .p-routine .title { flex: 1; min-width: 0; font-size: 16px; line-height: 24px; color: var(--text); }
+.phone .p-routine.done .title { color: var(--muted); text-decoration: line-through; }
+.phone .p-routine .time { font-size: 14px; color: var(--muted); margin-left: 8px; }
+.phone .p-routine .missed { font-size: 12px; font-weight: 500; color: var(--danger); margin-left: 8px; }
+.phone .p-routine .streak { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 500; color: #ff7043; margin-left: 10px; }
+.phone .pe-sublabel { display: block; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .pe-label:has(> .pe-sublabel) { padding: 10px 0 12px; }
+/* A switch at the end of a view row sits 16 dp from the edge, as in Settings. */
+.phone .pe-trail > .p-switch { margin-right: 12px; }
