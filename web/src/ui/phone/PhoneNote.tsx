@@ -13,7 +13,7 @@ import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, saveItem, saveVersio
 import { openItem } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
 import { RichEditor, type RichEditorHandle } from "../RichEditor.tsx";
-import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
 import { onKeyboardHide, pushBack } from "./native.ts";
@@ -105,14 +105,15 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const images = s.images.get(noteId) ?? [];
   const dayOcc = isDaily ? occurrencesIn(s.items, s.done, base.noteDay!, base.noteDay!) : [];
   const versions = s.versions.get(noteId) ?? [];
+  const undoState = useUndoState();
   const keepFocus = { onPointerDown: (e: React.PointerEvent) => e.preventDefault(), onMouseDown: (e: React.MouseEvent) => e.preventDefault() };
 
   return (
     <div className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg! } : undefined}>
       <TopAppBar back title={isDaily ? formatDate(base.noteDay!) : ""} className="pn-appbar" actions={<>
         {writing && <span className="pn-undo" {...keepFocus}>
-          <IconButton icon="fUndo" label="Undo" onClick={() => rich.current?.exec("undo")} />
-          <IconButton icon="fRedo" label="Redo" onClick={() => rich.current?.exec("redo")} />
+          <IconButton icon="fUndo" label="Undo" disabled={!undoState.undo} onClick={() => rich.current?.exec("undo")} />
+          <IconButton icon="fRedo" label="Redo" disabled={!undoState.redo} onClick={() => rich.current?.exec("redo")} />
         </span>}
         <IconButton icon={style.pinned ? "fPushPin" : "oPushPin"} label={style.pinned ? "Unpin" : "Pin"} onClick={() => setStyle({ ...style, pinned: !style.pinned })} />
         <IconButton icon="oPalette" label="Style" onClick={() => setOpen("style")} />

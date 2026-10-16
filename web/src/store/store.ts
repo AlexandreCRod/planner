@@ -153,7 +153,9 @@ export function saveItem(item: Item, opts: SaveOptions = {}): number {
     for (const r of opts.reminders) put("reminders", { ...r, id: r.id || newId(), itemId: id });
   }
   if (opts.tags) setTags(id, opts.tags);
-  refreshWikiLinks(id, saved.content);
+  // Typing [[Title]] links items on the PC only; the phone links with "Link to…" (auto links it finds
+  // already made are left as they are).
+  if (!onPhone()) refreshWikiLinks(id, saved.content);
   changed();
   return id;
 }
@@ -324,3 +326,6 @@ export function ensureDefaults() {
 }
 
 export { newItem, isRecurring };
+
+/** The phone layout is showing (it sets html.phone); kept apart from platform.ts so tests can load the store. */
+const onPhone = () => typeof document !== "undefined" && document.documentElement.classList.contains("phone");

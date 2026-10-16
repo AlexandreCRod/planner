@@ -80,7 +80,6 @@ export function RichBar({ editor, compact, className = "", extra, onHold }: {
               items={SIZES.map(([l, px]) => ({ label: l, onClick: () => back()?.setSize(px) }))} />
           </span>
           <B icon="fLink" label="Web link" onClick={() => open("link")} />
-          <B icon="fDataObject" label="Insert [[link]] to another item" onClick={() => ed()?.insertText("[[]]")} />
           {!compact && <B icon="oSchedule" label="Insert date and time" onClick={() => ed()?.insertText(`${formatDate(today())}, ${formatTime(nowMinutes())}`)} />}
           <B icon="fFormatClear" label="Clear formatting" onClick={() => ed()?.exec("removeFormat")} />
           {extra}

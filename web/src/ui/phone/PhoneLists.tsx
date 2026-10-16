@@ -377,7 +377,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
         </>}
       </ChipRow>
       <div className="p-graph" ref={box}>
-        {graph.nodes.length === 0 && <div className="p-graph-empty"><span>No connections yet.<br />Link items from their editor, or type [[Title]] inside a note.</span></div>}
+        {graph.nodes.length === 0 && <div className="p-graph-empty"><span>No connections yet.<br />Link items with Link in their editor.</span></div>}
         <svg width={w} height={h}>
           {graph.edges.map(([a, b]) => {
             const pa = P(a), pb = P(b);

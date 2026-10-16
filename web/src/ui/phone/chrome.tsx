@@ -22,10 +22,30 @@ export function MIcon({ name, size = 24, color }: { name: string; size?: number;
 }
 
 /** Material 3 icon button: a 48 dp touch target with a 40 dp circular state layer. */
-export function IconButton({ icon, label, onClick, className = "", children }: {
-  icon?: string; label: string; onClick: () => void; className?: string; children?: ReactNode;
+export function IconButton({ icon, label, onClick, className = "", children, disabled }: {
+  icon?: string; label: string; onClick: () => void; className?: string; children?: ReactNode; disabled?: boolean;
 }) {
-  return <button className={`p-icon ${className}`} aria-label={label} onClick={onClick}>{children ?? <MIcon name={icon!} />}</button>;
+  return <button className={`p-icon ${className}`} aria-label={label} onClick={onClick} disabled={disabled}>{children ?? <MIcon name={icon!} />}</button>;
+}
+
+/**
+ * Whether the text being edited has something to undo or redo (the browser's own edit history), read
+ * again after every edit, caret move and undo/redo, so the buttons can show they'd do nothing.
+ */
+export function useUndoState(): { undo: boolean; redo: boolean } {
+  const read = () => {
+    const q = (c: string) => { try { return document.queryCommandEnabled(c); } catch { return false; } };
+    return { undo: q("undo"), redo: q("redo") };
+  };
+  const [st, setSt] = useState(read);
+  useEffect(() => {
+    let raf = 0;
+    const on = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => setSt((o) => { const n = read(); return n.undo === o.undo && n.redo === o.redo ? o : n; })); };
+    const evs = ["input", "selectionchange", "focusin", "focusout", "click"] as const;
+    evs.forEach((e) => document.addEventListener(e, on, true));
+    return () => { cancelAnimationFrame(raf); evs.forEach((e) => document.removeEventListener(e, on, true)); };
+  }, []);
+  return st;
 }
 
 /**

@@ -454,7 +454,7 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
   const [picking, setPicking] = useState(false);
   const rows: { item: Item; label: string; removable: boolean }[] = [];
   const seen = new Set<number>();
-  for (const l of s.links) if (l.sourceId === id && s.byId.has(l.targetId)) { seen.add(l.targetId); rows.push({ item: s.byId.get(l.targetId)!, label: l.auto ? "Mentioned with [[ ]]" : "Linked", removable: !l.auto }); }
+  for (const l of s.links) if (l.sourceId === id && s.byId.has(l.targetId)) { seen.add(l.targetId); rows.push({ item: s.byId.get(l.targetId)!, label: l.auto ? "Mentioned" : "Linked", removable: !l.auto }); }
   for (const l of s.links) if (l.targetId === id && l.sourceId !== id && s.byId.has(l.sourceId) && !seen.has(l.sourceId)) rows.push({ item: s.byId.get(l.sourceId)!, label: l.auto ? "Mentions this" : "Links here", removable: !l.auto });
   const typeIcon = (i: Item) => (i.type === "TASK" ? "oTaskAlt" : i.type === "EVENT" ? "fEvent" : "oDescription");
   return (
@@ -464,7 +464,7 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
         {id !== 0 && <TextButton className="icon" onClick={() => { onLeave?.(); go(`graph?focus=${id}`); }}><MIcon name="oHub" size={18} />Graph</TextButton>}
         <TextButton className="icon" onClick={() => setPicking(true)}><MIcon name="oAddLink" size={18} />Link</TextButton>
       </div>
-      {rows.length === 0 && <div className="pe-small pad">Connect this to other notes, tasks or events. You can also type [[Title]] in the text.</div>}
+      {rows.length === 0 && <div className="pe-small pad">Connect this to other notes, tasks or events with Link.</div>}
       {rows.map(({ item, label, removable }) => (
         <div key={item.id} className="p-li two" role="button" onClick={() => { onLeave?.(); openItem(item); }}>
           <span className="lead"><MIcon name={typeIcon(item)} color={s.colorOf(item)} /></span>
