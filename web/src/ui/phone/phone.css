@@ -240,12 +240,15 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-now { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--danger); z-index: 2; pointer-events: none; }
 
 /* ---------- Add panel (GrowingPanel.kt, NewEventSheet.kt, QuickAddSheet.kt) ---------- */
-.phone .gp-root { position: fixed; inset: 0; z-index: 50; overflow: hidden; }
+/* clip, not hidden: the panel is moved below the bottom edge with a transform, and a hidden-overflow box
+   can still be scrolled, which the focused field did (by up to the keyboard's height) to keep its caret in
+   view while the keyboard was coming up, leaving a gap under the panel. A clipped box can't scroll. */
+.phone .gp-root { position: fixed; inset: 0; z-index: 50; overflow: clip; }
 .phone .gp-probe { position: fixed; bottom: 0; left: 0; width: 0; height: var(--sab); visibility: hidden; pointer-events: none; }
 .phone .gp-scrim { position: absolute; inset: 0; background: #000; opacity: 0; }
 .phone .gp-panel { position: absolute; left: 0; right: 0; top: 0; will-change: transform; touch-action: none; }
 .phone .gp-bg { position: absolute; inset: 0; background: var(--p-sc-low); box-shadow: 0 -1px 6px rgb(0 0 0 / .1); }
-.phone .gp-full { position: absolute; left: 0; right: 0; top: 0; overflow: hidden; pointer-events: none; touch-action: auto; will-change: opacity; }
+.phone .gp-full { position: absolute; left: 0; right: 0; top: 0; overflow: clip; pointer-events: none; touch-action: auto; will-change: opacity; }
 .phone .gp-full.live { pointer-events: auto; }
 .phone .gp-full .panel { width: 100%; height: 100%; background: transparent; box-shadow: none; }
 .phone .gp-full .panel header { background: var(--p-sc-low); }

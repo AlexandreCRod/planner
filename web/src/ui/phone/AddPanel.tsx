@@ -184,10 +184,19 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   }, [api, sp]);
   // The keyboard's own animation is about a quarter of a second; the panel rides on it.
   useEffect(() => { api.start({ kb, config: { duration: kb ? 260 : 220, easing: easings.easeOutCubic } }); }, [kb, api]);
+  const measureRef = useRef(() => {});
   useLayoutEffect(() => {
     const el = compactRef.current;
     if (!el) return;
-    const measure = () => { if (sp.p.get() === 0 || sp.ch.get() === 0) api.start({ ch: el.offsetHeight, immediate: true }); };
+    // The panel is exactly as tall as its content. The first height is taken at once; later changes
+    // (a chips row coming or going as the line is typed) slide the panel to its new height.
+    const measure = () => {
+      const h = el.offsetHeight, first = sp.ch.get() === 0;
+      if (!first && sp.p.get() !== 0) return;
+      if (h === sp.ch.goal) return;
+      api.start({ ch: h, immediate: first, config: { duration: 180, easing: easings.easeOutCubic } });
+    };
+    measureRef.current = measure;
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -228,6 +237,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     api.start({
       p: target, config: { ...SETTLE, velocity },
       onRest: ({ finished }) => {
+        // Back to small: its content may have changed while it was the editor.
+        if (finished && target === 0) measureRef.current();
         if (!finished || target !== 1 || grownRef.current) return;
         grownRef.current = true;
         // The editor's title takes the keyboard over if the small panel had it.
