@@ -16,7 +16,7 @@ import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
 import { MIcon, TabGlyph } from "./chrome.tsx";
 import { SnackbarHost } from "./m3.tsx";
-import { TimeWheelHost } from "./TimeWheel.tsx";
+import { DrumHost } from "./TimeWheel.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing } from "./native.ts";
@@ -252,7 +252,7 @@ export function PhoneApp() {
         </button>
       )}
       {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
-      <TimeWheelHost />
+      <DrumHost />
       <SnackbarHost raised={!!overlay} />
       <PermissionHost />
       <InviteHost />

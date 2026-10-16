@@ -37,3 +37,12 @@ export function moveKeepingLength(start: number, oldStart: number, oldEnd: numbe
   const len = Math.max(0, oldEnd - oldStart);
   return { startMin: start, endMin: Math.min(24 * 60 - 1, start + len) };
 }
+
+/** [i] wrapped into 0..n−1 (a drum's rows go round). */
+export const wrapIndex = (i: number, n: number): number => ((i % n) + n) % n;
+
+/** The slot nearest [cur] (rows counted without wrapping) that shows row [index] of an [n]-row drum. */
+export function nearestSlot(cur: number, index: number, n: number): number {
+  const base = cur - wrapIndex(cur, n) + index;
+  return [base - n, base, base + n].reduce((a, b) => (Math.abs(b - cur) < Math.abs(a - cur) ? b : a));
+}

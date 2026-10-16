@@ -1,40 +1,44 @@
-// Moving an event on Today by holding its time: the time wheel opens, and the event moves to the
-// picked start keeping its length, with Undo in the snackbar. A repeating event moves on that day only.
+// Changing a time on Today by holding its digits (the drum, TimeWheel.tsx): an event moves keeping
+// its length (or, from its end time, changes its end); a task moves. A repeating item changes on that
+// day only, as the calendar's drag does. The snackbar offers Undo.
 import { formatTime } from "../../domain/dates.ts";
-import type { Occurrence } from "../../domain/schedule.ts";
-import { isRecurring } from "../../domain/types.ts";
+import type { Occurrence, TaskEntry } from "../../domain/schedule.ts";
+import { isRecurring, type Item } from "../../domain/types.ts";
 import { deleteForever, saveItem, saveSeriesEdit } from "../../store/store.ts";
 import { showSnackbar } from "./m3.tsx";
-import { openTimeWheel } from "./TimeWheel.tsx";
 import { moveKeepingLength } from "./wheelMath.ts";
 
-/** Whether holding this occurrence's time moves it (a timed event within one day). */
-export const canMoveByWheel = (o: Occurrence) => o.timed && !o.multiDay && o.startMin !== null && o.item.type !== "TASK";
-
-/** Opens the wheel for [o]; [pointerId] is the finger still down from the hold. */
-export function moveByWheel(o: Occurrence, pointerId?: number) {
-  const s0 = o.startMin!, e0 = o.endMin;
-  openTimeWheel({
-    title: o.item.title.trim() || "Untitled",
-    value: s0,
-    okLabel: "Move",
-    pointerId,
-    note: (t) => (e0 !== null ? `${formatTime(t)} – ${formatTime(moveKeepingLength(t, s0, e0).endMin!)}` : formatTime(t)),
-    onPick: (t) => { if (t !== s0) moveTo(o, t); },
-  });
-}
-
-function moveTo(o: Occurrence, t: number) {
-  const item = o.item;
-  const span = moveKeepingLength(t, o.startMin!, o.endMin);
+/** Saves [patch] on [item] as it is on [day] (that day only, for a repeating one), with Undo. */
+function change(item: Item, day: number, patch: Partial<Item>, text: string) {
   let undo: () => void;
   if (!isRecurring(item)) {
-    saveItem({ ...item, ...span });
+    saveItem({ ...item, ...patch });
     undo = () => saveItem(item);
   } else {
-    // Just this day's: the series skips it and a one-off copy takes its place (as the calendar does).
-    const id = saveSeriesEdit("THIS", item, o.day, { ...item, ...span });
+    const id = saveSeriesEdit("THIS", item, day, { ...item, ...patch });
     undo = () => { deleteForever(id); saveItem(item); };
   }
-  showSnackbar(`Moved to ${formatTime(t)}`, "Undo", undo);
+  showSnackbar(text, "Undo", undo);
+}
+
+/** Whether this event's times can be held (timed, within one day). */
+export const canHoldEvent = (o: Occurrence) => o.timed && !o.multiDay && o.startMin !== null;
+
+/** The event starting at [t] instead, keeping its length. */
+export function moveEvent(o: Occurrence, t: number) {
+  if (t === o.startMin) return;
+  change(o.item, o.day, moveKeepingLength(t, o.startMin!, o.endMin), `Moved to ${formatTime(t)}`);
+}
+
+/** The event ending at [t] instead (after its start). */
+export function setEventEnd(o: Occurrence, t: number) {
+  if (t === o.endMin) return;
+  if (t <= o.startMin!) { showSnackbar("The end must be after the start"); return; }
+  change(o.item, o.day, { endMin: t }, `Ends at ${formatTime(t)}`);
+}
+
+/** The task due at [t] instead. */
+export function moveTask(e: TaskEntry, t: number) {
+  if (t === e.item.startMin || e.day === null) return;
+  change(e.item, e.day, { startMin: t }, `Moved to ${formatTime(t)}`);
 }

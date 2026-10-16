@@ -156,9 +156,6 @@ export function snapIndex(pos: number, v: number, step: number, min: number, max
   return Math.min(max, Math.max(min, i));
 }
 
-/** A wheel coming to rest after a fling: soft, no overshoot. */
-export const WHEEL_SPRING: SpringConfig = { stiffness: 260, damping: 1 };
-
 /**
  * The time constant (ms) of a coast that starts at [v0] px/ms and comes to rest exactly [dist] px on,
  * slowing all the way (x = dist·(1 − e^(−t/τ)), so its starting speed is dist/τ): null when the fling
@@ -169,27 +166,31 @@ export function coastTau(dist: number, v0: number, min = 60, max = 900): number 
   return Math.max(min, Math.min(max, dist / v0));
 }
 
+/** A wheel's last few px onto its row: a soft spring with the faintest overshoot. */
+export const SNAP_SPRING: SpringConfig = { stiffness: 320, damping: 0.72 };
+
 /**
- * Carries a flung value from [from] to [to] (a wheel's row), starting at the finger's [v0] px/ms and
- * slowing smoothly onto it, as a wheel picker coasts; a slow or backwards release glides on a spring.
+ * Carries a flung value from [from] to [to] (a wheel's row): it coasts from the finger's [v0] px/ms,
+ * slowing all the way, and the last [snapAt] px are a soft spring onto the row, carrying the coast's
+ * speed. A slow or backwards release is the spring alone.
  */
-export function animateCoast(from: number, to: number, v0: number, frame: (x: number) => void, done?: () => void): Animation {
+export function animateCoast(from: number, to: number, v0: number, frame: (x: number) => void, done?: () => void, snapAt = 10): Animation {
   const tau = coastTau(to - from, v0);
-  if (tau === null) return animateSpring(from, to, v0, frame, done, WHEEL_SPRING);
+  if (tau === null || Math.abs(to - from) <= snapAt) return animateSpring(from, to, v0, frame, done, SNAP_SPRING);
   const d = to - from, t0 = performance.now();
-  let raf = 0, x = from, v = v0, stopped = false;
+  let raf = 0, x = from, v = v0, snap: Animation | null = null;
   const step = (now: number) => {
     const t = Math.max(0, now - t0), e = Math.exp(-t / tau);
     x = to - d * e;
     v = (d / tau) * e;
-    if (Math.abs(to - x) < 0.3) { x = to; v = 0; stopped = true; frame(to); done?.(); return; }
+    if (Math.abs(to - x) <= snapAt) { snap = animateSpring(x, to, v, frame, done, SNAP_SPRING); return; }
     frame(x);
     raf = requestAnimationFrame(step);
   };
   raf = requestAnimationFrame(step);
   return {
-    stop() { stopped = true; cancelAnimationFrame(raf); },
-    now() { return stopped && x === to ? { x: to, v: 0 } : { x, v }; },
+    stop() { cancelAnimationFrame(raf); snap?.stop(); },
+    now() { return snap ? snap.now() : { x, v }; },
   };
 }
 

@@ -11,8 +11,8 @@ import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
 import { hapticLift } from "./phone/native.ts";
 import { useSwipePager } from "./phone/pager.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
-import { canMoveByWheel, moveByWheel } from "./phone/eventTime.ts";
-import { holdProps } from "./phone/TimeWheel.tsx";
+import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
+import { HeldTime } from "./phone/TimeWheel.tsx";
 import { count } from "../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -80,8 +80,14 @@ function PcToday() {
   );
 }
 
-/** Holding an event's time on the phone opens the time wheel to move it. */
-const timeHold = (o: Occurrence) => (canMoveByWheel(o) ? { ...holdProps((id) => moveByWheel(o, id)), className: "time p-time-hold" } : undefined);
+/** On the phone, the times of events and tasks can be held to change them (a drum opens on the digits). */
+const eventTime = (o: Occurrence, which: "start" | "end") => {
+  if (!canHoldEvent(o)) return null;
+  return which === "start"
+    ? <HeldTime min={o.startMin!} onChange={(t) => moveEvent(o, t)} />
+    : <HeldTime min={o.endMin!} onChange={(t) => setEventEnd(o, t)} />;
+};
+const taskTime = (e: TaskEntry) => (e.item.startMin !== null && e.day !== null ? <HeldTime min={e.item.startMin} onChange={(t) => moveTask(e, t)} /> : null);
 
 /** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
 function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
@@ -119,7 +125,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   const dayWord = word?.toLowerCase() ?? "that day";
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
-    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay}
+    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={phone ? taskTime : undefined}
       // On the phone streaks belong to routines only (in their own section); the PC keeps them on repeating tasks.
       streakInfo={!phone && isRecurring(e.item) && !showDay ? streak(e.item, s.done, day) : undefined}
       onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
@@ -152,7 +158,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       </>}
       <div className="section">Schedule</div>
       {dayEvents.length === 0 && <div className="hint empty">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
-      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} timeHold={phone ? timeHold : undefined} />)}
+      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={phone ? eventTime : undefined} />)}
       <div className="section">{isToday ? "Today's note" : "Note"}</div>
       <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
         {phone && <MIcon name="oEditNote" />}
@@ -162,7 +168,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       </div>
       {upcoming.length > 0 && <>
         <div className="section">Next 7 days</div>
-        {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay timeHold={phone ? timeHold : undefined} />)}
+        {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay heldTime={phone ? eventTime : undefined} />)}
       </>}
   </>;
 }

@@ -1,5 +1,5 @@
 // Small shared pieces: icons, task and event rows, the hash router.
-import { useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
@@ -137,8 +137,10 @@ export function RepeatBadge({ color }: { color: string }) {
   return <span className="rep" title="Repeats" style={{ color, background: `color-mix(in srgb, ${color} 20%, transparent)` }}><Icon name="repeat" size={12} /></span>;
 }
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag }: {
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** The phone's time, which can be held to change it (the PC passes none). */
+  heldTime?: (entry: TaskEntry) => ReactNode;
   /** The phone's task lists: priority as a coloured "High" tag at the end instead of the small flag. */
   priorityTag?: boolean;
   /** Called with the new state before the tick is saved. */
@@ -150,11 +152,12 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   const due = dueAt(entry);
   const hasReminders = (s.reminders.get(item.id)?.length ?? 0) > 0;
   const linked = s.neighbours(item.id).size > 0;
-  const sub = [
+  const subParts: ReactNode[] = [
     showDay && entry.day !== null ? relativeDay(entry.day) : null,
-    item.startMin !== null ? formatTime(item.startMin) : null,
+    item.startMin !== null ? (heldTime?.(entry) || formatTime(item.startMin)) : null,
     isRecurring(item) ? describe(item) : null,
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean);
+  const sub = subParts.length > 0;
   return (
     <div className="task" style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
       <span className="bar" style={{ background: color }} />
@@ -167,7 +170,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
           {item.title || "Untitled"}
         </div>
         {sub && <div className="sub ellipsis">
-          <span className="sub-text">{sub}</span>{hasReminders && <span className="rem-emoji"> · ⏰</span>}
+          <span className="sub-text">{subParts.map((p, i) => <Fragment key={i}>{i > 0 && " · "}{p}</Fragment>)}</span>{hasReminders && <span className="rem-emoji"> · ⏰</span>}
           {/* The phone shows these as small icons after the line, like the native row (hidden on the PC). */}
           {hasReminders && <span className="sub-icon alarm"><Icon name="alarm" size={14} /></span>}
           {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
@@ -186,11 +189,13 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   );
 }
 
-/** [timeHold]: extra props for the time (the phone holds it to move the event; the PC passes none). */
-export function EventRow({ o, s, showDay, timeHold }: { o: Occurrence; s: Snapshot; showDay?: boolean; timeHold?: (o: Occurrence) => HTMLAttributes<HTMLDivElement> | undefined }) {
+/** [heldTime]: the phone's start and end times, which can be held to change them (the PC passes none). */
+export function EventRow({ o, s, showDay, heldTime }: { o: Occurrence; s: Snapshot; showDay?: boolean; heldTime?: (o: Occurrence, which: "start" | "end") => ReactNode }) {
+  const t1 = (o.timed && heldTime?.(o, "start")) || (o.startMin !== null ? formatTime(o.startMin) : "");
+  const t2 = (o.timed && o.endMin !== null && heldTime?.(o, "end")) || (o.endMin !== null ? formatTime(o.endMin) : "");
   return (
     <div className="event" onClick={() => openItem(o.item, o.day)}>
-      <div className="time" {...timeHold?.(o)}>{o.timed ? <><span className="t1">{formatTime(o.startMin!)}</span>{o.endMin !== null && <><br /><span className="t2">{formatTime(o.endMin)}</span></>}</> : <span className="t0">All day</span>}</div>
+      <div className="time">{o.timed ? <><span className="t1">{t1}</span>{o.endMin !== null && <><br /><span className="t2">{t2}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
         <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>

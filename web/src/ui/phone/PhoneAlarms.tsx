@@ -18,6 +18,7 @@ import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
+import { HeldTime } from "./TimeWheel.tsx";
 
 type Section = "alarm" | "timer" | "stopwatch" | "world";
 const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
@@ -341,7 +342,7 @@ function AlarmCard({ a, now, onClick }: { a: ClockAlarm; now: Date; onClick: () 
     <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label">{a.label.trim()}</div>}
-        <div className="pa-time48">{formatTime(a.hour * 60 + a.minute)}</div>
+        <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
         <div className="t-body-medium muted pa-line">{repeatText(a, now, relative)}</div>
       </div>
       <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
@@ -399,7 +400,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
           <span className="t-title-medium grow">{isNew ? "New alarm" : "Alarm"}</span>
           {!isNew && <TextButton className="icon" onClick={() => { void act(native.deleteClock(alarm.id)); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
         </div>
-        <button className="pa-bigtime" onClick={() => setPickTime(true)}>{formatTime(minute)}</button>
+        <button className="pa-bigtime" onClick={() => setPickTime(true)}><HeldTime step={1} min={minute} onChange={setMinute} /></button>
         <div className="pa-erow">
           <MIcon name="fRepeat" />
           <div className="pa-days">

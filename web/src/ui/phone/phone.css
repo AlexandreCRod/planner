@@ -1157,31 +1157,22 @@ html.phone[data-theme="dark"] {
 .phone .pg-block.tiny .pg-tick svg { width: 6px; height: 6px; }
 .phone .pg-chip.task, .phone .p-mchip.task { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
 
-/* ---------- Time wheel (TimeWheel.tsx): hours and minutes on spinning wheels ----------
-   Each wheel is its rows twice: once in the muted colour, once clipped to the soft band in the middle
-   in the strong text colour, both moved by the same transform, so the middle row reads as chosen. */
-.phone .tw-scrim.out { opacity: 0; transition: opacity .15s linear; }
-.phone .tw-dialog {
-  width: 328px; max-width: calc(100% - 32px); padding: 24px 20px 12px; border-radius: 28px; background: var(--p-sc-high); color: var(--text);
-  animation: tw-in .22s cubic-bezier(.2, 0, 0, 1);
+/* ---------- Time drum (TimeWheel.tsx): a small 3D drum blooming out of held digits ----------
+   Rows are placed round the drum by the script (rotateX about its radius, with perspective), fading as
+   they curve away; the middle number is a flat copy, crisp, inside a soft band in the muted accent. */
+.phone .tw-part { display: inline-block; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.phone .tw-scrim { position: fixed; inset: 0; z-index: 70; }
+.phone .tw-drum { position: fixed; touch-action: none; user-select: none; -webkit-user-select: none; outline: none; }
+.phone .tw-panel {
+  position: absolute; inset: 0; border-radius: 18px; background: var(--p-sc-highest); will-change: transform, opacity; opacity: 0;
+  box-shadow: 0 8px 22px rgb(0 0 0 / .3), 0 1px 4px rgb(0 0 0 / .2);
 }
-@keyframes tw-in { from { transform: scale(.92); opacity: 0; } }
-.phone .tw-wheels { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.phone .tw-colon { font-size: 36px; line-height: 1; color: var(--muted); padding-bottom: 6px; }
-.phone .tw-col {
-  position: relative; width: 92px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; outline: none;
-  -webkit-mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent); mask-image: linear-gradient(transparent, #000 32%, #000 68%, transparent);
+.phone .tw-row {
+  position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; opacity: 0; will-change: transform, opacity;
+  color: color-mix(in srgb, var(--fc) 70%, transparent); backface-visibility: hidden; font-variant-numeric: tabular-nums;
 }
-.phone .tw-col.tw-ampm { width: 72px; margin-left: 6px; }
-.phone .tw-list { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
-.phone .tw-row { display: grid; place-items: center; font-size: 34px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
-.phone .tw-ampm .tw-row { font-size: 20px; }
-.phone .tw-band {
-  position: absolute; left: 0; right: 0; top: var(--mid); height: var(--row); overflow: hidden; border-radius: 14px;
-  background: var(--p-sec-container); pointer-events: none;
-}
-.phone .tw-band .tw-list { top: calc(-1 * var(--mid)); }
-.phone .tw-row.on { color: var(--text); font-weight: 500; }
-.phone .tw-note { text-align: center; margin-top: 12px; font-size: 14px; line-height: 20px; color: var(--muted); font-variant-numeric: tabular-nums; }
-/* The time of an event on Today can be held to move it (no callout, no text selection). */
-.phone .p-time-hold { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.phone .tw-band { position: absolute; left: 4px; right: 4px; overflow: hidden; border-radius: 12px; pointer-events: none; }
+.phone .tw-band-bg { position: absolute; inset: 0; opacity: 0; background: color-mix(in srgb, var(--p-primary) 24%, var(--p-sc-highest)); }
+.phone .tw-flat { position: absolute; left: -4px; right: -4px; top: 0; text-align: center; white-space: nowrap; color: var(--fc); will-change: transform; font-variant-numeric: tabular-nums; }
+/* The times on Today can be held (no callout, no text selection). */
+.phone .p-heldtime { white-space: nowrap; }

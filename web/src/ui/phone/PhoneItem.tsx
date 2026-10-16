@@ -22,6 +22,7 @@ import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, 
 import { openExternal } from "./native.ts";
 import { type Place, openPlace, searchPlaces } from "./device.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { HeldTime } from "./TimeWheel.tsx";
 import { RichBar } from "./RichBar.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
@@ -163,6 +164,13 @@ function WhenFields({ d, set }: { d: Item; set: (patch: Partial<Item>) => void }
   const [pick, setPick] = useState<Pick>(null);
   const isEvent = d.type === "EVENT";
   const dateOf = (which: "start" | "end") => (which === "end" ? d.endDay ?? d.startDay : d.startDay);
+  const setStart = (m: number) => {
+    const dur = d.startMin !== null && d.endMin !== null ? d.endMin - d.startMin : 60;
+    set({ startMin: m, endMin: isEvent ? Math.min(m + Math.max(15, dur), DAY_END) : d.endMin });
+  };
+  const setEnd = (m: number) => set({ endMin: m });
+  // A time shown can also be held: a drum opens on its hours or minutes (TimeWheel.tsx).
+  const held = (m: number, on: (m: number) => void) => <HeldTime min={m} onChange={on} />;
   return <>
     {isEvent ? <>
       <FieldRow icon="oSchedule" onClick={() => set(allDayPatch(d, !d.allDay))}>
@@ -171,17 +179,17 @@ function WhenFields({ d, set }: { d: Item; set: (patch: Partial<Item>) => void }
       </FieldRow>
       <FieldRow>
         <FieldText grow onClick={() => setPick({ kind: "date", which: "start" })}>{d.startDay !== null ? formatDate(d.startDay) : "Pick date"}</FieldText>
-        {!d.allDay && <FieldText onClick={() => setPick({ kind: "time", which: "start" })}>{d.startMin !== null ? formatTime(d.startMin) : "Time"}</FieldText>}
+        {!d.allDay && <FieldText onClick={() => setPick({ kind: "time", which: "start" })}>{d.startMin !== null ? held(d.startMin, setStart) : "Time"}</FieldText>}
       </FieldRow>
       <FieldRow>
         <FieldText grow onClick={() => setPick({ kind: "date", which: "end" })}>{dateOf("end") !== null ? formatDate(dateOf("end")!) : "Pick date"}</FieldText>
-        {!d.allDay && <FieldText onClick={() => setPick({ kind: "time", which: "end" })}>{d.endMin !== null ? formatTime(d.endMin) : "Time"}</FieldText>}
+        {!d.allDay && <FieldText onClick={() => setPick({ kind: "time", which: "end" })}>{d.endMin !== null ? held(d.endMin, setEnd) : "Time"}</FieldText>}
       </FieldRow>
     </> : (
       <FieldRow icon="oSchedule">
         <FieldText grow placeholder={d.startDay === null} onClick={() => setPick({ kind: "date", which: "start" })}>{d.startDay !== null ? formatDate(d.startDay) : "Add date"}</FieldText>
         {d.startDay !== null && <>
-          <FieldText placeholder={d.startMin === null} onClick={() => setPick({ kind: "time", which: "start" })}>{d.startMin !== null ? formatTime(d.startMin) : "Add time"}</FieldText>
+          <FieldText placeholder={d.startMin === null} onClick={() => setPick({ kind: "time", which: "start" })}>{d.startMin !== null ? held(d.startMin, setStart) : "Add time"}</FieldText>
           <IconButton icon="fClose" label="Clear date" onClick={() => set({ startDay: null, startMin: null, freq: "NONE" })} />
         </>}
       </FieldRow>
@@ -196,13 +204,7 @@ function WhenFields({ d, set }: { d: Item; set: (patch: Partial<Item>) => void }
       }} />
     )}
     {pick?.kind === "time" && (
-      <TimePickerDialog value={(pick.which === "end" ? d.endMin : d.startMin) ?? 9 * 60} onClose={() => setPick(null)} onPick={(m) => {
-        if (pick.which === "end") set({ endMin: m });
-        else {
-          const dur = d.startMin !== null && d.endMin !== null ? d.endMin - d.startMin : 60;
-          set({ startMin: m, endMin: isEvent ? Math.min(m + Math.max(15, dur), DAY_END) : d.endMin });
-        }
-      }} />
+      <TimePickerDialog value={(pick.which === "end" ? d.endMin : d.startMin) ?? 9 * 60} onClose={() => setPick(null)} onPick={(m) => (pick.which === "end" ? setEnd(m) : setStart(m))} />
     )}
   </>;
 }

@@ -64,6 +64,13 @@ function selecting(): boolean {
 interface Touch { el: HTMLElement; id: number; x0: number; y0: number; decided: boolean; pull: boolean; base: number; from: number; vt: VelocityTracker; sign: 1 | -1 }
 let touch: Touch | null = null;
 let fingers = 0;
+/** A held number turning a time wheel (TimeWheel.tsx) has the finger: no pull meanwhile. */
+let suspended = false;
+export function suspendOverscroll(on: boolean) {
+  suspended = on;
+  const t = touch;
+  if (on && t) { touch = null; if (t.pull) release(bandOf(t.el), 0); }
+}
 let lastTouchEnd = 0;
 
 function onStart(e: TouchEvent) {
@@ -85,6 +92,7 @@ function onStart(e: TouchEvent) {
 function onMove(e: TouchEvent) {
   const t = touch;
   if (!t) return;
+  if (suspended) { touch = null; if (t.pull) release(bandOf(t.el), 0); return; }
   if (e.touches.length > 1) { endTouch(0); return; }
   const p = [...e.touches].find((x) => x.identifier === t.id);
   if (!p) return;

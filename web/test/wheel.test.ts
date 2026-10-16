@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { joinTime, moveKeepingLength, splitTime, wheelHours, wheelMinutes } from "../src/ui/phone/wheelMath.ts";
+import { joinTime, moveKeepingLength, nearestSlot, splitTime, wheelHours, wheelMinutes, wrapIndex } from "../src/ui/phone/wheelMath.ts";
 import { snapIndex } from "../src/ui/phone/motion.ts";
 
 test("minutes come in fives, keeping an odd minute the item already has", () => {
@@ -40,4 +40,14 @@ test("a moved event keeps its length, within the day", () => {
   assert.deepEqual(moveKeepingLength(600, 540, 600), { startMin: 600, endMin: 660 });
   assert.deepEqual(moveKeepingLength(23 * 60 + 30, 540, 660), { startMin: 1410, endMin: 1439 });
   assert.deepEqual(moveKeepingLength(600, 540, null), { startMin: 600, endMin: null });
+});
+
+test("a drum goes round: 23 is next to 00, and the nearest way round is taken", () => {
+  assert.equal(wrapIndex(-1, 24), 23);
+  assert.equal(wrapIndex(24, 24), 0);
+  assert.equal(wrapIndex(49, 24), 1);
+  assert.equal(nearestSlot(0, 23, 24), -1); // from 00 to 23: one row back, not 23 on
+  assert.equal(nearestSlot(22, 1, 24), 25); // from 22 to 01: three rows on
+  assert.equal(nearestSlot(30, 6, 24), 30);
+  assert.equal(wrapIndex(nearestSlot(-50, 5, 60), 60), 5);
 });
