@@ -257,3 +257,32 @@ select.plain { cursor: pointer; }
 html:not(.phone) .task .pill { color: var(--muted) !important; background: var(--surface-2) !important; }
 html:not(.phone) .task .pill[style*="--danger"] { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
 html:not(.phone) .rep { color: var(--muted) !important; background: var(--surface-2) !important; }
+
+/* Routines on the PC's Today: a row of small chips (ring ticks, name opens) and the list of them all. */
+.rchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.rchip { display: inline-flex; align-items: center; gap: 4px; height: 30px; max-width: 220px; padding: 0 10px 0 5px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 500; transition: opacity .25s ease, background-color .2s ease; }
+.rchip:hover { background: var(--surface-low); border-color: color-mix(in oklab, var(--line) 60%, var(--muted)); }
+.rchip .ring { flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--muted); background: none; display: grid; place-items: center; color: var(--on-strong); cursor: pointer; transition: background-color .2s ease, border-color .2s ease; }
+.rchip .ring:hover { border-color: var(--strong); background: color-mix(in oklab, var(--strong) 10%, transparent); }
+.rchip .name { min-width: 0; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; text-decoration: line-through transparent; transition: text-decoration-color .25s ease; }
+.rchip .name:hover { text-decoration: underline; }
+.rchip .streak { flex: none; display: inline-flex; align-items: center; gap: 1px; font-size: 11px; color: var(--muted); }
+.rchip.done { opacity: .6; background: transparent; }
+.rchip.done .ring { background: var(--strong); border-color: var(--strong); }
+.rchip.done .name { text-decoration: line-through; color: var(--muted); }
+.rchip.missed .ring { border-color: var(--danger); }
+.rchip.all { padding: 0 10px; gap: 6px; color: var(--muted); cursor: pointer; }
+.panel-backdrop.center { justify-content: center; align-items: center; }
+.card.dialog { padding: 16px 16px 10px; width: min(420px, calc(100% - 32px)); max-height: 70vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow); }
+.rlist-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: none; color: var(--text); text-align: left; cursor: pointer; }
+.rlist-row:hover { background: var(--surface-2); }
+.rlist-row .ring { flex: none; width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--muted); display: grid; place-items: center; color: var(--on-strong); }
+.rlist-row.done .ring { background: var(--strong); border-color: var(--strong); }
+.rlist-row.off .ring { border-style: dashed; opacity: .6; }
+.rlist-row .grow { min-width: 0; display: flex; flex-direction: column; }
+.rlist-row .name { font-size: 14.5px; }
+.rlist-row .sub { font-size: 12.5px; color: var(--muted); }
+.rlist-row .streak { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.link-btn { display: block; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.link-btn:hover { color: var(--text); text-decoration: underline; }
+.routine-switch { margin-top: 6px; cursor: pointer; }

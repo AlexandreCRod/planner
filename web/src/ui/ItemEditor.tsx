@@ -4,6 +4,7 @@ import { searchNominatim } from "./phone/device.ts";
 import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
+import { isRoutineItem } from "../domain/routines.ts";
 import { preview } from "../domain/text.ts";
 import {
   type AlertType, type Freq, type Item, type OverduePolicy, type Reminder,
@@ -128,6 +129,8 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
       it = { ...it, startDay: sd, endDay: ed, endMin: em };
     } else it = { ...it, endDay: null, endMin: null, allDay: false };
     if (it.freq !== "NONE" && it.startDay === null) it.startDay = todayEpoch();
+    // Only a repeating task can be a routine.
+    if (it.routine && !(it.type === "TASK" && it.freq !== "NONE")) it.routine = false;
     return it;
   };
 
@@ -226,7 +229,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
                 </div>
               </Info>
             )}
-            {isRecurring(o) && <Info icon={<Icon name="repeat" size={16} color={color} />}>{describe(o)}</Info>}
+            {isRecurring(o) && <Info icon={<Icon name="repeat" size={16} color={color} />}>{describe(o)}{isRoutineItem(o) && <span className="hint"> · Routine</span>}</Info>}
             {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS_MUTED[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
             {!oEvent && o.startDay !== null && o.overduePolicy !== "SHOW_OVERDUE" && (
               <Info icon={<Icon name="update" size={16} />}>{o.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"}</Info>
@@ -345,6 +348,12 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
                 <div className="row">Ends <input type="date" className="input" value={toInput(d.untilDay)} onChange={(e) => set({ untilDay: fromInput(e.target.value) })} />
                   {d.untilDay !== null && <button className="btn small" onClick={() => set({ untilDay: null })}>Never</button>}</div>
                 {upcoming.length > 0 && <div className="hint">Next: {upcoming.map(formatDate).join(", ")}</div>}
+                {!isEvent && (
+                  <label className="row routine-switch" title="Routines get their own checklist on Today; a missed day ends the streak instead of piling up as overdue.">
+                    <input type="checkbox" checked={d.routine === true} onChange={(e) => set({ routine: e.target.checked })} />
+                    <span>Routine <span className="hint">— its own checklist on Today, with a streak</span></span>
+                  </label>
+                )}
               </>}
             </div>
           </div>

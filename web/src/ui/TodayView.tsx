@@ -1,9 +1,8 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
-import { type Occurrence, type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
+import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
-import { isRecurring } from "../domain/types.ts";
 import { isRoutineItem, routineList, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
 import { showStreaks } from "../store/routines.ts";
@@ -95,10 +94,10 @@ const taskTime = (e: TaskEntry) => (e.item.startMin !== null && e.day !== null ?
 function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
   const isToday = day === t;
   // Routines: their own checklist, out of the task lists below, never overdue.
-  const routines = phone ? routinesOnDay(s.items, s.done, day, t) : [];
+  const routines = routinesOnDay(s.items, s.done, day, t);
   // With routines but none on this day, the row still holds the button to list them all.
-  const anyRoutine = phone && s.items.some(isRoutineItem);
-  const withoutRoutines = (list: TaskEntry[]) => (phone ? skipRoutines(list) : list);
+  const anyRoutine = s.items.some(isRoutineItem);
+  const withoutRoutines = skipRoutines;
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
     const tasks = withoutRoutines(tasksForDay(s.items, s.done, t));
@@ -128,14 +127,13 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
     <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={phone ? taskTime : undefined}
-      // On the phone streaks belong to routines only (in their own section); the PC keeps them on repeating tasks.
-      streakInfo={!phone && isRecurring(e.item) && !showDay ? streak(e.item, s.done, day) : undefined}
       onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
   ));
 
   return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
       {phone && (routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
+      {!phone && (routines.length > 0 || anyRoutine) && <PcRoutineChips list={routines} s={s} day={day} t={t} />}
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
           <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
@@ -153,7 +151,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       {rows(shownTasks, `t${day}`, false)}
       {anytime > 0 && (phone
         ? <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>
-        : <div className="hint anytime" style={{ marginTop: 6 }}>{count(anytime, "task")} without a date — see Tasks</div>)}
+        : <button className="hint anytime link-btn" style={{ marginTop: 6 }} onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>)}
       {alsoDone.length > 0 && <>
         <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
         {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
@@ -226,6 +224,63 @@ function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: 
         </div>
       </div>
     )}</BottomSheet>
+  );
+}
+
+/**
+ * The PC's routines row: the same chips, for a mouse. A click on the ring ticks it, a click on the name
+ * opens it (like a task row's box and title); the last chip lists every routine.
+ */
+function PcRoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
+  const streaks = showStreaks() && day >= t;
+  const [all, setAll] = useState(false);
+  return (
+    <div className="rchips" role="list">
+      {list.map((e) => {
+        const ticked = e.status === "DONE";
+        const st = streaks ? routineStreak(e.item, s.done, t) : null;
+        const title = e.item.title || "Untitled";
+        return (
+          <span key={e.item.id} role="listitem" className={`rchip ${ticked ? "done" : ""} ${e.status === "MISSED" ? "missed" : ""}`}>
+            <button className="ring" aria-pressed={ticked} title={ticked ? "Done — click to untick" : "Tick"}
+              onClick={() => toggleCompletion(e.item.id, day, !ticked)}>{ticked && <Icon name="check" size={13} />}</button>
+            <button className="name" title={`Open ${title}`} onClick={() => openItem(e.item, e.day)}>{title}</button>
+            {st && st.current > 1 && <span className="streak" title={`${st.current} in a row`}><MIcon name="fLocalFireDepartment" size={12} />{st.current}</span>}
+          </span>
+        );
+      })}
+      <button className="rchip all" title="All routines" onClick={() => setAll(true)}><MIcon name="fFormatListBulleted" size={16} />{list.length === 0 && <span className="name">Routines</span>}</button>
+      {all && createPortal(<PcRoutineList s={s} t={t} onClose={() => setAll(false)} />, document.body)}
+    </div>
+  );
+}
+
+/** Every routine in a small dialog (the phone's sheet): name, how it repeats, today, streak. A click opens it. */
+function PcRoutineList({ s, t, onClose }: { s: Snapshot; t: number; onClose: () => void }) {
+  const rows = routineList(s.items, s.done, t);
+  const streaks = showStreaks();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="panel-backdrop center" onClick={onClose}>
+      <div className="card dialog rlist" role="dialog" aria-label="Routines" onClick={(e) => e.stopPropagation()}>
+        <div className="row"><b className="grow" style={{ fontSize: 16 }}>Routines</b><button className="icon-btn" title="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
+        {rows.length === 0 && <div className="hint">No routines yet. Turn on Routine in a repeating task's editor.</div>}
+        {rows.map((r) => (
+          <button key={r.item.id} className={`rlist-row ${r.today}`} onClick={() => { onClose(); openItem(r.item, r.today === "off" ? r.next : t); }}>
+            <span className="ring">{r.today === "done" && <Icon name="check" size={13} />}</span>
+            <span className="grow">
+              <span className="name ellipsis">{r.item.title || "Untitled"}</span>
+              <span className="sub ellipsis">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
+            </span>
+            {streaks && r.streak.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={14} />{r.streak.current}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

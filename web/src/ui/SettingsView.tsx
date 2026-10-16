@@ -8,6 +8,7 @@ import { getServer, isNative } from "../platform.ts";
 import { typeLabel } from "./LinksSection.tsx";
 import { checkedLinger, showDoneOnToday } from "./common.tsx";
 import { count } from "../domain/plural.ts";
+import { setShowStreaks, showStreaks } from "../store/routines.ts";
 
 export const ACCENTS: [string, string][] = [["Blue", "#1a73e8"], ["Indigo", "#3f51b5"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"], ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"]];
 
@@ -35,6 +36,7 @@ export function SettingsView() {
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
   const [showDone, setShowDone] = useState(showDoneOnToday());
+  const [streaks, setStreaks] = useState(showStreaks());
   const [editing, setEditing] = useState<Category | null>(null);
   useEffect(() => { localStorage.setItem("theme", theme); localStorage.setItem("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { localStorage.setItem("weekStartsMonday", String(monday)); }, [monday]);
@@ -74,6 +76,10 @@ export function SettingsView() {
       <label className="row" style={{ marginTop: 8 }}>
         <input type="checkbox" checked={showDone} onChange={(e) => { setShowDone(e.target.checked); localStorage.setItem("showDoneOnToday", String(e.target.checked)); }} />
         Show completed tasks on Today
+      </label>
+      <label className="row" style={{ marginTop: 8 }}>
+        <input type="checkbox" checked={streaks} onChange={(e) => { setStreaks(e.target.checked); setShowStreaks(e.target.checked); }} />
+        Show streaks on routines
       </label>
 
       {!isNative && <>
