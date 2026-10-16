@@ -14,7 +14,8 @@ import { typeLabel } from "../LinksSection.tsx";
 import { checkedLinger, go, showDoneOnToday } from "../common.tsx";
 import { applyTheme, useSyncStatus } from "../SettingsView.tsx";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
-import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog } from "./m3.tsx";
+import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
+import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
@@ -94,6 +95,26 @@ function AlarmSettingsSection() {
   </>;
 }
 
+/** "Check for updates": the installed version; a tap asks GitHub now (update.ts), whatever was dismissed. */
+function UpdateRow() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => { void installedVersion().then(setVersion); }, []);
+  const check = async () => {
+    if (checking) return;
+    setChecking(true);
+    const r = await checkForUpdate(true);
+    setChecking(false);
+    if (r === "current") showSnackbar("You're up to date");
+    else if (r === "failed") showSnackbar("Couldn't check for updates");
+  };
+  return <>
+    <div className="p-hr" />
+    <SectionHeader>About</SectionHeader>
+    <ListItem headline="Check for updates" supporting={checking ? "Checking…" : version ? `Version ${version}` : ""} onClick={() => void check()} />
+  </>;
+}
+
 export function PhoneSettings() {
   const sync = useSyncStatus();
   const [theme, setTheme] = useState(localStorage.getItem("theme") ?? "system");
@@ -166,6 +187,7 @@ export function PhoneSettings() {
         <SectionHeader>Data</SectionHeader>
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TASK_EVENT_DAYS} days (notes ${NOTE_DAYS})`}</span>} onClick={() => go("settings/trash")} />
+        {isNative && <UpdateRow />}
         <div className="p-endspace" />
       </div>
 

@@ -1234,3 +1234,17 @@ html.phone[data-theme="dark"] {
 .phone .p-rlist-row .name { font-size: 16px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-rlist-row .sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-rlist-row .streak { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--muted); }
+
+/* The update popup (UpdateHost.tsx): which version, the release notes as plain text, a quiet progress bar. */
+.phone .p-update-version { color: var(--muted); margin-bottom: 12px; }
+.phone .p-update-notes { color: var(--text); display: flex; flex-direction: column; gap: 4px; }
+.phone .p-update-notes .h { font-weight: 500; margin-top: 6px; }
+.phone .p-update-notes .li { position: relative; padding-left: 16px; }
+.phone .p-update-notes .li::before { content: "•"; position: absolute; left: 3px; color: var(--muted); }
+.phone .p-update-notes p { margin: 2px 0; }
+.phone .p-update-progress { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.phone .p-update-progress .p-progress { background: var(--p-sec-container); border-radius: 2px; overflow: hidden; }
+.phone .p-update-progress .active { transition: width .2s linear; }
+.phone .p-update-progress .active.busy { animation: p-update-busy 1.2s ease-in-out infinite alternate; }
+@keyframes p-update-busy { from { transform: translateX(-60%); } to { transform: translateX(260%); } }
+.phone .p-update-size { color: var(--muted); font-size: 12px; }

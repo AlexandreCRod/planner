@@ -28,6 +28,7 @@ import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from 
 import { BAR_GAIN, barTarget, spring } from "./pager.ts";
 import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
+import { UpdateHost } from "./UpdateHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Alarms is the fifth where the alarm engine is (the phone build), not in a browser.
@@ -249,6 +250,7 @@ export function PhoneApp() {
       <SnackbarHost raised={!!overlay} />
       <PermissionHost />
       <InviteHost />
+      {isNative && <UpdateHost />}
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onPreview={setPreview} onClose={() => { setAdding(null); setPreview(null); }} />}
     </div>
   );
