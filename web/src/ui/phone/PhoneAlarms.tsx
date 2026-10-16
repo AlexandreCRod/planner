@@ -12,6 +12,7 @@ import {
 import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts";
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
 import { useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
+import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { AppBarActions, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { BottomSheet, Switch, TextButton } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
@@ -532,8 +533,11 @@ function WorldClockPane({ zones, local, active, onAdd }: { zones: string[]; loca
   return (
     <div className="pa-scroll pa-gap12 pa-top16">
       <div className="pa-local">
-        <div className="pa-time52">{zoneClock(here, now, h24)}</div>
-        <div className="t-body-medium muted">{cityName(here)} · here</div>
+        <div className="pa-local-text">
+          <div className="pa-time52">{zoneClock(here, now, h24)}</div>
+          <div className="t-body-medium muted">{cityName(here)} · here</div>
+        </div>
+        <WeatherChip id={here} now={now} active={active} />
       </div>
       {zones.length === 0 && <Empty icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
       {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} />)}
@@ -541,25 +545,36 @@ function WorldClockPane({ zones, local, active, onAdd }: { zones: string[]; loca
   );
 }
 
-function CityCard({ zone, here, now, h24, active }: { zone: string; here: string; now: number; h24: boolean; active: boolean }) {
-  const w = useWeather(zone, active);
-  const v = w ? weatherView(w, zone, now) : null;
+/**
+ * A city's weather now: its symbol and temperature, or a quiet cloud and a dash until the first reading
+ * arrives (or while offline). Tapping it opens the weather app (or a weather page).
+ */
+function WeatherChip({ id, now, active }: { id: string; now: number; active: boolean }) {
+  const w = useWeather(id, active);
+  const v = w ? weatherView(w, id, now) : null;
+  return (
+    <button className={`pa-wx ${v ? "" : "none"}`} aria-label={v ? `${v.label}, ${v.text}${v.unit}. Open the weather` : "Weather. Open the weather"}
+      onClick={() => void native.openWeather(weatherPage(id))}>
+      <MIcon name={v ? v.icon : "oCloud"} size={22} />
+      <span>{v ? v.text : "–°"}</span>
+    </button>
+  );
+}
+
+/** A city on the world clock, by its stored id (a zone, or "zone#Name": domain/cities.ts). */
+function CityCard({ zone: id, here, now, h24, active }: { zone: string; here: string; now: number; h24: boolean; active: boolean }) {
+  const zone = zoneOf(id);
   let sub = "";
   try { sub = [zoneDayLabel(zone, now, here), zoneOffsetLabel(zone, now, here)].filter(Boolean).join(" · "); } catch { return null; }
   return (
     <div className="pa-card pa-city">
       <div className="grow pa-city-text">
-        <div className="t-title-medium pa-line">{cityName(zone)}</div>
+        <div className="t-title-medium pa-line">{cityLabel(id)}</div>
         <div className="t-body-small muted pa-line">{sub}</div>
       </div>
-      {v && (
-        <button className="pa-wx" aria-label={`${v.label}, ${v.text}${v.unit}. Open the weather`} onClick={() => void native.openWeather(weatherPage(zone))}>
-          <MIcon name={v.icon} size={22} />
-          <span>{v.text}</span>
-        </button>
-      )}
+      <WeatherChip id={id} now={now} active={active} />
       <span className="pa-time26">{zoneClock(zone, now, h24)}</span>
-      <IconButton icon="fClose" label="Remove" onClick={() => void act(native.zone("remove", zone))} />
+      <IconButton icon="fClose" label="Remove" onClick={() => void act(native.zone("remove", id))} />
     </div>
   );
 }
@@ -573,16 +588,16 @@ function ZonePickerDialog({ local, onClose }: { local: string; onClose: () => vo
   }, []);
   const now = Date.now();
   const here = local || systemZone();
-  const t = q.trim().toLowerCase();
-  const shown = all.filter((z) => !t || cityName(z).toLowerCase().includes(t) || z.toLowerCase().includes(t));
+  // The city table by name or country; other time zones only once something is typed.
+  const shown = useMemo(() => searchCities(q, all), [q, all]);
   return (
     <Dialog title="Add a city" onClose={onClose} actions={<TextButton onClick={onClose}>Cancel</TextButton>}>
       <Field label="Search" value={q} onChange={setQ} autoFocus />
       <div className="pa-zones">
-        {shown.map((z) => (
-          <button key={z} className="pa-zone" onClick={() => { onClose(); void act(native.zone("add", z)); }}>
-            <span className="t-body-large">{cityName(z)}</span>
-            <span className="t-body-small muted">{z.slice(0, z.indexOf("/"))} · {zoneOffsetLabel(z, now, here)}</span>
+        {shown.map((c) => (
+          <button key={c.id} className="pa-zone" onClick={() => { onClose(); void act(native.zone("add", c.id)); }}>
+            <span className="t-body-large">{c.name}</span>
+            <span className="t-body-small muted">{c.place} · {zoneOffsetLabel(zoneOf(c.id), now, here)}</span>
           </button>
         ))}
       </div>

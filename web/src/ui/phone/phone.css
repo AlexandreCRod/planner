@@ -1013,3 +1013,7 @@ html.phone[data-theme="dark"] {
 .phone .p-routine .streak { color: var(--muted); }
 /* The add button: a quiet raised surface with the accent's icon. */
 .phone .p-fab { background: var(--p-sc-high); color: var(--p-primary); }
+/* World clock: the local time with its weather beside it; the weather chip is there before its first reading. */
+.phone .pa-local { display: flex; align-items: center; gap: 8px; }
+.phone .pa-local-text { flex: 1; min-width: 0; }
+.phone .pa-wx.none svg { color: var(--muted); opacity: .6; }

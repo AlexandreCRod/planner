@@ -3,7 +3,8 @@
 // place search by the city's name, asked once and remembered). Nothing about the phone or its owner
 // leaves it. Values are kept between visits and asked again about every 30 minutes while on screen.
 import { useEffect, useState } from "react";
-import { cityName, usesFahrenheit, toFahrenheit, weatherSymbol, zoneHour } from "../domain/alarms.ts";
+import { usesFahrenheit, toFahrenheit, weatherSymbol, zoneHour } from "../domain/alarms.ts";
+import { cityLabel, cityOf, zoneOf } from "../domain/cities.ts";
 
 /** Where the city of each time zone is, as [latitude, longitude], to two decimals. */
 const COORDS: Record<string, [number, number]> = {
@@ -64,15 +65,20 @@ const REFRESH_MS = 30 * 60_000;
 const read = <T,>(key: string): T | null => { try { return JSON.parse(localStorage.getItem(key) ?? "null") as T | null; } catch { return null; } };
 const write = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* full or private */ } };
 
-/** Coordinates for a zone's city: the table, a remembered search, or Open-Meteo's place search by name. */
-async function coordsFor(zone: string): Promise<[number, number] | null> {
-  if (COORDS[zone]) return COORDS[zone];
-  const key = `geo:${zone}`;
+/**
+ * Coordinates for a world clock city (its stored id, see domain/cities.ts): the city table, the zone's
+ * city above, a remembered search, or Open-Meteo's place search by name.
+ */
+async function coordsFor(id: string): Promise<[number, number] | null> {
+  const city = cityOf(id);
+  if (city) return [city.lat, city.lng];
+  if (!id.includes("#") && COORDS[id]) return COORDS[id];
+  const key = `geo:${id}`;
   const saved = read<[number, number] | "none">(key);
   if (saved === "none") return null;
   if (saved) return saved;
   try {
-    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName(zone))}&count=1&format=json`);
+    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityLabel(id))}&count=1&format=json`);
     const j = await r.json() as { results?: { latitude: number; longitude: number }[] };
     const hit = j.results?.[0];
     const v: [number, number] | "none" = hit ? [Math.round(hit.latitude * 100) / 100, Math.round(hit.longitude * 100) / 100] : "none";
@@ -122,12 +128,12 @@ export function useWeather(zone: string, visible: boolean): Weather | null {
 
 const FAHRENHEIT = usesFahrenheit(navigator.language || "en");
 /** "18°" in °C or °F by the phone's language, with the symbol for the code (night between 20:00 and 06:00 there). */
-export function weatherView(w: Weather, zone: string, now: number): { text: string; unit: string; icon: string; label: string } {
-  const h = zoneHour(zone, now);
+export function weatherView(w: Weather, id: string, now: number): { text: string; unit: string; icon: string; label: string } {
+  const h = zoneHour(zoneOf(id), now);
   const sym = weatherSymbol(w.code, h >= 6 && h < 20);
   const t = Math.round(FAHRENHEIT ? toFahrenheit(w.tempC) : w.tempC);
   return { text: `${t}°`, unit: FAHRENHEIT ? "F" : "C", ...sym };
 }
 
 /** A weather page for the city, for when no weather app has been picked (DuckDuckGo: no account, no tracking). */
-export const weatherPage = (zone: string) => `https://duckduckgo.com/?q=${encodeURIComponent(`weather ${cityName(zone)}`)}&ia=weather`;
+export const weatherPage = (id: string) => `https://duckduckgo.com/?q=${encodeURIComponent(`weather ${cityLabel(id)}`)}&ia=weather`;
