@@ -166,7 +166,7 @@ class AlarmPlugin : Plugin() {
 
     @PluginMethod
     fun controls(call: PluginCall) {
-        val itemId = call.getLong("itemId") ?: return call.reject("itemId missing")
+        val itemId = call.num("itemId") ?: return call.reject("itemId missing")
         val out = ArrayList<Control>()
         val item = Mirror.item(context, itemId)
         if (item != null && RingDevice.ringsEvents(context)) {
@@ -185,7 +185,7 @@ class AlarmPlugin : Plugin() {
     }
 
     private fun itemAndReminder(call: PluginCall): Pair<Item, Reminder>? {
-        val r = call.getLong("reminderId")?.let { Mirror.reminder(context, it) } ?: return null
+        val r = call.num("reminderId")?.let { Mirror.reminder(context, it) } ?: return null
         val item = Mirror.item(context, r.itemId) ?: return null
         return item to r
     }
@@ -194,7 +194,7 @@ class AlarmPlugin : Plugin() {
     @PluginMethod
     fun earlySnooze(call: PluginCall) {
         val (item, r) = itemAndReminder(call) ?: return call.reject("unknown reminder")
-        val original = call.getLong("original") ?: return call.reject("original missing")
+        val original = call.num("original") ?: return call.reject("original missing")
         val current = AlarmOverrides.adjusted(context, r.id, original) ?: return ok(call)
         if (!AlarmScheduler.canSnoozeEarly(current)) return ok(call)
         AlarmOverrides.delay(context, r.id, original, current + Mirror.settings(context).snoozeMinutes * 60_000L)
@@ -207,7 +207,7 @@ class AlarmPlugin : Plugin() {
     @PluginMethod
     fun earlyStop(call: PluginCall) {
         val (item, r) = itemAndReminder(call) ?: return call.reject("unknown reminder")
-        val original = call.getLong("original") ?: return call.reject("original missing")
+        val original = call.num("original") ?: return call.reject("original missing")
         AlarmOverrides.stop(context, r.id, original)
         Notifications.cancelUpcoming(context, r.id)
         AlarmScheduler.scheduleItem(context, item, listOf(r))
@@ -218,7 +218,7 @@ class AlarmPlugin : Plugin() {
     @PluginMethod
     fun resetAlarm(call: PluginCall) {
         val (item, r) = itemAndReminder(call) ?: return call.reject("unknown reminder")
-        val original = call.getLong("original")?.takeIf { it != 0L }
+        val original = call.num("original")?.takeIf { it != 0L }
         if (original != null) AlarmOverrides.reset(context, r.id, original)
         AlarmScheduler.cancelSnooze(context, r.id)
         Notifications.cancelUpcoming(context, r.id)
@@ -240,7 +240,7 @@ class AlarmPlugin : Plugin() {
 
     @PluginMethod
     fun deleteClock(call: PluginCall) {
-        ClockAlarms.delete(context, call.getLong("id") ?: return call.reject("id missing"))
+        ClockAlarms.delete(context, call.num("id") ?: return call.reject("id missing"))
         ok(call)
     }
 
@@ -249,11 +249,11 @@ class AlarmPlugin : Plugin() {
         val now = System.currentTimeMillis()
         val action = call.getString("action") ?: return call.reject("action missing")
         if (action == "start") {
-            val ms = call.getLong("durationMs") ?: return call.reject("durationMs missing")
+            val ms = call.num("durationMs") ?: return call.reject("durationMs missing")
             ClockTools.startTimer(context, ms, call.getString("label") ?: "")
             return ok(call)
         }
-        val id = call.getLong("id") ?: return call.reject("id missing")
+        val id = call.num("id") ?: return call.reject("id missing")
         val t = ClockTools.timer(context, id) ?: return ok(call)
         when (action) {
             "pause" -> ClockTools.saveTimer(context, t.pause(now))
@@ -367,10 +367,10 @@ class AlarmPlugin : Plugin() {
         call ?: return
         val c = result.data?.component
         if (result.resultCode != android.app.Activity.RESULT_OK || c == null) return call.resolve(JSObject().put("picked", false))
-        // The picked app is visible to this one through the pick itself; if not, its package name stands in.
+        // Android hides other apps from this one (no app list is asked for), so the picked app's own name
+        // usually can't be read; a name made from its package stands in ("com.google.android.deskclock": "Deskclock").
         val label = runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
-            ?: runCatching { context.packageManager.getApplicationInfo(c.packageName, 0).loadLabel(context.packageManager).toString() }.getOrNull()
-            ?: c.packageName
+            ?: nameFromPackage(c.packageName)
         weatherPrefs().edit().putString("component", c.flattenToString()).putString("label", label).apply()
         call.resolve(JSObject().put("picked", true).put("label", label))
     }
@@ -424,4 +424,15 @@ class AlarmPlugin : Plugin() {
         runCatching { activity?.startActivity(intent) }
         ok(call)
     }
+}
+
+/** A whole number argument, whether JavaScript sent it as an Int or a Long (getLong only takes a Long). */
+private fun PluginCall.num(name: String): Long? = (data.opt(name) as? Number)?.toLong()
+
+private val GENERIC_SEGMENTS = setOf("com", "org", "net", "io", "de", "fr", "co", "uk", "android", "app", "apps", "google", "mobile", "free", "pro", "lite", "client")
+
+/** A readable stand-in for an app's name: the most specific part of its package that isn't generic. */
+internal fun nameFromPackage(pkg: String): String {
+    val part = pkg.split('.').lastOrNull { it.isNotBlank() && it.lowercase() !in GENERIC_SEGMENTS } ?: return pkg
+    return part.replaceFirstChar { it.uppercase() }
 }

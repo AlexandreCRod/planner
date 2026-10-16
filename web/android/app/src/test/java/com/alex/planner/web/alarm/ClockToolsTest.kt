@@ -61,4 +61,11 @@ class ClockToolsTest {
         assertNull(ClockTools.dayLabel(ZoneId.of("Europe/Paris"), winter, lisbon))
         assertEquals("New York", ClockTools.cityName("America/New_York"))
     }
+
+    @Test fun weatherAppNameFromItsPackage() {
+        assertEquals("Deskclock", nameFromPackage("com.google.android.deskclock"))
+        assertEquals("Accuweather", nameFromPackage("com.accuweather.android"))
+        assertEquals("Weather", nameFromPackage("com.weather.Weather"))
+        assertEquals("com.android", nameFromPackage("com.android"))
+    }
 }
