@@ -724,8 +724,14 @@ function NotesSheet({ item, onClose, onSave }: { item: Item; onClose: () => void
 
 // ---------- The full editor ----------
 
-/** The copy "Duplicate" opens the editor with; nothing is saved until Save. */
+/** The copy "Duplicate" (or an opened invitation) opens the editor with; nothing is saved until Save. */
 let duplicateSeed: Draft | null = null;
+
+/** Opens the full editor on a new, unsaved item (a calendar invitation): it's added only on Save. */
+export function openNewDraft(draft: Draft) {
+  duplicateSeed = draft;
+  go(`item/0?edit=1&dup=1&n=${Date.now()}`);
+}
 
 /**
  * The full editor, laid out like Google Calendar's: one row per field, each with its icon. Standing

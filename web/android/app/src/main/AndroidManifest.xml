@@ -23,6 +23,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Calendar invites: Gmail's invite.ics, or a .ics file opened in Files, offer "Open with"
+                 this app (invite/InvitePlugin.kt reads the shared file; nothing is fetched). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="application/ics" />
+                <data android:mimeType="text/x-vcalendar" />
+            </intent-filter>
+            <!-- A .ics file some app shares without a calendar type. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.ics" />
+                <data android:pathPattern=".*\\..*\\.ics" />
+            </intent-filter>
+
         </activity>
 
         <!-- The alarm engine (alarm/), the same components as the native app's. -->

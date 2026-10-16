@@ -24,6 +24,7 @@ import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmSection } from "./PhoneAlarms.tsx";
+import { InviteHost } from "./InviteHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Alarms is the fifth where the alarm engine is (the phone build), not in a browser.
@@ -164,9 +165,10 @@ export function PhoneApp() {
       {!overlay && TABS[tab].key !== "alarms" && (
         <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
       )}
-      {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "")} route={route} path={path} query={query} />}
+      {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
       <SnackbarHost raised={!!overlay} />
       <PermissionHost />
+      <InviteHost />
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onPreview={setPreview} onClose={() => { setAdding(null); setPreview(null); }} />}
     </div>
   );
