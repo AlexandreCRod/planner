@@ -114,9 +114,18 @@ const system24h = (() => {
   return !/[AP]M/i.test(s);
 })();
 
+/**
+ * The phone's own 24-hour setting, read from Android (the phone app sets it at start and whenever the
+ * app comes back). When known it is the only source: the in-app choice isn't offered there.
+ */
+let device24h: boolean | null = null;
+export function setDeviceClock24(v: boolean | null) { device24h = v; }
+export const deviceClockKnown = () => device24h !== null;
+
 /** "system" (this computer's setting), "24" or "12"; chosen in Settings. */
 export type ClockFormat = "system" | "24" | "12";
 export function clockFormat(): ClockFormat {
+  if (device24h !== null) return "system";
   try {
     const v = globalThis.localStorage?.getItem("clockFormat");
     return v === "24" || v === "12" ? v : "system";
@@ -124,7 +133,7 @@ export function clockFormat(): ClockFormat {
     return "system";
   }
 }
-export const use24h = () => (clockFormat() === "system" ? system24h : clockFormat() === "24");
+export const use24h = () => (device24h !== null ? device24h : clockFormat() === "system" ? system24h : clockFormat() === "24");
 
 export function formatTime(min: number): string {
   const h = Math.floor(min / 60), mm = min % 60;

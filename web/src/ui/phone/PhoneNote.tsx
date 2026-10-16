@@ -16,7 +16,8 @@ import { RichEditor, type RichEditorHandle } from "../RichEditor.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
-import { onKeyboardHide, openExternal, pushBack } from "./native.ts";
+import { onKeyboardHide, pushBack } from "./native.ts";
+import { openPlace } from "./device.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
 
@@ -147,7 +148,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           <MIcon name="oLocationOn" />
           {/* A typed place has no coordinates; the map is searched for the text. */}
           <input placeholder="place" value={place.location} onChange={(e) => setPlace({ location: e.target.value, lat: null, lng: null })} />
-          {place.location.trim() && <IconButton icon="oMap" label="Open in Maps" onClick={() => openExternal(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : place.location.trim())}`)} />}
+          {place.location.trim() && <IconButton icon="oMap" label="Open in Maps" onClick={() => openPlace(place.location.trim(), place.lat, place.lng)} />}
         </div>
         {images.length > 0 && (
           <div className="pn-images">

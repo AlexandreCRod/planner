@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import androidx.activity.EdgeToEdge;
 import com.alex.planner.web.alarm.AlarmPlugin;
+import com.alex.planner.web.device.DevicePlugin;
 import com.alex.planner.web.invite.InvitePlugin;
 import com.getcapacitor.BridgeActivity;
 
@@ -23,6 +24,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AlarmPlugin.class);
         // Calendar invites (.ics) opened with this app.
         registerPlugin(InvitePlugin.class);
+        // The phone's clock format, place search and the maps app.
+        registerPlugin(DevicePlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
     }

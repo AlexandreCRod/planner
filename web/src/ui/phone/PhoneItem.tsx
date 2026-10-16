@@ -20,6 +20,7 @@ import { RichEditor, type RichEditorHandle, sanitize } from "../RichEditor.tsx";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { openExternal } from "./native.ts";
+import { type Place, openPlace, searchPlaces } from "./device.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { RichBar } from "./RichBar.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
@@ -77,9 +78,8 @@ export function whenText(item: Item, day: number | null): string {
 
 const overdueText = (p: OverduePolicy) => p === "SHOW_OVERDUE" ? "If missed: stays overdue" : p === "CARRY_OVER" ? "If missed: moves to the next day" : "If missed: skip it";
 
-/** The place on a map (Google Maps, or whatever handles map links), and directions to it. Only a link is opened. */
+/** Directions to the place (Google Maps, or whatever handles map links). Only a link is opened. */
 const place = (i: Item) => (i.lat != null && i.lng != null ? `${i.lat},${i.lng}` : (i.location ?? "").trim());
-export const mapUrl = (i: Item) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place(i))}`;
 export const directionsUrl = (i: Item) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place(i))}`;
 
 /** Moves an item to the trash at once; the snackbar can bring it back (vm.trashWithUndo). */
@@ -408,16 +408,43 @@ function EarlyAlarmControls({ itemId, reminders }: { itemId: number; reminders: 
 function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<Item>) => void; autoFocus?: boolean }) {
   const loc = d.location ?? "";
   const ref = useRef<HTMLInputElement>(null);
+  // What's being typed (null once a place is picked or the field is left), and the places it matches.
+  const [query, setQuery] = useState<string | null>(null);
+  const [found, setFound] = useState<Place[]>([]);
   useEffect(() => { if (autoFocus) { const t = window.setTimeout(() => ref.current?.focus(), 80); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
+  useEffect(() => {
+    const q = query?.trim() ?? "";
+    if (q.length < 3) { setFound([]); return; }
+    let live = true;
+    const t = window.setTimeout(() => { void searchPlaces(q).then((r) => { if (live) setFound(r); }); }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [query]);
+  const pick = (p: Place) => { set({ location: p.name, lat: p.lat, lng: p.lng }); setQuery(null); setFound([]); ref.current?.blur(); };
+  return <>
     <FieldRow icon="oLocationOn">
-      {/* A typed place has no coordinates; ones that came with the item stay until the text changes. */}
+      {/* A typed place has no coordinates; a picked suggestion brings its own. */}
       <input ref={ref} className="pe-input grow" placeholder="Add location" value={loc} enterKeyHint="done" autoCapitalize="words"
-        onChange={(e) => set({ location: e.target.value, lat: null, lng: null })} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-      {loc && <IconButton icon="fClose" label="Clear location" onClick={() => set({ location: "", lat: null, lng: null })} />}
-      {loc.trim() && <IconButton icon="oDirections" label="Directions" onClick={() => openExternal(directionsUrl(d))} />}
+        onChange={(e) => { set({ location: e.target.value, lat: null, lng: null }); setQuery(e.target.value); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+      {loc && <IconButton icon="fClose" label="Clear location" onClick={() => { set({ location: "", lat: null, lng: null }); setQuery(null); }} />}
     </FieldRow>
-  );
+    {query !== null && found.length > 0 && (
+      <div className="pe-places" role="listbox">
+        {found.map((p) => {
+          const comma = p.name.indexOf(",");
+          return (
+            <button key={`${p.name}${p.lat}`} className="pe-place" role="option" onPointerDown={(e) => e.preventDefault()} onClick={() => pick(p)}>
+              <MIcon name="oLocationOn" size={18} />
+              <span className="grow">
+                <span className="ellipsis">{comma > 0 ? p.name.slice(0, comma) : p.name}</span>
+                {comma > 0 && <span className="pe-place-sub ellipsis">{p.name.slice(comma + 1).trim()}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </>;
 }
 
 // ---------- Links ----------
@@ -463,9 +490,10 @@ function ItemPicker({ s, exclude, onPick, onClose }: { s: Snapshot; exclude: Set
       <div className="p-sheet-pad"><input className="p-field" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" /></div>
       <div className="pe-pick-list">
         {list.map((i) => (
-          <div key={i.id} className="p-li two" role="button" onClick={() => { onPick(i.id); close(); }}>
-            <span className="lead"><span className="pe-dot" style={{ background: s.colorOf(i) }} /></span>
-            <span className="text"><span className="headline ellipsis">{i.title || "Untitled"}</span><span className="supporting small">{typeLabel(i)}</span></span>
+          <div key={i.id} className="pe-pick" role="button" onClick={() => { onPick(i.id); close(); }}>
+            <span className="pe-dot" style={{ background: s.colorOf(i) }} />
+            <span className="ellipsis grow">{i.title || "Untitled"}</span>
+            <span className="pe-pick-type">{typeLabel(i)}</span>
           </div>
         ))}
       </div>
@@ -594,7 +622,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
 
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
         {(item.location ?? "").trim() && (
-          <InfoRow icon="oLocationOn" text={item.location!} link onClick={() => openExternal(mapUrl(item))} trailing={<>
+          <InfoRow icon="oLocationOn" text={item.location!} link onClick={() => openPlace(item.location!.trim(), item.lat, item.lng)} trailing={<>
             <IconButton icon="oDirections" label="Directions" className="primary" onClick={() => openExternal(directionsUrl(item))} />
             <IconButton icon="oEdit" label="Change location" onClick={() => setEditing("location")} />
           </>} />

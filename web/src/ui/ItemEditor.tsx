@@ -1,5 +1,6 @@
 // Side panel for tasks and events: a simple view when opened, the full editor after Edit (same fields as the phone's).
 import { useEffect, useRef, useState } from "react";
+import { searchNominatim } from "./phone/device.ts";
 import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
@@ -463,17 +464,8 @@ const directionsUrl = (i: Item, app: "google" | "waze") => {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hasPoint ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
 };
 
-/** Address suggestions from OpenStreetMap's search (Nominatim), at most 5. */
-async function searchPlaces(q: string): Promise<{ name: string; lat: number; lng: number }[]> {
-  try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`, { headers: { Accept: "application/json" } });
-    if (!r.ok) return [];
-    const list = (await r.json()) as { display_name: string; lat: string; lon: string }[];
-    return list.map((p) => ({ name: p.display_name, lat: Number(p.lat), lng: Number(p.lon) }));
-  } catch {
-    return [];
-  }
-}
+/** Address suggestions from OpenStreetMap's search (Nominatim), at most 5 (see phone/device.ts). */
+const searchPlaces = (q: string) => searchNominatim(q, 5);
 
 const mapsUrl = (i: Item) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.lat !== null && i.lng !== null ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
 

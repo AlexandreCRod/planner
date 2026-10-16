@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { isNative } from "../../platform.ts";
 import { startPressFeedback } from "./press.ts";
 import { startPhoneTheme } from "./theme.ts";
+import { startDeviceClock } from "./device.ts";
 
 // ---------- Haptics (no-ops in a browser) ----------
 export const hapticLift = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {}); };
@@ -39,6 +40,7 @@ export function startPhonePlumbing() {
   started = true;
   startPhoneTheme();
   startPressFeedback();
+  startDeviceClock();
   const vv = window.visualViewport;
   if (vv) {
     const measure = () => { viewportCover = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); update(); };

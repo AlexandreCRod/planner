@@ -9,7 +9,7 @@ import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
 import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
 import { setShowStreaks, showStreaks } from "../../store/routines.ts";
-import { getServer, setServer } from "../../platform.ts";
+import { getServer, isNative, setServer } from "../../platform.ts";
 import { typeLabel } from "../LinksSection.tsx";
 import { checkedLinger, go, showDoneOnToday } from "../common.tsx";
 import { applyTheme, useSyncStatus } from "../SettingsView.tsx";
@@ -140,7 +140,8 @@ export function PhoneSettings() {
         <div className="p-hr" />
         <SectionHeader>Calendar</SectionHeader>
         <SwitchRow title="Week starts on Monday" checked={monday} onChange={(v) => { setMonday(v); redraw("weekStartsMonday", String(v)); }} />
-        <ChoiceRow title="Time format" value={clock} options={CLOCKS} onPick={(v) => { setClock(v); redraw("clockFormat", v); }} />
+        {/* In the app, times follow the phone's own 24-hour setting (Android's Date & time settings). */}
+        {!isNative && <ChoiceRow title="Time format" value={clock} options={CLOCKS} onPick={(v) => { setClock(v); redraw("clockFormat", v); }} />}
         <ChoiceRow title="Date format" value={dates} options={DATE_STYLES} onPick={(v) => { setDates(v); redraw("dateFormat", v); }} />
 
         <div className="p-hr" />
