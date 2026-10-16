@@ -1192,3 +1192,9 @@ html.phone[data-theme="dark"] {
   background: color-mix(in srgb, var(--pn-fg) 9%, var(--pn-bg, var(--bg))); box-shadow: 0 6px 16px rgb(0 0 0 / .22);
 }
 .phone .pn-text .rich > p.pn-sliding { transition: transform .18s cubic-bezier(.2, 0, 0, 1); will-change: transform; }
+
+/* ---------- Room for the system's navigation bar (3-button or gesture) ----------
+   Full-screen pages cover the bottom bar, so their scrolling content and anything pinned to the bottom
+   keeps clear of the navigation bar's height (--sab, from the system's insets). */
+.phone .p-overlay .p-list, .phone .p-content.ps { padding-bottom: calc(var(--sab) + 16px); }
+.phone .p-graphcard { bottom: calc(var(--sab) + 12px); }
