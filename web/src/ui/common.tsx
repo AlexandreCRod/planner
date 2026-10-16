@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
-import { PRIORITY_COLORS, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
+import { PRIORITY_COLORS, PRIORITY_COLORS_MUTED, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
 import { type Snapshot, toggleCompletion } from "../store/store.ts";
 
 // Material Symbols paths (24 px viewBox).
@@ -84,8 +84,8 @@ export function useNow(): number {
   return now;
 }
 
-export function Pill({ children, color }: { children: ReactNode; color: string }) {
-  return <span className="pill" style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)` }}>{children}</span>;
+export function Pill({ children, color, className = "" }: { children: ReactNode; color: string; className?: string }) {
+  return <span className={`pill ${className}`} style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)`, ["--pc" as string]: color }}>{children}</span>;
 }
 
 /** Seconds a ticked task stays where it was (Settings → Checked tasks); -1 until the page is left. */
@@ -174,7 +174,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
         </div>}
       </div>
       <span className="pills">
-      {priorityTag && item.priority > 0 && !done && <Pill color={PRIORITY_COLORS[item.priority]}><span className="sub-icon flag"><Icon name="flag" size={12} /></span>{PRIORITIES[item.priority]}</Pill>}
+      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={PRIORITY_COLORS_MUTED[item.priority]}><span className="sub-icon flag"><Icon name="flag" size={12} /></span>{PRIORITIES[item.priority]}</Pill>}
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}

@@ -13,7 +13,8 @@ import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts"
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
 import { useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { AppBarActions, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
@@ -219,7 +220,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           {SECTIONS.map(([k], i) => (
             <div key={k} className="pa-section" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
               {Math.abs(i - index) <= 1 || k === "alarm" ? (
-                k === "alarm" ? <AlarmList alarms={st.alarms} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} />
+                k === "alarm" ? <AlarmList alarms={st.alarms} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} onNew={newAlarm} />
                   : k === "timer" ? <TimersPane timers={st.tools.timers} active={active && index === i} onNew={() => setNewTimer(true)} />
                     : k === "stopwatch" ? <StopwatchPane active={active && index === i} />
                       : <WorldClockPane zones={st.tools.zones} local={st.zone} active={active && index === i} onAdd={() => setAddZone(true)} />
@@ -230,7 +231,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
       </div>
       {/* Where the shell's + button sits: its menu opens above it. */}
       <div className="p-menu-anchor pa-fab-anchor">
-        <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
+        <AddDial open={menu} onClose={() => setMenu(false)} items={[
           { label: "New alarm", icon: "oAlarm", onClick: newAlarm },
           { label: "Start a timer", icon: "oTimer", onClick: () => { show(1); setNewTimer(true); } },
           { label: "Start the stopwatch", icon: "oAvTimer", onClick: () => void startStopwatch() },
@@ -244,6 +245,33 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   );
 }
 
+/**
+ * What the + button adds on this page: round symbols stacked above it (the first one nearest the
+ * button), each scaling in on a short stagger. Holding one shows its name (press.ts), a tap picks it,
+ * and a tap outside or back closes the stack.
+ */
+function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void; items: { label: string; icon: string; onClick: () => void }[] }) {
+  const [shown, setShown] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  useLayoutEffect(() => {
+    if (open) { setShown(true); setLeaving(false); }
+    else if (shown) { setLeaving(true); const t = window.setTimeout(() => { setShown(false); setLeaving(false); }, 120); return () => clearTimeout(t); }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => (open ? pushBack(onClose) : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!shown) return null;
+  return <>
+    <div className="p-menu-scrim" onPointerDown={onClose} />
+    <div className={`pa-dial ${leaving ? "out" : ""}`} role="menu">
+      {items.map((it, i) => (
+        <button key={it.label} role="menuitem" className="pa-dial-btn" aria-label={it.label} style={{ animationDelay: `${i * 28}ms` }}
+          onClick={() => { onClose(); it.onClick(); }}>
+          <MIcon name={it.icon} />
+        </button>
+      ))}
+    </div>
+  </>;
+}
+
 // ---------- Alarms ----------
 
 type Show = "all" | "on" | "off";
@@ -251,8 +279,8 @@ const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inact
 
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
-function AlarmList({ alarms, rings, active, onEdit }: {
-  alarms: ClockAlarm[]; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void;
+function AlarmList({ alarms, rings, active, onEdit, onNew }: {
+  alarms: ClockAlarm[]; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
 }) {
   const [show, setShow] = useState<Show>("all");
   const [open, setOpen] = useState<Record<number, boolean>>({});
@@ -271,7 +299,8 @@ function AlarmList({ alarms, rings, active, onEdit }: {
           {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
         </div>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={alarms.length ? `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms` : "No alarms"} text="Tap + to add one" />}
+      {list.length === 0 && <Empty icon="oAlarm" title={alarms.length ? `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms` : "No alarms"} text="Tap + to add one"
+        onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} onClick={() => onEdit(g[0])} />
         : <BundleCard key={g[0].id} group={g} now={now} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
@@ -294,10 +323,12 @@ function NextAlarm({ alarms, now }: { alarms: ClockAlarm[]; now: Date }) {
   );
 }
 
-function Empty({ icon, title, text, action }: { icon: string; title: string; text?: string; action?: ReactNode }) {
+function Empty({ icon, title, text, action, onIcon, iconLabel }: { icon: string; title: string; text?: string; action?: ReactNode; onIcon?: () => void; iconLabel?: string }) {
   return (
     <div className="pa-empty">
-      <MIcon name={icon} size={56} />
+      {onIcon
+        ? <button className="pa-empty-icon" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={56} /></button>
+        : <MIcon name={icon} size={56} />}
       <div className="t-title-medium">{title}</div>
       {text && <div className="t-body-medium muted">{text}</div>}
       {action}
@@ -553,10 +584,10 @@ function WeatherChip({ id, now, active }: { id: string; now: number; active: boo
   const w = useWeather(id, active);
   const v = w ? weatherView(w, id, now) : null;
   return (
-    <button className={`pa-wx ${v ? "" : "none"}`} aria-label={v ? `${v.label}, ${v.text}${v.unit}. Open the weather` : "Weather. Open the weather"}
+    <button className={`pa-wx ${v ? "" : "none"}`} aria-label={v ? `${v.label}, ${v.text}. Open the weather` : "Weather. Open the weather"}
       onClick={() => void native.openWeather(weatherPage(id))}>
       <MIcon name={v ? v.icon : "oCloud"} size={22} />
-      <span>{v ? v.text : "–°"}</span>
+      <span>{v ? v.text : "–°C"}</span>
     </button>
   );
 }

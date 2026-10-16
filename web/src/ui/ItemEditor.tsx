@@ -13,6 +13,7 @@ import { type EditScope, deleteForever, deleteOccurrence, saveItem, saveSeriesEd
 import { Icon, go } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor, type RichEditorHandle, sanitize } from "./RichEditor.tsx";
+import { count } from "../domain/plural.ts";
 
 const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080];
 const toInput = (e: number | null) => { if (e === null) return ""; const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
@@ -437,12 +438,12 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
 
 /** "At the time", "15 minutes before", "1 day before"... */
 function offsetText(min: number): string {
-  const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""} before`;
+  const plural = (n: number, w: string) => `${count(n, w)} before`;
   if (min === 0) return "At the time";
   if (min % 10080 === 0) return plural(min / 10080, "week");
   if (min % 1440 === 0) return plural(min / 1440, "day");
   if (min % 60 === 0) return plural(min / 60, "hour");
-  return `${min} minutes before`;
+  return `${count(min, "minute")} before`;
 }
 
 /** "Thu, 15 Oct · 15:00–16:00", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 09:00"... */

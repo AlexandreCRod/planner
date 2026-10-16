@@ -6,6 +6,7 @@ import { type Item, isRecurring } from "../domain/types.ts";
 import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { RepeatBadge, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
+import { count } from "../domain/plural.ts";
 
 export const KINDS: [string, string, (i: Item) => boolean][] = [
   ["ALL", "All", () => true],
@@ -25,7 +26,7 @@ export function subtitle(i: Item, s: Snapshot) {
   const c = i.categoryId !== null ? s.categoryById.get(i.categoryId) : undefined;
   if (c) parts.push(c.name);
   const n = s.neighbours(i.id).size;
-  if (n) parts.push(`${n} link(s)`);
+  if (n) parts.push(count(n, "link"));
   return parts.join(" · ");
 }
 
@@ -60,7 +61,7 @@ export function BrowseView({ initialKind }: { initialKind: string }) {
         {s.categories.map((c) => <button key={c.id} className={`chip ${cat === c.id ? "on" : ""}`} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</button>)}
         {s.tags.map((t) => <button key={t.id} className={`chip ${tag === t.id ? "on" : ""}`} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</button>)}
       </div>
-      <div className="hint" style={{ margin: "4px 0 8px" }}>{results.length} result(s)</div>
+      <div className="hint" style={{ margin: "4px 0 8px" }}>{count(results.length, "result")}</div>
       {results.map((i) => (
         <div key={i.id} className="task" onClick={() => openItem(i)}>
           <span className="bar" style={{ background: s.colorOf(i) }} />

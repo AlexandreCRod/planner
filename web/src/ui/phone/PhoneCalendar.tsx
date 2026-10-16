@@ -308,7 +308,7 @@ const YearPanel = memo(function YearPanel({ s, items, year, t, onMonth }: { s: S
                   const d = start + w * 7 + c;
                   if (ymd(d).m !== mi + 1) return <span key={c} className="p-yday" />;
                   const n = busy.get(d) ?? 0;
-                  const bg = d === t ? "var(--p-primary)" : n > 0 ? `color-mix(in srgb, var(--p-primary) ${Math.min(50, 12 + n * 10)}%, transparent)` : undefined;
+                  const bg = d === t ? "var(--p-strong)" : n > 0 ? `color-mix(in srgb, var(--p-primary) ${Math.min(50, 12 + n * 10)}%, transparent)` : undefined;
                   return <span key={c} className="p-yday"><span className={d === t ? "today" : ""} style={{ background: bg }}>{ymd(d).d}</span></span>;
                 })}
               </div>

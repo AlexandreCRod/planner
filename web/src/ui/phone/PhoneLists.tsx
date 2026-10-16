@@ -21,6 +21,7 @@ import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
 import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
+import { count } from "../../domain/plural.ts";
 
 // ---------- Tasks ----------
 
@@ -41,6 +42,14 @@ function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
  * own swipe to the trash keeps the other way: on Scheduled a swipe left turns to To-do and a swipe right
  * removes a row; on To-do a swipe right turns back and a swipe left removes one.
  */
+/** Opens Tasks on its To-do tab (from Today's "2 tasks without a date"). */
+export function openTodoTab() {
+  try { localStorage.setItem("tasksTab", "todo"); } catch { /* private mode */ }
+  todoListener?.();
+  go("tasks");
+}
+let todoListener: (() => void) | null = null;
+
 export const PhoneTasks = memo(function PhoneTasks() {
   const [todo, setTodo] = useState(() => localStorage.getItem("tasksTab") === "todo");
   const index = todo ? 1 : 0;
@@ -61,6 +70,7 @@ export const PhoneTasks = memo(function PhoneTasks() {
     const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
     stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
   };
+  useEffect(() => { todoListener = () => showTab("todo"); return () => { todoListener = null; }; });
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [strip.current],
     onStep: (d) => setIndex(Math.min(1, Math.max(0, idx.current + d))),
@@ -414,7 +424,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
         {sel && (
           <div className="p-graphcard">
             <div className="t-title-medium">{sel.title || "Untitled"}</div>
-            <div className="t-body-small muted">{typeLabel(sel)} · {graph.degree.get(sel.id) ?? 0} connection(s)</div>
+            <div className="t-body-small muted">{typeLabel(sel)} · {count(graph.degree.get(sel.id) ?? 0, "connection")}</div>
             {pv && <div className="t-body-small clamp3">{pv}</div>}
             <div className="actions">
               <button className="p-text-btn icon" onClick={() => openItem(sel)}><MIcon name="oOpenInNew" size={18} />Open</button>
@@ -483,7 +493,7 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
             {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
           </ChipRow>
         )}
-        <div className="p-count">{results.length} result(s)</div>
+        <div className="p-count">{count(results.length, "result")}</div>
         <div className="p-list">
           {results.map((i) => {
             const pv = preview(i.content, 80);

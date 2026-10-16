@@ -9,6 +9,8 @@ import { showStreaks, useRoutines } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
 import { AppBarActions, Checkbox, IconButton, MIcon } from "./phone/chrome.tsx";
 import { useSwipePager } from "./phone/pager.ts";
+import { openTodoTab } from "./phone/PhoneLists.tsx";
+import { count } from "../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const toInput = (e: number) => { const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
@@ -135,7 +137,9 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       <div className="section">Tasks</div>
       {shownTasks.length === 0 && <div className="hint empty">{isToday ? (phone ? "No tasks due today. Tap + to add one." : "No tasks due today. Use the bar at the top to add one.") : `No tasks were due ${dayWord}.`}</div>}
       {rows(shownTasks, `t${day}`, false)}
-      {anytime > 0 && <div className="hint anytime" style={{ marginTop: 6 }}>{anytime} task(s) without a date — see Tasks</div>}
+      {anytime > 0 && (phone
+        ? <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>
+        : <div className="hint anytime" style={{ marginTop: 6 }}>{count(anytime, "task")} without a date — see Tasks</div>)}
       {alsoDone.length > 0 && <>
         <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
         {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}

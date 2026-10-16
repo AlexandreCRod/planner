@@ -5,6 +5,7 @@ import { apiUrl, deviceName } from "../platform.ts";
 import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
 import { type Kind, allRecords, applyRemote } from "./store.ts";
+import { count } from "../domain/plural.ts";
 
 type Rec = Record<string, unknown>;
 interface Base { seq: number; records: Record<string, Rec> }
@@ -102,7 +103,7 @@ async function doSync(force: boolean): Promise<number> {
     localStorage.setItem("lastSyncAt", String(now));
     const parts = ["Synced"];
     if (outgoing.length || reply.changes.length) parts.push(`sent ${outgoing.length}, received ${reply.changes.length}`);
-    if (reply.conflicts) parts.push(`${reply.conflicts} conflict(s) settled`);
+    if (reply.conflicts) parts.push(`${count(reply.conflicts, "conflict")} settled`);
     setStatus({ state: "idle", lastSyncAt: now, message: parts.join(" · ") });
     await fetchMissing([...allRecords().entries()].filter(([k]) => k.startsWith("images/")).map(([, r]) => String(r.hash)));
     return reply.changes.length;

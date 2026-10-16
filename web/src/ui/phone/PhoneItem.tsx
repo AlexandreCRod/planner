@@ -9,7 +9,7 @@ import { currentEntry, streak } from "../../domain/schedule.ts";
 import { preview } from "../../domain/text.ts";
 import {
   type AlertType, type Freq, type Item, type ItemType, type OverduePolicy, type Reminder,
-  NO_DAY, PRIORITIES, PRIORITY_COLORS, cssColor, isRecurring, newItem,
+  NO_DAY, PRIORITIES, PRIORITY_COLORS_MUTED, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
   type EditScope, type Snapshot, addLink, deleteOccurrence, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
@@ -27,6 +27,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { isRoutine, setRoutine, showStreaks, useRoutines } from "../../store/routines.ts";
+import { count } from "../../domain/plural.ts";
 
 // ---------- Shared bits ----------
 
@@ -56,12 +57,12 @@ export function switchType(d: Draft, t: ItemType): Draft {
 
 /** "At the time", "15 minutes before", "1 day before"... */
 export function offsetText(min: number): string {
-  const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? "s" : ""} before`;
+  const plural = (n: number, w: string) => `${count(n, w)} before`;
   if (min === 0) return "At the time";
   if (min % 10080 === 0) return plural(min / 10080, "week");
   if (min % 1440 === 0) return plural(min / 1440, "day");
   if (min % 60 === 0) return plural(min / 60, "hour");
-  return `${min} minutes before`;
+  return `${count(min, "minute")} before`;
 }
 
 /** "Thu, 15 Oct · 3 PM – 4 PM", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 9 AM"... */
@@ -144,7 +145,7 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
 }
 
 const priorityItems = (pick: (p: number) => void): MenuItem[] =>
-  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? PRIORITY_COLORS[i] : undefined, onClick: () => pick(i) }));
+  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? PRIORITY_COLORS_MUTED[i] : undefined, onClick: () => pick(i) }));
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));
 const categoryItems = (s: Snapshot, pick: (id: number | null) => void, leave?: () => void): MenuItem[] => [
@@ -521,7 +522,7 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
-        <span className="fire"><MIcon name="fLocalFireDepartment" size={20} color="#FF7043" /> {rs.current} current</span>
+        <span className="fire"><MIcon name="fLocalFireDepartment" size={20} color="var(--muted)" /> {rs.current} current</span>
         <span>Best {rs.best}</span>
         <span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
       </div>
@@ -639,7 +640,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
         {!isEvent && item.priority > 0 && (
           <span className="p-menu-anchor start wide">
-            <InfoRow icon="fFlag" tint={PRIORITY_COLORS[item.priority]} text={`${PRIORITIES[item.priority]} priority`} onClick={() => setPrioMenu(true)} />
+            <InfoRow icon="fFlag" tint={PRIORITY_COLORS_MUTED[item.priority]} text={`${PRIORITIES[item.priority]} priority`} onClick={() => setPrioMenu(true)} />
             <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
           </span>
         )}

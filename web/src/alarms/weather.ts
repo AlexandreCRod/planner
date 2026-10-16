@@ -3,7 +3,7 @@
 // place search by the city's name, asked once and remembered). Nothing about the phone or its owner
 // leaves it. Values are kept between visits and asked again about every 30 minutes while on screen.
 import { useEffect, useState } from "react";
-import { usesFahrenheit, toFahrenheit, weatherSymbol, zoneHour } from "../domain/alarms.ts";
+import { weatherSymbol, zoneHour } from "../domain/alarms.ts";
 import { cityLabel, cityOf, zoneOf } from "../domain/cities.ts";
 
 /** Where the city of each time zone is, as [latitude, longitude], to two decimals. */
@@ -126,13 +126,11 @@ export function useWeather(zone: string, visible: boolean): Weather | null {
   return w;
 }
 
-const FAHRENHEIT = usesFahrenheit(navigator.language || "en");
-/** "18°" in °C or °F by the phone's language, with the symbol for the code (night between 20:00 and 06:00 there). */
-export function weatherView(w: Weather, id: string, now: number): { text: string; unit: string; icon: string; label: string } {
+/** "18°C" (always Celsius), with the symbol for the code (night between 20:00 and 06:00 there). */
+export function weatherView(w: Weather, id: string, now: number): { text: string; icon: string; label: string } {
   const h = zoneHour(zoneOf(id), now);
   const sym = weatherSymbol(w.code, h >= 6 && h < 20);
-  const t = Math.round(FAHRENHEIT ? toFahrenheit(w.tempC) : w.tempC);
-  return { text: `${t}°`, unit: FAHRENHEIT ? "F" : "C", ...sym };
+  return { text: `${Math.round(w.tempC)}°C`, ...sym };
 }
 
 /** A weather page for the city, for when no weather app has been picked (DuckDuckGo: no account, no tracking). */

@@ -7,6 +7,7 @@ import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
 import { getServer, isNative } from "../platform.ts";
 import { typeLabel } from "./LinksSection.tsx";
 import { checkedLinger, showDoneOnToday } from "./common.tsx";
+import { count } from "../domain/plural.ts";
 
 export const ACCENTS: [string, string][] = [["Blue", "#1a73e8"], ["Indigo", "#3f51b5"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"], ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"]];
 
@@ -98,7 +99,7 @@ export function SettingsView() {
       {s.categories.map((c) => (
         <div key={c.id} className="task" onClick={() => setEditing({ ...c })}>
           <span className="dot" style={{ background: cssColor(c.color), width: 14, height: 14 }} />
-          <div className="grow">{c.name}<div className="sub">Default reminder: {c.defaultAlert.toLowerCase()} · {s.items.filter((i) => i.categoryId === c.id).length} item(s)</div></div>
+          <div className="grow">{c.name}<div className="sub">Default reminder: {c.defaultAlert.toLowerCase()} · {count(s.items.filter((i) => i.categoryId === c.id).length, "item")}</div></div>
         </div>
       ))}
       {editing && (
@@ -114,7 +115,7 @@ export function SettingsView() {
         </div>
       )}
 
-      <div className="section">Trash <span className="grow" />{s.trash.length > 0 && <button className="btn small danger" onClick={() => { if (confirm(`Permanently delete ${s.trash.length} item(s)?`)) emptyTrash(); }}>Empty trash</button>}</div>
+      <div className="section">Trash <span className="grow" />{s.trash.length > 0 && <button className="btn small danger" onClick={() => { if (confirm(`Permanently delete ${count(s.trash.length, "item")}?`)) emptyTrash(); }}>Empty trash</button>}</div>
       {s.trash.length === 0 && <div className="hint">Trash is empty.</div>}
       {s.trash.map((i) => (
         <div key={i.id} className="task">

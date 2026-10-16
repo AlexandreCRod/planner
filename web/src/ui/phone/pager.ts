@@ -159,7 +159,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
 }
 
 /** The bottom bar's drag: the pages move this many tabs per tab width the finger slides along the bar. */
-export const BAR_GAIN = 1.45;
+export const BAR_GAIN = 1.3;
 /** A flick along the bar faster than this (px per ms) turns a page whatever the distance. */
 export const BAR_FLING = 0.3;
 

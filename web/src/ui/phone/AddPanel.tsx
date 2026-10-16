@@ -14,7 +14,7 @@ import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domai
 import { daysText, formatDuration } from "../../domain/alarms.ts";
 import { act, hasAlarms, native } from "../../alarms/native.ts";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
-import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS, newItem } from "../../domain/types.ts";
+import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS_MUTED, newItem } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
 import { go } from "../common.tsx";
 import { FilterChip, MIcon, Segmented } from "./chrome.tsx";
@@ -457,7 +457,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
                 <div className="gp-chips">
                   {parsedItem.freq !== "NONE" && <span className="p-assist static"><MIcon name="oRepeat" size={18} /> {describe(parsedItem)}</span>}
                   {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
-                  {parsedItem.priority > 0 && <span className="p-assist static"><MIcon name="oFlag" size={18} color={PRIORITY_COLORS[parsedItem.priority]} /> {PRIORITIES[parsedItem.priority]} priority</span>}
+                  {parsedItem.priority > 0 && <span className="p-assist static"><MIcon name="oFlag" size={18} color={PRIORITY_COLORS_MUTED[parsedItem.priority]} /> {PRIORITIES[parsedItem.priority]} priority</span>}
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
               )}

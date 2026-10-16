@@ -1,6 +1,8 @@
 // Dates are "local days since 1970-01-01" (like Android's LocalDate.toEpochDay) so a 9:00 task
 // stays at 9:00 wall time on every device.
 
+import { count } from "./plural.ts";
+
 const DAY_MS = 86_400_000;
 
 export interface YMD { y: number; m: number; d: number } // m = 1..12
@@ -164,9 +166,9 @@ export function dueCountdown(dueTs: number, now = Date.now()): string {
 
 export function offsetLabel(min: number): string {
   if (min === 0) return "At time";
-  if (min % 10080 === 0) return `${min / 10080} week(s) before`;
-  if (min % 1440 === 0) return `${min / 1440} day(s) before`;
-  if (min % 60 === 0) return `${min / 60} hour(s) before`;
+  if (min % 10080 === 0) return `${count(min / 10080, "week")} before`;
+  if (min % 1440 === 0) return `${count(min / 1440, "day")} before`;
+  if (min % 60 === 0) return `${count(min / 60, "hour")} before`;
   return `${min} min before`;
 }
 

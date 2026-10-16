@@ -21,6 +21,7 @@ import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
 import { SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
+import { count } from "../../domain/plural.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -195,7 +196,7 @@ export function PhoneCategories() {
         {s.categories.length === 0 && <EmptyHint>No categories yet.</EmptyHint>}
         {s.categories.map((c) => (
           <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: cssColor(c.color) }} />}
-            supporting={`Default reminder: ${c.defaultAlert.toLowerCase()} · ${s.items.filter((i) => i.categoryId === c.id).length} item(s)`}
+            supporting={`Default reminder: ${c.defaultAlert.toLowerCase()} · ${count(s.items.filter((i) => i.categoryId === c.id).length, "item")}`}
             onClick={() => setEditing(c)} />
         ))}
         <div className="p-endspace" />
@@ -251,7 +252,7 @@ export function PhoneTrash() {
         <Dialog title="Empty trash?" onClose={() => setConfirm(null)} actions={<>
           <TextButton onClick={() => setConfirm(null)}>Cancel</TextButton>
           <TextButton onClick={() => { emptyTrash(); setConfirm(null); }}>Delete forever</TextButton>
-        </>}>{s.trash.length} item(s) will be permanently deleted. This cannot be undone (except from a backup).</Dialog>
+        </>}>{count(s.trash.length, "item")} will be permanently deleted. This cannot be undone (except from a backup).</Dialog>
       )}
       {typeof confirm === "number" && (
         <Dialog title="Delete forever?" onClose={() => setConfirm(null)} actions={<>

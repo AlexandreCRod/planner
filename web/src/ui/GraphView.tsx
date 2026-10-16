@@ -5,6 +5,7 @@ import type { ItemType } from "../domain/types.ts";
 import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { Icon, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
+import { count } from "../domain/plural.ts";
 
 export interface P { x: number; y: number; vx: number; vy: number }
 
@@ -81,7 +82,7 @@ export function GraphView({ focusId }: { focusId: number }) {
         {sel && (
           <div className="card" style={{ position: "absolute", left: 16, bottom: 16, padding: 14, width: 320, boxShadow: "var(--shadow)" }}>
             <b>{sel.title || "Untitled"}</b>
-            <div className="hint">{typeLabel(sel)} · {graph.degree.get(sel.id) ?? 0} connection(s)</div>
+            <div className="hint">{typeLabel(sel)} · {count(graph.degree.get(sel.id) ?? 0, "connection")}</div>
             {preview(sel.content, 140) && <div style={{ fontSize: 13, marginTop: 4 }}>{preview(sel.content, 140)}</div>}
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn small" onClick={() => openItem(sel)}>Open</button>

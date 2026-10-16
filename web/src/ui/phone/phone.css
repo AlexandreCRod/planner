@@ -1036,3 +1036,75 @@ html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), 
   background: var(--p-primary); color: var(--p-on-primary);
 }
 .phone .p-notecard .p-selmark { position: absolute; top: 8px; right: 8px; z-index: 1; }
+
+/* Today's "2 tasks without a date — see Tasks": a quiet link to the To-do tab. */
+.phone .today-list .p-anytime { display: block; width: 100%; margin-top: 6px !important; border: 0; background: none; text-align: left; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+.phone .today-list .p-anytime::after { content: " ›"; }
+/* Priority tags keep a hint of their colour, muted (PRIORITY_COLORS_MUTED), not the neutral grey of other tags. */
+.phone :is(.today-list, .p-rows) .pill.prio { color: color-mix(in srgb, var(--pc) 80%, var(--text)) !important; background: color-mix(in srgb, var(--pc) 16%, transparent) !important; }
+
+/* ---------- Darker highlights ----------
+   Filled highlights (today's date, a picked day or weekday, switches, filled buttons, ticks, the
+   selection mark) use --p-strong: a deep, muted tone of the accent instead of the bright primary.
+   Selected chips, tabs and the bottom bar's pill use a slightly deeper container. The snackbar and
+   tooltips use neutral inverse surfaces, and the snackbar's action follows the accent. */
+html.phone {
+  --p-strong: color-mix(in oklab, var(--p-acc-light, #1a73e8) 52%, #2f3237);
+  --p-on-strong: #ffffff;
+  --p-sec-container: color-mix(in oklab, var(--p-acc-light-container, #d3e3fd) 46%, #d7d9dd);
+  --p-inverse-surface: #2e2f32; --p-inverse-on-surface: #f1f1f3;
+  --p-inverse-primary: color-mix(in oklab, var(--p-acc-dark, #a8c7fa) 62%, #c9ccd1);
+}
+@media (prefers-color-scheme: dark) {
+  html.phone:not([data-theme="light"]) {
+    --p-strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52);
+    --p-on-strong: #eceef1;
+    --p-inverse-surface: #e4e4e7; --p-inverse-on-surface: #2e2f32;
+    --p-inverse-primary: color-mix(in oklab, var(--p-acc-light, #1a73e8) 60%, #464a50);
+    --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%23eceef1' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+  }
+}
+html.phone[data-theme="dark"] {
+  --p-strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52);
+  --p-on-strong: #eceef1;
+  --p-inverse-surface: #e4e4e7; --p-inverse-on-surface: #2e2f32;
+  --p-inverse-primary: color-mix(in oklab, var(--p-acc-light, #1a73e8) 60%, #464a50);
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%23eceef1' stroke-width='2' stroke-linecap='square'/%3E%3C/svg%3E");
+}
+.phone .pg-dh.today .num, .phone .p-mnum.today { background: var(--p-strong); color: var(--p-on-strong); }
+.phone .p-yday > span.today { color: var(--p-on-strong); }
+.phone .p-dp-days button.sel span, .phone .p-dp-years button.sel span { background: var(--p-strong); color: var(--p-on-strong); }
+.phone .p-dp-days button.today span { box-shadow: inset 0 0 0 1px var(--p-outline); color: var(--text); }
+.phone .pe-circles button.on, .phone .pa-days button.on { background: var(--p-strong); color: var(--p-on-strong); }
+.phone .p-switch.on { border-color: var(--p-strong); background: var(--p-strong); }
+.phone .p-switch.on .thumb { background: var(--p-on-strong); }
+.phone .p-filled-btn { background: var(--p-strong); color: var(--p-on-strong); }
+.phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked, .phone .p-checkbox:checked { border-color: var(--p-strong); background-color: var(--p-strong); }
+.phone .p-selmark { background: var(--p-strong); color: var(--p-on-strong); }
+.phone .pe-heat span.done { background: var(--p-strong); }
+.phone .p-progress .active, .phone .p-progress .stop { background: var(--p-strong); }
+.phone .pa-indicator { background: var(--p-strong); }
+.phone .pa-tab.on { color: var(--text); }
+.phone .p-tp-dial .hand { stroke: var(--p-strong); }
+.phone .p-tp-dial .hub, .phone .p-tp-dial .knob { fill: var(--p-strong); }
+.phone .p-tp-dial .num.on { color: var(--p-on-strong); }
+.phone .p-tp-box.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
+
+/* Alarms' + stack: round symbols above the button, no names (holding one shows it). */
+.phone .pa-dial { position: absolute; right: 4px; bottom: 68px; z-index: 40; display: flex; flex-direction: column-reverse; gap: 12px; }
+.phone .pa-dial-btn {
+  position: relative; overflow: hidden; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--p-sc-high); color: var(--text); box-shadow: 0 2px 6px rgb(0 0 0 / .22), 0 1px 2px rgb(0 0 0 / .16);
+  animation: pa-dial-in .26s cubic-bezier(.34, 1.4, .64, 1) both;
+}
+.phone .pa-dial.out .pa-dial-btn { animation: pa-dial-out .12s linear forwards; }
+@keyframes pa-dial-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.6); } }
+@keyframes pa-dial-out { to { opacity: 0; transform: scale(.85); } }
+/* The empty page's big symbol adds an alarm. */
+.phone .pa-empty-icon { position: relative; overflow: hidden; width: 88px; height: 88px; margin-bottom: 4px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
+.phone .pa-empty > .pa-empty-icon > svg { margin: 0; }
+/* World clock cards, a touch smaller. */
+.phone .pa-city { padding: 8px 2px 8px 18px; border-radius: 20px; }
+.phone .pa-city .t-title-medium { font-size: 15px; line-height: 22px; }
+.phone .pa-city .pa-time26 { font-size: 23px; line-height: 28px; }
+.phone .pa-city .pa-wx { height: 36px; font-size: 13px; }
