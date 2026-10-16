@@ -123,8 +123,12 @@ function Login({ message }: { message: string }) {
     <div className="login">
       <div className="card">
         <div className="row"><img src="/icon.svg" alt="" width={36} /><b style={{ fontSize: 20 }}>Planner</b></div>
-        <div className="hint">Enter the sync password you set with <code>wrangler secret put API_TOKEN</code>. It is kept only in this browser.</div>
-        {isNative && <input className="input" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" placeholder="Server address (https://…)" aria-label="Server address" value={server} onChange={(e) => setSrv(e.target.value)} />}
+        <div className="hint">
+          {isNative
+            ? "Enter your server's address and the sync password you chose when setting it up. The password is kept only on this phone."
+            : "Enter the sync password you chose when setting up the server. It is kept only in this browser."}
+        </div>
+        {isNative && <input className="input" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" placeholder="Server address" aria-label="Server address" value={server} onChange={(e) => setSrv(e.target.value)} />}
         <input className="input" type="password" autoFocus={!isNative} placeholder="Sync password" value={token} onChange={(e) => setTok(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void submit(); }} />
         {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
         <button className="btn primary" disabled={!token || (isNative && !server.trim()) || busy} onClick={() => void submit()}>{busy ? "Connecting…" : "Connect"}</button>

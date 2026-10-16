@@ -9,8 +9,11 @@ import { migrateLocalRoutines } from "./store/routines.ts";
 import { getToken, onStatus, requestSync, signOut, startAutoSync } from "./store/sync.ts";
 import { App } from "./ui/App.tsx";
 import { applyTheme } from "./ui/SettingsView.tsx";
+import { startPhoneTheme } from "./ui/phone/theme.ts";
 
 applyTheme();
+// The accent's palette (the calm tones both layouts and the first-run screen are drawn with).
+startPhoneTheme();
 
 async function start() {
   await load();

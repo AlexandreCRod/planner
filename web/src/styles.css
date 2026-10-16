@@ -1,6 +1,10 @@
 :root {
   --accent: #1a73e8;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* Filled highlights (the main button, today's date, picked days): a deep, muted tone of the accent,
+     the same as the phone's --p-strong (phone.css), from the palette ui/phone/theme.ts sets. */
+  --strong: color-mix(in oklab, var(--p-acc-light, #1a73e8) 52%, #2f3237);
+  --on-strong: #ffffff;
   --bg: #fbf8fd;
   --surface: #ffffff;
   --surface-2: #f1eef6;
@@ -19,12 +23,14 @@
     --bg: #141318; --surface: #1c1b20; --surface-2: #26252b; --line: #34323a;
     --text: #e6e1e9; --muted: #a8a4ae; --danger: #ef5350; color-scheme: dark;
     --accent-soft: color-mix(in srgb, var(--accent) 28%, transparent);
+    --strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52); --on-strong: #eceef1;
   }
 }
 :root[data-theme="dark"] {
   --bg: #141318; --surface: #1c1b20; --surface-2: #26252b; --line: #34323a;
   --text: #e6e1e9; --muted: #a8a4ae; --danger: #ef5350; color-scheme: dark;
   --accent-soft: color-mix(in srgb, var(--accent) 28%, transparent);
+  --strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52); --on-strong: #eceef1;
 }
 
 * { box-sizing: border-box; }
@@ -58,7 +64,8 @@ a { color: var(--accent); }
 
 .btn { border: 1px solid var(--line); background: var(--surface); padding: 5px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { background: var(--surface-2); }
-.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.primary { background: var(--strong); color: var(--on-strong); border-color: var(--strong); }
+.btn.primary:disabled { opacity: .5; cursor: default; filter: none; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.danger { color: var(--danger); }
 .btn.small { padding: 3px 9px; font-size: 12px; }
