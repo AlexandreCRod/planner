@@ -2,6 +2,7 @@ package com.alex.planner.web;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import androidx.activity.EdgeToEdge;
 import com.alex.planner.web.alarm.AlarmPlugin;
 import com.alex.planner.web.device.DevicePlugin;
@@ -28,5 +29,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DevicePlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
+        // No stretch or glow at the WebView's edges: the page draws its own rubber band (overscroll.ts).
+        if (getBridge() != null && getBridge().getWebView() != null) getBridge().getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
     }
 }

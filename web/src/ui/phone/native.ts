@@ -7,6 +7,7 @@ import { isNative } from "../../platform.ts";
 import { startPressFeedback } from "./press.ts";
 import { startPhoneTheme } from "./theme.ts";
 import { startDeviceClock } from "./device.ts";
+import { startOverscroll } from "./overscroll.ts";
 
 // ---------- Haptics (no-ops in a browser) ----------
 export const hapticLift = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {}); };
@@ -40,6 +41,7 @@ export function startPhonePlumbing() {
   started = true;
   startPhoneTheme();
   startPressFeedback();
+  startOverscroll();
   startDeviceClock();
   const vv = window.visualViewport;
   if (vv) {
