@@ -719,10 +719,11 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-rb-btn.on { color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 12%, transparent); background-clip: content-box; padding: 4px; }
 .phone .rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); opacity: 1; }
 /* While the days slide: a line before every day (none is missing at the edge of the old range), and a
-   thicker one where one range meets the next, through the header, the all-day strip and the grid. */
+   stronger one where one range meets the next, through the header, the all-day strip and the grid:
+   as thin as the day lines, in the outline colour instead of outline-variant. */
 .phone .pg.swiping .pg-col.first { border-left: 1px solid var(--line); }
-.phone .pg.swiping .pg-col.range { border-left: 2px solid var(--p-outline); }
-.phone .pg.swiping .pg-dh.range, .phone .pg.swiping .pg-adcol.range { box-shadow: inset 2px 0 0 var(--p-outline); }
+.phone .pg.swiping .pg-col.range { border-left: 1px solid var(--p-outline); }
+.phone .pg.swiping .pg-dh.range, .phone .pg.swiping .pg-adcol.range { box-shadow: inset 1px 0 0 var(--p-outline); }
 /* The slot tapped for a new event: just its outline, in the event's colour. */
 .phone .pg-slot { box-sizing: border-box; background: none; border: 2px solid #039be5; padding: 0; color: inherit; }
 /* Add panel: the small panel's settings chips, and the full editor's handle strip. */

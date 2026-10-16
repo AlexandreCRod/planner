@@ -455,7 +455,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     let settling: { stop: () => void; end: () => void } | null = null;
     const layers = () => [layer.current, headDays.current, allDayDays.current];
     // While the days slide, every day keeps its line (the one before the first day in view too), and
-    // the lines between one range and the next are drawn thicker, so the step from week to week shows.
+    // the lines between one range and the next are drawn in a stronger colour, so the step from week to week shows.
     const root = el.parentElement;
     const moveLayers = (x: number) => {
       for (const l of layers()) if (l) l.style.transform = x ? `translate3d(${x}px,0,0)` : "";
