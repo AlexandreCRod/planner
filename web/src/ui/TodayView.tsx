@@ -1,13 +1,14 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
-import { epochOf, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
-import { routineProgress, routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
+import { routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
 import { showStreaks, useRoutines } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
-import { AppBarActions, Checkbox, IconButton, MIcon } from "./phone/chrome.tsx";
+import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
+import { hapticLift } from "./phone/native.ts";
 import { useSwipePager } from "./phone/pager.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
 import { count } from "../domain/plural.ts";
@@ -121,6 +122,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
+      {routines.length > 0 && <RoutineChips list={routines} s={s} day={day} t={t} />}
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
           <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
@@ -133,7 +135,6 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
         <div className="section">Overdue</div>
         {rows(shownOverdue, `o${day}`, true)}
       </>}
-      {routines.length > 0 && <RoutineSection list={routines} s={s} day={day} t={t} />}
       <div className="section">Tasks</div>
       {shownTasks.length === 0 && <div className="hint empty">{isToday ? (phone ? "No tasks due today. Tap + to add one." : "No tasks due today. Use the bar at the top to add one.") : `No tasks were due ${dayWord}.`}</div>}
       {rows(shownTasks, `t${day}`, false)}
@@ -162,31 +163,49 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 }
 
 /**
- * Today's routines: "Routines · 3 of 5" and one compact line each, ticked in place (rows don't move).
- * A routine missed on an earlier day isn't carried here; it only ends the streak.
+ * Today's routines as one row of small chips under the progress bar: a ring (a tick once done) and the
+ * name. A tap ticks it (the chip fades and is struck through), a long press opens the routine. The row
+ * scrolls sideways when it doesn't fit (it wins over the day swipe then). A routine missed on an
+ * earlier day isn't carried here; it only ends the streak.
  */
-function RoutineSection({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
-  const { done, total } = routineProgress(list);
+function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
   const streaks = showStreaks() && day >= t;
-  return <>
-    <div className="section">Routines · {done} of {total}</div>
-    <div className="p-routines">
+  return (
+    <div className="p-rchips" role="list">
       {list.map((e) => {
         const ticked = e.status === "DONE";
-        const color = s.colorOf(e.item);
         const st = streaks ? routineStreak(e.item, s.done, t) : null;
         return (
-          <div key={e.item.id} className={`p-routine ${ticked ? "done" : ""}`} role="button" onClick={() => openItem(e.item, e.day)}>
-            <Checkbox checked={ticked} color={color} onChange={(v) => toggleCompletion(e.item.id, day, v)} />
-            <span className="title ellipsis">{e.item.title || "Untitled"}</span>
-            {e.status === "MISSED" && <span className="missed">Missed</span>}
-            {e.item.startMin !== null && <span className="time">{formatTime(e.item.startMin)}</span>}
-            {st && st.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={16} />{st.current}</span>}
-          </div>
+          <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
+            streak={st && st.current > 1 ? st.current : 0}
+            onToggle={() => toggleCompletion(e.item.id, day, !ticked)} onOpen={() => openItem(e.item, e.day)} />
         );
       })}
     </div>
-  </>;
+  );
+}
+
+const CHIP_HOLD_MS = 450;
+function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { title: string; ticked: boolean; missed: boolean; streak: number; onToggle: () => void; onOpen: () => void }) {
+  const hold = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
+  const clear = () => { if (hold.current) clearTimeout(hold.current.timer); };
+  return (
+    <button role="listitem" className={`p-rchip ${ticked ? "done" : ""} ${missed ? "missed" : ""}`} aria-pressed={ticked}
+      aria-label={`${title}${ticked ? ", done" : ""}. Hold to open`}
+      onPointerDown={(e) => {
+        clear();
+        const h = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
+        h.timer = window.setTimeout(() => { h.fired = true; hapticLift(); onOpen(); }, CHIP_HOLD_MS);
+        hold.current = h;
+      }}
+      onPointerMove={(e) => { const h = hold.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 8) { clear(); hold.current = null; } }}
+      onPointerUp={clear} onPointerCancel={() => { clear(); hold.current = null; }}
+      onClick={() => { const h = hold.current; hold.current = null; if (!h?.fired) onToggle(); }}>
+      <span className="ring">{ticked && <MIcon name="fCheck" size={14} />}</span>
+      <span className="name">{title}</span>
+      {streak > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={12} />{streak}</span>}
+    </button>
+  );
 }
 
 /** Lines shown of the day's note on Today; more ends in "…". */
@@ -266,6 +285,8 @@ function PhoneToday() {
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [track.current],
     onStep: (dir) => show(dayRef.current + dir),
+    // The routines row scrolls sideways itself when it overflows; there it wins over the day swipe.
+    allow: (el) => { const row = el.closest<HTMLElement>(".p-rchips"); return !row || row.scrollWidth <= row.clientWidth + 1; },
   });
 
   return (

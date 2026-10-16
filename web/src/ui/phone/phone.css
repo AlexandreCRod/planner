@@ -899,14 +899,6 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-early-buttons { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; min-height: 40px; }
 .phone .pe-early-note { padding-right: 8px; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 
-/* ---------- Routines on Today: a compact checklist ("Routines · 3 of 5") ---------- */
-.phone .p-routines { margin: 0 0 4px; }
-.phone .p-routine { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 16px 0 6px; }
-.phone .p-routine .title { flex: 1; min-width: 0; font-size: 16px; line-height: 24px; color: var(--text); }
-.phone .p-routine.done .title { color: var(--muted); text-decoration: line-through; }
-.phone .p-routine .time { font-size: 14px; color: var(--muted); margin-left: 8px; }
-.phone .p-routine .missed { font-size: 12px; font-weight: 500; color: var(--danger); margin-left: 8px; }
-.phone .p-routine .streak { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 500; color: #ff7043; margin-left: 10px; }
 .phone .pe-sublabel { display: block; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .pe-label:has(> .pe-sublabel) { padding: 10px 0 12px; }
 /* A switch at the end of a view row sits 16 dp from the edge, as in Settings. */
@@ -1010,7 +1002,6 @@ html.phone[data-theme="dark"] {
 .phone :is(.today-list, .p-rows) .pill[style*="--danger"] { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
 .phone :is(.today-list, .p-rows) .rep { color: var(--muted) !important; background: var(--p-sc-high) !important; }
 .phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked, .phone .p-checkbox:checked { border-color: var(--p-primary); background-color: var(--p-primary); }
-.phone .p-routine .streak { color: var(--muted); }
 /* The add button: a quiet raised surface with the accent's icon. */
 .phone .p-fab { background: var(--p-sc-high); color: var(--p-primary); }
 /* World clock: the local time with its weather beside it; the weather chip is there before its first reading. */
@@ -1122,3 +1113,30 @@ html.phone[data-theme="dark"] {
 .phone .pg-slot.armed svg { color: var(--p-primary); flex: none; }
 .phone .pg-slot.armed.short { flex-direction: row; gap: 4px; }
 .phone .pg-slot.armed.short svg { width: 14px; height: 14px; }
+
+/* ---------- Routines on Today: one row of small chips under the progress bar ----------
+   A ring (a tick once done) and a short name; a ticked one fades and is struck through. The row
+   scrolls sideways on its own when it overflows, and stays one line. */
+.phone .p-rchips {
+  display: flex; gap: 6px; padding: 10px 16px 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  touch-action: pan-x pan-y; overscroll-behavior-x: contain;
+}
+.phone .p-rchips::-webkit-scrollbar { display: none; }
+.phone .p-rchip {
+  position: relative; overflow: hidden; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; max-width: 150px;
+  padding: 0 11px 0 6px; border: 1px solid var(--line); border-radius: 15px; background: var(--p-sc-low); color: var(--text);
+  font-size: 13px; line-height: 18px; font-weight: 500; letter-spacing: .1px; transition: opacity .25s ease, background-color .25s ease;
+}
+.phone .p-rchip .ring {
+  flex: none; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--p-outline);
+  display: grid; place-items: center; color: var(--p-on-strong); transition: background-color .2s ease, border-color .2s ease;
+}
+.phone .p-rchip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through transparent; transition: text-decoration-color .25s ease; }
+.phone .p-rchip .streak { flex: none; display: inline-flex; align-items: center; gap: 1px; font-size: 11px; color: var(--muted); }
+.phone .p-rchip.done { opacity: .55; background: transparent; }
+.phone .p-rchip.done .ring { background: var(--p-strong); border-color: var(--p-strong); }
+.phone .p-rchip.done .name { text-decoration-color: currentColor; color: var(--muted); }
+.phone .p-rchip.missed .ring { border-color: var(--danger); }
+.phone .p-progress-row + .p-rchips { padding-top: 8px; }
+.phone .today-list > .today-page > .p-rchips:first-child { padding-top: 6px; }
+
