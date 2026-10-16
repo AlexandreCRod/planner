@@ -1,4 +1,8 @@
 apply plugin: 'com.android.application'
+// The alarm engine is Kotlin (ported from the native app), and its ringing screen is Compose.
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
 
 android {
     namespace = "com.alex.planner.web"
@@ -15,6 +19,16 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    buildFeatures {
+        compose = true
+    }
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+    // The scheduling cases shared with the web app and the native app (repo shared/), for AlarmDomainTest.
+    sourceSets {
+        test.resources.srcDirs += ['../../../shared']
     }
     buildTypes {
         release {
@@ -36,6 +50,13 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Alarm engine: ringing screen, notifications, its own copy of the alarm data.
+    implementation platform('androidx.compose:compose-bom:2025.06.00')
+    implementation 'androidx.compose.material3:material3'
+    implementation "androidx.activity:activity-compose:$androidxActivityVersion"
+    implementation "androidx.core:core-ktx:$androidxCoreVersion"
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
