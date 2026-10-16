@@ -867,7 +867,13 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pa-days { flex: 1; display: flex; justify-content: space-between; }
 .phone .pa-days button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--p-outline); background: none; color: var(--text); font-size: 14px; font-weight: 500; padding: 0; position: relative; overflow: hidden; }
 .phone .pa-days button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
-.phone .pa-days-text { padding: 0 0 4px 72px; }
+.phone .pa-days-text { display: flex; align-items: center; min-height: 40px; padding: 0 12px 4px 72px; }
+.phone .pa-days-text .grow { flex: 1; }
+.phone .pa-dates { flex: 1; min-width: 0; height: 40px; border: 0; padding: 0; background: none; color: var(--text); text-align: left; position: relative; overflow: hidden; }
+.phone .pa-pause { gap: 4px; padding-right: 12px; }
+.phone .pa-pause > svg { margin-right: 20px; }
+.phone .pa-pause .grow { flex: 1; }
+.phone .pa-pause-text { flex: 1; min-width: 0; height: 48px; border: 0; padding: 0; background: none; color: var(--text); text-align: left; position: relative; overflow: hidden; }
 .phone .pa-label-input { flex: 1; min-width: 0; height: 56px; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 16px; caret-color: var(--p-primary); }
 .phone .pa-label-input::placeholder { color: var(--muted); }
 /* Timer and stopwatch. */
@@ -1201,3 +1207,18 @@ html.phone[data-theme="dark"] {
    keeps clear of the navigation bar's height (--sab, from the system's insets). */
 .phone .p-overlay .p-list, .phone .p-content.ps { padding-bottom: calc(var(--sab) + 16px); }
 .phone .p-graphcard { bottom: calc(var(--sab) + 12px); }
+
+/* Several days at once (MultiDatePickerDialog): picked days run together as a band. */
+.phone .p-mdp-days { touch-action: none; user-select: none; -webkit-user-select: none; padding-bottom: 4px; }
+.phone .p-mdp-days button:disabled { color: var(--muted); opacity: .45; }
+.phone .p-mdp-days button.sel span { width: auto; justify-self: stretch; border-radius: 20px; }
+.phone .p-mdp-days button.sel.joinl span { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.phone .p-mdp-days button.sel.joinr span { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.phone .p-mdp-days button.sel:not(.joinl) span { margin-left: 4px; }
+.phone .p-mdp-days button.sel:not(.joinr) span { margin-right: 4px; }
+.phone .p-mdp-days button.sel:not(.joinl):not(.joinr) span { width: 40px; justify-self: center; margin: 0; }
+.phone .p-mdp .p-dp-actions .grow { flex: 1; }
+.phone .p-dp-month.static { pointer-events: none; }
+
+/* The weather when an alarm next rings, beside its switch. */
+.phone .pa-cardwx { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }

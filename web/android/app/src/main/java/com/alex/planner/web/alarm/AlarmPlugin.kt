@@ -114,6 +114,14 @@ class AlarmPlugin : Plugin() {
         ok(call)
     }
 
+    /** The hourly forecast for the phone's city (web/src/alarms/weather.ts), for the ringing screen. */
+    @PluginMethod
+    fun forecast(call: PluginCall) {
+        val text = call.getString("json") ?: return call.reject("json missing")
+        if (!Forecast.save(context, text)) return call.reject("bad json")
+        ok(call)
+    }
+
     /** Tasks un-ticked on the Today widget, for the page to save (ticks come through takeDone). */
     @PluginMethod
     fun takeWidgetUndone(call: PluginCall) = ok(call, json.encodeToString(ListSerializer(Completion.serializer()), WidgetStore.takeUndone(context)))

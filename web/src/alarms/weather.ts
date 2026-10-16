@@ -3,8 +3,9 @@
 // place search by the city's name, asked once and remembered). Nothing about the phone or its owner
 // leaves it. Values are kept between visits and asked again about every 30 minutes while on screen.
 import { useEffect, useState } from "react";
-import { weatherSymbol, zoneHour } from "../domain/alarms.ts";
+import { forecastAt, weatherSymbol, zoneHour } from "../domain/alarms.ts";
 import { cityLabel, cityOf, zoneOf } from "../domain/cities.ts";
+import { native } from "./native.ts";
 
 /** Where the city of each time zone is, as [latitude, longitude], to two decimals. */
 const COORDS: Record<string, [number, number]> = {
@@ -135,3 +136,65 @@ export function weatherView(w: Weather, id: string, now: number): { text: string
 
 /** A weather page for the city, for when no weather app has been picked (DuckDuckGo: no account, no tracking). */
 export const weatherPage = (id: string) => `https://duckduckgo.com/?q=${encodeURIComponent(`weather ${cityLabel(id)}`)}&ia=weather`;
+
+// ---------- The forecast for alarms ----------
+// Each alarm shows the weather at the hour it rings next: the hourly forecast for the phone's own city
+// (the same coordinates as its world clock card; nothing else is sent), asked about every three hours
+// while the Alarms page is open. It's also handed to the alarm engine, so the ringing screen can show
+// it without the network (alarm/Forecast.kt).
+
+/** Hour starts (ms), °C and weather codes, for the next 16 days. */
+export interface Hourly { at: number[]; t: number[]; c: number[]; fetched: number }
+const FORECAST_MS = 3 * 3600_000;
+
+async function fetchHourly(zone: string): Promise<Hourly | null> {
+  const c = await coordsFor(zone);
+  if (!c) return null;
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c[0]}&longitude=${c[1]}&hourly=temperature_2m,weather_code&forecast_days=16&timeformat=unixtime`);
+  if (!r.ok) return null;
+  const j = await r.json() as { hourly?: { time?: number[]; temperature_2m?: (number | null)[]; weather_code?: (number | null)[] } };
+  const h = j.hourly;
+  if (!h?.time || !h.temperature_2m || !h.weather_code) return null;
+  const out: Hourly = { at: [], t: [], c: [], fetched: Date.now() };
+  h.time.forEach((s, i) => {
+    const t = h.temperature_2m![i], code = h.weather_code![i];
+    if (typeof t === "number" && typeof code === "number") { out.at.push(s * 1000); out.t.push(Math.round(t * 10) / 10); out.c.push(code); }
+  });
+  if (!out.at.length) return null;
+  write(`wxh:${zone}`, out);
+  return out;
+}
+
+let pushed = "";
+/** Hands the forecast to the alarm engine (the phone build), once per new forecast. */
+function pushForecast(h: Hourly) {
+  const text = JSON.stringify(h);
+  if (text === pushed) return;
+  pushed = text;
+  void native.forecast(text);
+}
+
+/** The hourly forecast for [zone]'s city: the last one at once, a fresh one when it's three hours old. */
+export function useForecast(zone: string, visible: boolean): Hourly | null {
+  const [h, setH] = useState<Hourly | null>(() => (zone ? read<Hourly>(`wxh:${zone}`) : null));
+  useEffect(() => {
+    if (!zone) return;
+    const last = read<Hourly>(`wxh:${zone}`);
+    setH(last);
+    if (last) pushForecast(last);
+    if (!visible) return;
+    let live = true;
+    const check = () => {
+      const cur = read<Hourly>(`wxh:${zone}`);
+      if ((cur && Date.now() - cur.fetched < FORECAST_MS) || !navigator.onLine) return;
+      void fetchHourly(zone).catch(() => null).then((x) => { if (x) { pushForecast(x); if (live) setH(x); } });
+    };
+    check();
+    const t = window.setInterval(check, 10 * 60_000);
+    return () => { live = false; clearInterval(t); };
+  }, [zone, visible]);
+  return h;
+}
+
+/** The weather in the hour holding [at], or null (domain/alarms.ts, tested). */
+export const forecastView = forecastAt;

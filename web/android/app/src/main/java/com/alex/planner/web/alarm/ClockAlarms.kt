@@ -9,13 +9,15 @@ import android.os.Build
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
  * A plain alarm clock, like the phone's Clock app: a time, the weekdays it repeats on (none = rings
- * once), a label and a colour. Kept on the phone only, since only the phone rings.
- * (Copied from the native app's ClockAlarms.)
+ * once) or chosen dates instead, days it skips or a day it's paused until, a label and a colour. Kept
+ * on the phone only, since only the phone rings. The rules match the page's (web/src/domain/alarms.ts,
+ * tested there). (Started from the native app's ClockAlarms.)
  */
 @Serializable
 data class ClockAlarm(
@@ -29,9 +31,26 @@ data class ClockAlarm(
     /** Index into the alarm page's palette. */
     val color: Int = 0,
     val sound: String? = null,
+    /** Local epoch days it rings on, instead of [days], when there are any. */
+    val dates: List<Long> = emptyList(),
+    /** Days a repeating alarm stays quiet. */
+    val skip: List<Long> = emptyList(),
+    /** A repeating alarm is quiet until this day (the first day it rings again). */
+    val pausedUntil: Long? = null,
 ) {
     val minuteOfDay get() = hour * 60 + minute
     fun repeatsOn(d: DayOfWeek) = days and (1 shl (d.value - 1)) != 0
+    val repeating get() = days != 0 || dates.isNotEmpty()
+
+    /** Whether it rings on [day] (its time aside): ringsOnDay in alarms.ts. */
+    fun ringsOn(day: LocalDate): Boolean {
+        val e = day.toEpochDay()
+        if (dates.isNotEmpty()) { if (e !in dates) return false }
+        else if (days == 0) return true
+        else if (!repeatsOn(day.dayOfWeek)) return false
+        if (e in skip) return false
+        return pausedUntil == null || e >= pausedUntil
+    }
 }
 
 object ClockAlarms {
@@ -68,22 +87,25 @@ object ClockAlarms {
         cancel(context, id)
     }
 
-    /** The next time [a] rings after [now]. */
-    fun nextRing(a: ClockAlarm, now: LocalDateTime = LocalDateTime.now()): LocalDateTime {
+    /** The next time [a] rings after [now], or null if it won't (its dates are all past): nextRing in alarms.ts. */
+    fun nextRing(a: ClockAlarm, now: LocalDateTime = LocalDateTime.now()): LocalDateTime? {
         var d = now.toLocalDate()
-        repeat(8) {
-            val at = d.atTime(a.hour, a.minute)
-            if (at.isAfter(now) && (a.days == 0 || a.repeatsOn(d.dayOfWeek))) return at
+        repeat(401) {
+            if (a.ringsOn(d)) {
+                val at = d.atTime(a.hour, a.minute)
+                if (at.isAfter(now)) return at
+            }
             d = d.plusDays(1)
         }
-        return now.toLocalDate().plusDays(1).atTime(a.hour, a.minute)
+        return null
     }
 
     fun rescheduleAll(context: Context) = load(context).forEach { schedule(context, it) }
 
     fun schedule(context: Context, a: ClockAlarm) {
         if (!a.enabled) { cancel(context, a.id); return }
-        val at = nextRing(a).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val next = nextRing(a) ?: run { cancel(context, a.id); return }
+        val at = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         set(context, a.id, at, snooze = false)
     }
 
@@ -91,10 +113,10 @@ object ClockAlarms {
         set(context, id, System.currentTimeMillis() + minutes * 60_000L, snooze = true)
     }
 
-    /** After ringing: a one-off alarm switches itself off, a repeating one queues its next day. */
+    /** After ringing: a one-off alarm (or one whose dates have all come) switches itself off, a repeating one queues its next day. */
     fun afterRing(context: Context, id: Long) {
         val a = get(context, id) ?: return
-        if (a.days == 0) save(context, a.copy(enabled = false)) else schedule(context, a)
+        if (!a.repeating || nextRing(a) == null) save(context, a.copy(enabled = false)) else schedule(context, a)
     }
 
     private fun pending(context: Context, id: Long, snooze: Boolean, create: Boolean): PendingIntent? {

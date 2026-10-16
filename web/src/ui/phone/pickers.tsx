@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, daysInMonth, epochOf, formatDate, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
 import { IconButton, MIcon } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
-import { pushBack } from "./native.ts";
+import { hapticTick, pushBack } from "./native.ts";
 import { useSwipePager } from "./pager.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
@@ -64,6 +64,89 @@ export function DatePickerDialog({ value, onPick, onClose }: { value: number | n
       <div className="p-dp-actions">
         <TextButton onClick={onClose}>Cancel</TextButton>
         <TextButton onClick={() => { onPick(sel); onClose(); }}>OK</TextButton>
+      </div>
+    </PickerShell>
+  );
+}
+
+/**
+ * Several days on a calendar: tap a day to pick it or leave it, or drag across days to pick (or, from
+ * a picked day, leave) all of them at once. Days before [from] can't be picked. Months turn with the
+ * arrows, so a sideways drag is always a range.
+ */
+export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
+  title: string; value: number[]; from: number; onPick: (days: number[]) => void; onClose: () => void;
+}) {
+  const t = todayEpoch();
+  const [sel, setSel] = useState<ReadonlySet<number>>(() => new Set(value.filter((d) => d >= from)));
+  const [month, setMonth] = useState(() => {
+    const first = value.filter((d) => d >= from).sort((a, b) => a - b)[0] ?? Math.max(t, from);
+    const { y, m } = ymd(first);
+    return epochOf(y, m, 1);
+  });
+  const drag = useRef<{ id: number; from: number; add: boolean; base: ReadonlySet<number>; last: number } | null>(null);
+  const dayAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]");
+    const d = el ? Number(el.dataset.day) : NaN;
+    return Number.isFinite(d) && d >= from ? d : null;
+  };
+  const apply = (d: NonNullable<typeof drag.current>, to: number) => {
+    const next = new Set(d.base);
+    for (let x = Math.min(d.from, to); x <= Math.max(d.from, to); x++) if (x >= from) { if (d.add) next.add(x); else next.delete(x); }
+    setSel(next);
+  };
+  const { y, m } = ymd(month);
+  const lead = month - startOfWeek(month, mondayFirst());
+  const n = daysInMonth(y, m);
+  const cells: (number | null)[] = [...Array.from({ length: lead }, () => null), ...Array.from({ length: n }, (_, i) => month + i)];
+  while (cells.length < 42) cells.push(null);
+  const count = sel.size;
+  return (
+    <PickerShell onClose={onClose} className="p-datepicker p-mdp">
+      <div className="p-dp-title">{title}</div>
+      <div className="p-dp-headline">{count === 0 ? "No days" : count === 1 ? formatDate([...sel][0]) : `${count} days`}</div>
+      <div className="p-divider" />
+      <div className="p-dp-nav">
+        <span className="p-dp-month static">{monthLong(m)} {y}</span>
+        <span className="grow" />
+        <IconButton icon="fKeyboardArrowLeft" label="Previous month" onClick={() => setMonth(addMonths(month, -1))} />
+        <IconButton icon="fKeyboardArrowRight" label="Next month" onClick={() => setMonth(addMonths(month, 1))} />
+      </div>
+      <div className="p-dp-week">{weekLabels().map((l, i) => <span key={i}>{l}</span>)}</div>
+      <div className="p-dp-days p-mdp-days"
+        onPointerDown={(e) => {
+          if (drag.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+          const d = dayAt(e.clientX, e.clientY);
+          if (d === null) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          drag.current = { id: e.pointerId, from: d, add: !sel.has(d), base: sel, last: d };
+          apply(drag.current, d);
+          hapticTick();
+        }}
+        onPointerMove={(e) => {
+          const g = drag.current;
+          if (!g || e.pointerId !== g.id) return;
+          const d = dayAt(e.clientX, e.clientY);
+          if (d === null || d === g.last) return;
+          g.last = d;
+          apply(g, d);
+          hapticTick();
+        }}
+        onPointerUp={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}
+        onPointerCancel={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}>
+        {cells.map((d, i) => {
+          if (d === null) return <span key={i} />;
+          const on = sel.has(d), col = i % 7;
+          const cls = [on ? "sel" : "", d === t ? "today" : "", d < from ? "past" : "",
+            on && col > 0 && sel.has(d - 1) ? "joinl" : "", on && col < 6 && sel.has(d + 1) ? "joinr" : ""].join(" ");
+          return <button key={i} data-day={d} className={cls} disabled={d < from} aria-pressed={on}><span>{ymd(d).d}</span></button>;
+        })}
+      </div>
+      <div className="p-dp-actions">
+        {count > 0 && <TextButton onClick={() => setSel(new Set())}>Clear</TextButton>}
+        <span className="grow" />
+        <TextButton onClick={onClose}>Cancel</TextButton>
+        <TextButton onClick={() => { onPick([...sel].sort((a, b) => a - b)); onClose(); }}>OK</TextButton>
       </div>
     </PickerShell>
   );

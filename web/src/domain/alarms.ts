@@ -79,25 +79,76 @@ export const EVERY_DAY = 0b1111111;
 /** Alarms closer than this to the previous one share a bundle. */
 export const BUNDLE_GAP_MIN = 29;
 
-interface Clockish { hour: number; minute: number; days: number }
+/**
+ * A plain alarm clock's schedule (alarm/ClockAlarms.kt has the same rules). [days]: bit 0 = Monday ...
+ * bit 6 = Sunday, 0 = rings once. [dates] (local epoch days), when there are any, replace the weekdays:
+ * it rings on those dates only. A repeating alarm (weekdays or dates) can skip chosen days ([skip]) or
+ * be paused until a day ([pausedUntil]: the first day it rings again). Kept on the phone only.
+ */
+export interface Clockish { hour: number; minute: number; days: number; dates?: number[]; skip?: number[]; pausedUntil?: number | null }
 const minuteOfDay = (a: Clockish) => a.hour * 60 + a.minute;
 /** Monday = 0 ... Sunday = 6 (the days mask's bits). */
 const dayIndex = (d: Date) => (d.getDay() + 6) % 7;
+/** Monday = 0 ... Sunday = 6 for a local epoch day (1970-01-01 was a Thursday). */
+export const epochDayIndex = (day: number) => (((day + 3) % 7) + 7) % 7;
 export const repeatsOn = (a: Clockish, d: Date) => (a.days & (1 << dayIndex(d))) !== 0;
+const epochOfDate = (d: Date) => Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+const dateOfEpoch = (day: number, minute: number) => {
+  const u = new Date(day * 86_400_000);
+  return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), Math.floor(minute / 60), minute % 60);
+};
 
-/** The next time [a] rings after [now] (ClockAlarms.nextRing). */
-export function nextRing(a: Clockish, now: Date): Date {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  for (let i = 0; i < 8; i++) {
-    const at = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i, a.hour, a.minute);
-    if (at > now && (a.days === 0 || repeatsOn(a, at))) return at;
+/** Whether [a] rings more than once: on weekdays or on chosen dates. */
+export const isRepeating = (a: Clockish) => a.days !== 0 || (a.dates?.length ?? 0) > 0;
+
+/** Whether [a] rings on local day [day] (its time aside). */
+export function ringsOnDay(a: Clockish, day: number): boolean {
+  if (a.dates?.length) { if (!a.dates.includes(day)) return false; }
+  else if (a.days === 0) return true; // once: the next time it comes round
+  else if ((a.days & (1 << epochDayIndex(day))) === 0) return false;
+  if (a.skip?.includes(day)) return false;
+  return a.pausedUntil == null || day >= a.pausedUntil;
+}
+
+/** How far ahead a ring is looked for (a pause or a date can be months away). */
+const HORIZON_DAYS = 400;
+
+/** The next time [a] rings after [now], or null if it won't (its dates are all past). (ClockAlarms.nextRing) */
+export function nextRing(a: Clockish, now: Date): Date | null {
+  const t0 = epochOfDate(now);
+  for (let i = 0; i <= HORIZON_DAYS; i++) {
+    if (!ringsOnDay(a, t0 + i)) continue;
+    const at = dateOfEpoch(t0 + i, minuteOfDay(a));
+    if (at > now) return at;
   }
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, a.hour, a.minute);
+  return null;
+}
+
+/** The quiet note under a paused or skipping alarm: "Paused until Mon 20", "Skips 3 days", or "". */
+export function pauseText(a: Clockish, today: number, date: (day: number) => string): string {
+  if (!isRepeating(a)) return "";
+  if (a.pausedUntil != null && a.pausedUntil > today) return `Paused until ${date(a.pausedUntil)}`;
+  const n = (a.skip ?? []).filter((d) => d >= today && ringsOnDay({ ...a, skip: [], pausedUntil: null }, d)).length;
+  return n ? `Skips ${n === 1 ? "1 day" : `${n} days`}` : "";
+}
+
+/** [a] with days already past dropped from its dates and skips, and a pause that has ended cleared. */
+export function tidySchedule<T extends Clockish>(a: T, today: number): T {
+  return {
+    ...a,
+    dates: (a.dates ?? []).filter((d) => d >= today).sort((x, y) => x - y),
+    skip: (a.skip ?? []).filter((d) => d >= today).sort((x, y) => x - y),
+    pausedUntil: a.pausedUntil != null && a.pausedUntil > today ? a.pausedUntil : null,
+  };
 }
 
 /** The weekdays [a] rings on (bit 0 = Monday): its repeat days, or the day it rings next if it rings once. */
 export function alarmDayMask(a: Clockish, now: Date): number {
-  return a.days !== 0 ? a.days : 1 << dayIndex(nextRing(a, now));
+  const today = epochOfDate(now);
+  if (a.dates?.length) return a.dates.filter((d) => d >= today).reduce((m, d) => m | (1 << epochDayIndex(d)), 0);
+  if (a.days !== 0) return a.days;
+  const next = nextRing(a, now);
+  return next ? 1 << dayIndex(next) : 0;
 }
 
 /** The Alarms page's filters: all, on, off, ringing on weekdays (Mon–Fri) or at the weekend. */
@@ -131,8 +182,14 @@ export const NARROW_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 /** Under an alarm: "Once · Tomorrow", "Every day", "Weekdays", "Mon Wed Fri" (AlarmsScreen.repeatText). */
 export function repeatText(a: Clockish, now: Date, relative: (d: Date) => string): string {
+  if (a.dates?.length) {
+    const next = nextRing(a, now);
+    const left = a.dates.filter((d) => d >= epochOfDate(now)).length;
+    if (!next) return "Dates passed";
+    return left === 1 ? `Once · ${relative(next)}` : `${left} dates · next ${relative(next)}`;
+  }
   switch (a.days) {
-    case 0: return `Once · ${relative(nextRing(a, now))}`;
+    case 0: { const next = nextRing(a, now); return next ? `Once · ${relative(next)}` : "Once"; }
     case EVERY_DAY: return "Every day";
     case WEEKDAYS: return "Weekdays";
     case WEEKEND: return "Weekends";
@@ -255,6 +312,19 @@ export function weatherSymbol(code: number, day: boolean): { icon: string; label
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return { icon: "oAcUnit", label: "Snow" };
   if (code >= 95) return { icon: "oThunderstorm", label: "Thunderstorm" };
   return { icon: "oCloud", label: "Cloudy" };
+}
+
+/** An hourly forecast: hour starts (ms), °C and weather codes (alarms/weather.ts). */
+export interface HourlyForecast { at: number[]; t: number[]; c: number[] }
+
+/** The weather in the hour holding [at] ("12°C" and its symbol), or null when the forecast doesn't reach it. */
+export function forecastAt(h: HourlyForecast | null, at: Date | null): { text: string; icon: string; label: string } | null {
+  if (!h || !at) return null;
+  const ts = at.getTime();
+  const i = h.at.findIndex((s) => ts >= s && ts < s + 3600_000);
+  if (i < 0 || i >= h.t.length || i >= h.c.length) return null;
+  const hour = at.getHours();
+  return { text: `${Math.round(h.t[i])}°C`, ...weatherSymbol(h.c[i], hour >= 6 && hour < 20) };
 }
 
 /** Countries that read temperatures in Fahrenheit. */

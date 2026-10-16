@@ -5,7 +5,11 @@ import { useSyncExternalStore } from "react";
 import { isNative } from "../platform.ts";
 
 /** A plain alarm clock (ClockAlarms.kt). days: bit 0 = Monday ... bit 6 = Sunday; 0 rings once. */
-export interface ClockAlarm { id: number; hour: number; minute: number; label: string; days: number; enabled: boolean; color: number; sound: string | null }
+export interface ClockAlarm {
+  id: number; hour: number; minute: number; label: string; days: number; enabled: boolean; color: number; sound: string | null;
+  /** Chosen dates (local epoch days) instead of weekdays; days skipped; paused until (first day back): domain/alarms.ts. */
+  dates?: number[]; skip?: number[]; pausedUntil?: number | null;
+}
 /** A countdown (ClockTools.kt): running, it keeps when it ends; paused, what's left. */
 export interface ClockTimer { id: number; durationMs: number; label: string; endAt: number | null; remainingMs: number }
 export interface Stopwatch { startedAt: number | null; accumulatedMs: number; laps: number[] }
@@ -21,6 +25,7 @@ interface Plugin {
   takeDone(): Promise<{ json: string }>;
   takeLaunch(): Promise<{ itemId?: number; section?: string }>;
   widgets(o: { json: string }): Promise<void>;
+  forecast(o: { json: string }): Promise<void>;
   takeWidgetUndone(): Promise<{ json: string }>;
   state(): Promise<{ json: string }>;
   controls(o: { itemId: number }): Promise<{ json: string }>;
@@ -57,6 +62,7 @@ export const native = {
   sync: (payload: unknown) => call((p) => p.sync({ json: JSON.stringify(payload) }), undefined),
   takeDone: async () => JSON.parse((await call((p) => p.takeDone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   takeLaunch: () => call((p) => p.takeLaunch(), {}),
+  forecast: (json: string) => call((p) => p.forecast({ json }), undefined),
   widgets: (payload: unknown) => call((p) => p.widgets({ json: JSON.stringify(payload) }), undefined),
   takeWidgetUndone: async () => JSON.parse((await call((p) => p.takeWidgetUndone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   controls: async (itemId: number) => JSON.parse((await call((p) => p.controls({ itemId }), { json: "[]" })).json) as Control[],

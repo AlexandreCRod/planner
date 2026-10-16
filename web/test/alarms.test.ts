@@ -12,7 +12,7 @@ import { type Reminder, newItem } from "../src/domain/types.ts";
 
 const thuMorning = new Date(2026, 9, 15, 8, 0); // a Thursday
 const clock = (h: number, m: number, days = 0) => ({ id: h * 60 + m, hour: h, minute: m, days });
-const hm = (d: Date) => [d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()];
+const hm = (d: Date | null) => (d ? [d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()] : null);
 
 test("a one-off alarm rings today or tomorrow", () => {
   assert.deepEqual(hm(nextRing(clock(9, 30), thuMorning)), [10, 15, 9, 30]);
@@ -160,4 +160,43 @@ test("the alarm filters: on or off, and ringing on weekdays or at the weekend", 
   assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekdays")), [true, false, true, false, true]);
   assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekend")), [false, true, true, true, false]);
   assert.deepEqual([f(work, "on"), f(lie, "on"), f(lie, "off"), f(lie, "all")], [true, false, true, true]);
+});
+
+test("specific dates, skipped days and a pause decide when an alarm rings", async () => {
+  const { pauseText, ringsOnDay, tidySchedule, isRepeating } = await import("../src/domain/alarms.ts");
+  const thu = epochOf(2026, 10, 15), fri = thu + 1, mon = thu + 4, tue = thu + 5;
+  // On chosen dates only (the weekdays don't count then).
+  const dates = { ...clock(7, 0, WEEKDAYS), dates: [mon, thu + 10] };
+  assert.deepEqual(hm(nextRing(dates, thuMorning)), [10, 19, 7, 0]);
+  assert.equal(ringsOnDay(dates, fri), false);
+  assert.equal(nextRing({ ...clock(7, 0), dates: [thu - 3] }, thuMorning), null); // all past: no ring
+  // Skipping Friday: weekdays go on to Monday.
+  assert.deepEqual(hm(nextRing({ ...clock(7, 0, WEEKDAYS), skip: [fri] }, thuMorning)), [10, 19, 7, 0]);
+  // Paused until Tuesday: Monday is quiet, Tuesday rings.
+  const paused = { ...clock(7, 0, WEEKDAYS), pausedUntil: tue };
+  assert.deepEqual(hm(nextRing(paused, thuMorning)), [10, 20, 7, 0]);
+  // A one-off alarm isn't paused or skipped.
+  assert.equal(isRepeating(clock(7, 0)), false);
+  assert.deepEqual(hm(nextRing({ ...clock(9, 30), skip: [thu] }, thuMorning)), [10, 15, 9, 30]);
+  // The calm notes on the card.
+  const d = (x: number) => `day ${x}`;
+  assert.equal(pauseText(paused, thu, d), `Paused until day ${tue}`);
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), skip: [fri, mon, thu + 2] }, thu, d), "Skips 2 days"); // Saturday wouldn't ring anyway
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), pausedUntil: thu }, thu, d), "");
+  assert.equal(pauseText(clock(7, 0), thu, d), "");
+  // Past days are tidied away when saved.
+  assert.deepEqual(tidySchedule({ ...clock(7, 0, WEEKDAYS), dates: [mon, thu - 1], skip: [thu - 2, fri], pausedUntil: thu }, thu),
+    { ...clock(7, 0, WEEKDAYS), dates: [mon], skip: [fri], pausedUntil: null });
+  assert.equal(repeatText(dates, thuMorning, () => "Mon"), "2 dates · next Mon");
+});
+
+test("an alarm's weather is the forecast for the hour it rings", async () => {
+  const { forecastAt } = await import("../src/domain/alarms.ts");
+  const h0 = new Date(2026, 9, 17, 6, 0).getTime();
+  const fc = { at: [h0, h0 + 3600_000], t: [11.6, 13.2], c: [0, 61] };
+  assert.deepEqual(forecastAt(fc, new Date(2026, 9, 17, 6, 30)), { text: "12°C", icon: "oWbSunny", label: "Clear" });
+  assert.equal(forecastAt(fc, new Date(2026, 9, 17, 7, 5))?.label, "Rain");
+  assert.equal(forecastAt(fc, new Date(2026, 9, 17, 9, 0)), null); // past the forecast
+  assert.equal(forecastAt(null, new Date()), null);
+  assert.equal(forecastAt(fc, null), null);
 });

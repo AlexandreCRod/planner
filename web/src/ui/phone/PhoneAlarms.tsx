@@ -6,17 +6,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type AlarmFilter, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type AlarmFilter, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
-import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts";
+import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
-import { useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
+import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton } from "./m3.tsx";
-import { TimePickerDialog } from "./pickers.tsx";
+import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { HeldTime } from "./TimeWheel.tsx";
 
@@ -59,6 +59,11 @@ function useTick(period: number, active: boolean): number {
 }
 
 const relative = (d: Date) => relativeDay(epochOf(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+/** "Mon 20" (within a few weeks, the month goes without saying). */
+const shortDay = (day: number) => `${dayShort(weekday(day))} ${ymd(day).d}`;
+const todayNow = () => { const n = new Date(); return epochOf(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
+/** An alarm's repeat line, with a pause or skipped days after it. */
+const scheduleLine = (a: ClockAlarm, now: Date) => [repeatText(a, now, relative), a.enabled ? pauseText(a, todayNow(), shortDay) : ""].filter(Boolean).join(" · ");
 
 // ---------- Asking for permissions, with the reason ----------
 
@@ -221,7 +226,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           {SECTIONS.map(([k], i) => (
             <div key={k} className="pa-section" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
               {Math.abs(i - index) <= 1 || k === "alarm" ? (
-                k === "alarm" ? <AlarmList alarms={st.alarms} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} onNew={newAlarm} />
+                k === "alarm" ? <AlarmList alarms={st.alarms} zone={st.zone} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} onNew={newAlarm} />
                   : k === "timer" ? <TimersPane timers={st.tools.timers} active={active && index === i} onNew={() => setNewTimer(true)} />
                     : k === "stopwatch" ? <StopwatchPane active={active && index === i} />
                       : <WorldClockPane zones={st.tools.zones} local={st.zone} active={active && index === i} onAdd={() => setAddZone(true)} />
@@ -280,14 +285,15 @@ const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inact
 
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
-function AlarmList({ alarms, rings, active, onEdit, onNew }: {
-  alarms: ClockAlarm[]; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
+function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
+  alarms: ClockAlarm[]; zone: string; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
 }) {
   const [show, setShow] = useState<Show>("all");
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
   const list = alarms.filter((a) => alarmShown(a, show, now));
   const groups = bundle(list);
+  const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
   return (
     <div className="pa-scroll">
       <PermissionCards />
@@ -303,8 +309,8 @@ function AlarmList({ alarms, rings, active, onEdit, onNew }: {
       {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? "No alarms" : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
-        ? <AlarmCard key={g[0].id} a={g[0]} now={now} onClick={() => onEdit(g[0])} />
-        : <BundleCard key={g[0].id} group={g} now={now} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
+        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
       {!rings.originalInstalled && (
         <p className="pa-foot">Alarm clocks set in the original Planner app don't carry over to this one; set them again here.</p>
       )}
@@ -313,9 +319,9 @@ function AlarmList({ alarms, rings, active, onEdit, onNew }: {
 }
 
 function NextAlarm({ alarms, now }: { alarms: ClockAlarm[]; now: Date }) {
-  const on = alarms.filter((a) => a.enabled);
-  if (!on.length) return null;
-  const at = on.map((a) => nextRing(a, now)).reduce((x, y) => (y < x ? y : x));
+  const rings = alarms.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null);
+  if (!rings.length) return null;
+  const at = rings.reduce((x, y) => (y < x ? y : x));
   return (
     <div className="pa-next">
       <div className="t-title-large">Alarm in {untilText(at, now)}</div>
@@ -337,21 +343,29 @@ function Empty({ icon, title, text, action, onIcon, iconLabel }: { icon: string;
   );
 }
 
-function AlarmCard({ a, now, onClick }: { a: ClockAlarm; now: Date; onClick: () => void }) {
+/** The weather when [a] next rings: a small symbol and °C, or nothing past the forecast (or while off). */
+function AlarmWeather({ a, now, fc }: { a: ClockAlarm; now: Date; fc: Hourly | null }) {
+  const v = a.enabled ? forecastView(fc, nextRing(a, now)) : null;
+  if (!v) return null;
+  return <span className="pa-cardwx" aria-label={`${v.label}, ${v.text} when it rings`}><MIcon name={v.icon} size={18} />{v.text}</span>;
+}
+
+function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void }) {
   return (
     <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label">{a.label.trim()}</div>}
         <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
-        <div className="t-body-medium muted pa-line">{repeatText(a, now, relative)}</div>
+        <div className="t-body-medium muted pa-line">{scheduleLine(a, now)}</div>
       </div>
+      <AlarmWeather a={a} now={now} fc={fc} />
       <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
     </div>
   );
 }
 
-function BundleCard({ group, now, open, onOpen, onEdit }: {
-  group: ClockAlarm[]; now: Date; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void;
+function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
+  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void;
 }) {
   const on = group.filter((a) => a.enabled).length;
   const first = group[0], last = group[group.length - 1];
@@ -371,8 +385,9 @@ function BundleCard({ group, now, open, onOpen, onEdit }: {
             <div key={a.id} className={`pa-bundle-row ${a.enabled ? "" : "off"}`} role="button" onClick={() => onEdit(a)}>
               <div className="grow">
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
-                <div className="t-body-small muted pa-line">{[a.label.trim(), repeatText(a, now, relative)].filter(Boolean).join(" · ")}</div>
+                <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
               </div>
+              <AlarmWeather a={a} now={now} fc={fc} />
               <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
             </div>
           ))}
@@ -387,8 +402,16 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
   const [minute, setMinute] = useState(alarm.hour * 60 + alarm.minute);
   const [label, setLabel] = useState(alarm.label);
   const [days, setDays] = useState(alarm.days);
+  const [dates, setDates] = useState<number[]>(alarm.dates ?? []);
+  const [skip, setSkip] = useState<number[]>(alarm.skip ?? []);
+  const [pausedUntil, setPausedUntil] = useState<number | null>(alarm.pausedUntil ?? null);
+  const [picker, setPicker] = useState<null | "dates" | "skip" | "until">(null);
   const [sound, setSound] = useState(alarm.sound);
   const [pickTime, setPickTime] = useState(isNew);
+  const today = todayNow();
+  const sched = { hour: Math.floor(minute / 60), minute: minute % 60, days, dates, skip, pausedUntil };
+  const repeating = isRepeating(sched);
+  const pause = pauseText(sched, today, shortDay);
   const pickSound = async () => {
     const r = await native.pickSound(sound, "Alarm sound");
     if (r.picked) setSound(r.uri ?? null);
@@ -403,14 +426,39 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
         <button className="pa-bigtime" onClick={() => setPickTime(true)}><HeldTime step={1} min={minute} onChange={setMinute} /></button>
         <div className="pa-erow">
           <MIcon name="fRepeat" />
-          <div className="pa-days">
-            {NARROW_DAYS.map((d, i) => {
-              const on = (days & (1 << i)) !== 0;
-              return <button key={i} className={on ? "on" : ""} aria-pressed={on} onClick={() => setDays(days ^ (1 << i))}>{d}</button>;
-            })}
-          </div>
+          {dates.length ? (
+            <button className="pa-dates" onClick={() => setPicker("dates")}>
+              <span className="t-body-large pa-line">{dates.slice(0, 4).map(shortDay).join(", ") + (dates.length > 4 ? ` +${dates.length - 4}` : "")}</span>
+            </button>
+          ) : (
+            <div className="pa-days">
+              {NARROW_DAYS.map((d, i) => {
+                const on = (days & (1 << i)) !== 0;
+                return <button key={i} className={on ? "on" : ""} aria-pressed={on} onClick={() => setDays(days ^ (1 << i))}>{d}</button>;
+              })}
+            </div>
+          )}
         </div>
-        <div className="t-body-small muted pa-days-text">{daysText(days)}</div>
+        <div className="pa-days-text">
+          <span className="t-body-small muted grow">{dates.length ? (dates.length === 1 ? "On one date" : `On ${dates.length} chosen dates`) : daysText(days)}</span>
+          {dates.length
+            ? <TextButton onClick={() => setDates([])}>Weekdays</TextButton>
+            : <TextButton onClick={() => setPicker("dates")}>Dates…</TextButton>}
+        </div>
+        {repeating && <>
+          <div className="p-divider" />
+          <div className="pa-erow pa-pause">
+            <MIcon name="oEventBusy" />
+            {pause ? <>
+              <button className="pa-pause-text t-body-large" onClick={() => setPicker(pausedUntil != null && pausedUntil > today ? "until" : "skip")}>{pause}</button>
+              <IconButton icon="fClose" label="Stop pausing" onClick={() => { setSkip([]); setPausedUntil(null); }} />
+            </> : <>
+              <span className="t-body-large muted grow">Pause</span>
+              <TextButton onClick={() => setPicker("skip")}>Skip days</TextButton>
+              <TextButton onClick={() => setPicker("until")}>Until…</TextButton>
+            </>}
+          </div>
+        </>}
         <div className="p-divider" />
         <label className="pa-erow">
           <MIcon name="oLabel" />
@@ -426,7 +474,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
         <div className="p-sheet-buttons">
           <TextButton onClick={close}>Cancel</TextButton>
           <button className="p-filled-btn" onClick={() => {
-            const a = { ...alarm, hour: Math.floor(minute / 60), minute: minute % 60, label: label.trim(), days, sound, enabled: true };
+            const a = tidySchedule({ ...alarm, hour: Math.floor(minute / 60), minute: minute % 60, label: label.trim(), days, sound, enabled: true, dates, skip, pausedUntil }, today);
             close();
             void ensureNotifications("This alarm rings at its time even with the app closed, through a notification.").then(() => save(a));
           }}>Save</button>
@@ -434,6 +482,9 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
       </div>
     )}</BottomSheet>
     {pickTime && <TimePickerDialog value={minute} onPick={setMinute} onClose={() => setPickTime(false)} />}
+    {picker === "dates" && <MultiDatePickerDialog title="Ring on these dates" value={dates} from={today} onPick={setDates} onClose={() => setPicker(null)} />}
+    {picker === "skip" && <MultiDatePickerDialog title="Skip these days" value={skip} from={today} onPick={(d) => { setSkip(d); if (d.length) setPausedUntil(null); }} onClose={() => setPicker(null)} />}
+    {picker === "until" && <DatePickerDialog value={pausedUntil ?? today + 7} onPick={(d) => { setPausedUntil(d > today ? d : null); setSkip([]); }} onClose={() => setPicker(null)} />}
   </>;
 }
 

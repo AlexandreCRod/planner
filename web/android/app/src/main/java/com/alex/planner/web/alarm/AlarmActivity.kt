@@ -81,11 +81,15 @@ class AlarmActivity : ComponentActivity() {
         val isClock = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) != 0L
         val isTimer = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0) != 0L
         val accent = Mirror.settings(this).accent
+        // A clock alarm shows the weather at this hour, from the forecast the page last pushed (Forecast.kt).
+        val now = System.currentTimeMillis()
+        val weather = if (isClock) Forecast.at(this, now)?.let { (t, code) -> Forecast.icon(code, now) to "${Math.round(t)}°C" } else null
         setContent {
             MaterialTheme(colorScheme = darkScheme(accents[accent.coerceIn(accents.indices)])) {
                 AlarmScreen(
                     title = title,
                     text = text,
+                    weather = weather,
                     onDismiss = { send(AlarmService.ACTION_DISMISS) },
                     onSnooze = { send(AlarmService.ACTION_SNOOZE) },
                     snoozeLabel = if (isTimer) "+1 min" else "Snooze",
@@ -152,6 +156,7 @@ private val AlarmIcon: ImageVector by lazy {
 private fun AlarmScreen(
     title: String,
     text: String,
+    weather: Pair<ImageVector, String>?,
     onDismiss: () -> Unit,
     onSnooze: () -> Unit,
     snoozeLabel: String,
@@ -176,6 +181,12 @@ private fun AlarmScreen(
             if (text.isNotBlank()) Text(text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             Text(formatTime(now.hour * 60 + now.minute), fontSize = 80.sp, fontWeight = FontWeight.Normal)
+            if (weather != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(weather.first, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(weather.second, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Spacer(Modifier.height(40.dp))
             Box(
                 Modifier.size(112.dp).scale(pulse).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
