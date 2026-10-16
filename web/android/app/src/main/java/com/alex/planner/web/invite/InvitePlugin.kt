@@ -60,9 +60,13 @@ class InvitePlugin : Plugin() {
                     if (text == null) JSObject().put("error", "This file is too large to be a calendar invitation.")
                     else JSObject().put("text", text).put("name", name)
                 }
+            } catch (e: SecurityException) {
+                // No read access: an old intent handed over again (the file was shown back then). Nothing to say.
+                null
             } catch (e: Exception) {
                 JSObject().put("error", "The invitation couldn't be read.")
             }
+            if (pending == null) return@Thread
             // Kept until the page listens, so a file that opened the app is shown once it has started.
             notifyListeners("invite", JSObject(), true)
         }.start()
