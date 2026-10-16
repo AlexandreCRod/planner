@@ -109,11 +109,21 @@ function hideTip() {
   window.setTimeout(() => el.remove(), 200);
 }
 
-/** The click a long press ends in is dropped, so the button doesn't also act. */
-export function swallowClick() {
-  const stop = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
-  window.addEventListener("click", stop, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 800);
+/**
+ * The click a long press (or a drag) ends in is dropped, so the button doesn't also act. Often no click
+ * comes at all (the browser drops it after a long press), so the next touch ends the wait: a quick tap
+ * right after is never lost.
+ */
+export function swallowClick(ms = 800) {
+  const stop = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); off(); };
+  const off = () => {
+    window.removeEventListener("click", stop, { capture: true });
+    window.removeEventListener("pointerdown", off, { capture: true });
+    clearTimeout(timer);
+  };
+  window.addEventListener("click", stop, { capture: true });
+  window.addEventListener("pointerdown", off, { capture: true });
+  const timer = window.setTimeout(off, ms);
 }
 
 function startHold(e: PointerEvent, t: Element) {

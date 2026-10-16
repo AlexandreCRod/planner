@@ -3,7 +3,7 @@
 // that wobbles a little is still a tap; once a drag has started, the click it would end in is dropped.
 // No pointer capture and no preventDefault: the browser keeps vertical scrolling (touch-action: pan-y).
 import { useEffect, useRef } from "react";
-import { TOUCH_SLOP, textTouch } from "./press.ts";
+import { TOUCH_SLOP, swallowClick, textTouch } from "./press.ts";
 
 export interface SwipeHandlers {
   /** The drag has started (past the slop). */
@@ -18,9 +18,7 @@ export interface SwipeHandlers {
 
 /** Drops the next click if it comes within a moment (the one a drag ends in, with a mouse). */
 function swallowNextClick() {
-  const stop = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
-  window.addEventListener("click", stop, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 400);
+  swallowClick(400);
 }
 
 export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandlers) {
