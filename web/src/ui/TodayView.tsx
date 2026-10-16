@@ -4,9 +4,9 @@ import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd
 import { type Occurrence, type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
-import { routineList, routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
+import { isRoutineItem, routineList, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
-import { showStreaks, useRoutines } from "../store/routines.ts";
+import { showStreaks } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
 import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
 import { hapticLift } from "./phone/native.ts";
@@ -94,23 +94,21 @@ const taskTime = (e: TaskEntry) => (e.item.startMin !== null && e.day !== null ?
 /** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
 function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
   const isToday = day === t;
-  // Routines (phone only): their own checklist, out of the task lists below, never overdue.
-  const marks = useRoutines();
-  const noRoutines = new Set<number>();
-  const routineMarks = phone ? marks : noRoutines;
-  const routines = phone ? routinesOnDay(s.items, routineMarks, s.done, day, t) : [];
+  // Routines: their own checklist, out of the task lists below, never overdue.
+  const routines = phone ? routinesOnDay(s.items, s.done, day, t) : [];
   // With routines but none on this day, the row still holds the button to list them all.
-  const anyRoutine = phone && routineMarks.size > 0 && s.items.some((i) => routineMarks.has(i.id));
+  const anyRoutine = phone && s.items.some(isRoutineItem);
+  const withoutRoutines = (list: TaskEntry[]) => (phone ? skipRoutines(list) : list);
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
-    const tasks = withoutRoutines(tasksForDay(s.items, s.done, t), routineMarks);
+    const tasks = withoutRoutines(tasksForDay(s.items, s.done, t));
     overdue = tasks.filter((e) => e.status === "OVERDUE");
     dayTasks = tasks.filter((e) => e.status === "DUE" || e.status === "CARRIED" || e.status === "DONE");
     anytime = tasks.filter((e) => e.status === "ANYTIME").length;
   } else {
     // Tasks still overdue today carry on to the days ahead until they're ticked.
-    if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t), routineMarks).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
-    dayTasks = withoutRoutines(tasksOnDay(s.items, s.done, day, t), routineMarks);
+    if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t)).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
+    dayTasks = withoutRoutines(tasksOnDay(s.items, s.done, day, t));
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);
   // "Show completed tasks on Today" off: ticked tasks leave today's list (after the hold).
@@ -119,7 +117,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   // Ticked during this day but not listed above: overdue ones, undated ones, early ticks...
   const listed = new Set([...shownOverdue, ...shownTasks].map(rowKey));
   for (const r of routines) listed.add(rowKey(r));
-  const alsoDone = hideDone ? [] : withoutRoutines(tickedDuring(s.items, s.completions, day), routineMarks).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
+  const alsoDone = hideDone ? [] : withoutRoutines(tickedDuring(s.items, s.completions, day)).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
   const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day + 7);
   const dayEvents = events.filter((o) => o.day <= day && o.endDay >= day);
   const upcoming = isToday ? events.filter((o) => o.day > day).slice(0, 8) : [];
@@ -137,7 +135,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
-      {phone && (routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} marks={routineMarks} />}
+      {phone && (routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
           <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
@@ -183,7 +181,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
  * scrolls sideways when it doesn't fit (it wins over the day swipe then). A routine missed on an
  * earlier day isn't carried here; it only ends the streak.
  */
-function RoutineChips({ list, s, day, t, marks }: { list: TaskEntry[]; s: Snapshot; day: number; t: number; marks: ReadonlySet<number> }) {
+function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
   const streaks = showStreaks() && day >= t;
   const [all, setAll] = useState(false);
   return (
@@ -200,14 +198,14 @@ function RoutineChips({ list, s, day, t, marks }: { list: TaskEntry[]; s: Snapsh
       <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
         <MIcon name="fFormatListBulleted" size={18} />
       </button>
-      {all && createPortal(<RoutineListSheet s={s} t={t} marks={marks} onClose={() => setAll(false)} />, document.body)}
+      {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} />, document.body)}
     </div>
   );
 }
 
 /** Every routine in a sheet: name, how it repeats, today's state and its streak. A tap opens it. */
-function RoutineListSheet({ s, t, marks, onClose }: { s: Snapshot; t: number; marks: ReadonlySet<number>; onClose: () => void }) {
-  const rows = routineList(s.items, marks, s.done, t);
+function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: () => void }) {
+  const rows = routineList(s.items, s.done, t);
   const streaks = showStreaks();
   return (
     <BottomSheet onClose={onClose} className="p-rlist-sheet">{(close) => (

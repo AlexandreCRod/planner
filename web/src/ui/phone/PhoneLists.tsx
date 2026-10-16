@@ -6,7 +6,7 @@ import { formatDate } from "../../domain/dates.ts";
 import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
 import { isRoutineItem, routineEntry } from "../../domain/routines.ts";
-import { showStreaks, useRoutines } from "../../store/routines.ts";
+import { showStreaks } from "../../store/routines.ts";
 import { preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
@@ -111,12 +111,11 @@ function ScheduledList() {
   const [category, setCategory] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const hold = useCheckedHold();
-  const routines = useRoutines();
   const streaks = showStreaks();
   const entries = s.items
     .filter((i) => i.type === "TASK" && i.startDay !== null && (category === null || i.categoryId === category))
     // A routine's box ticks today's (or the next) day, never a missed one.
-    .map((i) => (isRoutineItem(i, routines) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)))
+    .map((i) => (isRoutineItem(i) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)))
     .filter((e) => showDone || e.status !== "DONE" || isRecurring(e.item));
   const sorted = (list: TaskEntry[]) => [...list].sort((a, b) =>
     Number(a.status === "DONE") - Number(b.status === "DONE") || b.item.priority - a.item.priority ||
@@ -142,7 +141,7 @@ function ScheduledList() {
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
             <SwipeToTrash key={e.item.id} item={e.item}>
-              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineItem(e.item, routines) ? streak(e.item, s.done, t) : undefined}
+              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineItem(e.item) ? streak(e.item, s.done, t) : undefined}
                 onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
             </SwipeToTrash>
           ))}

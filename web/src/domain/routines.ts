@@ -1,6 +1,6 @@
 // Routines: repeating tasks done as a habit (stretch, pills, journal). On Today they have their own short
 // checklist instead of mixing with one-off tasks; a day missed doesn't pile up as overdue, it only
-// ends the streak. Which tasks are routines is stored apart (store/routines.ts); these are the rules.
+// ends the streak. A task is one when its synced `routine` field is set; these are the rules.
 import { describe, nextOnOrAfter, occursOn, previousBefore } from "./recurrence.ts";
 import { type CompletionIndex, type TaskEntry, currentEntry, streak } from "./schedule.ts";
 import { type Item, isRecurring } from "./types.ts";
@@ -9,8 +9,18 @@ import { type Item, isRecurring } from "./types.ts";
  * Whether [item] counts as a routine: marked as one, and still a repeating task. A mark left on a task
  * that no longer repeats (or was turned into an event, or is in the trash) is ignored.
  */
-export function isRoutineItem(item: Item, marked: ReadonlySet<number>): boolean {
-  return marked.has(item.id) && item.type === "TASK" && isRecurring(item) && item.startDay !== null && item.deletedAt === null;
+export function isRoutineItem(item: Item): boolean {
+  return item.routine === true && item.type === "TASK" && isRecurring(item) && item.startDay !== null && item.deletedAt === null;
+}
+
+/**
+ * The one-time move of the phone's old device-only marks (a list of ids) into the synced field: the
+ * items to save with `routine: true`. Marks on items this copy doesn't have were for items deleted for
+ * good, so they're dropped; nothing is marked twice, so running it again changes nothing.
+ */
+export function itemsToMarkAsRoutines(allItems: Item[], marks: Iterable<number>): Item[] {
+  const ids = new Set(marks);
+  return allItems.filter((i) => ids.has(i.id) && i.routine !== true).map((i) => ({ ...i, routine: true }));
 }
 
 const byTimeThenTitle = (a: TaskEntry, b: TaskEntry) =>
@@ -21,16 +31,16 @@ const byTimeThenTitle = (a: TaskEntry, b: TaskEntry) =>
  * earlier missed one. DONE when ticked; otherwise DUE, or MISSED for a day that has passed.
  * Sorted by time (untimed last), then title; no grouping by time of day.
  */
-export function routinesOnDay(items: Item[], marked: ReadonlySet<number>, done: CompletionIndex, day: number, today: number): TaskEntry[] {
+export function routinesOnDay(items: Item[], done: CompletionIndex, day: number, today: number): TaskEntry[] {
   return items
-    .filter((i) => isRoutineItem(i, marked) && occursOn(i, day))
+    .filter((i) => isRoutineItem(i) && occursOn(i, day))
     .map((item): TaskEntry => ({ item, day, status: done.isDone(item.id, day) ? "DONE" : day < today ? "MISSED" : "DUE", missed: 0 }))
     .sort(byTimeThenTitle);
 }
 
 /** Today's task lists without the routines (they're in their own section), overdue ones included. */
-export function withoutRoutines(entries: TaskEntry[], marked: ReadonlySet<number>): TaskEntry[] {
-  return entries.filter((e) => !isRoutineItem(e.item, marked));
+export function withoutRoutines(entries: TaskEntry[]): TaskEntry[] {
+  return entries.filter((e) => !isRoutineItem(e.item));
 }
 
 /**
@@ -68,9 +78,9 @@ export interface RoutineRow {
 }
 
 /** Every routine, for the list opened from Today's chips: by time (untimed last), then title. */
-export function routineList(items: Item[], marked: ReadonlySet<number>, done: CompletionIndex, today: number): RoutineRow[] {
+export function routineList(items: Item[], done: CompletionIndex, today: number): RoutineRow[] {
   return items
-    .filter((i) => isRoutineItem(i, marked))
+    .filter((i) => isRoutineItem(i))
     .map((item): RoutineRow => {
       const on = occursOn(item, today);
       return {

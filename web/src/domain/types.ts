@@ -49,6 +49,9 @@ export interface Item {
   /** Coordinates when the place came from the device's position. */
   lat?: number | null;
   lng?: number | null;
+  /** A repeating task done as a habit: on Today's own checklist, a missed day only ends its streak
+   *  (domain/routines.ts). Missing on records made before routines synced. */
+  routine?: boolean;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }

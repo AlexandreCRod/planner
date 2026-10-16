@@ -27,7 +27,7 @@ import { RichBar } from "./RichBar.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
-import { isRoutine, setRoutine, showStreaks, useRoutines } from "../../store/routines.ts";
+import { setRoutine, showStreaks } from "../../store/routines.ts";
 import { count } from "../../domain/plural.ts";
 
 // ---------- Shared bits ----------
@@ -563,7 +563,6 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const [prioMenu, setPrioMenu] = useState(false);
   const [overdueMenu, setOverdueMenu] = useState(false);
   const [pendingScope, setPendingScope] = useState<Item | null>(null);
-  const routineMarks = useRoutines();
   if (!item) return null;
 
   const isEvent = item.type === "EVENT";
@@ -574,7 +573,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const notifications = reminders.filter((r) => r.type !== "ALARM");
   const tags = s.tagsByItem.get(id) ?? [];
   const hasLinks = s.neighbours(id).size > 0;
-  const routine = isRoutineItem(item, routineMarks);
+  const routine = isRoutineItem(item);
   const t = todayEpoch();
   const timed = !(item.allDay || item.startMin === null);
   // A routine is about today (or its next day); a missed day isn't something to tick any more.
@@ -649,7 +648,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {!isEvent && isRecurring(item) && (
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
-            onClick={() => setRoutine(id, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(id, v)} label="Routine" />} />
+            onClick={() => setRoutine(item, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(item, v)} label="Routine" />} />
         )}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
@@ -820,8 +819,9 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const [notesFocused, setNotesFocused] = useState(false);
   const [notesEmpty, setNotesEmpty] = useState(() => !preview(d.content, 10).trim());
   const [currentId, setCurrentId] = useState(id);
-  // The Routine switch (kept on this phone, see store/routines.ts): saved with the task.
-  const [routine, setRoutineDraft] = useState(() => id !== 0 && isRoutine(id));
+  // The Routine switch: the task's synced `routine` field, saved with it.
+  const routine = d.routine === true;
+  const setRoutineDraft = (on: boolean) => set({ routine: on });
   const canBeRoutine = d.type === "TASK" && d.freq !== "NONE";
   const rich = useRef<RichEditorHandle>(null);
   const [initialHtml] = useState(d.content);
@@ -842,14 +842,12 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const save = (scope?: EditScope) => {
     const item = finalItem();
     if (original && isRecurring(original) && occ !== null && !scope) { setScopeOpen(true); return; }
-    let savedId: number;
+    // Only a repeating task can be a routine; one that stops repeating loses the mark.
+    if (item.routine && !(item.type === "TASK" && item.freq !== "NONE")) item.routine = false;
     if (original && scope && occ !== null) {
       const edited = scope === "THIS" ? { ...item, startDay: item.startDay !== original.startDay ? item.startDay : occ } : item;
-      savedId = saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
-    } else savedId = saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
-    // A single changed day (THIS) doesn't repeat, so it isn't a routine; the series keeps its mark.
-    if (item.type === "TASK" && item.freq !== "NONE" && scope !== "THIS") setRoutine(savedId, routine);
-    else if (!original || original.id === savedId) setRoutine(savedId, false);
+      saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
+    } else saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
     onClose();
   };
   if (saveRef) saveRef.current = () => save();

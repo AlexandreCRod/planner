@@ -10,6 +10,7 @@ import {
   currentEntry, entriesFor, forCalendar, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring,
 } from "../src/domain/schedule.ts";
 import { type Completion, type Item, NO_DAY, newItem } from "../src/domain/types.ts";
+import { routinesOnDay, withoutRoutines } from "../src/domain/routines.ts";
 
 // Parsed JSON from the cases file.
 type Json = any;
@@ -58,6 +59,7 @@ function toItem(j: Json): Item {
     excludedDays,
     overduePolicy: j.overduePolicy ?? "SHOW_OVERDUE",
     priority: j.priority ?? 0,
+    ...(j.routine !== undefined ? { routine: j.routine } : {}),
   });
 }
 
@@ -116,6 +118,12 @@ function run(c: Json) {
       return;
     case "tickedDuring":
       assert.deepEqual(tickedDuring(items, completions, day(c.day)).map(entryActual), c.expect.map(entryExpected));
+      return;
+    case "routinesOnDay":
+      assert.deepEqual(routinesOnDay(items, done, day(c.day), day(c.today)).map(entryActual), c.expect.map(entryExpected));
+      return;
+    case "tasksForDayWithoutRoutines":
+      assert.deepEqual(withoutRoutines(tasksForDay(items, done, day(c.today))).map(entryActual), c.expect.map(entryExpected));
       return;
     case "streak": {
       const s = streak(target(), done, day(c.today));

@@ -7,11 +7,58 @@
     "weekDays: list of MON..SUN; months: list of 1..12; monthDays: list of 1..31 or 32 (last day); excludedDays: list of dates.",
     "done: completions; day null = undated (NO_DAY); 'at' = local wall time it was ticked (optional).",
     "fn: days (Recurrence.occurrences of the first item) | occurrences | forCalendar | tasksForDay | tasksOnDay | entriesFor |",
-    "currentEntry | tickedDuring | streak. entriesFor/currentEntry/streak use itemId (default: first item).",
+    "currentEntry | tickedDuring | streak | routinesOnDay | tasksForDayWithoutRoutines. entriesFor/currentEntry/streak use itemId (default: first item).",
+    "routine: true marks a routine (the synced item field); routinesOnDay uses day + today, tasksForDayWithoutRoutines uses today.",
     "Expected occurrences: endDay defaults to day, startMin/endMin to null, completed/overdue to false.",
     "Expected task entries: day defaults to null, missed to 0."
   ],
   "cases": [
+    {
+      "name": "routines: only marked repeating live tasks, that day's occurrence only, by time then title",
+      "fn": "routinesOnDay",
+      "items": [
+        { "id": 1, "title": "Stretch", "startDay": "2026-10-01", "startMin": "09:00", "freq": "DAILY", "routine": true },
+        { "id": 2, "title": "Pills", "startDay": "2026-10-01", "startMin": "08:00", "freq": "DAILY", "routine": true },
+        { "id": 3, "title": "Journal", "startDay": "2026-10-01", "freq": "DAILY", "routine": true },
+        { "id": 4, "title": "Not marked", "startDay": "2026-10-01", "freq": "DAILY" },
+        { "id": 5, "title": "No longer repeats", "startDay": "2026-10-15", "routine": true },
+        { "id": 6, "title": "Mondays", "startDay": "2026-10-12", "freq": "WEEKLY", "routine": true }
+      ],
+      "done": [{ "itemId": 2, "day": "2026-10-15" }, { "itemId": 1, "day": "2026-10-14" }],
+      "day": "2026-10-15", "today": "2026-10-15",
+      "expect": [
+        { "id": 2, "day": "2026-10-15", "status": "DONE" },
+        { "id": 1, "day": "2026-10-15", "status": "DUE" },
+        { "id": 3, "day": "2026-10-15", "status": "DUE" }
+      ]
+    },
+    {
+      "name": "routines: a past day not ticked is missed, not overdue",
+      "fn": "routinesOnDay",
+      "items": [
+        { "id": 1, "title": "Stretch", "startDay": "2026-10-01", "freq": "DAILY", "routine": true },
+        { "id": 2, "title": "Pills", "startDay": "2026-10-01", "freq": "DAILY", "routine": true }
+      ],
+      "done": [{ "itemId": 1, "day": "2026-10-14" }],
+      "day": "2026-10-14", "today": "2026-10-15",
+      "expect": [
+        { "id": 2, "day": "2026-10-14", "status": "MISSED" },
+        { "id": 1, "day": "2026-10-14", "status": "DONE" }
+      ]
+    },
+    {
+      "name": "routines: a missed routine doesn't pile up in Today's task list",
+      "fn": "tasksForDayWithoutRoutines",
+      "items": [
+        { "id": 1, "title": "routine", "startDay": "2026-10-01", "freq": "DAILY", "routine": true },
+        { "id": 2, "title": "plain", "startDay": "2026-10-13", "freq": "DAILY" }
+      ],
+      "today": "2026-10-15",
+      "expect": [
+        { "id": 2, "day": "2026-10-14", "status": "OVERDUE", "missed": 2 },
+        { "id": 2, "day": "2026-10-15", "status": "DUE" }
+      ]
+    },
     {
       "name": "days: non-repeating occurs on its start day only",
       "fn": "days",

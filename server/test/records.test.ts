@@ -74,3 +74,12 @@ test("sync deletion guard", () => {
   assert.ok(syncDeletionGuard(3, 3));
   assert.equal(syncDeletionGuard(30, 5), null);
 });
+
+test("item fields pass through untouched, new ones included (e.g. routine)", () => {
+  const item = { id: 7, type: "TASK", title: "Stretch", freq: "DAILY", routine: true, updatedAt: 3 };
+  const ok = parseSyncBody({ since: 0, changes: [{ kind: "items", id: "7", data: item }] });
+  assert.ok(typeof ok !== "string");
+  assert.deepEqual(ok.changes[0].data, item);
+  // What the store writes and later sends back keeps the field.
+  assert.deepEqual(JSON.parse(canonical(ok.changes[0].data)), item);
+});

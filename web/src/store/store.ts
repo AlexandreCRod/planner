@@ -255,7 +255,8 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
     deleteOccurrence(series, day);
     const startDay = edited.startDay !== series.startDay ? edited.startDay : day;
     const newIdNum = saveItem(
-      { ...edited, id: 0, freq: "NONE", parentId: series.id, excludedDays: "", untilDay: null, startDay, endDay: (startDay ?? day) + span },
+      // A single changed day doesn't repeat, so it isn't a routine (the series keeps its mark).
+      { ...edited, id: 0, freq: "NONE", parentId: series.id, excludedDays: "", untilDay: null, startDay, endDay: (startDay ?? day) + span, routine: false },
       { reminders: freshReminders, tags },
     );
     addLink(newIdNum, series.id);

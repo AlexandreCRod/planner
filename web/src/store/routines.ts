@@ -1,66 +1,42 @@
-// Which repeating tasks are routines, and whether streaks show: kept on this phone only (not synced,
-// lost on a reinstall). Everything that reads or writes the routine marks goes through this module.
-//
-// After the switch-over from the original app, the mark can become a synced item field. The migration
-// goes here, in one step: on first start with the field, set it on every item in listRoutines() (one
-// saveItem each), then remove ROUTINES_KEY. Not built yet.
-import { useSyncExternalStore } from "react";
+// Routines: which repeating tasks are routines is the synced item field `routine` (domain/routines.ts
+// has the rules). Before it synced, the phone kept the marks on itself (localStorage "routines");
+// migrateLocalRoutines() moves them into the field once. Whether streaks show stays a setting of each
+// device.
 import type { Item } from "../domain/types.ts";
-import { changed } from "./store.ts";
+import { itemsToMarkAsRoutines } from "../domain/routines.ts";
+import { changed, saveItem, snapshot } from "./store.ts";
 
-const ROUTINES_KEY = "routines";
+/** The old device-only marks: a JSON list of item ids. */
+const LEGACY_KEY = "routines";
 const STREAKS_KEY = "showStreaks";
 
-function read(): Set<number> {
-  try {
-    const v = JSON.parse(localStorage.getItem(ROUTINES_KEY) ?? "[]");
-    return new Set(Array.isArray(v) ? v.filter((x): x is number => typeof x === "number") : []);
-  } catch { return new Set(); }
-}
-
-/** Replaced (never changed in place) on every change, so it can be handed out as-is. */
-let ids: ReadonlySet<number> = read();
 let streaks = (() => { try { return localStorage.getItem(STREAKS_KEY) !== "false"; } catch { return true; } })();
-const listeners = new Set<() => void>();
 
-function commit(next: Set<number>) {
-  ids = next;
-  try { localStorage.setItem(ROUTINES_KEY, JSON.stringify([...next])); } catch { /* private mode: kept for this session */ }
-  listeners.forEach((l) => l());
-  // Every page redraws with the change (Today's lists are drawn from the store's snapshot).
-  changed(true);
-}
-
-export const isRoutine = (id: number) => ids.has(id);
-export const listRoutines = (): number[] => [...ids];
-/** The marked ids (whether each still counts is domain/routines.ts's isRoutineItem). */
-export const routineIds = (): ReadonlySet<number> => ids;
-
-export function setRoutine(id: number, on: boolean) {
-  if (!id || ids.has(id) === on) return;
-  const next = new Set(ids);
-  if (on) next.add(id); else next.delete(id);
-  commit(next);
-}
-
-export function subscribeRoutines(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => { listeners.delete(fn); };
-}
-
-export function useRoutines(): ReadonlySet<number> {
-  return useSyncExternalStore(subscribeRoutines, routineIds);
+/** Marks [item] as a routine or not; saved with the item, so it syncs. */
+export function setRoutine(item: Item, on: boolean) {
+  if (!item.id || (item.routine === true) === on) return;
+  saveItem({ ...item, routine: on });
 }
 
 /**
- * Forgets the marks of items that no longer exist (deleted for good, here or on another device). One in
- * the trash keeps its mark, so Undo and Restore bring the routine back; meanwhile it's not shown.
+ * Moves the old device-only marks into the synced field, then forgets them. Waits until the local copy
+ * has items (it may still be empty before the first sync); once it has, marks of items it doesn't
+ * know were for items deleted for good and are dropped. Running it again does nothing.
+ * Returns how many items it marked.
  */
-export function pruneRoutines(allItems: Item[]) {
-  if (!ids.size || !allItems.length) return;
-  const known = new Set(allItems.map((i) => i.id));
-  const next = new Set([...ids].filter((id) => known.has(id)));
-  if (next.size !== ids.size) commit(next);
+export function migrateLocalRoutines(allItems: Item[] = snapshot().allItems): number {
+  let raw: string | null;
+  try { raw = localStorage.getItem(LEGACY_KEY); } catch { return 0; }
+  if (raw === null || !allItems.length) return 0;
+  let ids: number[] = [];
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v)) ids = v.filter((x): x is number => typeof x === "number");
+  } catch { /* unreadable: nothing to move */ }
+  const marked = itemsToMarkAsRoutines(allItems, ids);
+  for (const item of marked) saveItem(item);
+  try { localStorage.removeItem(LEGACY_KEY); } catch { /* kept: the next run marks nothing again */ }
+  return marked.length;
 }
 
 /** Settings > "Show streaks": off hides them everywhere in this app. */
@@ -68,6 +44,5 @@ export const showStreaks = () => streaks;
 export function setShowStreaks(v: boolean) {
   streaks = v;
   try { localStorage.setItem(STREAKS_KEY, String(v)); } catch { /* private mode */ }
-  listeners.forEach((l) => l());
   changed(true);
 }

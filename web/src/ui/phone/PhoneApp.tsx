@@ -6,8 +6,6 @@ import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
-import { snapshot, subscribe } from "../../store/store.ts";
-import { pruneRoutines } from "../../store/routines.ts";
 import { go, useRoute } from "../common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
 import { PhoneCategories, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
@@ -132,11 +130,6 @@ export function PhoneApp() {
   const [preview, setPreview] = useState<SlotPreview | null>(null);
 
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
-  // Routine marks of tasks deleted for good (here or on another device) are forgotten.
-  useEffect(() => {
-    pruneRoutines(snapshot().allItems);
-    return subscribe(() => pruneRoutines(snapshot().allItems));
-  }, []);
 
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per

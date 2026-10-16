@@ -5,6 +5,7 @@ import { startNotifications } from "./notify.ts";
 import { startAlarmMirror } from "./alarms/mirror.ts";
 import { isNative } from "./platform.ts";
 import { ensureDefaults, load, setChangeHook, tidy } from "./store/store.ts";
+import { migrateLocalRoutines } from "./store/routines.ts";
 import { getToken, onStatus, requestSync, signOut, startAutoSync } from "./store/sync.ts";
 import { App } from "./ui/App.tsx";
 import { applyTheme } from "./ui/SettingsView.tsx";
@@ -16,7 +17,9 @@ async function start() {
   setChangeHook(() => requestSync());
   // Retention: ticked to-dos to the trash after 48 h, old trash deleted (domain/retention.ts).
   tidy();
-  onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) tidy(); });
+  // The phone's old device-only routine marks move into the synced field once (when there are items).
+  migrateLocalRoutines();
+  onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) { tidy(); migrateLocalRoutines(); } });
   window.setInterval(() => tidy(), 3_600_000);
   if (getToken()) startAutoSync();
   else signOut();
