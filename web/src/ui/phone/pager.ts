@@ -1,18 +1,20 @@
-// Live sideways pagers (Today's days, the calendar's months and years): the content follows the
-// finger 1:1 with the neighbouring page sliding in beside it, then settles like Compose's
-// HorizontalPager: past 400 dp/s it goes the way it was flung, otherwise to the nearest page, on a
-// critically damped spring of stiffness 400 (Compose's snap spring) that starts at the finger's speed.
+// Live sideways pagers (Today's days, the calendar's months and years, the Tasks and Alarms tabs): the
+// content follows the finger, 1.2 times its travel, with the neighbouring page sliding in beside it,
+// then settles like Compose's HorizontalPager: past 400 dp/s it goes the way it was flung, otherwise to
+// the nearest page, on a snappy critically damped spring (motion.ts) that starts at the finger's speed.
 // Nothing moves until the finger has gone past the 8 dp touch slop sideways, so taps still win, and a
-// mostly-vertical move is left to the browser's scrolling (touch-action: pan-y).
+// mostly-vertical move is left to the browser's scrolling (touch-action: pan-y). Moves are written once
+// per frame, at sub-pixel offsets, through the layers' style (no React render during the drag).
 import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
+import { PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
 
 /** Compose's pager fling threshold, 400 dp/s, in px per ms. */
 export const SNAP_VELOCITY = 0.4;
-/** ω of the snap spring: √stiffness, stiffness 400 (Spring.StiffnessMediumLow), damping ratio 1. */
-const OMEGA = 20;
+/** Inner pagers move this much further than the finger, so a short swipe turns a page. */
+export const SWIPE_GAIN = 1.2;
 
 /**
  * Which page to settle on after a drag of [dx] px at [vx] px/ms on pages [w] px wide: 1 for the next
@@ -28,24 +30,12 @@ export function pageTarget(dx: number, vx: number, w: number): -1 | 0 | 1 {
 }
 
 /**
- * A critically damped spring from [from] to [to] starting at [v0] px/ms, calling [frame] every
- * animation frame and [done] once it rests. Returns a function that stops it where it is.
+ * A spring from [from] to [to] starting at [v0] px/ms (the pagers' snappy settle), calling [frame]
+ * every animation frame and [done] once it rests. Returns a function that stops it where it is.
  */
 export function spring(from: number, to: number, v0: number, frame: (x: number) => void, done: () => void): () => void {
-  const d0 = from - to, vs = v0 * 1000;
-  const t0 = performance.now();
-  let raf = 0;
-  const step = (now: number) => {
-    const t = Math.max(0, (now - t0) / 1000);
-    const e = Math.exp(-OMEGA * t);
-    const x = (d0 + (vs + OMEGA * d0) * t) * e;
-    const v = (vs - OMEGA * (vs + OMEGA * d0) * t) * e;
-    if ((t > 0.05 && Math.abs(x) < 0.5 && Math.abs(v) < 30) || t > 1.5) { frame(to); done(); return; }
-    frame(to + x);
-    raf = requestAnimationFrame(step);
-  };
-  raf = requestAnimationFrame(step);
-  return () => cancelAnimationFrame(raf);
+  const a = animateSpring(from, to, v0, frame, done, PAGE_SPRING);
+  return () => a.stop();
 }
 
 export interface PagerOptions {
@@ -75,7 +65,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    let g: { id: number; x0: number; y0: number; dragging: boolean; done: boolean; vx: number; lastX: number; lastT: number; dx: number } | null = null;
+    let g: { id: number; x0: number; y0: number; dragging: boolean; done: boolean; vt: VelocityTracker; lastX: number; dx: number } | null = null;
     let stopAnim: (() => void) | null = null;
     // Once the pages are moving the browser mustn't take the finger for a scroll. Only listened to
     // during a drag, so plain scrolling never waits on the page's script.
@@ -87,7 +77,9 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       for (const l of o.current.layers()) if (l) l.style.transform = t;
       o.current.onMove?.(x, o.current.width?.() ?? el.clientWidth);
     };
+    const write = frameWriter(place);
     const settle = (dx: number, vx: number) => {
+      write.cancel();
       const w = o.current.width?.() ?? el.clientWidth;
       let dir = pageTarget(dx, vx, w);
       if (dir && o.current.canStep && !o.current.canStep(dir)) dir = 0;
@@ -109,8 +101,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id || g.done) return;
       const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
-      const dt = e.timeStamp - g.lastT;
-      if (dt > 0) { g.vx = 0.6 * ((e.clientX - g.lastX) / dt) + 0.4 * g.vx; g.lastT = e.timeStamp; }
+      g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       if (!g.dragging) {
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
@@ -120,17 +111,19 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
         el.addEventListener("touchmove", onTouchMove, { passive: false });
         g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
       }
-      g.dx = e.clientX - g.x0;
-      // Past the first or last page the content only gives a third of the finger's way.
-      if (g.dx && o.current.canStep && !o.current.canStep(g.dx < 0 ? 1 : -1)) g.dx /= 3;
-      place(g.dx);
+      const w = o.current.width?.() ?? el.clientWidth;
+      let x = SWIPE_GAIN * (e.clientX - g.x0);
+      // Past the first or last page the content only gives a little, like a rubber band.
+      if (x && o.current.canStep && !o.current.canStep(x < 0 ? 1 : -1)) x = rubberBand(x, w);
+      g.dx = Math.max(-w, Math.min(w, x));
+      write(g.dx);
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       const cur = g;
       g = null;
       stop();
-      if (cur.dragging) { swallowNextClick(); settle(cur.dx, cur.vx); }
+      if (cur.dragging) { swallowNextClick(); settle(cur.dx, SWIPE_GAIN * cur.vt.velocity(e.timeStamp)); }
     };
     const onCancel = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
@@ -144,14 +137,15 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       if (o.current.allow && !o.current.allow(e.target as Element)) return;
       // A finger landing while a page is still settling finishes that at once.
       if (stopAnim) { stopAnim(); finishAnim?.(); }
-      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vx: 0, lastX: e.clientX, lastT: e.timeStamp, dx: 0 };
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vt: new VelocityTracker(), lastX: e.clientX, dx: 0 };
+      g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });
       window.addEventListener("pointercancel", onCancel, { passive: true });
     };
     el.addEventListener("pointerdown", onDown, { passive: true });
     return () => {
-      stop(); stopAnim?.();
+      stop(); stopAnim?.(); write.cancel();
       el.removeEventListener("pointerdown", onDown);
     };
   }, []);

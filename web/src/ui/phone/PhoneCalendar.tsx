@@ -15,7 +15,8 @@ import { ScopeDialog } from "../ItemEditor.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { hapticLift } from "./native.ts";
-import { pageTarget, spring, useSwipePager } from "./pager.ts";
+import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
+import { VelocityTracker, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { openingHourHeight, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 
@@ -351,7 +352,7 @@ interface Gesture {
   block: HTMLElement | null; key: string; timer: number;
   lifted: boolean; swiping: boolean; moved: boolean;
   dx: number; dy: number; x: number; y: number;
-  vx: number; lastX: number; lastT: number;
+  vt: VelocityTracker; sx: number;
   snap: string; raf: number;
 }
 
@@ -468,6 +469,13 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       root?.classList.toggle("swiping", x !== 0);
     };
     const colW = () => (layer.current?.clientWidth ?? 300) / daysRef.current.length;
+    // The days follow 1.2 times the finger, written once per frame.
+    const writeLayers = frameWriter(moveLayers);
+    const swipeTo = (cur: Gesture) => {
+      const w = layer.current?.clientWidth ?? 300;
+      cur.sx = Math.max(-w, Math.min(w, SWIPE_GAIN * cur.dx));
+      writeLayers(cur.sx);
+    };
 
     const updateDrag = () => {
       if (!g || !g.block) return;
@@ -527,8 +535,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       g = {
         id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, scroll0: el.scrollTop,
         block, key: block?.dataset.key ?? "", timer: 0, lifted: false, swiping: false, moved: false,
-        dx: 0, dy: 0, x: e.clientX, y: e.clientY, vx: 0, lastX: e.clientX, lastT: e.timeStamp, snap: "", raf: 0,
+        dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0,
       };
+      g.vt.add(e.timeStamp, e.clientX);
       if (block) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
     };
 
@@ -536,19 +545,19 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       if (!g || e.pointerId !== g.id) return;
       g.x = e.clientX; g.y = e.clientY;
       g.dx = e.clientX - g.x0; g.dy = e.clientY - g.y0;
-      const dt = e.timeStamp - g.lastT;
-      if (dt > 0) { g.vx = 0.6 * ((e.clientX - g.lastX) / dt) + 0.4 * g.vx; g.lastX = e.clientX; g.lastT = e.timeStamp; }
+      g.vt.addEvent(e, "x");
       if (g.lifted) { updateDrag(); return; }
-      if (g.swiping) { moveLayers(g.dx); return; }
+      if (g.swiping) { swipeTo(g); return; }
       if (Math.abs(g.dx) > TOUCH_SLOP || Math.abs(g.dy) > TOUCH_SLOP) {
         g.moved = true;
         clearTimeout(g.timer);
-        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.2) { g.swiping = true; g.x0 += Math.sign(g.dx) * TOUCH_SLOP; g.dx = e.clientX - g.x0; moveLayers(g.dx); }
+        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.2) { g.swiping = true; g.x0 += Math.sign(g.dx) * TOUCH_SLOP; g.dx = e.clientX - g.x0; swipeTo(g); }
       }
     };
 
     /** Lets the days go: on to the next range, or back, on the pager's spring (no buzz, as native). */
     const settleSwipe = (dx: number, vx: number) => {
+      writeLayers.cancel();
       const w = layer.current?.clientWidth ?? 300;
       const dir = pageTarget(dx, vx, w);
       let done = false;
@@ -591,7 +600,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           }
         }
       } else if (cur.swiping) {
-        settleSwipe(cur.dx, cur.vx);
+        settleSwipe(cur.sx, SWIPE_GAIN * cur.vt.velocity(e.timeStamp));
       } else if (!cur.moved) {
         clearTimeout(cur.timer);
         if (cur.block) {
@@ -613,7 +622,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const onCancel = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       // The browser took the finger for scrolling.
-      if (g.swiping) settleSwipe(g.dx, 0);
+      if (g.swiping) settleSwipe(g.sx, 0);
       if (g.lifted && g.block) { g.block.style.transform = ""; g.block.classList.remove("lifted"); setGhost(null); }
       end();
     };
@@ -625,7 +634,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 2 || pinch || g?.lifted) return;
       // A second finger turns whatever the first one started into a zoom.
-      if (g) { clearTimeout(g.timer); if (g.swiping) moveLayers(0); end(); }
+      if (g) { clearTimeout(g.timer); if (g.swiping) { writeLayers.cancel(); moveLayers(0); } end(); }
       pinch = { d0: spread(e.touches), h0: hourRef.current };
     };
     const onTouchMove = (e: TouchEvent) => {

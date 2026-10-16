@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, ty
 import { go } from "../common.tsx";
 import { ICONS } from "./icons.ts";
 import { pushBack } from "./native.ts";
+import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 
 /** Older short names used around the phone code, mapped to the Compose icons. */
 const ALIAS: Record<string, string> = {
@@ -103,22 +104,35 @@ export function ChipRow({ children, className = "" }: { children: ReactNode; cla
 /**
  * Single-choice segmented buttons (40 dp, full width): a calm indicator sits under the chosen one and
  * slides to the next. [track], when given, receives a function that moves the indicator to a
- * fractional position (a page being dragged) without redrawing anything, and null puts it back.
+ * fractional position (a page being dragged) without redrawing anything; null lets it go, and it
+ * springs to the chosen segment, carrying [v] (segments per ms) when given.
  */
 export function Segmented<T extends string>({ value, options, onChange, track }: {
-  value: T; options: [T, string][]; onChange: (v: T) => void; track?: MutableRefObject<((p: number | null) => void) | null>;
+  value: T; options: [T, string][]; onChange: (v: T) => void; track?: MutableRefObject<((p: number | null, v?: number) => void) | null>;
 }) {
   const ind = useRef<HTMLSpanElement>(null);
   const index = Math.max(0, options.findIndex(([k]) => k === value));
   const indexRef = useRef(index);
   indexRef.current = index;
-  useLayoutEffect(() => { const el = ind.current; if (el) el.style.transform = `translate3d(${index * 100}%,0,0)`; }, [index]);
-  if (track) track.current = (p) => {
+  const at = useRef<number | null>(null);
+  const anim = useRef<Animation | null>(null);
+  const put = (p: number) => { const el = ind.current; if (el) el.style.transform = `translate3d(${p * 100}%,0,0)`; };
+  useLayoutEffect(() => { if (at.current === null && !anim.current) put(index); }, [index]);
+  if (track) track.current = (p, v = 0) => {
     const el = ind.current;
     if (!el) return;
-    el.style.transition = p === null ? "" : "none";
-    const at = p === null ? indexRef.current : Math.max(0, Math.min(options.length - 1, p));
-    el.style.transform = `translate3d(${at * 100}%,0,0)`;
+    el.style.transition = "none";
+    if (p !== null) {
+      anim.current?.stop(); anim.current = null;
+      at.current = Math.max(0, Math.min(options.length - 1, p));
+      put(at.current);
+      return;
+    }
+    // Let go: from where it is to the chosen segment, on the pagers' spring.
+    const from = at.current ?? anim.current?.now().x ?? indexRef.current;
+    anim.current?.stop();
+    at.current = null;
+    anim.current = animateSpring(from, indexRef.current, v, put, () => { anim.current = null; el.style.transition = ""; }, PAGE_SPRING);
   };
   return (
     <div className="p-segmented" role="radiogroup">

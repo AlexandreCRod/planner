@@ -18,7 +18,8 @@ import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS_MU
 import { saveItem, snapshot } from "../../store/store.ts";
 import { go } from "../common.tsx";
 import { FilterChip, MIcon, Segmented } from "./chrome.tsx";
-import { pageTarget } from "./pager.ts";
+import { SWIPE_GAIN, pageTarget } from "./pager.ts";
+import { VelocityTracker } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { swallowNextClick } from "./gesture.ts";
 import { panelTarget } from "./sheet.ts";
@@ -263,7 +264,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   // editor's handle strip does (its content scrolls). The panel's transform is written here, in the
   // pointer's own event, so it never trails the finger; the springs are only told where it is.
   const panelRef = useRef<HTMLDivElement>(null);
-  const typeTrack = useRef<((p: number | null) => void) | null>(null);
+  const typeTrack = useRef<((p: number | null, v?: number) => void) | null>(null);
   const live = useRef({ canGrow, type, lineMode, setType: (t: ItemType) => {} });
   live.current = {
     canGrow, type: lineMode ? type : d.type, lineMode,
@@ -272,7 +273,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   useEffect(() => {
     const el = panelRef.current;
     if (!el) return;
-    type G = { id: number; x0: number; y0: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number; mode: "" | "y" | "x"; p0: number; down0: number; from: "compact" | "full"; segW: number };
+    type G = { id: number; x0: number; y0: number; lastX: number; lastY: number; lastT: number; vx: number; vy: number; vt: VelocityTracker; mode: "" | "y" | "x"; p0: number; down0: number; from: "compact" | "full"; segW: number };
     let g: G | null = null;
     const panelY = () => {
       const b = bottomOf(sp.kb.get(), sp.nav.get());
@@ -286,7 +287,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       if (t.closest(".p-dialog-scrim, .p-menu")) return;
       const seg = el.querySelector<HTMLElement>(".gp-compact .p-segmented");
       g = {
-        id: e.pointerId, x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: e.timeStamp, vx: 0, vy: 0, mode: "",
+        id: e.pointerId, x0: e.clientX, y0: e.clientY, lastX: e.clientX, lastY: e.clientY, lastT: e.timeStamp, vx: 0, vy: 0, vt: new VelocityTracker(), mode: "",
         p0: sp.p.get(), down0: sp.down.get(), from: grownRef.current ? "full" : "compact", segW: seg ? seg.offsetWidth / TYPES.length : 120,
       };
     };
@@ -299,6 +300,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
         g.lastT = e.timeStamp;
       }
       g.lastX = e.clientX; g.lastY = e.clientY;
+      g.vt.addEvent(e, "x");
       const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
       if (!g.mode) {
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) {
@@ -319,7 +321,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       }
       if (g.mode === "x") {
         const i = TYPES.findIndex(([k]) => k === live.current.type);
-        typeTrack.current?.(i + (e.clientX - g.x0) / g.segW);
+        typeTrack.current?.(i + (SWIPE_GAIN * (e.clientX - g.x0)) / g.segW);
         return;
       }
       // Up: first undo any pull-down, then grow. Down: shrink, then pull away.
@@ -347,10 +349,11 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       const cancelled = e.type === "pointercancel";
       if (cur.mode === "x") {
         const i = TYPES.findIndex(([k]) => k === live.current.type);
-        const dir = cancelled ? 0 : -pageTarget(e.clientX - cur.x0, cur.vx, cur.segW);
+        const vx = cancelled ? 0 : SWIPE_GAIN * cur.vt.velocity(e.timeStamp);
+        const dir = cancelled ? 0 : -pageTarget(SWIPE_GAIN * (e.clientX - cur.x0), vx, cur.segW);
         const next = TYPES[Math.max(0, Math.min(TYPES.length - 1, i + dir))][0];
         if (next !== live.current.type) flushSync(() => live.current.setType(next));
-        typeTrack.current?.(null);
+        typeTrack.current?.(null, vx / cur.segW);
         return;
       }
       const v = cancelled ? 0 : cur.vy;
