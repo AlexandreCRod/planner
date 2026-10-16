@@ -1017,3 +1017,10 @@ html.phone[data-theme="dark"] {
 .phone .pa-local { display: flex; align-items: center; gap: 8px; }
 .phone .pa-local-text { flex: 1; min-width: 0; }
 .phone .pa-wx.none svg { color: var(--muted); opacity: .6; }
+
+/* No stray text selection: on the phone only fields and the note editor select text; cards, lists,
+   chips, bars and the calendar don't, and a long press shows no copy menu or callout. */
+html.phone, html.phone body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), [contenteditable]:not([contenteditable=false]) *) {
+  user-select: text; -webkit-user-select: text; -webkit-touch-callout: default;
+}

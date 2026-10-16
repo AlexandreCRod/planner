@@ -139,6 +139,9 @@ function endHold(e: PointerEvent, moved: boolean) {
   hold = null;
 }
 
+/** Where text may be selected on the phone: fields and the note editor. */
+const EDITABLE = "input, textarea, [contenteditable]:not([contenteditable=false])";
+
 let started = false;
 export function startPressFeedback() {
   if (started) return;
@@ -146,9 +149,10 @@ export function startPressFeedback() {
   document.addEventListener("pointermove", (e) => endHold(e, true), { capture: true, passive: true });
   document.addEventListener("pointerup", (e) => endHold(e, false), { capture: true, passive: true });
   document.addEventListener("pointercancel", (e) => endHold(e, false), { capture: true, passive: true });
-  // No long-press menu (or text selection) on an icon button: its label shows instead.
+  // No long-press menu or text selection outside the fields one types in (an icon button shows its
+  // label instead; a note card starts selecting notes).
   document.addEventListener("contextmenu", (e) => {
-    if (document.documentElement.classList.contains("phone") && e.target instanceof Element && iconButton(e.target)) e.preventDefault();
+    if (document.documentElement.classList.contains("phone") && e.target instanceof Element && !e.target.closest(EDITABLE)) e.preventDefault();
   }, { capture: true });
   document.addEventListener("pointerdown", (e) => {
     if (tip) hideTip();
