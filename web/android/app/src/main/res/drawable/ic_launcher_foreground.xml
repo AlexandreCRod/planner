@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Planner stack: a task card over a tilted one, white on Google blue. Drawn on a 100-unit grid and
+     scaled into the 108dp adaptive-icon canvas so it sits inside the visible circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.05"
+        android:scaleY="1.05"
+        android:translateX="1.5"
+        android:translateY="1.5">
+        <!-- The card behind, tilted. -->
+        <group android:rotation="-9" android:pivotX="50" android:pivotY="50">
+            <path
+                android:fillColor="@color/launcher_fg"
+                android:fillAlpha="0.45"
+                android:pathData="M36,27h28a6,6 0,0 1,6 6v35a6,6 0,0 1,-6 6H36a6,6 0,0 1,-6 -6V33a6,6 0,0 1,6 -6z" />
+        </group>
+        <!-- The front card. -->
+        <path
+            android:fillColor="@color/launcher_fg"
+            android:pathData="M36,28h28a6,6 0,0 1,6 6v34a6,6 0,0 1,-6 6H36a6,6 0,0 1,-6 -6V34a6,6 0,0 1,6 -6z" />
+        <!-- An open task: empty box and a line. -->
+        <path
+            android:strokeColor="@color/launcher_bg"
+            android:strokeWidth="2.5"
+            android:pathData="M38,38h4a2,2 0,0 1,2 2v4a2,2 0,0 1,-2 2h-4a2,2 0,0 1,-2 -2v-4a2,2 0,0 1,2 -2z" />
+        <path
+            android:strokeColor="@color/launcher_bg"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:pathData="M49,42h15" />
+        <!-- A done task: filled box with a tick, and a fainter line. -->
+        <path
+            android:fillColor="@color/launcher_bg"
+            android:pathData="M38,54h4a2,2 0,0 1,2 2v4a2,2 0,0 1,-2 2h-4a2,2 0,0 1,-2 -2v-4a2,2 0,0 1,2 -2z" />
+        <path
+            android:strokeColor="@color/launcher_fg"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M38,58l1.5,1.5 3,-3" />
+        <path
+            android:strokeColor="@color/launcher_bg"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:pathData="M49,58h11" />
+    </group>
+</vector>

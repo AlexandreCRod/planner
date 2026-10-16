@@ -17,8 +17,10 @@
     </style>
 
 
+    <!-- The starting window: the app icon on the page colour, as the native app (no Capacitor splash image). -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/windowBehind</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 
     <!-- The full-screen ringing screen (drawn by Compose, dark like the native app's). -->
