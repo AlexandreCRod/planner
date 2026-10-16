@@ -1222,3 +1222,18 @@ html.phone[data-theme="dark"] {
 
 /* The weather when an alarm next rings, beside its switch. */
 .phone .pa-cardwx { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }
+
+/* The button ending Today's routine chips, and the list of all routines it opens. */
+.phone .p-rchip.p-rchip-all { padding: 0 8px; color: var(--muted); }
+.phone .p-rlist { padding: 0 0 calc(var(--sab) + 12px); }
+.phone .p-rlist-head { padding: 4px 24px 8px; }
+.phone .p-rlist-empty { padding: 16px 24px 24px; }
+.phone .p-rlist-rows { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
+.phone .p-rlist-row { position: relative; overflow: hidden; width: 100%; display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 8px 24px; border: 0; background: none; color: var(--text); text-align: left; }
+.phone .p-rlist-row .ring { flex: none; width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--p-outline); display: grid; place-items: center; color: var(--p-on-strong); }
+.phone .p-rlist-row.done .ring { background: var(--p-strong); border-color: var(--p-strong); }
+.phone .p-rlist-row.off .ring { border-style: dashed; opacity: .6; }
+.phone .p-rlist-row .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .p-rlist-row .name { font-size: 16px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-rlist-row .sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-rlist-row .streak { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 13px; color: var(--muted); }

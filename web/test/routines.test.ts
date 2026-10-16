@@ -68,3 +68,20 @@ test("a missed day breaks the streak; today's open day doesn't", () => {
   done = new CompletionIndex(ticks(2, today - 4, today - 2));
   assert.deepEqual(routineStreak(mwf, done, today), { current: 2, best: 2, broken: false });
 });
+
+test("the list of all routines: how each repeats, today's state and its streak", async () => {
+  const { routineList } = await import("../src/domain/routines.ts");
+  const { CompletionIndex } = await import("../src/domain/schedule.ts");
+  const { newItem } = await import("../src/domain/types.ts");
+  const today = 20_000;
+  const daily = newItem({ type: "TASK", id: 1, title: "Stretch", startDay: today - 10, startMin: 420, freq: "DAILY", interval: 1 });
+  const other = newItem({ type: "TASK", id: 2, title: "Plants", startDay: today + 1, freq: "DAILY", interval: 3 });
+  const plain = newItem({ type: "TASK", id: 3, title: "Not one", startDay: today, freq: "DAILY", interval: 1 });
+  const done = new CompletionIndex([1, 2, 3].map((k) => ({ itemId: 1, day: today - k, completedAt: 1 })).concat([{ itemId: 1, day: today, completedAt: 1 }]));
+  const rows = routineList([other, plain, daily], new Set([1, 2]), done, today);
+  assert.deepEqual(rows.map((r) => r.item.title), ["Stretch", "Plants"]); // timed first; unmarked left out
+  assert.equal(rows[0].today, "done");
+  assert.equal(rows[0].repeat, "Every day");
+  assert.equal(rows[0].streak.current, 4);
+  assert.deepEqual([rows[1].today, rows[1].next], ["off", today + 1]);
+});

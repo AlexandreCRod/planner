@@ -1,7 +1,7 @@
 // Routines: repeating tasks done as a habit (stretch, pills, journal). On Today they have their own short
 // checklist instead of mixing with one-off tasks; a day missed doesn't pile up as overdue, it only
 // ends the streak. Which tasks are routines is stored apart (store/routines.ts); these are the rules.
-import { occursOn, previousBefore } from "./recurrence.ts";
+import { describe, nextOnOrAfter, occursOn, previousBefore } from "./recurrence.ts";
 import { type CompletionIndex, type TaskEntry, currentEntry, streak } from "./schedule.ts";
 import { type Item, isRecurring } from "./types.ts";
 
@@ -55,6 +55,33 @@ export function routineStreak(item: Item, done: CompletionIndex, today: number):
   const st = streak(item, done, today);
   const prev = previousBefore(item, today);
   return { current: st.current, best: st.best, broken: prev !== null && !done.isDone(item.id, prev) };
+}
+
+/** A routine in the list of them all: how it repeats, where it stands today, its streak. */
+export interface RoutineRow {
+  item: Item;
+  repeat: string;
+  /** done or due today, or not on today (then [next] is its next day, if any). */
+  today: "done" | "due" | "off";
+  next: number | null;
+  streak: RoutineStreak;
+}
+
+/** Every routine, for the list opened from Today's chips: by time (untimed last), then title. */
+export function routineList(items: Item[], marked: ReadonlySet<number>, done: CompletionIndex, today: number): RoutineRow[] {
+  return items
+    .filter((i) => isRoutineItem(i, marked))
+    .map((item): RoutineRow => {
+      const on = occursOn(item, today);
+      return {
+        item,
+        repeat: describe(item),
+        today: on ? (done.isDone(item.id, today) ? "done" : "due") : "off",
+        next: on ? today : nextOnOrAfter(item, today + 1),
+        streak: routineStreak(item, done, today),
+      };
+    })
+    .sort((a, b) => (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || (a.item.title < b.item.title ? -1 : a.item.title > b.item.title ? 1 : 0));
 }
 
 /** "3 of 5": routines ticked out of those due on the day. */

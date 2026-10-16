@@ -1,9 +1,10 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
-import { routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
+import { routineList, routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
 import { showStreaks, useRoutines } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
@@ -13,6 +14,7 @@ import { useSwipePager } from "./phone/pager.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
 import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
 import { HeldTime } from "./phone/TimeWheel.tsx";
+import { BottomSheet } from "./phone/m3.tsx";
 import { count } from "../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -97,6 +99,8 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   const noRoutines = new Set<number>();
   const routineMarks = phone ? marks : noRoutines;
   const routines = phone ? routinesOnDay(s.items, routineMarks, s.done, day, t) : [];
+  // With routines but none on this day, the row still holds the button to list them all.
+  const anyRoutine = phone && routineMarks.size > 0 && s.items.some((i) => routineMarks.has(i.id));
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
     const tasks = withoutRoutines(tasksForDay(s.items, s.done, t), routineMarks);
@@ -133,7 +137,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
-      {routines.length > 0 && <RoutineChips list={routines} s={s} day={day} t={t} />}
+      {phone && (routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} marks={routineMarks} />}
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
           <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
@@ -179,8 +183,9 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
  * scrolls sideways when it doesn't fit (it wins over the day swipe then). A routine missed on an
  * earlier day isn't carried here; it only ends the streak.
  */
-function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
+function RoutineChips({ list, s, day, t, marks }: { list: TaskEntry[]; s: Snapshot; day: number; t: number; marks: ReadonlySet<number> }) {
   const streaks = showStreaks() && day >= t;
+  const [all, setAll] = useState(false);
   return (
     <div className="p-rchips" role="list">
       {list.map((e) => {
@@ -192,7 +197,37 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
             onToggle={() => toggleCompletion(e.item.id, day, !ticked)} onOpen={() => openItem(e.item, e.day)} />
         );
       })}
+      <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
+        <MIcon name="fFormatListBulleted" size={18} />
+      </button>
+      {all && createPortal(<RoutineListSheet s={s} t={t} marks={marks} onClose={() => setAll(false)} />, document.body)}
     </div>
+  );
+}
+
+/** Every routine in a sheet: name, how it repeats, today's state and its streak. A tap opens it. */
+function RoutineListSheet({ s, t, marks, onClose }: { s: Snapshot; t: number; marks: ReadonlySet<number>; onClose: () => void }) {
+  const rows = routineList(s.items, marks, s.done, t);
+  const streaks = showStreaks();
+  return (
+    <BottomSheet onClose={onClose} className="p-rlist-sheet">{(close) => (
+      <div className="p-rlist">
+        <div className="p-rlist-head t-title-medium">Routines</div>
+        {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet</div>}
+        <div className="p-rlist-rows">
+          {rows.map((r) => (
+            <button key={r.item.id} className={`p-rlist-row ${r.today}`} onClick={() => { close(); window.setTimeout(() => openItem(r.item, r.today === "off" ? r.next : t), 210); }}>
+              <span className="ring">{r.today === "done" && <MIcon name="fCheck" size={14} />}</span>
+              <span className="text">
+                <span className="name">{r.item.title || "Untitled"}</span>
+                <span className="sub">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
+              </span>
+              {streaks && r.streak.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={14} />{r.streak.current}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}</BottomSheet>
   );
 }
 
