@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { startNotifications } from "./notify.ts";
 import { isNative } from "./platform.ts";
-import { ensureDefaults, load, setChangeHook } from "./store/store.ts";
-import { getToken, requestSync, signOut, startAutoSync } from "./store/sync.ts";
+import { ensureDefaults, load, setChangeHook, tidy } from "./store/store.ts";
+import { getToken, onStatus, requestSync, signOut, startAutoSync } from "./store/sync.ts";
 import { App } from "./ui/App.tsx";
 import { applyTheme } from "./ui/SettingsView.tsx";
 
@@ -13,6 +13,10 @@ applyTheme();
 async function start() {
   await load();
   setChangeHook(() => requestSync());
+  // Retention: ticked to-dos to the trash after 48 h, old trash deleted (domain/retention.ts).
+  tidy();
+  onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) tidy(); });
+  window.setInterval(() => tidy(), 3_600_000);
   if (getToken()) startAutoSync();
   else signOut();
   // Default categories only once this browser has synced (the server may already have them).

@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import * as db from "./db.ts";
 import { newId, tagIdFor } from "../domain/ids.ts";
 import { parseDays } from "../domain/recurrence.ts";
+import { doneTodosToTrash, expiredTrash } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml, wikiTitles } from "../domain/text.ts";
 import {
@@ -203,6 +204,23 @@ function removeItemDeep(id: number) {
 }
 
 export function deleteForever(id: number) { removeItemDeep(id); changed(); }
+
+/**
+ * The retention rules (domain/retention.ts): to-dos ticked 48 hours ago move to the trash, and what has
+ * been in the trash too long is deleted for good (the next sync sends that, like the phone's purge).
+ * Runs at start, after each sync and hourly; returns how many items it moved or deleted.
+ */
+export function tidy(now = Date.now()): number {
+  let n = 0;
+  const items = list<Item>("items");
+  for (const m of doneTodosToTrash(items, list<Completion>("completions"), now)) {
+    for (const i of items) if (i.id === m.id || i.parentId === m.id) put("items", { ...i, deletedAt: m.deletedAt, updatedAt: now });
+    n++;
+  }
+  for (const id of expiredTrash(list<Item>("items"), now)) { removeItemDeep(id); n++; }
+  if (n) changed();
+  return n;
+}
 
 export function emptyTrash() {
   for (const i of list<Item>("items")) if (i.deletedAt !== null) removeItemDeep(i.id);
