@@ -78,6 +78,33 @@
             </intent-filter>
         </receiver>
 
+        <!-- Home-screen widgets (widget/Widgets.kt), drawn from what the page last pushed. -->
+        <receiver
+            android:name=".widget.TodayWidget"
+            android:exported="true"
+            android:label="@string/widget_today">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today" />
+        </receiver>
+        <receiver
+            android:name=".widget.UpcomingWidget"
+            android:exported="true"
+            android:label="@string/widget_upcoming">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_upcoming" />
+        </receiver>
+        <receiver
+            android:name=".widget.WidgetReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

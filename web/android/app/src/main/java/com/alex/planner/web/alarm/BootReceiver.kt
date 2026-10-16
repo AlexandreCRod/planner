@@ -23,6 +23,8 @@ class BootReceiver : BroadcastReceiver() {
                 AlarmScheduler.rescheduleAll(ctx)
                 ClockAlarms.rescheduleAll(ctx)
                 ClockTools.rescheduleAll(ctx)
+                // The home-screen widgets go by the date, so a clock change redraws them.
+                com.alex.planner.web.widget.Widgets.update(ctx)
             } finally {
                 pending.finish()
             }

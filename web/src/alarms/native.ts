@@ -20,6 +20,8 @@ interface Plugin {
   sync(o: { json: string }): Promise<void>;
   takeDone(): Promise<{ json: string }>;
   takeLaunch(): Promise<{ itemId?: number; section?: string }>;
+  widgets(o: { json: string }): Promise<void>;
+  takeWidgetUndone(): Promise<{ json: string }>;
   state(): Promise<{ json: string }>;
   controls(o: { itemId: number }): Promise<{ json: string }>;
   earlySnooze(o: { reminderId: number; original: number }): Promise<void>;
@@ -55,6 +57,8 @@ export const native = {
   sync: (payload: unknown) => call((p) => p.sync({ json: JSON.stringify(payload) }), undefined),
   takeDone: async () => JSON.parse((await call((p) => p.takeDone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   takeLaunch: () => call((p) => p.takeLaunch(), {}),
+  widgets: (payload: unknown) => call((p) => p.widgets({ json: JSON.stringify(payload) }), undefined),
+  takeWidgetUndone: async () => JSON.parse((await call((p) => p.takeWidgetUndone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   controls: async (itemId: number) => JSON.parse((await call((p) => p.controls({ itemId }), { json: "[]" })).json) as Control[],
   earlySnooze: (reminderId: number, original: number) => call((p) => p.earlySnooze({ reminderId, original }), undefined),
   earlyStop: (reminderId: number, original: number) => call((p) => p.earlyStop({ reminderId, original }), undefined),
@@ -75,7 +79,7 @@ export const native = {
   openSettings: (which: "notifications" | "fullScreen" | "battery" | "exact") => call((p) => p.openSettings({ which }), undefined),
 };
 
-/** Listens to the engine: "changed" carries what changed ("clock", "tools", "overrides", "done", "ring", "resume"). */
+/** Listens to the engine: "changed" carries what changed ("clock", "tools", "overrides", "done", "widget", "ring", "resume"). */
 export function onNative(event: "changed" | "launch", fn: (what: string) => void): () => void {
   if (!plugin) return () => {};
   const h = plugin.addListener(event, (e) => fn(e?.what ?? ""));

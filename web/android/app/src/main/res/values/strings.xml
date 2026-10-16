@@ -4,4 +4,8 @@
     <string name="title_activity_main">Planner (new)</string>
     <string name="package_name">com.alex.planner.web</string>
     <string name="custom_url_scheme">com.alex.planner.web</string>
+    <string name="widget_today">Today</string>
+    <string name="widget_upcoming">Upcoming</string>
+    <string name="widget_today_desc">Today\'s tasks, ticked right from the home screen</string>
+    <string name="widget_upcoming_desc">Events in the next two weeks</string>
 </resources>

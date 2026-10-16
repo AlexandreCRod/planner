@@ -9,6 +9,7 @@ import { clockFormat, dateStyle } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
 import { go } from "../ui/common.tsx";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
+import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";
 
 let last = "";
@@ -63,4 +64,5 @@ export function startAlarmMirror() {
   void takeDone();
   void takeLaunch();
   void refreshAlarmState();
+  startWidgetMirror();
 }

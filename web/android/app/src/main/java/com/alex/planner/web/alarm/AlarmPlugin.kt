@@ -14,6 +14,8 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.result.ActivityResult
 import androidx.core.app.NotificationManagerCompat
+import com.alex.planner.web.widget.WidgetStore
+import com.alex.planner.web.widget.Widgets
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
@@ -102,6 +104,19 @@ class AlarmPlugin : Plugin() {
     /** Completions ticked natively (notification "Done", ringing screen "Mark done"), for the page to save. */
     @PluginMethod
     fun takeDone(call: PluginCall) = ok(call, json.encodeToString(ListSerializer(Completion.serializer()), Mirror.takePendingDone(context)))
+
+    /** What the home-screen widgets show (web/src/alarms/widgets.ts); they're drawn again from it. */
+    @PluginMethod
+    fun widgets(call: PluginCall) {
+        val text = call.getString("json") ?: return call.reject("json missing")
+        if (!WidgetStore.replace(context, text)) return call.reject("bad json")
+        Widgets.update(context)
+        ok(call)
+    }
+
+    /** Tasks un-ticked on the Today widget, for the page to save (ticks come through takeDone). */
+    @PluginMethod
+    fun takeWidgetUndone(call: PluginCall) = ok(call, json.encodeToString(ListSerializer(Completion.serializer()), WidgetStore.takeUndone(context)))
 
     @PluginMethod
     fun takeLaunch(call: PluginCall) {

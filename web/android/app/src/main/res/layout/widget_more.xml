@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "N more" under a full widget: opens the app. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_text"
+    android:layout_width="match_parent"
+    android:layout_height="28dp"
+    android:background="@drawable/widget_row"
+    android:gravity="center_vertical"
+    android:textColor="@color/widget_muted"
+    android:textSize="12sp" />

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="windowBehind">#1C1B20</color>
+    <color name="widget_bg">#1E1F22</color>
+    <color name="widget_text">#E6E6E9</color>
+    <color name="widget_muted">#9A9DA4</color>
+    <color name="widget_overdue">#CC8A85</color>
+    <color name="widget_tick">#C5C7CC</color>
+    <color name="widget_on_tick">#1E1F22</color>
+    <color name="widget_press">#1FFFFFFF</color>
 </resources>

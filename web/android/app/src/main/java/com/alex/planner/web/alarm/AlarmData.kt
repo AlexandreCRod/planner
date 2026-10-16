@@ -152,6 +152,8 @@ object Mirror {
         val c = Completion(itemId, day)
         update(context) { it.copy(completions = (it.completions + c).distinct(), pendingDone = (it.pendingDone + c).distinct()) }
         AlarmEvents.changed("done")
+        // The Today widget shows it ticked at once.
+        com.alex.planner.web.widget.Widgets.update(context)
     }
 
     /** Hands the queued ticks to the page (which saves and syncs them). */

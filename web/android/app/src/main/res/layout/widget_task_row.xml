@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A task on the Today widget: its tick (a tap ticks it), title and time or state; the row opens it. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_row"
+    android:layout_width="match_parent"
+    android:layout_height="36dp"
+    android:background="@drawable/widget_row"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <ImageView
+        android:id="@+id/w_check"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="-9dp"
+        android:background="@drawable/widget_row"
+        android:padding="9dp"
+        android:src="@drawable/widget_check_off" />
+
+    <TextView
+        android:id="@+id/w_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="2dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/w_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:maxLines="1"
+        android:textColor="@color/widget_muted"
+        android:textSize="12sp" />
+</LinearLayout>
