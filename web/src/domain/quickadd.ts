@@ -185,3 +185,91 @@ export function parseQuickAdd(input: string, today = todayEpoch()): QuickAdd {
   const title = cleanTitle(text);
   return { title, day, startMin: start, endMin: end, freq, interval, weekDays, alerts, priority, tags };
 }
+
+// ---------- Timers and alarm clocks from the add line (phone) ----------
+// The native quick-add line only makes tasks and events. On the phone, which has the Alarms page, the
+// same line can also start a timer or set an alarm clock, when it clearly asks for one:
+//   "timer 10 min", "pasta timer 12m", "set a timer for 1h 30m", "timer 5:00 tea", "tea 4 min timer"
+//   "alarm 6:30", "alarm 7am weekdays gym", "set an alarm for 6:45 mon wed fri", "wake me up at 7",
+//   "alarm in 20 min", "wake me in 8 hours"
+// "timer" must be there with a length; an alarm must start with "alarm" / "set an alarm" / "wake me"
+// and give a clock time (or "in ..."). Anything else ("Buy alarm clock", "Dentist 3pm alarm",
+// "alarm 10 min before") stays an item, read by parseQuickAdd as before.
+
+export type ClockCommand =
+  | { kind: "timer"; durationMs: number; label: string }
+  | { kind: "alarm"; hour: number; minute: number; days: number; label: string };
+
+const DUR_UNIT = "(h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)";
+const unitMs = (u: string) => {
+  const c = u[0].toLowerCase();
+  return c === "h" ? 3_600_000 : c === "m" ? 60_000 : 1000;
+};
+const tidyLabel = (t: string) => t.replace(/\s+/g, " ").replace(/^[\s,;:-]+|[\s,;:-]+$/g, "").replace(/^(for|at|to|on)\s+/i, "").replace(/\s+(for|at|to|on|and)$/i, "").trim();
+
+/** A timer or alarm clock asked for on the add line, or null when it's an ordinary item. */
+export function parseClockCommand(input: string, now = new Date()): ClockCommand | null {
+  const text = ` ${input.trim()} `;
+  if (/\btimer\b|\bcountdown\b/i.test(text)) return parseTimer(text);
+  if (/^\s(?:set\s+(?:an?\s+|the\s+)?)?alarm\b|^\swake\s+me\b/i.test(text)) return parseAlarm(text, now);
+  return null;
+}
+
+function parseTimer(input: string): ClockCommand | null {
+  let text = input.replace(/\s(?:set|start)\s+(?:an?\s+|the\s+)?(?=timer\b|countdown\b)/i, " ").replace(/\s(?:timer|countdown)\b/i, " ");
+  let ms = 0;
+  // "1:30:00" (h:mm:ss) or "5:00" (m:ss)
+  text = text.replace(/\s(\d{1,2}):(\d{2})(?::(\d{2}))?(?=\s)/, (_m, a: string, b: string, c?: string) => {
+    ms += c !== undefined ? (+a * 3600 + +b * 60 + +c) * 1000 : (+a * 60 + +b) * 1000;
+    return " ";
+  });
+  // "1h30", "1h 30m", "90 sec", "1.5 h", "2 hours and 10 minutes"
+  text = text.replace(/\s(\d{1,2})h(\d{2})(?=\s)/i, (_m, h: string, m: string) => { ms += +h * 3_600_000 + +m * 60_000; return " "; });
+  const re = new RegExp(String.raw`\s(?:and\s+|for\s+)?(\d+(?:[.,]\d+)?)\s*${DUR_UNIT}(?=[\s,])`, "i");
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    ms += parseFloat(m[1].replace(",", ".")) * unitMs(m[2]);
+    text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+  }
+  ms = Math.round(ms);
+  if (ms <= 0 || ms > 100 * 3_600_000) return null;
+  return { kind: "timer", durationMs: ms, label: tidyLabel(text) };
+}
+
+function parseAlarm(input: string, now: Date): ClockCommand | null {
+  // Lead times belong to an item's alarm ("alarm 10 min before"), not to an alarm clock.
+  if (/\b(before|earlier|early)\b/i.test(input)) return null;
+  let text = input.replace(/^\s(?:set\s+(?:an?\s+|the\s+)?alarm|alarm|wake\s+me(?:\s+up)?)\b/i, " ");
+  let hour = null as number | null, minute = 0, days = 0;
+  const take = (re: RegExp, fn: (m: RegExpExecArray) => void) => {
+    const m = re.exec(text);
+    if (m) { fn(m); text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length); }
+  };
+  // "in 20 min", "in 8 hours": a one-off alarm that far from now.
+  take(/\s(?:for\s+)?in\s+(\d+)\s*(h|hrs?|hours?|m|mins?|minutes?)(?=\s)/i, (m) => {
+    const at = new Date(now.getTime() + +m[1] * (m[2][0].toLowerCase() === "h" ? 3_600_000 : 60_000));
+    hour = at.getHours(); minute = at.getMinutes();
+  });
+  if (hour === null) {
+    const set = (h: string, mm: string, ampm: string) => {
+      let x = parseInt(h, 10);
+      const y = mm ? parseInt(mm, 10) : 0;
+      if (ampm.toLowerCase() === "am" && x === 12) x = 0;
+      if (ampm.toLowerCase() === "pm" && x < 12) x += 12;
+      if (x >= 0 && x <= 23 && y >= 0 && y <= 59) { hour = x; minute = y; }
+    };
+    take(/\s(?:for\s+|at\s+)?(\d{1,2})(?::(\d{2})|h(\d{2})?)\s*(am|pm)?(?=\s)/i, (m) => set(m[1], m[2] ?? m[3] ?? "", m[4] ?? ""));
+    if (hour === null) take(/\s(?:for\s+|at\s+)?(\d{1,2})\s*(am|pm)(?=\s)/i, (m) => set(m[1], "", m[2]));
+    if (hour === null) take(/\s(?:for\s+)?at\s+(\d{1,2})(?=\s)/i, (m) => set(m[1], "", ""));
+    if (hour === null) take(/\s(?:at\s+)?(noon|midday)(?=\s)/i, () => set("12", "", ""));
+  }
+  if (hour === null) return null;
+  take(/\s(?:on\s+)?(?:every\s+weekday|weekdays)\b/i, () => { days = 0b0011111; });
+  take(/\s(?:on\s+)?(?:every\s+weekend|weekends)\b/i, () => { days = 0b1100000; });
+  take(/\s(?:every\s*day|daily)\b/i, () => { days = 0b1111111; });
+  take(new RegExp(String.raw`\s(?:every\s+|on\s+)?(${WD}(?:\s*(?:,|and|&)?\s*${WD})*)\b`, "i"), (m) => {
+    for (const w of m[1].match(new RegExp(WD, "gi")) ?? []) days |= 1 << (WD_NAMES[w.toLowerCase()] - 1);
+  });
+  // "today" / "tomorrow": a one-off alarm rings at its next time anyway.
+  take(/\s(today|tonight|tomorrow|tmrw|tmr)\b/i, () => {});
+  return { kind: "alarm", hour, minute, days, label: tidyLabel(text) };
+}

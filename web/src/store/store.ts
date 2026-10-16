@@ -127,6 +127,12 @@ export function snapshot(): Snapshot {
   return snap;
 }
 
+/** Calls [fn] after every change (local or from sync). Returns the unsubscribe. */
+export function subscribe(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 export function useSnapshot(): Snapshot {
   useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => version);
   return snapshot();
