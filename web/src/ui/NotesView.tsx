@@ -8,6 +8,7 @@ import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, saveItem, saveVersio
 import { Icon, go, openItem } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor, type RichEditorHandle } from "./RichEditor.tsx";
+import { SelectBox, SelectionBar, usePcSelection } from "./PcSelect.tsx";
 
 export const FONTS = ["system-ui, sans-serif", "Georgia, 'Times New Roman', serif", "Consolas, 'Courier New', monospace", "'Segoe Print', 'Comic Sans MS', cursive"];
 export const FONT_NAMES = ["Sans", "Serif", "Mono", "Handwriting"];
@@ -31,8 +32,10 @@ export function NotesView() {
     .filter((n) => (filter === "daily" ? n.noteDay !== null : n.noteDay === null && (filter !== "pinned" || n.pinned)))
     .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
+  const sel = usePcSelection(notes.map((n) => n.id));
   return (
     <>
+      <SelectionBar sel={sel} items={notes.filter((n) => sel.ids.has(n.id))} total={notes.length} />
       <div className="chips-row">
         {([["notes", "Notes"], ["pinned", "Pinned"], ["daily", "Daily notes"]] as const).map(([k, l]) => (
           <button key={k} className={`chip ${filter === k ? "on" : ""}`} onClick={() => setFilter(k)}>{l}</button>
@@ -42,14 +45,15 @@ export function NotesView() {
         <button className="btn primary" onClick={() => go("note/new")}><Icon name="add" size={16} /> New note</button>
       </div>
       {notes.length === 0 && <div className="hint">No notes yet.</div>}
-      <div className="notes-grid">
+      <div className={`notes-grid ${sel.active ? "selecting" : ""}`}>
         {notes.map((n) => {
           const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
           const fg = bg ? (isDark(bg) ? "#eee" : "#222") : undefined;
           const accent = n.color !== null ? cssColor(n.color) : n.categoryId !== null && s.categoryById.get(n.categoryId) ? cssColor(s.categoryById.get(n.categoryId)!.color) : undefined;
           const links = s.neighbours(n.id).size;
           return (
-            <div key={n.id} className="note-card" onClick={() => openItem(n)} style={{ background: bg, color: fg, borderTop: accent ? `4px solid ${accent}` : undefined, fontFamily: FONTS[n.fontFamily] }}>
+            <div key={n.id} className={`note-card ${sel.ids.has(n.id) ? "selected" : ""}`} onClick={(e) => { if (!sel.click(e, n.id)) openItem(n); }} style={{ background: bg, color: fg, borderTop: accent ? `4px solid ${accent}` : undefined, fontFamily: FONTS[n.fontFamily] }}>
+              <SelectBox on={sel.ids.has(n.id)} onToggle={() => sel.toggle(n.id)} />
               <h3>{n.pinned && "📌 "}{n.noteDay !== null ? formatDate(n.noteDay) : n.title || "Untitled"}</h3>
               <p style={{ color: fg ? "inherit" : undefined, opacity: fg ? 0.85 : undefined }}>{stripHtml(n.content).trim().slice(0, 400)}</p>
               <div className="hint" style={{ marginTop: 6, fontSize: 11.5, color: fg ? "inherit" : undefined, opacity: fg ? 0.6 : undefined }}>

@@ -19,3 +19,16 @@ export function keepShown(ids: ReadonlySet<number>, shown: readonly number[]): R
 export function selectAll(ids: ReadonlySet<number>, shown: readonly number[]): ReadonlySet<number> {
   return shown.length > 0 ? new Set(shown) : ids;
 }
+
+/**
+ * Shift-click on the PC: everything shown from [anchor] (the last one clicked) to [id], added to [ids].
+ * Without an anchor still shown, it picks just [id].
+ */
+export function rangeIds(ids: ReadonlySet<number>, shown: readonly number[], anchor: number | null, id: number): Set<number> {
+  const next = new Set(ids);
+  const a = anchor === null ? -1 : shown.indexOf(anchor), b = shown.indexOf(id);
+  if (b < 0) return next;
+  if (a < 0) { next.add(id); return next; }
+  for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(shown[i]);
+  return next;
+}

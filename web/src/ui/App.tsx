@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ToastHost } from "./Toast.tsx";
 import { formatClock } from "../domain/dates.ts";
 import { DEFAULT_SERVER, getServer, isNative, setServer, usePhone } from "../platform.ts";
 import { testToken, setToken, startAutoSync, syncNow } from "../store/sync.ts";
@@ -93,6 +94,7 @@ function DesktopApp() {
         <ItemEditor key={path[1]} id={Number(path[1])} occurrence={query.get("occ") ? Number(query.get("occ")) : null}
           isNewPlaceholder={query.get("new") === "1"} onClose={() => history.back()} />
       )}
+      <ToastHost />
     </div>
   );
 }

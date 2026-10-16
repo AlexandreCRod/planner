@@ -7,6 +7,7 @@ import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { RepeatBadge, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
 import { count } from "../domain/plural.ts";
+import { SelectBox, SelectionBar, usePcSelection } from "./PcSelect.tsx";
 
 export const KINDS: [string, string, (i: Item) => boolean][] = [
   ["ALL", "All", () => true],
@@ -46,8 +47,10 @@ export function BrowseView({ initialKind }: { initialKind: string }) {
     .filter((i) => !ql || i.title.toLowerCase().includes(ql) || preview(i.content, 10000).toLowerCase().includes(ql) || (s.tagsByItem.get(i.id) ?? []).some((t) => t.name.toLowerCase().includes(ql)))
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "date" ? (a.startDay ?? a.noteDay ?? 1e9) - (b.startDay ?? b.noteDay ?? 1e9)
       : sort === "links" ? s.neighbours(b.id).size - s.neighbours(a.id).size : b.updatedAt - a.updatedAt);
+  const sel = usePcSelection(results.map((i) => i.id));
   return (
     <div style={{ maxWidth: 900 }}>
+      <SelectionBar sel={sel} items={results.filter((i) => sel.ids.has(i.id))} total={results.length} />
       <div className="row" style={{ marginBottom: 12 }}>
         <input className="input grow" autoFocus placeholder="Search everything" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" value={sort} onChange={(e) => setSort(e.target.value)}>
@@ -62,8 +65,10 @@ export function BrowseView({ initialKind }: { initialKind: string }) {
         {s.tags.map((t) => <button key={t.id} className={`chip ${tag === t.id ? "on" : ""}`} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</button>)}
       </div>
       <div className="hint" style={{ margin: "4px 0 8px" }}>{count(results.length, "result")}</div>
+      <div className={`sel-list ${sel.active ? "selecting" : ""}`}>
       {results.map((i) => (
-        <div key={i.id} className="task" onClick={() => openItem(i)}>
+        <div key={i.id} className={`task ${sel.ids.has(i.id) ? "selected" : ""}`} onClick={(e) => { if (!sel.click(e, i.id)) openItem(i); }}>
+          <SelectBox on={sel.ids.has(i.id)} onToggle={() => sel.toggle(i.id)} />
           <span className="bar" style={{ background: s.colorOf(i) }} />
           <div className="grow">
             <div className="ellipsis">{isRecurring(i) && <RepeatBadge color={s.colorOf(i)} />}{i.title || (i.noteDay !== null ? formatDate(i.noteDay) : "Untitled")}</div>
@@ -72,6 +77,7 @@ export function BrowseView({ initialKind }: { initialKind: string }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keepShown, selectAll, toggleId } from "../src/ui/phone/selection.ts";
+import { keepShown, rangeIds, selectAll, toggleId } from "../src/ui/phone/selection.ts";
 
 test("a tap adds or removes one", () => {
   const a = toggleId(new Set(), 3);
@@ -22,4 +22,13 @@ test("Select all picks everything shown", () => {
   assert.deepEqual([...selectAll(new Set([1, 2, 3]), [1, 2, 3])], [1, 2, 3]);
   const ids = new Set([5]);
   assert.equal(selectAll(ids, []), ids);
+});
+
+test("Shift-click adds everything between the last click and this one, either way", () => {
+  const shown = [5, 6, 7, 8, 9];
+  assert.deepEqual([...rangeIds(new Set([5]), shown, 6, 8)].sort(), [5, 6, 7, 8]);
+  assert.deepEqual([...rangeIds(new Set(), shown, 9, 7)].sort(), [7, 8, 9]);
+  assert.deepEqual([...rangeIds(new Set(), shown, null, 7)], [7]);   // no anchor: just this one
+  assert.deepEqual([...rangeIds(new Set(), shown, 42, 7)], [7]);     // anchor no longer shown
+  assert.deepEqual([...rangeIds(new Set([1]), shown, 5, 42)], [1]);  // not shown: nothing changes
 });

@@ -286,3 +286,24 @@ html:not(.phone) .rep { color: var(--muted) !important; background: var(--surfac
 .link-btn { display: block; padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .link-btn:hover { color: var(--text); text-decoration: underline; }
 .routine-switch { margin-top: 6px; cursor: pointer; }
+
+/* Picking several notes or search results (PcSelect.tsx): hover checkboxes, a bar, and a toast with Undo. */
+.sel-box { flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--muted); background: var(--surface); color: var(--on-strong); display: grid; place-items: center; cursor: pointer; opacity: 0; transition: opacity .12s ease; }
+.sel-box.on { background: var(--strong); border-color: var(--strong); opacity: 1; }
+.task:hover > .sel-box, .note-card:hover > .sel-box, .selecting .sel-box, .sel-box:focus-visible { opacity: 1; }
+.sel-list .task { position: relative; }
+.sel-list .task > .sel-box { margin-left: -2px; }
+.task.selected, .note-card.selected { background: var(--accent-soft); }
+.note-card { position: relative; }
+.note-card > .sel-box { position: absolute; top: 8px; right: 8px; }
+.note-card.selected { outline: 2px solid var(--strong); outline-offset: -1px; }
+.sel-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); }
+.sel-close, .toast-close { width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: inherit; cursor: pointer; }
+.sel-close:hover { background: var(--line); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; min-width: 300px; max-width: min(560px, calc(100% - 32px)); padding: 8px 8px 8px 16px; border-radius: 8px; background: #2f3033; color: #f1f1f2; box-shadow: var(--shadow); font-size: 14px; animation: toast-in .18s ease-out; }
+.toast-action { border: 0; background: none; padding: 6px 10px; border-radius: 6px; color: #c9d4ff; font: inherit; font-weight: 600; cursor: pointer; }
+.toast-action:hover, .toast-close:hover { background: rgb(255 255 255 / .1); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+:root[data-theme=dark] .toast { background: #e5e5e7; color: #1c1c1e; }
+:root[data-theme=dark] .toast-action { color: #2e4a9e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme=light]) .toast { background: #e5e5e7; color: #1c1c1e; } :root:not([data-theme=light]) .toast-action { color: #2e4a9e; } }
