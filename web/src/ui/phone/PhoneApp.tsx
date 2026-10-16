@@ -1,7 +1,6 @@
 // The phone shell: pages side by side like a ViewPager, a Material bottom bar that drags them (a finger
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
-import { animated, useSpring, type SpringValue } from "@react-spring/web";
 import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
@@ -28,6 +27,7 @@ import { isNative } from "../../platform.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
 import { BAR_GAIN, barTarget, spring } from "./pager.ts";
+import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
@@ -42,8 +42,6 @@ const TABS: { key: string; label: string }[] = [
 const LAST = TABS.length - 1;
 /** Two taps on the same tab closer than this (finger lifts, ms) reset its page (HomeScreen.kt). */
 const DOUBLE_TAP_MS = 350;
-/** Compose's pager snap: stiffness 400, critically damped. */
-const PAGER_SPRING = { tension: 400, friction: 40 };
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 /**
  * The pager's offset. While it moves it's a 3D translate (its own GPU layer, cheap to slide); at rest it's
@@ -53,6 +51,62 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const slide = (p: number, sign: number) => Number.isInteger(p)
   ? (p ? `translateX(${sign * p * 100}%)` : "none")
   : `translate3d(${sign * p * 100}%,0,0)`;
+
+/**
+ * Where the pages are (in pages, fractional while moving), written straight to the track and the bar's
+ * pill every frame: no React render while they move. A finger on the bar is followed through a short
+ * critically damped chase (about 20 ms), so the bar's gear (pages move several times the finger's
+ * travel) doesn't turn each touch sample into a visible step; letting go hands its speed to the settle.
+ */
+class ShellPos {
+  p: number;
+  private anim: Animation | null = null;
+  private chase: { target: number; v: number; raf: number; last: number } | null = null;
+  track: HTMLElement | null = null;
+  pill: HTMLElement | null = null;
+  private shown: number;
+  constructor(p: number, private width: () => number, private onShown: (i: number) => void) { this.p = p; this.shown = p; }
+  draw(p: number) {
+    this.p = p;
+    if (this.track) this.track.style.transform = slide(p, -1);
+    if (this.pill) this.pill.style.transform = slide(p, 1);
+    const r = clamp(Math.round(p), 0, LAST);
+    if (r !== this.shown) { this.shown = r; this.onShown(r); }
+  }
+  stop() {
+    this.anim?.stop(); this.anim = null;
+    if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
+  }
+  /** At once (a tap on a tab). */
+  jump(i: number) { this.stop(); this.draw(i); }
+  /** Follows a finger: [target] in pages. */
+  follow(target: number) {
+    this.anim?.stop(); this.anim = null;
+    if (this.chase) { this.chase.target = target; return; }
+    const c = this.chase = { target, v: 0, raf: 0, last: performance.now() };
+    const W = 65; // ω of the chase: lags about 2/ω (30 ms) behind a steady finger, catches up within ~60 ms
+    const step = (now: number) => {
+      if (this.chase !== c) return;
+      const dt = Math.min(0.1, Math.max(0.001, (now - c.last) / 1000));
+      c.last = now;
+      // Exact over the frame (closed form), so a long frame can't make it overshoot or blow up.
+      const st = springAt(dt, this.p - c.target, c.v, W * W, 1);
+      c.v = st.v;
+      let p = c.target + st.x;
+      if (Math.abs(c.target - p) < 0.0005 && Math.abs(c.v) < 0.01) { p = c.target; c.v = 0; }
+      this.draw(p);
+      c.raf = requestAnimationFrame(step);
+    };
+    c.raf = requestAnimationFrame(step);
+  }
+  /** Settles on page [i], starting at [v] pages per ms. */
+  settle(i: number, v: number) {
+    if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
+    this.anim?.stop();
+    const w = Math.max(1, this.width());
+    this.anim = animateSpring(this.p * w, i * w, v * w, (x) => this.draw(x / w), () => { this.anim = null; this.draw(i); }, PAGE_SPRING);
+  }
+}
 
 export function PhoneApp() {
   const [path, query] = useRoute();
@@ -69,15 +123,8 @@ export function PhoneApp() {
   const selectListeners = useRef(new Set<(i: number) => void>());
   const popBar = useRef<() => void>();
   const lastTap = useRef({ i: -1, at: 0 });
-  const shownRef = useRef(tab);
-  const [{ pos }, api] = useSpring(() => ({
-    pos: tab,
-    config: PAGER_SPRING,
-    onChange: ({ value }: { value: { pos: number } }) => {
-      const r = clamp(Math.round(value.pos), 0, LAST);
-      if (r !== shownRef.current) { shownRef.current = r; selectListeners.current.forEach((l) => l(r)); }
-    },
-  }));
+  const pagerEl = useRef<HTMLDivElement>(null);
+  const [pos] = useState(() => new ShellPos(tab, () => pagerEl.current?.clientWidth ?? window.innerWidth, (r) => selectListeners.current.forEach((l) => l(r))));
   const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
   // The outline the calendar draws where a new event from a slot will go (it follows the panel).
@@ -101,9 +148,9 @@ export function PhoneApp() {
     const moved = i !== tabRef.current;
     tabRef.current = i;
     if (jump) {
-      api.start({ pos: i, immediate: true });
+      pos.jump(i);
       if (moved) popBar.current?.();
-    } else api.start({ pos: i, config: { ...PAGER_SPRING, velocity } });
+    } else pos.settle(i, velocity);
     startTransition(() => {
       setTab(i);
       setMounted((m) => (m.has(i) ? m : new Set([...m, i])));
@@ -187,14 +234,14 @@ export function PhoneApp() {
 
   return (
     <div className="p-root">
-      <div className="p-pager">
-        <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
+      <div className="p-pager" ref={pagerEl}>
+        <div className="p-track" ref={(el) => { pos.track = el; if (el) el.style.transform = slide(pos.p, -1); }}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
               {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay} />}
             </div>
           ))}
-        </animated.div>
+        </div>
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
       {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what to add. */}
@@ -265,7 +312,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
  * buttons see it, and a tap that wobbles less than the slop stays a tap.
  */
 function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
-  pos: SpringValue<number>; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
+  pos: ShellPos; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
   onTap: (i: number) => void; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
 }) {
   const [selected, setSelected] = useState(start);
@@ -289,7 +336,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   useEffect(() => {
     const el = bar.current;
     if (!el) return;
-    let g: { id: number; x0: number; from: number; sliding: boolean; vx: number; lastX: number; lastT: number } | null = null;
+    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number } | null = null;
     const tabW = () => el.clientWidth / TABS.length;
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -299,23 +346,23 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     };
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
-      const dt = e.timeStamp - g.lastT;
-      if (dt > 0) { g.vx = 0.7 * ((e.clientX - g.lastX) / dt) + 0.3 * g.vx; g.lastT = e.timeStamp; }
+      g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
       if (!g.sliding) { pill.current?.classList.remove("pop"); g.x0 += Math.sign(dx) * TOUCH_SLOP; }
       g.sliding = true;
       // The pages go a little further than the finger, so a short slide turns a page.
-      pos.start(clamp(g.from + (BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST), { immediate: true });
+      pos.follow(clamp(g.from + (BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST));
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       if (g.sliding) {
         swallowNextClick();
         const at = clamp(g.from + (BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
+        const vx = g.vt.velocity(e.timeStamp);
         // A flick turns a page whatever the distance; otherwise the nearest one.
-        settleRef.current(barTarget(g.from, at, g.vx, LAST), (BAR_GAIN * g.vx) / tabW());
+        settleRef.current(barTarget(g.from, at, vx, LAST), (BAR_GAIN * vx) / tabW());
       } else if (e.type === "pointerup") {
         // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
         const tabEl = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab");
@@ -325,7 +372,8 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
-      g = { id: e.pointerId, x0: e.clientX, from: pos.get(), sliding: false, vx: 0, lastX: e.clientX, lastT: e.timeStamp };
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX };
+      g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });
       window.addEventListener("pointercancel", onUp, { passive: true });
@@ -337,9 +385,9 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   return (
     <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
-      <animated.span className="p-pill-track" style={{ width: `${100 / TABS.length}%`, transform: pos.to((p) => slide(p, 1)) }}>
+      <span className="p-pill-track" style={{ width: `${100 / TABS.length}%` }} ref={(el) => { pos.pill = el; if (el) el.style.transform = slide(pos.p, 1); }}>
         <span className="p-pill" ref={pill} />
-      </animated.span>
+      </span>
       {TABS.map((t, i) => (
         <button key={t.key} data-i={i} className={`p-tab ${selected === i ? "on" : ""}`} aria-label={t.label} aria-current={selected === i ? "page" : undefined}
           onClick={(e) => { if (e.detail === 0) onTap(i); }}>
