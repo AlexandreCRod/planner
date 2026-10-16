@@ -820,6 +820,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pa-strip { position: absolute; top: 0; bottom: 0; width: 100%; }
 .phone .pa-section { position: absolute; top: 0; bottom: 0; width: 100%; overflow: hidden; contain: layout paint style; }
 .phone .pa-scroll { height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y; padding: 8px 16px 96px; display: flex; flex-direction: column; gap: 12px; }
+.phone .pa-scroll > * { flex-shrink: 0; } /* a short window (split screen) scrolls the list; cards keep their height */
 .phone .pa-top12 { padding-top: 12px; }
 .phone .pa-top16 { padding-top: 16px; }
 .phone .pa-fab-anchor { position: absolute; right: 16px; bottom: 16px; z-index: 25; transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
