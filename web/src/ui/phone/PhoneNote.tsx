@@ -13,6 +13,7 @@ import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, saveItem, saveVersio
 import { openItem } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
 import { RichEditor, type RichEditorHandle } from "../RichEditor.tsx";
+import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
@@ -40,6 +41,8 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const [open, setOpen] = useState<"" | "style" | "templates" | "versions" | "trash">("");
   const [viewing, setViewing] = useState<NoteImage | null>(null);
   const rich = useRef<RichEditorHandle>(null);
+  const textBox = useRef<HTMLDivElement>(null);
+  const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const opened = useRef(base.content);
   const timer = useRef<number>();
@@ -109,7 +112,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const keepFocus = { onPointerDown: (e: React.PointerEvent) => e.preventDefault(), onMouseDown: (e: React.MouseEvent) => e.preventDefault() };
 
   return (
-    <div className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg! } : undefined}>
+    <div className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg!, ["--pn-bg" as string]: page } : undefined}>
       <TopAppBar back title={isDaily ? formatDate(base.noteDay!) : ""} className="pn-appbar" actions={<>
         {writing && <span className="pn-undo" {...keepFocus}>
           <IconButton icon="fUndo" label="Undo" disabled={!undoState.undo} onClick={() => rich.current?.exec("undo")} />
@@ -156,9 +159,10 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
             {images.map((img) => <Thumb key={img.id} img={img} onOpen={() => setViewing(img)} />)}
           </div>
         )}
-        <div className="pn-text">
+        <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
           <RichEditor ref={rich} initialHtml={initialHtml} onChange={scheduleSave} fontFamily={FONTS[style.fontFamily]} minHeight={320}
             noToolbar placeholder="Start writing…" onFocusChange={setFocused} />
+          <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={scheduleSave} onHas={setHasChecks} />
         </div>
         <div className="pn-links">
           <PhoneLinks id={noteId} s={s} ensureSaved={save} />

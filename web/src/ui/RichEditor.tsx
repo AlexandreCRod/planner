@@ -12,6 +12,8 @@ export interface RichEditorHandle {
   html(): string; focus(): void; insertText(t: string): void;
   /** The formatting commands, for a toolbar drawn elsewhere (the phone's, above the keyboard). */
   exec(cmd: string, value?: string): void; toggleChecklist(): void; indent(deeper: boolean): void; setSize(px: number | null): void;
+  /** The editable element itself (the phone's checklist handles sit beside its lines). */
+  root(): HTMLElement | null;
 }
 
 export function sanitize(html: string): string {
@@ -123,6 +125,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     toggleChecklist: () => toggleChecklist(),
     indent: (deeper: boolean) => indent(deeper),
     setSize: (px: number | null) => setSize(px),
+    root: () => el.current,
   }));
 
   const exec = (cmd: string, value?: string) => {

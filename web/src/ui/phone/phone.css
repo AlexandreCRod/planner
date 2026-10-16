@@ -1176,3 +1176,19 @@ html.phone[data-theme="dark"] {
 .phone .tw-flat { position: absolute; left: -4px; right: -4px; top: 0; text-align: center; white-space: nowrap; color: var(--fc); will-change: transform; font-variant-numeric: tabular-nums; }
 /* The times on Today can be held (no callout, no text selection). */
 .phone .p-heldtime { white-space: nowrap; }
+
+/* ---------- Checklist handles in the note editor (ChecklistHandles.tsx) ----------
+   A drag handle in the margin by each checklist line; the lifted line floats over the others, which
+   slide out of its way. */
+.phone .pn-text { position: relative; transition: padding-left .15s cubic-bezier(.2, 0, 0, 1); }
+.phone .pn-text.has-checks { padding-left: 34px; }
+.phone .pn-handles { position: absolute; left: 0; top: 0; width: 34px; height: 0; }
+.phone .pn-handle {
+  position: absolute; left: 2px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 16px; display: grid; place-items: center;
+  background: none; color: color-mix(in srgb, var(--pn-fg, var(--text)) 38%, transparent); touch-action: none; -webkit-touch-callout: none;
+}
+.phone .pn-text .rich > p.pn-lifted {
+  position: relative; z-index: 2; border-radius: 8px; will-change: transform;
+  background: color-mix(in srgb, var(--pn-fg) 9%, var(--pn-bg, var(--bg))); box-shadow: 0 6px 16px rgb(0 0 0 / .22);
+}
+.phone .pn-text .rich > p.pn-sliding { transition: transform .18s cubic-bezier(.2, 0, 0, 1); will-change: transform; }

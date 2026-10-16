@@ -12,7 +12,7 @@ import { TOUCH_SLOP } from "./press.ts";
 /** The pages that get rubber-band edges. */
 const SCROLLERS = ".p-content:not(.flush), .p-list, .pg-scroll, .p-dayagenda, .p-agenda, .pa-scroll, .p-yearview";
 /** Where a touch never starts a pull: fields, the note editor's text, and anything with its own drag. */
-const SKIP = "input, textarea, select, [contenteditable]:not([contenteditable=false]), .pg-block.lifted, .p-graph";
+const SKIP = "input, textarea, select, [contenteditable]:not([contenteditable=false]), .pg-block.lifted, .p-graph, .pn-handle, .tw-drum";
 /** A fling's bounce: its speed into the end is scaled by this, up to MAX_FLING px/ms. */
 const FLING_SCALE = 0.45;
 const MAX_FLING = 3;

@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, moveChecklistBlock } from "../src/domain/checklist.ts";
+
+const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
+
+test("checklist lines and their depth", () => {
+  assert.equal(checklistDepth("☐ Milk"), 0);
+  assert.equal(checklistDepth("⠀⠀⠀☑ x"), 3);
+  assert.equal(checklistDepth("Shopping"), -1);
+});
+
+test("a run is the adjoining checklist lines; a block takes the lines indented under it", () => {
+  assert.deepEqual(checklistRun(note, 3), [1, 4]);
+  assert.equal(checklistRun(note, 0), null);
+  assert.deepEqual(checklistRun(note, 6), [6, 6]);
+  assert.deepEqual(checklistBlock(note, 2), [2, 3]);
+  assert.deepEqual(checklistBlock(note, 1), [1, 1]);
+});
+
+test("a line moves with its sub-items, only within its own run", () => {
+  // Eggs (with Free range) above Milk.
+  assert.deepEqual(moveChecklistBlock(note, note, 2, 1), ["Shopping", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Milk", "☐ Bread", "", "☐ Other list"]);
+  // Milk to the end of its run (after Bread).
+  assert.deepEqual(moveChecklistBlock(note, note, 1, 4), ["Shopping", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "☐ Milk", "", "☐ Other list"]);
+  // Where Milk may land, in the lines without it: where it was (before Eggs, 1), before Bread (3), or the
+  // run's end (4); never inside Eggs's sub-items or in the other list.
+  assert.deepEqual(checklistSlots(note, 1), [1, 3, 4]);
+  // A sub-item stays among its parent's lines, so it can go before Eggs's other lines, not outside the run.
+  assert.ok(checklistSlots(note, 3).every((i) => i >= 1 && i <= 4));
+});
