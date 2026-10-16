@@ -6,8 +6,9 @@ import { type Snapshot, useSnapshot } from "../store/store.ts";
 import { Icon, openItem } from "./common.tsx";
 import { typeLabel } from "./LinksSection.tsx";
 import { count } from "../domain/plural.ts";
+import { type P, seedPosition, simStep } from "../domain/graphSim.ts";
 
-export interface P { x: number; y: number; vx: number; vy: number }
+export type { P };
 
 export function GraphView({ focusId }: { focusId: number }) {
   const s = useSnapshot();
@@ -23,7 +24,7 @@ export function GraphView({ focusId }: { focusId: number }) {
 
   const graph = useMemo(() => buildGraph(s, types, orphans, focus, depth), [s, types, orphans, focus, depth]);
 
-  useGraphSim(graph, pos, setFrame);
+  useGraphSim(graph, pos, () => setFrame((n) => n + 1));
 
   const onWheel = (e: React.WheelEvent) => setView((v) => ({ ...v, k: Math.max(0.2, Math.min(4, v.k * (e.deltaY < 0 ? 1.1 : 1 / 1.1))) }));
   const onPan = (e: React.PointerEvent) => {
@@ -121,50 +122,58 @@ export function buildGraph(s: Snapshot, types: Set<ItemType>, orphans: boolean, 
 
 export type Graph = ReturnType<typeof buildGraph>;
 
-/** Runs the layout physics on [pos] for [graph], redrawing through [setFrame] each step. */
-export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number, P>>, setFrame: (f: (n: number) => number) => void) {
-  // Physics: repulsion between all nodes, springs along links, a gentle pull to the centre.
+export interface GraphSim {
+  /** Warms the layout up again (something moved): it runs until it cools. */
+  reheat(alpha?: number): void;
+  /** Holds node [id] at world point (x, y) (a finger on it): it doesn't move by itself meanwhile. */
+  pin(id: number, x: number, y: number): void;
+  /** Lets it go at velocity (vx, vy) in world units per step. */
+  unpin(id: number, vx: number, vy: number): void;
+}
+
+/** Runs the layout physics (domain/graphSim.ts) on [pos] for [graph], calling [onFrame] after each step. */
+export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number, P>>, onFrame: () => void): GraphSim {
+  const frame = useRef(onFrame);
+  frame.current = onFrame;
+  const ctl = useRef<{ alpha: number; raf: number; pinned: Map<number, { x: number; y: number }>; run: () => void }>({ alpha: 0, raf: 0, pinned: new Map(), run: () => {} });
   useEffect(() => {
+    const c = ctl.current;
     const ids = graph.nodes.map((n) => n.id);
-    const r = 40 * Math.sqrt(ids.length + 1);
-    for (const id of ids) {
-      if (!pos.current.has(id)) {
-        const a = (id % 997) / 997 * Math.PI * 2, d = ((id % 389) / 389) * r;
-        pos.current.set(id, { x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0 });
-      }
-    }
-    let alpha = 1, raf = 0;
+    for (const id of ids) if (!pos.current.has(id)) pos.current.set(id, seedPosition(id, ids.length));
+    const index = new Map(ids.map((id, i) => [id, i]));
+    const nodes = ids.map((id) => pos.current.get(id)!);
+    const edges = graph.edges.map(([a, b]) => [index.get(a)!, index.get(b)!] as [number, number]).filter(([a, b]) => a !== undefined && b !== undefined);
     const tick = () => {
-      const f = new Map(ids.map((id) => [id, { x: 0, y: 0 }]));
-      for (let i = 0; i < ids.length; i++) {
-        const a = pos.current.get(ids[i])!;
-        for (let j = i + 1; j < ids.length; j++) {
-          const b = pos.current.get(ids[j])!;
-          let dx = a.x - b.x, dy = a.y - b.y;
-          let d2 = dx * dx + dy * dy;
-          if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-          const k = 5000 / (d2 * Math.sqrt(d2));
-          f.get(ids[i])!.x += dx * k; f.get(ids[i])!.y += dy * k;
-          f.get(ids[j])!.x -= dx * k; f.get(ids[j])!.y -= dy * k;
-        }
+      c.raf = 0;
+      const pinned = new Set<number>();
+      for (const [id, at] of c.pinned) {
+        const i = index.get(id);
+        if (i === undefined) continue;
+        pinned.add(i);
+        Object.assign(nodes[i], { x: at.x, y: at.y, vx: 0, vy: 0 });
       }
-      for (const [a, b] of graph.edges) {
-        const pa = pos.current.get(a), pb = pos.current.get(b);
-        if (!pa || !pb) continue;
-        const dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.max(1, Math.hypot(dx, dy)), k = 0.04 * (d - 110) / d;
-        f.get(a)!.x += dx * k; f.get(a)!.y += dy * k; f.get(b)!.x -= dx * k; f.get(b)!.y -= dy * k;
-      }
-      for (const id of ids) {
-        const p = pos.current.get(id)!, fo = f.get(id)!;
-        p.vx = (p.vx + (fo.x - p.x * 0.012) * alpha) * 0.82;
-        p.vy = (p.vy + (fo.y - p.y * 0.012) * alpha) * 0.82;
-        p.x += p.vx; p.y += p.vy;
-      }
-      alpha *= 0.985;
-      setFrame((n) => n + 1);
-      if (alpha > 0.02) raf = requestAnimationFrame(tick);
+      // A held node keeps the layout warm, so what's linked to it follows.
+      if (pinned.size) c.alpha = Math.max(c.alpha, 0.35);
+      simStep(nodes, edges, c.alpha, pinned);
+      c.alpha *= 0.985;
+      frame.current();
+      if (c.alpha > 0.02 || pinned.size) c.raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [graph]);
+    c.run = () => { if (!c.raf) c.raf = requestAnimationFrame(tick); };
+    c.alpha = 1;
+    c.run();
+    return () => { cancelAnimationFrame(c.raf); c.raf = 0; };
+  }, [graph]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo<GraphSim>(() => ({
+    reheat(alpha = 0.5) { const c = ctl.current; c.alpha = Math.max(c.alpha, alpha); c.run(); },
+    pin(id, x, y) { const c = ctl.current; c.pinned.set(id, { x, y }); c.run(); },
+    unpin(id, vx, vy) {
+      const c = ctl.current;
+      c.pinned.delete(id);
+      const p = pos.current.get(id);
+      if (p) { p.vx = vx; p.vy = vy; }
+      c.alpha = Math.max(c.alpha, 0.3);
+      c.run();
+    },
+  }), [pos]);
 }

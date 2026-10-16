@@ -1,7 +1,7 @@
 // The list pages on the phone, drawn as the native screens are: Tasks (TasksScreen.kt), Notes
 // (NotesScreen.kt), Links (GraphScreen.kt) and Search (BrowseScreen.kt). The data rules are the PC
 // views' own (shared helpers), only the drawing is the phone's.
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { formatDate } from "../../domain/dates.ts";
 import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
@@ -17,6 +17,8 @@ import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
+import { VelocityTracker } from "./motion.ts";
+import { hapticLift } from "./native.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
 import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
@@ -278,7 +280,14 @@ function NoteCard({ n, s, sel }: { n: Item; s: Snapshot; sel: Selection }) {
 
 // ---------- Links (graph) ----------
 
-/** The links graph, a page of its own (from the Notes bar, or an item's Links section with that item in focus). */
+/**
+ * The links graph, a page of its own (from the Notes bar, or an item's Links section with that item in
+ * focus). Positions never go through React: the layout steps (domain/graphSim.ts) and every gesture
+ * write the SVG's attributes straight from refs, once a frame, so hundreds of nodes stay smooth.
+ * A node grabbed with a finger sticks under it and the layout warms up, so what's linked to it follows
+ * on its springs; let go, it keeps the finger's speed. A tap picks the nearest node; one finger on empty
+ * space pans, two pinch.
+ */
 export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: number }) {
   const s = useSnapshot();
   const [types, setTypes] = useState<Set<ItemType>>(new Set(["NOTE", "TASK", "EVENT"]));
@@ -286,34 +295,85 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
   const [focus, setFocus] = useState(focusId);
   const [depth, setDepth] = useState(2);
   const [selected, setSelected] = useState(0);
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  // The view (pan and zoom) lives in a ref while fingers move; the state copy only re-renders labels.
+  const [view, setViewState] = useState({ x: 0, y: 0, k: 1 });
   const viewRef = useRef(view);
-  viewRef.current = view;
   const pos = useRef(new Map<number, P>());
-  const [, setFrame] = useState(0);
   const box = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 400, h: 600 });
+  const size = useRef({ w: 400, h: 600 });
+  const [svgSize, setSvgSize] = useState({ w: 400, h: 600 });
+  const nodeEls = useRef(new Map<number, SVGGElement>());
+  const edgeEls = useRef(new Map<string, SVGLineElement>());
   const graph = useMemo(() => buildGraph(s, types, orphans, focus, depth), [s, types, orphans, focus, depth]);
-  useGraphSim(graph, pos, setFrame);
   const graphRef = useRef(graph);
   graphRef.current = graph;
+  const drawn = useRef({ scaleR: 0, labels: true });
+
+  /** Writes every node and line where the layout and the view put them. */
+  const draw = () => {
+    const v = viewRef.current, { w, h } = size.current;
+    const sx = (x: number) => w / 2 + v.x + x * v.k, sy = (y: number) => h / 2 + v.y + y * v.k;
+    const scaleR = Math.min(1.6, Math.max(0.6, v.k));
+    const resize = scaleR !== drawn.current.scaleR;
+    drawn.current.scaleR = scaleR;
+    const g = graphRef.current;
+    for (const n of g.nodes) {
+      const el = nodeEls.current.get(n.id), p = pos.current.get(n.id);
+      if (!el || !p) continue;
+      el.setAttribute("transform", `translate(${sx(p.x).toFixed(2)} ${sy(p.y).toFixed(2)})`);
+      if (resize) {
+        const r = (7 + Math.sqrt(g.degree.get(n.id) ?? 0) * 4) * scaleR;
+        for (const c of el.querySelectorAll<SVGCircleElement>("circle")) c.setAttribute("r", String(r * Number(c.dataset.f ?? 1) + Number(c.dataset.add ?? 0)));
+        el.querySelector("text")?.setAttribute("y", String(r + 2));
+      }
+    }
+    for (const [a, b] of g.edges) {
+      const el = edgeEls.current.get(`${a}-${b}`), pa = pos.current.get(a), pb = pos.current.get(b);
+      if (!el || !pa || !pb) continue;
+      el.setAttribute("x1", sx(pa.x).toFixed(2)); el.setAttribute("y1", sy(pa.y).toFixed(2));
+      el.setAttribute("x2", sx(pb.x).toFixed(2)); el.setAttribute("y2", sy(pb.y).toFixed(2));
+    }
+  };
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const sim = useGraphSim(graph, pos, () => drawRef.current());
+  // New nodes or a new selection re-render the elements: place them at once.
+  useLayoutEffect(() => { drawn.current.scaleR = 0; draw(); });
+
+  const setView = (v: { x: number; y: number; k: number }) => { viewRef.current = v; setViewState(v); };
 
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    const ro = new ResizeObserver(() => { size.current = { w: el.clientWidth, h: el.clientHeight }; setSvgSize(size.current); });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // One finger pans, two pinch (0.2× to 4×, around the fingers), a tap picks the nearest node
-  // within reach, as detectTransformGestures and detectTapGestures do on the native canvas.
   useEffect(() => {
     const el = box.current;
     if (!el) return;
     const pts = new Map<number, { x: number; y: number }>();
     let start: { view: typeof view; cx: number; cy: number; d: number } | null = null;
     let tap: { x: number; y: number; id: number } | null = null;
+    // A node under the first finger: dragged instead of panning.
+    let held: { id: number; pointer: number; dx: number; dy: number; vt: VelocityTracker; vtY: VelocityTracker; moved: boolean } | null = null;
+    let viewMoved = false;
+    const toWorld = (x: number, y: number) => {
+      const r = el.getBoundingClientRect(), v = viewRef.current;
+      return { x: (x - r.left - r.width / 2 - v.x) / v.k, y: (y - r.top - r.height / 2 - v.y) / v.k };
+    };
+    const nearest = (x: number, y: number) => {
+      const w = toWorld(x, y), v = viewRef.current;
+      let best = 0, bestD = Infinity;
+      for (const n of graphRef.current.nodes) {
+        const p = pos.current.get(n.id);
+        if (!p) continue;
+        const d = Math.hypot(p.x - w.x, p.y - w.y);
+        if (d < bestD) { bestD = d; best = n.id; }
+      }
+      return bestD < 28 / Math.min(1, v.k) ? best : 0;
+    };
     const mid = () => {
       const p = [...pts.values()];
       const cx = p.reduce((a, q) => a + q.x, 0) / p.length, cy = p.reduce((a, q) => a + q.y, 0) / p.length;
@@ -321,17 +381,42 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
       return { cx, cy, d };
     };
     const rebase = () => { start = pts.size ? { view: viewRef.current, ...mid() } : null; };
+    let raf = 0;
+    const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawRef.current(); }); };
+    const letGo = (t: number) => {
+      if (!held) return;
+      const k = viewRef.current.k;
+      // px per ms on screen → world units per layout step (about 16.7 ms).
+      sim.unpin(held.id, (held.vt.velocity(t) * 16.7) / k, (held.vtY.velocity(t) * 16.7) / k);
+      held = null;
+    };
     const onDown = (e: PointerEvent) => {
       if ((e.target as Element).closest("button, .p-graphcard")) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       el.setPointerCapture(e.pointerId);
       tap = pts.size === 1 ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+      if (pts.size === 1) {
+        const id = nearest(e.clientX, e.clientY);
+        if (id) {
+          const p = pos.current.get(id)!, w = toWorld(e.clientX, e.clientY);
+          held = { id, pointer: e.pointerId, dx: p.x - w.x, dy: p.y - w.y, vt: new VelocityTracker(), vtY: new VelocityTracker(), moved: false };
+          held.vt.add(e.timeStamp, e.clientX); held.vtY.add(e.timeStamp, e.clientY);
+        }
+      } else letGo(e.timeStamp);
       rebase();
     };
     const onMove = (e: PointerEvent) => {
       if (!pts.has(e.pointerId) || !start) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TOUCH_SLOP) tap = null;
+      if (held && held.pointer === e.pointerId) {
+        held.vt.addEvent(e, "x"); held.vtY.addEvent(e, "y");
+        if (tap) return;
+        if (!held.moved) { held.moved = true; hapticLift(); }
+        const w = toWorld(e.clientX, e.clientY);
+        sim.pin(held.id, w.x + held.dx, w.y + held.dy);
+        return;
+      }
       if (tap) return;
       const m = mid();
       const r = el.getBoundingClientRect();
@@ -339,45 +424,36 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
       // Keep the world point that was under the fingers' centre under it.
       const ox = r.left + r.width / 2, oy = r.top + r.height / 2;
       const wx = (start.cx - ox - start.view.x) / start.view.k, wy = (start.cy - oy - start.view.y) / start.view.k;
-      setView({ k, x: m.cx - ox - wx * k, y: m.cy - oy - wy * k });
+      viewRef.current = { k, x: m.cx - ox - wx * k, y: m.cy - oy - wy * k };
+      viewMoved = true;
+      later();
     };
     const onUp = (e: PointerEvent) => {
       if (!pts.has(e.pointerId)) return;
       pts.delete(e.pointerId);
-      if (tap && tap.id === e.pointerId) {
-        const r = el.getBoundingClientRect();
-        const v = viewRef.current;
-        const wx = (e.clientX - r.left - r.width / 2 - v.x) / v.k, wy = (e.clientY - r.top - r.height / 2 - v.y) / v.k;
-        let best = 0, bestD = Infinity;
-        for (const n of graphRef.current.nodes) {
-          const p = pos.current.get(n.id);
-          if (!p) continue;
-          const d = Math.hypot(p.x - wx, p.y - wy);
-          if (d < bestD) { bestD = d; best = n.id; }
-        }
-        setSelected(bestD < 28 / Math.min(1, v.k) ? best : 0);
-      }
+      if (tap && tap.id === e.pointerId) setSelected(nearest(e.clientX, e.clientY));
+      if (held && held.pointer === e.pointerId) letGo(e.timeStamp);
       tap = null;
       rebase();
+      // The labels and sizes follow the zoom once the fingers are off.
+      if (!pts.size && viewMoved) { viewMoved = false; setViewState(viewRef.current); }
     };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
     el.addEventListener("pointercancel", onUp);
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleType = (t: ItemType) => { const n = new Set(types); if (n.has(t)) n.delete(t); else n.add(t); setTypes(n); };
   const neighbours = new Set(selected ? graph.edges.flatMap(([a, b]) => (a === selected ? [b] : b === selected ? [a] : [])) : []);
   const sel = s.byId.get(selected);
-  const { w, h } = size;
-  const P = (id: number) => { const p = pos.current.get(id); return p ? { x: w / 2 + view.x + p.x * view.k, y: h / 2 + view.y + p.y * view.k } : null; };
-  const scaleR = Math.min(1.6, Math.max(0.6, view.k));
   const pv = sel ? preview(sel.content, 140) : "";
 
   return (
@@ -394,33 +470,28 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
       </ChipRow>
       <div className="p-graph" ref={box}>
         {graph.nodes.length === 0 && <div className="p-graph-empty"><span>No connections yet.<br />Link items with Link in their editor.</span></div>}
-        <svg width={w} height={h}>
+        <svg width={svgSize.w} height={svgSize.h}>
           {graph.edges.map(([a, b]) => {
-            const pa = P(a), pb = P(b);
-            if (!pa || !pb) return null;
             const hot = a === selected || b === selected;
-            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} className={hot ? "hot" : ""} />;
+            return <line key={`${a}-${b}`} className={hot ? "hot" : ""} ref={(el) => { if (el) edgeEls.current.set(`${a}-${b}`, el); else edgeEls.current.delete(`${a}-${b}`); }} />;
           })}
           {graph.nodes.map((n) => {
-            const p = P(n.id);
-            if (!p) return null;
             const deg = graph.degree.get(n.id) ?? 0;
-            const r = (7 + Math.sqrt(deg) * 4) * scaleR;
             const dim = selected !== 0 && n.id !== selected && !neighbours.has(n.id);
             return (
-              <g key={n.id}>
-                <circle cx={p.x} cy={p.y} r={r} fill={s.colorOf(n)} fillOpacity={dim ? 0.3 : 1} />
-                {n.type === "TASK" && <circle cx={p.x} cy={p.y} r={r} className="ring" />}
-                {n.type === "EVENT" && <circle cx={p.x} cy={p.y} r={r * 0.45} className="dot" />}
-                {(n.id === selected || n.id === focus) && <circle cx={p.x} cy={p.y} r={r + 3} className="hl" />}
+              <g key={n.id} ref={(el) => { if (el) nodeEls.current.set(n.id, el); else nodeEls.current.delete(n.id); }}>
+                <circle fill={s.colorOf(n)} fillOpacity={dim ? 0.3 : 1} />
+                {n.type === "TASK" && <circle className="ring" />}
+                {n.type === "EVENT" && <circle className="dot" data-f="0.45" />}
+                {(n.id === selected || n.id === focus) && <circle className="hl" data-add="3" />}
                 {(view.k > 0.55 || deg >= 3 || n.id === selected) && (
-                  <text x={p.x} y={p.y + r + 2} className={dim ? "dim" : ""}>{(n.title || "Untitled").slice(0, 28)}</text>
+                  <text className={dim ? "dim" : ""}>{(n.title || "Untitled").slice(0, 28)}</text>
                 )}
               </g>
             );
           })}
         </svg>
-        <IconButton className="p-graph-reset" icon="oZoomOutMap" label="Reset view" onClick={() => setView({ x: 0, y: 0, k: 1 })} />
+        <IconButton className="p-graph-reset" icon="oZoomOutMap" label="Reset view" onClick={() => { setView({ x: 0, y: 0, k: 1 }); sim.reheat(0.3); }} />
         {sel && (
           <div className="p-graphcard">
             <div className="t-title-medium">{sel.title || "Untitled"}</div>
@@ -428,7 +499,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
             {pv && <div className="t-body-small clamp3">{pv}</div>}
             <div className="actions">
               <button className="p-text-btn icon" onClick={() => openItem(sel)}><MIcon name="oOpenInNew" size={18} />Open</button>
-              <button className="p-text-btn icon" onClick={() => { setFocus(sel.id); setView((v) => ({ ...v, x: 0, y: 0 })); }}><MIcon name="oCenterFocusStrong" size={18} />Focus</button>
+              <button className="p-text-btn icon" onClick={() => { setFocus(sel.id); setView({ ...viewRef.current, x: 0, y: 0 }); }}><MIcon name="oCenterFocusStrong" size={18} />Focus</button>
             </div>
           </div>
         )}
