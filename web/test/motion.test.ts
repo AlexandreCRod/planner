@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { VelocityTracker, bandClamp, project, rubberBand, rubberBandInverse, snapIndex, springAt } from "../src/ui/phone/motion.ts";
+import { VelocityTracker, bandClamp, coastTau, project, rubberBand, rubberBandInverse, snapIndex, springAt } from "../src/ui/phone/motion.ts";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
 
@@ -67,4 +67,12 @@ test("a fling's coast and the wheel's landing row", () => {
   assert.equal(snapIndex(100, -0.001, 40, 0, 23), 2);
   assert.equal(snapIndex(100, 5, 40, 0, 23), 23); // flung hard: the last row
   assert.equal(snapIndex(100, -5, 40, 0, 23), 0);
+});
+
+test("a wheel's coast starts at the finger's speed and lands on its row", () => {
+  const tau = coastTau(300, 1.5)!;
+  near(300 / tau, 1.5); // starting speed dist/τ is the finger's
+  assert.equal(coastTau(300, -1), null); // flung back the other way: a spring takes it
+  assert.equal(coastTau(300, 0.01), null); // too slow to coast
+  assert.equal(coastTau(10000, 1), 900); // never a very long coast
 });

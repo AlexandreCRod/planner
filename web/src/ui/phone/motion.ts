@@ -156,6 +156,43 @@ export function snapIndex(pos: number, v: number, step: number, min: number, max
   return Math.min(max, Math.max(min, i));
 }
 
+/** A wheel coming to rest after a fling: soft, no overshoot. */
+export const WHEEL_SPRING: SpringConfig = { stiffness: 260, damping: 1 };
+
+/**
+ * The time constant (ms) of a coast that starts at [v0] px/ms and comes to rest exactly [dist] px on,
+ * slowing all the way (x = dist·(1 − e^(−t/τ)), so its starting speed is dist/τ): null when the fling
+ * points the other way or is too slow to coast, for a spring to take it instead.
+ */
+export function coastTau(dist: number, v0: number, min = 60, max = 900): number | null {
+  if (Math.abs(v0) < 0.05 || Math.sign(dist) !== Math.sign(v0)) return null;
+  return Math.max(min, Math.min(max, dist / v0));
+}
+
+/**
+ * Carries a flung value from [from] to [to] (a wheel's row), starting at the finger's [v0] px/ms and
+ * slowing smoothly onto it, as a wheel picker coasts; a slow or backwards release glides on a spring.
+ */
+export function animateCoast(from: number, to: number, v0: number, frame: (x: number) => void, done?: () => void): Animation {
+  const tau = coastTau(to - from, v0);
+  if (tau === null) return animateSpring(from, to, v0, frame, done, WHEEL_SPRING);
+  const d = to - from, t0 = performance.now();
+  let raf = 0, x = from, v = v0, stopped = false;
+  const step = (now: number) => {
+    const t = Math.max(0, now - t0), e = Math.exp(-t / tau);
+    x = to - d * e;
+    v = (d / tau) * e;
+    if (Math.abs(to - x) < 0.3) { x = to; v = 0; stopped = true; frame(to); done?.(); return; }
+    frame(x);
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return {
+    stop() { stopped = true; cancelAnimationFrame(raf); },
+    now() { return stopped && x === to ? { x: to, v: 0 } : { x, v }; },
+  };
+}
+
 /** A value kept to [lo]..[hi], with the part past either end given back as a rubber band over [dim] px. */
 export function bandClamp(v: number, lo: number, hi: number, dim: number): number {
   if (v < lo) return lo + rubberBand(v - lo, dim);

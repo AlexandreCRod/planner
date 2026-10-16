@@ -11,7 +11,13 @@ import { startOverscroll } from "./overscroll.ts";
 
 // ---------- Haptics (no-ops in a browser) ----------
 export const hapticLift = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {}); };
-export const hapticTick = () => { if (isNative) void Haptics.selectionChanged().catch(() => {}); };
+/** A wheel's row going by: the light selection tick (the plugin only ticks once a selection started). */
+let selecting = false;
+export const hapticTick = () => {
+  if (!isNative) return;
+  if (!selecting) { selecting = true; void Haptics.selectionStart().catch(() => {}); }
+  void Haptics.selectionChanged().catch(() => {});
+};
 export const hapticLight = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); };
 
 // ---------- Keyboard ----------

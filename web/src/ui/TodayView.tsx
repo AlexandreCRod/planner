@@ -1,6 +1,6 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
-import { type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
+import { type Occurrence, type TaskEntry, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRecurring } from "../domain/types.ts";
 import { routineStreak, routinesOnDay, withoutRoutines } from "../domain/routines.ts";
@@ -11,6 +11,8 @@ import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
 import { hapticLift } from "./phone/native.ts";
 import { useSwipePager } from "./phone/pager.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
+import { canMoveByWheel, moveByWheel } from "./phone/eventTime.ts";
+import { holdProps } from "./phone/TimeWheel.tsx";
 import { count } from "../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -77,6 +79,9 @@ function PcToday() {
     </div>
   );
 }
+
+/** Holding an event's time on the phone opens the time wheel to move it. */
+const timeHold = (o: Occurrence) => (canMoveByWheel(o) ? { ...holdProps((id) => moveByWheel(o, id)), className: "time p-time-hold" } : undefined);
 
 /** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
 function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
@@ -147,7 +152,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       </>}
       <div className="section">Schedule</div>
       {dayEvents.length === 0 && <div className="hint empty">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
-      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} />)}
+      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} timeHold={phone ? timeHold : undefined} />)}
       <div className="section">{isToday ? "Today's note" : "Note"}</div>
       <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
         {phone && <MIcon name="oEditNote" />}
@@ -157,7 +162,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       </div>
       {upcoming.length > 0 && <>
         <div className="section">Next 7 days</div>
-        {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay />)}
+        {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay timeHold={phone ? timeHold : undefined} />)}
       </>}
   </>;
 }

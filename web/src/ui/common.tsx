@@ -1,5 +1,5 @@
 // Small shared pieces: icons, task and event rows, the hash router.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
@@ -186,10 +186,11 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   );
 }
 
-export function EventRow({ o, s, showDay }: { o: Occurrence; s: Snapshot; showDay?: boolean }) {
+/** [timeHold]: extra props for the time (the phone holds it to move the event; the PC passes none). */
+export function EventRow({ o, s, showDay, timeHold }: { o: Occurrence; s: Snapshot; showDay?: boolean; timeHold?: (o: Occurrence) => HTMLAttributes<HTMLDivElement> | undefined }) {
   return (
     <div className="event" onClick={() => openItem(o.item, o.day)}>
-      <div className="time">{o.timed ? <><span className="t1">{formatTime(o.startMin!)}</span>{o.endMin !== null && <><br /><span className="t2">{formatTime(o.endMin)}</span></>}</> : <span className="t0">All day</span>}</div>
+      <div className="time" {...timeHold?.(o)}>{o.timed ? <><span className="t1">{formatTime(o.startMin!)}</span>{o.endMin !== null && <><br /><span className="t2">{formatTime(o.endMin)}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
         <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
