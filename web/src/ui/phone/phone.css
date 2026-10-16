@@ -1140,3 +1140,19 @@ html.phone[data-theme="dark"] {
 .phone .p-progress-row + .p-rchips { padding-top: 8px; }
 .phone .today-list > .today-page > .p-rchips:first-child { padding-top: 6px; }
 
+/* ---------- Tasks on the calendar: outlined and lighter than events, with a small tick circle ----------
+   Events keep the filled block with the thin stripe; a task is only an outline in its colour, on the
+   page's own background, its title after a small ring that fills (with a tick) once it's done. */
+.phone .pg-block.task { background: color-mix(in srgb, var(--c) 5%, var(--bg)); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: color-mix(in srgb, var(--text) 85%, transparent); padding-left: 19px; }
+.phone .pg-block.task::before { display: none; }
+.phone .pg-block.task.done { border-style: dashed; opacity: .7; }
+.phone .pg-block.task.tiny { padding-left: 15px; }
+.phone .pg-tick {
+  position: absolute; left: 5px; top: 3px; width: 10px; height: 10px; box-sizing: border-box; display: grid; place-items: center;
+  border: 1.3px solid color-mix(in srgb, var(--c) 80%, var(--text)); border-radius: 50%; color: var(--bg);
+}
+.phone .pg-tick svg { width: 8px; height: 8px; }
+.phone .pg-tick.on { background: color-mix(in srgb, var(--c) 80%, var(--text)); }
+.phone .pg-block.tiny .pg-tick { left: 4px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-width: 1.1px; }
+.phone .pg-block.tiny .pg-tick svg { width: 6px; height: 6px; }
+.phone .pg-chip.task, .phone .p-mchip.task { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }

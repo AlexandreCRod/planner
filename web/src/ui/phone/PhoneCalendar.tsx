@@ -831,11 +831,14 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
   const h = Math.max(14, (p.end - p.start) * pxPerMin);
   const tiny = h < 22;
   return (
-    <div className={`pg-block ${tiny ? "tiny" : ""} ${isTask ? "task" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
+    <div className={`pg-block ${tiny ? "tiny" : ""} ${isTask ? "task" : ""} ${p.o.completed ? "done" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
       style={{
         top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`, ["--c" as string]: c,
       }}>
-      <b className={h >= 36 ? "two" : ""} style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>{displayTitle(p.o.item)}</b>
+      <b className={h >= 36 ? "two" : ""} style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>
+        {isTask && <span className={`pg-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
+        {displayTitle(p.o.item)}
+      </b>
       {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
     </div>
   );
