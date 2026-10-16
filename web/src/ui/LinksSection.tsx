@@ -14,10 +14,10 @@ export function LinksSection({ id, s, ensureSaved }: { id: number; s: Snapshot; 
   const rows: { item: Item; label: string; removable: boolean }[] = [];
   const seen = new Set<number>();
   for (const l of s.links) {
-    if (l.sourceId === id && s.byId.has(l.targetId)) { seen.add(l.targetId); rows.push({ item: s.byId.get(l.targetId)!, label: l.auto ? "Mentioned with [[ ]]" : "Linked", removable: !l.auto }); }
+    if (l.sourceId === id && s.byId.has(l.targetId)) { seen.add(l.targetId); rows.push({ item: s.byId.get(l.targetId)!, label: "Linked", removable: true }); }
   }
   for (const l of s.links) {
-    if (l.targetId === id && s.byId.has(l.sourceId) && !seen.has(l.sourceId)) rows.push({ item: s.byId.get(l.sourceId)!, label: l.auto ? "Mentions this" : "Links here", removable: !l.auto });
+    if (l.targetId === id && s.byId.has(l.sourceId) && !seen.has(l.sourceId)) rows.push({ item: s.byId.get(l.sourceId)!, label: "Links here", removable: true });
   }
   const exclude = new Set([id, ...s.neighbours(id)]);
   const options = s.items
@@ -31,7 +31,7 @@ export function LinksSection({ id, s, ensureSaved }: { id: number; s: Snapshot; 
         {id !== 0 && <button className="btn small" onClick={() => go(`graph?focus=${id}`)}><Icon name="graph" size={14} /> Graph</button>}
         <button className="btn small" onClick={() => setPicking(!picking)}><Icon name="link" size={14} /> Link</button>
       </div>
-      {rows.length === 0 && !picking && <div className="hint">Connect this to other notes, tasks or events. You can also type [[Title]] in the text.</div>}
+      {rows.length === 0 && !picking && <div className="hint">Connect this to other notes, tasks or events with Link.</div>}
       {rows.map(({ item, label, removable }) => (
         <div key={item.id} className="task" onClick={() => openItem(item)}>
           <span className="bar" style={{ background: s.colorOf(item) }} />

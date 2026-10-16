@@ -6,7 +6,7 @@ import { parseQuickAdd } from "../src/domain/quickadd.ts";
 import { LAST_DAY_OF_MONTH, dayBit, occurrences, occursOn } from "../src/domain/recurrence.ts";
 import { CompletionIndex, currentEntry, entriesFor, streak, tasksOnDay, tickedDuring } from "../src/domain/schedule.ts";
 import { newItem } from "../src/domain/types.ts";
-import { wikiTitles } from "../src/domain/text.ts";
+import { stripHtml } from "../src/domain/text.ts";
 
 // Same cases as the Android ScheduleTest, so both apps agree.
 const mon = epochOf(2026, 10, 12);
@@ -107,8 +107,8 @@ test("ids match the Android app", () => {
   assert.ok(id > 2 ** 40 && id < 2 ** 53 && Number.isSafeInteger(id));
 });
 
-test("wiki links in Android editor HTML", () => {
-  assert.deepEqual(wikiTitles("<p>see &lsqb;&lsqb;Stretch&rsqb;&rsqb; then&period;</p>"), ["Stretch"]);
+test("old [[Title]] brackets in a note are plain text", () => {
+  assert.equal(stripHtml("<p>see &lsqb;&lsqb;Stretch&rsqb;&rsqb; then&period;</p>").trim(), "see [[Stretch]] then.");
 });
 
 test("time format follows the setting", async () => {

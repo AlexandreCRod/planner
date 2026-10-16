@@ -139,7 +139,7 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
       {dayTasks.length > 0 && !phone && (
         <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
           <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
-            <div style={{ width: `${(doneCount / dayTasks.length) * 100}%`, height: "100%", background: "var(--accent)", transition: "width .3s" }} />
+            <div style={{ width: `${(doneCount / dayTasks.length) * 100}%`, height: "100%", background: "var(--strong)", transition: "width .3s" }} />
           </div>
           <span className="hint">{doneCount} of {dayTasks.length} done</span>
         </div>

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { describe } from "../domain/recurrence.ts";
 import { formatTime, offsetLabel, relativeDay, today } from "../domain/dates.ts";
 import { parseQuickAdd } from "../domain/quickadd.ts";
-import { PRIORITIES, PRIORITY_COLORS, newItem, type ItemType } from "../domain/types.ts";
+import { PRIORITIES, PRIORITY_COLORS_MUTED, newItem, type ItemType } from "../domain/types.ts";
 import { saveItem } from "../store/store.ts";
 import { go } from "./common.tsx";
 
@@ -67,7 +67,7 @@ export function QuickAdd({ defaultDay }: { defaultDay?: number }) {
               {item.startMin !== null && <span className="chip">🕒 {formatTime(item.startMin)}{item.endMin !== null ? `–${formatTime(item.endMin)}` : ""}</span>}
               {item.freq !== "NONE" && <span className="chip">🔁 {describe(item)}</span>}
               {p.alerts.map(([o, t], i) => <span key={i} className="chip">{t === "ALARM" ? "⏰ Alarm" : t === "REMINDER" ? "🔔 Reminder" : "🔕 Silent"} · {offsetLabel(o)}</span>)}
-              {item.priority > 0 && <span className="chip" style={{ color: PRIORITY_COLORS[item.priority] }}>⚑ {PRIORITIES[item.priority]}</span>}
+              {item.priority > 0 && <span className="chip" style={{ color: PRIORITY_COLORS_MUTED[item.priority] }}>⚑ {PRIORITIES[item.priority]}</span>}
               {p.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
             </div>
           )}

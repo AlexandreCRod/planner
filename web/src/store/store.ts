@@ -7,7 +7,7 @@ import { newId, tagIdFor } from "../domain/ids.ts";
 import { parseDays } from "../domain/recurrence.ts";
 import { doneTodosToTrash, expiredTrash } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
-import { stripHtml, wikiTitles } from "../domain/text.ts";
+import { stripHtml } from "../domain/text.ts";
 import {
   type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
   TYPE_COLORS, cssColor, isRecurring, newItem,
@@ -153,9 +153,6 @@ export function saveItem(item: Item, opts: SaveOptions = {}): number {
     for (const r of opts.reminders) put("reminders", { ...r, id: r.id || newId(), itemId: id });
   }
   if (opts.tags) setTags(id, opts.tags);
-  // Typing [[Title]] links items on the PC only; the phone links with "Link to…" (auto links it finds
-  // already made are left as they are).
-  if (!onPhone()) refreshWikiLinks(id, saved.content);
   changed();
   return id;
 }
@@ -170,16 +167,6 @@ function setTags(itemId: number, names: string[]) {
   }
   const used = new Set(list<ItemTag>("itemTags").map((t) => t.tagId));
   for (const t of list<Tag>("tags")) if (!used.has(t.id)) del("tags", t);
-}
-
-function refreshWikiLinks(id: number, content: string) {
-  for (const l of list<Link>("links")) if (l.sourceId === id && l.auto) del("links", l);
-  const byTitle = new Map<string, number>();
-  for (const i of list<Item>("items")) if (i.deletedAt === null && i.title) byTitle.set(i.title.toLowerCase(), i.id);
-  for (const t of wikiTitles(content)) {
-    const target = byTitle.get(t.toLowerCase());
-    if (target !== undefined && target !== id) put("links", { sourceId: id, targetId: target, auto: true });
-  }
 }
 
 export function toggleCompletion(itemId: number, day: number, done: boolean) {
@@ -327,6 +314,3 @@ export function ensureDefaults() {
 }
 
 export { newItem, isRecurring };
-
-/** The phone layout is showing (it sets html.phone); kept apart from platform.ts so tests can load the store. */
-const onPhone = () => typeof document !== "undefined" && document.documentElement.classList.contains("phone");

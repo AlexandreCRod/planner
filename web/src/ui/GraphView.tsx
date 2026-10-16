@@ -54,13 +54,13 @@ export function GraphView({ focusId }: { focusId: number }) {
         <button className="btn small" onClick={() => setView({ x: 0, y: 0, k: 1 })}>Reset view</button>
       </div>
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-        {graph.nodes.length === 0 && <div className="hint" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>No connections yet.<br />Link items from their editor, or type [[Title]] inside a note.</div>}
+        {graph.nodes.length === 0 && <div className="hint" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>No connections yet.<br />Connect items with Link in their editor.</div>}
         <svg ref={svg} width="100%" height="100%" onWheel={onWheel} onPointerDown={onPan} onClick={(e) => { if (!(e.target as Element).closest("[data-node]")) setSelected(0); }} style={{ cursor: "grab", display: "block" }}>
           {graph.edges.map(([a, b]) => {
             const pa = P(a), pb = P(b);
             if (!pa || !pb) return null;
             const hot = a === selected || b === selected;
-            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={hot ? "var(--accent)" : "var(--line)"} strokeWidth={hot ? 2.5 : 1.5} />;
+            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={hot ? "var(--acc)" : "var(--line)"} strokeWidth={hot ? 2.5 : 1.5} />;
           })}
           {graph.nodes.map((n) => {
             const p = P(n.id);
@@ -72,7 +72,7 @@ export function GraphView({ focusId }: { focusId: number }) {
               <g key={n.id} data-node onClick={(e) => { e.stopPropagation(); setSelected(n.id); }} onDoubleClick={() => openItem(n)} style={{ cursor: "pointer", opacity: dim ? 0.3 : 1 }}>
                 <circle cx={p.x} cy={p.y} r={r} fill={s.colorOf(n)} stroke={n.type === "TASK" ? "var(--text)" : "none"} strokeOpacity={0.5} strokeWidth={1.5} />
                 {n.type === "EVENT" && <circle cx={p.x} cy={p.y} r={r * 0.45} fill="var(--surface)" fillOpacity={0.5} />}
-                {(n.id === selected || n.id === focus) && <circle cx={p.x} cy={p.y} r={r + 4} fill="none" stroke="var(--accent)" strokeWidth={2.5} />}
+                {(n.id === selected || n.id === focus) && <circle cx={p.x} cy={p.y} r={r + 4} fill="none" stroke="var(--strong)" strokeWidth={2.5} />}
                 {(view.k > 0.55 || deg >= 3 || n.id === selected) && (
                   <text x={p.x} y={p.y + r + 13} textAnchor="middle" fontSize={11.5} fill="var(--text)">{(n.title || "Untitled").slice(0, 28)}</text>
                 )}

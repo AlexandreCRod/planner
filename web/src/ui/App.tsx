@@ -19,7 +19,7 @@ const NAV: [string, string, string][] = [
   ["notes", "Notes", "lightbulb"], ["graph", "Links", "graph"], ["browse", "Search", "search"], ["settings", "Settings", "settings"],
 ];
 
-const SYNC_COLORS: Record<string, string> = { idle: "#43a047", syncing: "#fb8c00", offline: "#9e9e9e", error: "var(--danger)", "needs-confirm": "var(--danger)", "signed-out": "var(--danger)" };
+const SYNC_COLORS: Record<string, string> = { idle: "#6f9a78", syncing: "#c39a5a", offline: "#9e9e9e", error: "var(--danger)", "needs-confirm": "var(--danger)", "signed-out": "var(--danger)" };
 
 export function App() {
   // Phones (the Capacitor app, or a phone-narrow browser) get their own shell; the PC layout is unchanged.

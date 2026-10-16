@@ -252,7 +252,6 @@ export const RichEditor = forwardRef<RichEditorHandle, {
         {!compact && <>
           <span className="sep" />
           <B label="🔗" title="Web link" onClick={() => { const url = prompt("Link address", "https://"); if (url) exec("createLink", url); }} />
-          <B label="[[ ]]" title="Link to another item: type its title inside" onClick={() => exec("insertText", "[[]]")} />
           <B label="🕒" title="Insert date and time" onClick={() => exec("insertText", formatDateTime(Date.now()))} />
           <B label="⌫" title="Clear formatting" onClick={() => exec("removeFormat")} />
         </>}

@@ -1,4 +1,4 @@
-// HTML ↔ plain text helpers shared by previews, search and [[wiki links]].
+// HTML ↔ plain text helpers shared by previews and search.
 
 /** Same encoding the Android editor uses: decode every entity, not just a few. */
 export function stripHtml(html: string): string {
@@ -12,18 +12,6 @@ export function stripHtml(html: string): string {
     .replace(/&lsqb;/g, "[").replace(/&rsqb;/g, "]").replace(/&period;/g, ".").replace(/&comma;/g, ",")
     .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&");
-}
-
-const WIKI = /\[\[([^\[\]|]+)(?:\|[^\]]*)?]]/g;
-
-/** Titles referenced as [[Title]] in a note. */
-export function wikiTitles(html: string): string[] {
-  const out = new Set<string>();
-  for (const m of stripHtml(html).matchAll(WIKI)) {
-    const t = m[1].trim();
-    if (t) out.add(t);
-  }
-  return [...out];
 }
 
 export function preview(html: string, max = 120): string {

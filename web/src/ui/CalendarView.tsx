@@ -79,8 +79,8 @@ export function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Ite
               const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
               const isTask = o.item.type === "TASK";
               return (
-                <div key={o.item.id + "-" + o.day} className="ev" onClick={(e) => { e.stopPropagation(); openItem(o.item, o.day); }}
-                  style={{ background: isTask ? `color-mix(in srgb, ${c} 16%, transparent)` : c, color: isTask ? c : "#fff", textDecoration: o.completed ? "line-through" : undefined }}>
+                <div key={o.item.id + "-" + o.day} className={`ev ${isTask ? "task" : ""} ${o.completed ? "done" : ""}`} onClick={(e) => { e.stopPropagation(); openItem(o.item, o.day); }}
+                  style={{ ["--c" as string]: c }}>
                   {o.timed && !o.multiDay ? `${formatTime(o.startMin!)} ` : ""}{displayTitle(o.item)}
                 </div>
               );
@@ -194,8 +194,8 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
                 const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
                 const isTask = o.item.type === "TASK";
                 return (
-                  <div key={o.item.id} className="ev ellipsis" onClick={() => openItem(o.item, o.day)}
-                    style={{ fontSize: 11.5, borderRadius: 4, padding: "1px 6px", marginBottom: 2, cursor: "pointer", background: isTask ? `color-mix(in srgb, ${c} 16%, transparent)` : c, color: isTask ? c : "#fff", textDecoration: o.completed ? "line-through" : undefined }}>
+                  <div key={o.item.id} className={`ev ellipsis ${isTask ? "task" : ""} ${o.completed ? "done" : ""}`} onClick={() => openItem(o.item, o.day)}
+                    style={{ ["--c" as string]: c, fontSize: 11.5, borderRadius: 4, padding: "1px 6px", marginBottom: 2, cursor: "pointer" }}>
                     {displayTitle(o.item)}
                   </div>
                 );
@@ -294,14 +294,14 @@ function DayColumn({ day, hour, placed, s, isToday, colWidth, onCommit, slot, on
           );
         })() : null;
         return (<Fragment key={key}>{ghost}
-          <div key={key} className={`block ${d ? "dragging" : ""}`} onPointerDown={(e) => startDrag(e, p, false)}
-            style={{
+          <div key={key} className={`block ${isTask ? "task" : ""} ${tiny ? "tiny" : ""} ${p.o.completed ? "done" : ""} ${d ? "dragging" : ""}`} onPointerDown={(e) => startDrag(e, p, false)}
+            style={{ ["--c" as string]: c,
               top: p.start * pxPerMin + (d && !d.resize ? d.dy : 0), height,
               left: `calc(${(p.col / p.cols) * 100}% + ${d && !d.resize ? d.dx : 0}px + 1px)`, width: `calc(${100 / p.cols}% - 3px)`,
-              background: isTask ? `color-mix(in srgb, ${c} 22%, var(--surface))` : c, color: isTask ? c : "#fff",
-              padding: tiny ? "0 5px" : undefined, fontSize: tiny ? 10.5 : 12, lineHeight: tiny ? `${height}px` : undefined,
-              textDecoration: p.o.completed ? "line-through" : undefined,
+              fontSize: tiny ? 10.5 : 12, lineHeight: tiny ? `${height - 2}px` : undefined,
             }}>
+            {/* A task is an outline with a small tick circle; an event is a filled block with a stripe. */}
+            {isTask && <span className={`cal-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <Icon name="check" size={8} />}</span>}
             <b style={{ fontWeight: 600 }}>{displayTitle(p.o.item)}</b>
             {height >= 40 && !isTask && <div style={{ opacity: 0.85, fontSize: 11 }}>{formatTime(p.start)}–{formatTime(Math.min(1439, p.end + (d?.resize ? snap(d.dy) : 0)))}</div>}
             {!isTask && height >= 30 && (

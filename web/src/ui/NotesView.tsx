@@ -167,7 +167,7 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
         <div className="card" style={{ margin: "10px auto", maxWidth: 820, padding: 14, display: "grid", gap: 10, color: "var(--text)" }}>
           <div className="row" style={{ flexWrap: "wrap" }}>Page colour
             <button className={`chip ${style.bgColor === null ? "on" : ""}`} onClick={() => setStyle({ ...style, bgColor: null })}>None</button>
-            {PAGE_COLORS.map((c) => <button key={c} title={c} onClick={() => setStyle({ ...style, bgColor: argbOf(c) })} style={{ width: 26, height: 26, borderRadius: "50%", border: bg === c ? "3px solid var(--accent)" : "1px solid var(--line)", background: c }} />)}
+            {PAGE_COLORS.map((c) => <button key={c} title={c} onClick={() => setStyle({ ...style, bgColor: argbOf(c) })} style={{ width: 26, height: 26, borderRadius: "50%", border: bg === c ? "3px solid var(--strong)" : "1px solid var(--line)", background: c }} />)}
           </div>
           <div className="row">Pattern <div className="seg">{["Plain", "Lines", "Grid", "Dots"].map((l, i) => <button key={l} className={style.bgPattern === i ? "on" : ""} onClick={() => setStyle({ ...style, bgPattern: i })}>{l}</button>)}</div></div>
           <div className="row">Font <div className="seg">{FONT_NAMES.map((l, i) => <button key={l} className={style.fontFamily === i ? "on" : ""} style={{ fontFamily: FONTS[i] }} onClick={() => setStyle({ ...style, fontFamily: i })}>{l}</button>)}</div></div>

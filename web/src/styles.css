@@ -1,17 +1,21 @@
 :root {
+  /* The accent chosen in Settings (set on the page by applyTheme) and its palette (ui/phone/theme.ts).
+     The page is drawn in the phone's calm colours (phone.css "Calmer colours"): neutral grey surfaces,
+     one muted accent (--acc) for text and lines, a deep muted tone (--strong) for filled highlights,
+     soft tinted containers (--accent-soft) for what's selected. Item colours are only stripes and dots. */
   --accent: #1a73e8;
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-  /* Filled highlights (the main button, today's date, picked days): a deep, muted tone of the accent,
-     the same as the phone's --p-strong (phone.css), from the palette ui/phone/theme.ts sets. */
+  --acc: color-mix(in oklab, var(--p-acc-light, #1a73e8) 66%, #6b6f76);
+  --accent-soft: color-mix(in oklab, var(--p-acc-light-container, #d3e3fd) 46%, #d7d9dd);
   --strong: color-mix(in oklab, var(--p-acc-light, #1a73e8) 52%, #2f3237);
   --on-strong: #ffffff;
-  --bg: #fbf8fd;
+  --bg: #f6f6f7;
   --surface: #ffffff;
-  --surface-2: #f1eef6;
-  --line: #e2dfe8;
-  --text: #1c1b1f;
-  --muted: #605d66;
-  --danger: #d32f2f;
+  --surface-2: #ececed;
+  --surface-low: #f4f4f5;
+  --line: #dcdde0;
+  --text: #1c1c1e;
+  --muted: #5c5d62;
+  --danger: #b3261e;
   --radius: 10px;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 4px 16px rgb(0 0 0 / 0.06);
   color-scheme: light;
@@ -20,16 +24,18 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #141318; --surface: #1c1b20; --surface-2: #26252b; --line: #34323a;
-    --text: #e6e1e9; --muted: #a8a4ae; --danger: #ef5350; color-scheme: dark;
-    --accent-soft: color-mix(in srgb, var(--accent) 28%, transparent);
+    --bg: #131314; --surface: #1b1b1d; --surface-2: #2a2a2c; --surface-low: #1f1f21; --line: #38393c;
+    --text: #e5e5e7; --muted: #a9aaae; --danger: #f2b8b5; color-scheme: dark;
+    --acc: color-mix(in oklab, var(--p-acc-dark, #a8c7fa) 68%, #9da1a8);
+    --accent-soft: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 34%, #333438);
     --strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52); --on-strong: #eceef1;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #141318; --surface: #1c1b20; --surface-2: #26252b; --line: #34323a;
-  --text: #e6e1e9; --muted: #a8a4ae; --danger: #ef5350; color-scheme: dark;
-  --accent-soft: color-mix(in srgb, var(--accent) 28%, transparent);
+  --bg: #131314; --surface: #1b1b1d; --surface-2: #2a2a2c; --surface-low: #1f1f21; --line: #38393c;
+  --text: #e5e5e7; --muted: #a9aaae; --danger: #f2b8b5; color-scheme: dark;
+  --acc: color-mix(in oklab, var(--p-acc-dark, #a8c7fa) 68%, #9da1a8);
+  --accent-soft: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 34%, #333438);
   --strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52); --on-strong: #eceef1;
 }
 
@@ -38,7 +44,7 @@ html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); }
 button { font: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
-a { color: var(--accent); }
+a { color: var(--acc); }
 
 .app { display: grid; grid-template-columns: 188px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; }
 .sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; }
@@ -59,7 +65,7 @@ a { color: var(--accent); }
 
 .quick { flex: 1; max-width: 620px; margin-left: auto; position: relative; }
 .quick input { width: 100%; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); outline: none; }
-.quick input:focus { border-color: var(--accent); background: var(--surface); }
+.quick input:focus { border-color: var(--acc); background: var(--surface); }
 .quick .chips { position: absolute; top: 36px; left: 0; right: 0; z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow); }
 
 .btn { border: 1px solid var(--line); background: var(--surface); padding: 5px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
@@ -80,7 +86,7 @@ button.chip:hover { background: var(--surface-2); }
 .chips-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .pill { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 
-.section { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.section { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .hint { color: var(--muted); font-size: 13px; }
 .row { display: flex; align-items: center; gap: 10px; }
@@ -90,7 +96,7 @@ button.chip:hover { background: var(--surface-2); }
 .task { display: flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
 .task:hover { background: var(--surface-2); }
 .task .bar { width: 3px; align-self: stretch; border-radius: 2px; }
-.task input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.task input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--strong); cursor: pointer; }
 .task .title.done { text-decoration: line-through; color: var(--muted); }
 .task .sub { font-size: 12px; color: var(--muted); }
 /* Phone-only bits of the shared rows (phone.css shows them); the PC row is laid out as before. */
@@ -118,8 +124,8 @@ select.plain { cursor: pointer; }
 .notes-box .rich { padding: 6px 0; }
 .rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; position: absolute; }
 .rich { position: relative; }
-.icon-btn.on { color: var(--accent); }
-.todo-add { gap: 14px; padding: 4px 8px 8px; color: var(--accent); }
+.icon-btn.on { color: var(--acc); }
+.todo-add { gap: 14px; padding: 4px 8px 8px; color: var(--acc); }
 .todo-add .plain { color: var(--text); font-size: 15px; }
 .gform .suggestion { min-height: 34px; font-size: 13px; gap: 10px; }
 .gform .suggestion > svg { color: var(--muted); }
@@ -131,7 +137,7 @@ select.plain { cursor: pointer; }
 .add-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 
 /* Calendar: tapped slot and drag target */
-.slot-sel { position: absolute; left: 1px; right: 2px; border: 2px solid var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-size: 12px; font-weight: 600; padding: 1px 6px; cursor: pointer; z-index: 3; }
+.slot-sel { position: absolute; left: 1px; right: 2px; border: 2px solid var(--acc); border-radius: 6px; background: color-mix(in srgb, var(--acc) 12%, transparent); color: var(--text); font-size: 12px; font-weight: 600; padding: 1px 6px; cursor: pointer; z-index: 3; }
 .drop-ghost { position: absolute; border: 2px solid; border-radius: 6px; font-size: 11px; font-weight: 700; padding: 0 5px; pointer-events: none; z-index: 4; }
 
 /* "Repeats" mark before a repeating item's title */
@@ -160,19 +166,29 @@ select.plain { cursor: pointer; }
 .month .cell:hover { background: var(--surface-2); }
 .month .cell.other { color: var(--muted); opacity: 0.55; }
 .month .num { font-size: 12px; width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; }
-.month .today .num { background: var(--accent); color: #fff; font-weight: 700; }
+.month .today .num { background: var(--strong); color: var(--on-strong); font-weight: 700; }
 .month .ev { font-size: 11px; border-radius: 4px; padding: 0 5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Events are filled with a calm tint of their colour and a stripe; tasks are outlined (the phone's look). */
+.ev, .block { --c: var(--acc); background: color-mix(in oklab, var(--c) 22%, var(--surface)); color: var(--text); border-left: 3px solid var(--c); }
+.ev.task, .block.task { background: var(--surface); border: 1px solid color-mix(in oklab, var(--c) 60%, transparent); border-left-width: 1px; }
+.ev.task::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; border: 1.5px solid var(--c); vertical-align: -1px; box-sizing: border-box; }
+.ev.task.done::before { background: var(--c); }
+.ev.done, .block.done { text-decoration: line-through; color: var(--muted); }
+.ev.task.done, .block.task.done { border-style: dashed; }
+.cal-tick { display: inline-grid; place-items: center; width: 11px; height: 11px; margin-right: 4px; border-radius: 50%; border: 1.5px solid var(--c); vertical-align: -1px; box-sizing: border-box; color: var(--surface); }
+.cal-tick.on { background: var(--c); }
 .grid-wrap { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .grid-days { display: grid; position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
 .grid-days .dh { text-align: center; padding: 3px 0; font-size: 12px; color: var(--muted); cursor: pointer; }
 .grid-days .dh b { display: block; font-size: 16px; color: var(--text); font-weight: 500; }
-.grid-days .dh.today b { color: var(--accent); }
+.grid-days .dh.today b { color: var(--acc); }
 .allday { display: grid; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; z-index: 4; }
 .hours { display: grid; position: relative; }
 .hour-label { font-size: 11px; color: var(--muted); text-align: right; padding-right: 8px; transform: translateY(-7px); }
 .daycol { position: relative; border-left: 1px solid var(--line); cursor: copy; }
 .hline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); pointer-events: none; }
-.block { position: absolute; border-radius: 6px; padding: 2px 6px; font-size: 12px; overflow: hidden; cursor: grab; user-select: none; box-shadow: 0 1px 2px rgb(0 0 0 / 0.15); }
+.block { position: absolute; border-radius: 6px; padding: 2px 6px; font-size: 12px; overflow: hidden; cursor: grab; user-select: none; }
+.block.tiny { padding: 0 5px; }
 .block.dragging { opacity: 0.75; cursor: grabbing; z-index: 10; }
 .nowline { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); z-index: 3; pointer-events: none; }
 
@@ -211,14 +227,14 @@ select.plain { cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
 .field > label:first-child { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .input { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 9px; }
-.input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.input:focus { outline: 2px solid var(--accent-soft); border-color: var(--acc); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .seg button { border: 0; background: none; padding: 4px 11px; font-size: 12.5px; white-space: nowrap; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--accent-soft); font-weight: 600; }
 .daydots { display: flex; gap: 4px; flex-wrap: wrap; }
 .daydots button { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: none; font-size: 12px; }
-.daydots button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.daydots button.on { background: var(--strong); color: var(--on-strong); border-color: var(--strong); }
 .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px); gap: 3px; }
 .heat span { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-2); }
 
@@ -236,3 +252,8 @@ select.plain { cursor: pointer; }
   .content { padding: 12px 16px 32px; }
   .editor-page { padding: 12px 16px 80px; }
 }
+
+/* Calm pills and repeat badges on the PC too: neutral grey, red only for overdue and missed (phone.css does the same). */
+html:not(.phone) .task .pill { color: var(--muted) !important; background: var(--surface-2) !important; }
+html:not(.phone) .task .pill[style*="--danger"] { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
+html:not(.phone) .rep { color: var(--muted) !important; background: var(--surface-2) !important; }

@@ -7,7 +7,7 @@ import { currentEntry, streak } from "../domain/schedule.ts";
 import { preview } from "../domain/text.ts";
 import {
   type AlertType, type Freq, type Item, type OverduePolicy, type Reminder,
-  NO_DAY, PRIORITIES, PRIORITY_COLORS, argbOf, cssColor, isRecurring,
+  NO_DAY, PRIORITIES, PRIORITY_COLORS_MUTED, argbOf, cssColor, isRecurring,
 } from "../domain/types.ts";
 import { type EditScope, deleteForever, deleteOccurrence, saveItem, saveSeriesEdit, toggleCompletion, trash, useSnapshot } from "../store/store.ts";
 import { Icon, go } from "./common.tsx";
@@ -227,7 +227,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
               </Info>
             )}
             {isRecurring(o) && <Info icon={<Icon name="repeat" size={16} color={color} />}>{describe(o)}</Info>}
-            {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
+            {!oEvent && o.priority > 0 && <Info icon={<Icon name="flag" size={16} color={PRIORITY_COLORS_MUTED[o.priority]} />}>{PRIORITIES[o.priority]} priority</Info>}
             {!oEvent && o.startDay !== null && o.overduePolicy !== "SHOW_OVERDUE" && (
               <Info icon={<Icon name="update" size={16} />}>{o.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"}</Info>
             )}
@@ -481,7 +481,7 @@ function Heatmap({ item, done }: { item: Item; done: Set<number> }) {
     <div className="heat">
       {Array.from({ length: 16 * 7 }, (_, i) => {
         const day = start + i;
-        const bg = day > t ? "transparent" : done.has(day) ? "var(--accent)" : occursOn(item, day) ? "color-mix(in srgb, var(--danger) 35%, transparent)" : undefined;
+        const bg = day > t ? "transparent" : done.has(day) ? "var(--acc)" : occursOn(item, day) ? "color-mix(in srgb, var(--danger) 35%, transparent)" : undefined;
         return <span key={i} title={formatDate(day)} style={{ background: bg }} />;
       })}
     </div>
