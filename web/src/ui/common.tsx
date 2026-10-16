@@ -137,8 +137,10 @@ export function RepeatBadge({ color }: { color: string }) {
   return <span className="rep" title="Repeats" style={{ color, background: `color-mix(in srgb, ${color} 20%, transparent)` }}><Icon name="repeat" size={12} /></span>;
 }
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** The phone's task lists: priority as a coloured "High" tag at the end instead of the small flag. */
+  priorityTag?: boolean;
   /** Called with the new state before the tick is saved. */
   onToggle?: (done: boolean) => void;
 }) {
@@ -161,7 +163,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
           {isRecurring(item) && <RepeatBadge color={color} />}
-          {item.priority > 0 && !done && <span title={`${PRIORITIES[item.priority]} priority`} style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS[item.priority]} /></span>}
+          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS[item.priority]} /></span>}
           {item.title || "Untitled"}
         </div>
         {sub && <div className="sub ellipsis">
@@ -172,6 +174,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle }: {
         </div>}
       </div>
       <span className="pills">
+      {priorityTag && item.priority > 0 && !done && <Pill color={PRIORITY_COLORS[item.priority]}><span className="sub-icon flag"><Icon name="flag" size={12} /></span>{PRIORITIES[item.priority]}</Pill>}
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}

@@ -37,11 +37,19 @@ function apply() {
   set("--p-tert-dark", darkTertiary(p[3]));
 }
 
+/** Pure black dark mode (Settings), as a class on the page; phone.css swaps the dark surfaces for black. */
+export function applyPureBlack() {
+  let on = false;
+  try { on = localStorage.getItem("pureBlack") === "true"; } catch { /* private mode */ }
+  document.documentElement.classList.toggle("pure-black", on);
+}
+
 let started = false;
 /** Keeps the phone palette in step with the accent chosen in Settings. */
 export function startPhoneTheme() {
   if (started) return;
   started = true;
   apply();
+  applyPureBlack();
   new MutationObserver(apply).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
 }

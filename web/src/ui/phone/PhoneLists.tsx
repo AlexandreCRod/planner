@@ -15,6 +15,7 @@ import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
+import { SwipeToTrash } from "./SwipeRow.tsx";
 
 // ---------- Tasks ----------
 
@@ -77,8 +78,10 @@ function ScheduledList() {
             setCollapsed(n);
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
-            <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={isRecurring(e.item) ? streak(e.item, s.done, t) : undefined}
-              onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
+            <SwipeToTrash key={e.item.id} item={e.item}>
+              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={isRecurring(e.item) ? streak(e.item, s.done, t) : undefined}
+                onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
+            </SwipeToTrash>
           ))}
         </div>
       );
@@ -114,11 +117,17 @@ function TodoList() {
     </div>
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
-      <TaskRow key={e.item.id} entry={e} s={s} now={now} onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
+      <SwipeToTrash key={e.item.id} item={e.item}>
+        <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
+      </SwipeToTrash>
     ))}
     {done.length > 0 && <>
       <SectionHeader expanded={showDone} onClick={() => setShowDone(!showDone)}>Completed ({done.length})</SectionHeader>
-      {showDone && done.map((item) => <TaskRow key={`d${item.id}`} entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />)}
+      {showDone && done.map((item) => (
+        <SwipeToTrash key={`d${item.id}`} item={item}>
+          <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
+        </SwipeToTrash>
+      ))}
     </>}
     <div className="p-endspace" />
   </>;

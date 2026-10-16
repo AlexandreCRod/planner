@@ -8,11 +8,11 @@ import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
-import { SettingsView } from "../SettingsView.tsx";
+import { PhoneCategories, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
 import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
-import { MIcon, Scaffold, TabGlyph } from "./chrome.tsx";
+import { MIcon, TabGlyph } from "./chrome.tsx";
 import { SnackbarHost } from "./m3.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
@@ -201,7 +201,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} />;
   } else if (route === "settings") {
-    body = <Scaffold title="Settings" back><SettingsView /></Scaffold>;
+    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : <PhoneSettings />;
   }
   return <div className="p-overlay">{body}</div>;
 }

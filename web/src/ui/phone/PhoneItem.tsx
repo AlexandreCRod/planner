@@ -515,13 +515,13 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
         {!isEvent && item.priority > 0 && (
-          <span className="p-menu-anchor start block">
+          <span className="p-menu-anchor start wide">
             <InfoRow icon="fFlag" tint={PRIORITY_COLORS[item.priority]} text={`${PRIORITIES[item.priority]} priority`} onClick={() => setPrioMenu(true)} />
             <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
           </span>
         )}
         {!isEvent && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
-          <span className="p-menu-anchor start block">
+          <span className="p-menu-anchor start wide">
             <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
             <DropdownMenu open={overdueMenu} onClose={() => setOverdueMenu(false)} items={overdueItems((p) => commit({ ...item, overduePolicy: p }))} />
           </span>
