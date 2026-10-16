@@ -15,6 +15,7 @@ import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.t
 import { RichEditor, type RichEditorHandle } from "../RichEditor.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
+import { NOTE_DAYS } from "../../domain/retention.ts";
 import { onKeyboardHide, openExternal, pushBack } from "./native.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
@@ -217,7 +218,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           <TextButton onClick={() => setOpen("")}>Cancel</TextButton>
           <TextButton onClick={() => { setOpen(""); deleted.current = true; clearTimeout(timer.current); if (noteId) trash(noteId); history.back(); }}>Move to trash</TextButton>
         </>}>
-          You can restore it from Settings → Trash for 14 days.
+          You can restore it from Settings → Trash for {NOTE_DAYS} days.
         </Dialog>
       )}
 
