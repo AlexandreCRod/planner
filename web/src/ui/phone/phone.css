@@ -732,3 +732,42 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .gp-drag { flex: none; height: calc(var(--sat) + 22px); padding-top: var(--sat); display: grid; place-items: center; touch-action: none; }
 .phone .gp-drag .gp-handle { margin: 0; }
 .phone .gp-row { flex-wrap: wrap; }
+
+/* ---------- Note editor (NoteEditorScreen) ---------- */
+.phone .pn { --pn-fg: var(--text); background: var(--bg); color: var(--text); }
+.phone .pn .pn-appbar { background: transparent; color: inherit; }
+.phone .pn.paper .p-icon, .phone .pn.paper .p-appbar-title { color: var(--pn-fg); }
+.phone .pn-undo { display: contents; }
+.phone .pn-scroll { padding: 0 0 32px; }
+.phone .pn-day { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
+.phone .pn-day .p-assist { max-width: 100%; padding: 0 16px 0 10px; color: inherit; }
+.phone .pe-dot.small { width: 10px; height: 10px; margin: 0; }
+.phone .pn-title { display: block; width: 100%; box-sizing: border-box; padding: 8px 20px; border: 0; background: none; font: inherit; font-size: 26px; line-height: 34px; font-weight: 700; color: inherit; outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .pn-title::placeholder { color: color-mix(in srgb, var(--pn-fg) 35%, transparent); }
+.phone .pn-meta { display: flex; align-items: center; min-height: 32px; padding: 0 20px; }
+.phone .pn-meta.place { min-height: 48px; padding-right: 8px; }
+.phone .pn-meta > svg { flex: none; margin-right: 4px; color: color-mix(in srgb, var(--pn-fg) 50%, transparent); }
+.phone .pn-meta input { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; background: none; font: inherit; font-family: system-ui, sans-serif; font-size: 13px; color: color-mix(in srgb, var(--pn-fg) 75%, transparent); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .pn-meta input::placeholder { color: color-mix(in srgb, var(--pn-fg) 35%, transparent); }
+.phone .pn-meta .p-icon { color: color-mix(in srgb, var(--pn-fg) 60%, transparent); }
+.phone .pn-images { display: flex; gap: 8px; overflow-x: auto; padding: 8px 20px; scrollbar-width: none; }
+.phone .pn-thumb { position: relative; overflow: hidden; flex: none; width: 112px; height: 112px; padding: 0; border: 0; border-radius: 10px; background: var(--p-sc-high); }
+.phone .pn-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phone .pn-text { padding: 8px 20px 0; }
+.phone .pn-text .rich { font-size: 16px; line-height: 24px; color: inherit; outline: none; user-select: text; -webkit-user-select: text; }
+.phone .pn-text .rich.is-empty::before { color: color-mix(in srgb, var(--pn-fg) 35%, transparent); }
+.phone .pn-links { margin-top: 16px; border-top: 1px solid color-mix(in srgb, var(--pn-fg) 12%, transparent); color: var(--text); }
+.phone .pn.paper .pn-links .p-section, .phone .pn.paper .pn-links .headline, .phone .pn.paper .pn-links .pe-small { color: var(--pn-fg); }
+.phone .pn > .p-richbar { padding-bottom: var(--sab); box-shadow: 0 -1px 0 color-mix(in srgb, var(--text) 8%, transparent); }
+.phone .pn-style { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 24px; }
+.phone .pn-style .p-sheet-title.small { padding: 0; }
+.phone .pn-list { display: flex; flex-direction: column; margin: 0 -24px; }
+.phone .pn-list > button { position: relative; overflow: hidden; padding: 12px 24px; border: 0; background: none; text-align: left; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--text); }
+.phone .pn-versions { max-height: 420px; margin: 0 -24px; }
+.phone .pn-picture { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: #000; }
+.phone .pn-picture img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.phone .pn-picture-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: flex; padding: var(--sat) 4px 0; height: calc(64px + var(--sat)); align-items: center; background: linear-gradient(#0009, transparent); }
+.phone .pn-picture-bar .p-icon { color: #fff; }
+.phone .p-menu button:disabled { opacity: .38; }
+.phone .pn-scroll { background-attachment: local; }
+.phone .pn.paper .pn-links .p-text-btn { color: var(--pn-fg); }

@@ -75,3 +75,10 @@ export function openExternal(url: string) {
   if (isNative) location.href = url;
   else window.open(url, "_blank", "noopener");
 }
+
+/** Runs [fn] when the soft keyboard starts to go down (in the app only). */
+export function onKeyboardHide(fn: () => void): () => void {
+  if (!isNative) return () => {};
+  const h = Keyboard.addListener("keyboardWillHide", fn);
+  return () => { void h.then((x) => x.remove()); };
+}

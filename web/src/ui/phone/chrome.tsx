@@ -102,7 +102,7 @@ export function EmptyHint({ children }: { children: ReactNode }) {
   return <div className="p-empty">{children}</div>;
 }
 
-export interface MenuItem { label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean }
+export interface MenuItem { label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean; disabled?: boolean }
 
 /**
  * Material 3 dropdown menu anchored under the top-right corner of its parent (which must be
@@ -123,7 +123,7 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
       {items.map((it, i) => (
         <div key={i}>
           {it.divider && <div className="p-menu-divider" />}
-          <button role="menuitem" className={it.icon || it.dot ? "lead" : ""} onClick={() => { onClose(); it.onClick(); }}>
+          <button role="menuitem" className={it.icon || it.dot ? "lead" : ""} disabled={it.disabled} onClick={() => { onClose(); it.onClick(); }}>
             {it.icon && <MIcon name={it.icon} color={it.iconColor} />}
             {it.dot && <span className="p-menu-dot"><span style={{ background: it.dot }} /></span>}
             <span className="grow">{it.label}</span>

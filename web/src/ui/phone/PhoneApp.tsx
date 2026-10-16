@@ -7,7 +7,7 @@ import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../common.tsx";
-import { NoteEditor } from "../NotesView.tsx";
+import { PhoneNote } from "./PhoneNote.tsx";
 import { SettingsView } from "../SettingsView.tsx";
 import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
@@ -195,9 +195,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
       ? <PhoneItemEditorPage key={`e${path[1]}`} id={Number(path[1])} occ={occ} dup={query.get("dup") === "1"} />
       : <PhoneItemView key={path[1]} id={Number(path[1])} occ={occ} />;
   } else if (route === "note") {
-    body = <div className="p-scaffold"><div className="p-statusbar" /><div className="p-content flush note-host">
-      <NoteEditor key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />
-    </div></div>;
+    body = <PhoneNote key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />;
   } else if (route === "graph") {
     body = <PhoneGraph focusId={Number(query.get("focus")) || 0} />;
   } else if (route === "browse") {

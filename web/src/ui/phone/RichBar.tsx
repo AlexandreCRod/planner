@@ -2,10 +2,11 @@
 // nine equal buttons (bold, italic, underline, checkbox, bullets, numbers, indent, outdent, more),
 // and with "more" a second row above it (strikethrough, colours, size, links, clear). Its buttons never
 // take the focus, so the keyboard stays up and the text keeps its selection.
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { formatDate, formatTime, nowMinutes, today } from "../../domain/dates.ts";
 import type { RichEditorHandle } from "../RichEditor.tsx";
 import { DropdownMenu, MIcon } from "./chrome.tsx";
+import { showKeyboard } from "./native.ts";
 import { ColorPickerDialog, PALETTE, TextFieldDialog } from "./m3.tsx";
 import { cssColor } from "../../domain/types.ts";
 
@@ -28,11 +29,29 @@ function useFormatState() {
   return st;
 }
 
-export function RichBar({ editor, compact, className = "" }: { editor: RefObject<RichEditorHandle>; compact?: boolean; className?: string }) {
+/** One of the bar's buttons: it never takes the focus from the text. */
+export function RichBarButton({ icon, label, on, onClick, color }: { icon: string; label: string; on?: boolean; onClick: () => void; color?: string }) {
+  return (
+    <button className={`p-rb-btn ${on ? "on" : ""}`} aria-label={label} aria-pressed={on}
+      onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
+      <MIcon name={icon} color={color} />
+    </button>
+  );
+}
+
+/**
+ * `extra` buttons go at the end of the "more" row (the note editor's Add picture). `onHold` tells the
+ * page while one of the bar's dialogs or menus has the focus, so it keeps the bar (and the dialog) up.
+ */
+export function RichBar({ editor, compact, className = "", extra, onHold }: {
+  editor: RefObject<RichEditorHandle>; compact?: boolean; className?: string; extra?: ReactNode; onHold?: (held: boolean) => void;
+}) {
   const [more, setMore] = useState(false);
   const [dialog, setDialog] = useState<"color" | "highlight" | "link" | null>(null);
   const [sizeMenu, setSizeMenu] = useState(false);
   const st = useFormatState();
+  const held = dialog !== null || sizeMenu;
+  useEffect(() => { onHold?.(held); }, [held]); // eslint-disable-line react-hooks/exhaustive-deps
   const ed = () => editor.current;
   // A dialog or menu takes the focus; the selection is kept and put back before the command runs.
   const saved = useRef<Range | null>(null);
@@ -40,17 +59,13 @@ export function RichBar({ editor, compact, className = "" }: { editor: RefObject
   const back = () => {
     const r = saved.current;
     ed()?.focus();
+    showKeyboard();
     if (r) { const sel = getSelection(); sel?.removeAllRanges(); sel?.addRange(r); }
     return ed();
   };
   const open = (d: "color" | "highlight" | "link") => { keep(); setDialog(d); };
 
-  const B = ({ icon, label, on, onClick, color }: { icon: string; label: string; on?: boolean; onClick: () => void; color?: string }) => (
-    <button className={`p-rb-btn ${on ? "on" : ""}`} aria-label={label} aria-pressed={on}
-      onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
-      <MIcon name={icon} color={color} />
-    </button>
-  );
+  const B = RichBarButton;
 
   return (
     <div className={`p-richbar ${className}`} onPointerDown={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}>
@@ -68,6 +83,7 @@ export function RichBar({ editor, compact, className = "" }: { editor: RefObject
           <B icon="fDataObject" label="Insert [[link]] to another item" onClick={() => ed()?.insertText("[[]]")} />
           {!compact && <B icon="oSchedule" label="Insert date and time" onClick={() => ed()?.insertText(`${formatDate(today())}, ${formatTime(nowMinutes())}`)} />}
           <B icon="fFormatClear" label="Clear formatting" onClick={() => ed()?.exec("removeFormat")} />
+          {extra}
         </div>
       )}
       <div className="p-rb-main">
