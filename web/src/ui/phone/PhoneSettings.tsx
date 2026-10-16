@@ -1,7 +1,7 @@
 // The phone's Settings, Categories and Trash pages, laid out like SettingsScreen.kt and
 // TrashCategories.kt: section headers, Material 3 list rows with switches or a menu of choices, and
-// dialogs. Settings this build can't act on (alarms, backups, the widget, calendar import, wallpaper
-// colours) are left out. Values are the same local keys the PC settings use.
+// dialogs. Settings this build can't act on (backups, the widget, calendar import, wallpaper colours) are
+// left out. Values are the same local keys the PC settings use.
 import { useEffect, useState } from "react";
 import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatDateTime } from "../../domain/dates.ts";
 import { RETENTION_TEXT, NOTE_DAYS, TASK_EVENT_DAYS } from "../../domain/retention.ts";
@@ -15,6 +15,11 @@ import { applyTheme, useSyncStatus } from "../SettingsView.tsx";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog } from "./m3.tsx";
 import { applyPureBlack } from "./theme.ts";
+import { TimePickerDialog } from "./pickers.tsx";
+import { ensureNotifications } from "./PhoneAlarms.tsx";
+import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
+import { formatTime } from "../../domain/dates.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -39,6 +44,54 @@ function ChoiceRow<T extends string>({ title, value, options, onPick }: { title:
 
 function SwitchRow({ title, checked, onChange, supporting }: { title: string; checked: boolean; onChange: (v: boolean) => void; supporting?: string }) {
   return <ListItem headline={title} supporting={supporting} trailing={<Switch checked={checked} onChange={onChange} label={title} />} onClick={() => onChange(!checked)} />;
+}
+
+const SNOOZES: [string, string][] = SNOOZE_CHOICES.map((m) => [String(m), `${m} min`]);
+
+/**
+ * "Reminders & alarms", as the native SettingsScreen has it, plus what only this build needs: whether
+ * event and task alarms ring on this phone (not while the original app is there to ring them) and the
+ * world clock's weather app. Phone build only; kept on this phone, not synced.
+ */
+function AlarmSettingsSection() {
+  const st = useAlarmSettings();
+  const { ring, perms, weatherApp } = useAlarmState();
+  const [time, setTime] = useState<"" | "task" | "qs" | "qe">("");
+  const pickSound = async () => {
+    const r = await native.pickSound(st.defaultAlarmSound, "Default alarm sound");
+    if (r.picked) setAlarmSettings({ defaultAlarmSound: r.uri ?? null, defaultAlarmSoundName: r.uri ? r.name ?? null : null });
+  };
+  const ringText = ring.originalInstalled
+    ? (ring.rings ? "On: they may ring twice, here and in the original Planner app" : "Off: the original Planner app rings them, so they don't ring twice")
+    : "Clock alarms, timers and the stopwatch always work";
+  return <>
+    <div className="p-hr" />
+    <SectionHeader>Reminders &amp; alarms</SectionHeader>
+    <SwitchRow title="Ring event and task alarms on this phone" supporting={ringText} checked={ring.rings}
+      onChange={(v) => void act(native.setRingEvents(v))} />
+    <ListItem headline="Time for untimed reminders" supporting={<span className="ps-pre">{`${formatTime(st.defaultTaskTime)}\nUsed for tasks without a time and all-day events`}</span>} onClick={() => setTime("task")} />
+    <ListItem headline="Default alarm sound" supporting={st.defaultAlarmSound == null ? "System alarm" : st.defaultAlarmSoundName ?? "Custom"} onClick={() => void pickSound()} />
+    <ChoiceRow title="Snooze length" value={String(st.snoozeMinutes)} options={SNOOZES} onPick={(v) => setAlarmSettings({ snoozeMinutes: Number(v) })} />
+    <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
+      supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
+    <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
+    {st.quietHoursEnabled && <>
+      <ListItem headline="Quiet from" supporting={formatTime(st.quietStart)} onClick={() => setTime("qs")} />
+      <ListItem headline="Quiet until" supporting={formatTime(st.quietEnd)} onClick={() => setTime("qe")} />
+    </>}
+    <ListItem headline="Weather app" supporting={weatherApp ? `${weatherApp} — opens from the world clock` : "None — the world clock opens a weather page"}
+      onClick={() => void act(native.pickWeatherApp())}
+      trailing={weatherApp ? <IconButton icon="fClose" label="Forget the weather app" onClick={() => void act(native.clearWeatherApp())} /> : undefined} />
+    <ListItem headline="Notification permission" supporting={perms.notifications ? "Allowed" : "Blocked — tap to fix"}
+      onClick={() => void (perms.notifications ? native.openSettings("notifications") : ensureNotifications("Alarms, reminders and timers show and ring through notifications, so this app needs them allowed."))} />
+    <ListItem headline="Full-screen alarms" supporting={perms.fullScreen ? "Allowed" : "Not allowed — tap to fix"} onClick={() => void native.openSettings("fullScreen")} />
+    {!perms.exact && <ListItem headline="Alarms & reminders" supporting="Not allowed — tap to fix, or alarms may ring late" onClick={() => void native.openSettings("exact")} />}
+    <ListItem headline="Battery optimization" supporting={perms.batteryExempt ? "Not optimized: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
+    {time && (
+      <TimePickerDialog value={time === "task" ? st.defaultTaskTime : time === "qs" ? st.quietStart : st.quietEnd} onClose={() => setTime("")}
+        onPick={(m) => setAlarmSettings(time === "task" ? { defaultTaskTime: m } : time === "qs" ? { quietStart: m } : { quietEnd: m })} />
+    )}
+  </>;
 }
 
 export function PhoneSettings() {
@@ -93,6 +146,8 @@ export function PhoneSettings() {
         <ChoiceRow title="Checked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
         <SwitchRow title="Show completed tasks on Today" supporting="Off: ticked tasks leave today's list once their moment is up" checked={showDone}
           onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
+
+        {hasAlarms && <AlarmSettingsSection />}
 
         <div className="p-hr" />
         <SectionHeader>Cloud sync</SectionHeader>

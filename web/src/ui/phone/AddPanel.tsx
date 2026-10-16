@@ -8,15 +8,41 @@ import { useDrag } from "@use-gesture/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { describe } from "../../domain/recurrence.ts";
 import { formatDate, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
-import { parseQuickAdd } from "../../domain/quickadd.ts";
+import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
+import { daysText, formatDuration } from "../../domain/alarms.ts";
+import { act, hasAlarms, native } from "../../alarms/native.ts";
+import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { type Item, type ItemType, type Reminder, PRIORITIES, PRIORITY_COLORS, newItem } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
 import { go } from "../common.tsx";
 import { FilterChip, MIcon } from "./chrome.tsx";
-import { AssistChip, ColorPickerDialog, TextButton } from "./m3.tsx";
+import { AssistChip, ColorPickerDialog, TextButton, showSnackbar } from "./m3.tsx";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 import { type Draft, PhoneItemEditor, firstAlerts, switchType } from "./PhoneItem.tsx";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+
+/** What a timer or alarm typed on the add line will be: "Timer · 10:00 · pasta", "Alarm · 7:00 AM · Weekdays". */
+function clockText(c: ClockCommand): string {
+  const parts = c.kind === "timer"
+    ? ["Timer", formatDuration(c.durationMs)]
+    : ["Alarm", formatTime(c.hour * 60 + c.minute), c.days ? daysText(c.days) : "Rings once"];
+  return [...parts, c.label].filter(Boolean).join(" · ");
+}
+
+/** Starts the timer or sets the alarm clock, then shows it on the Alarms page. */
+async function runClock(c: ClockCommand) {
+  if (c.kind === "timer") {
+    await ensureNotifications("A running timer shows its countdown in a notification and rings when it's done, even with the screen locked.");
+    await act(native.timer("start", { durationMs: c.durationMs, label: c.label }));
+    go("alarms/timer");
+    showSnackbar(`Timer started: ${formatDuration(c.durationMs)}`);
+  } else {
+    await ensureNotifications("This alarm rings at its time even with the app closed, through a notification.");
+    await act(native.saveClock({ id: 0, hour: c.hour, minute: c.minute, label: c.label, days: c.days, enabled: true, color: 0, sound: null }));
+    go("alarms/alarm");
+    showSnackbar(`Alarm set for ${formatTime(c.hour * 60 + c.minute)}`);
+  }
+}
 
 /** Whole device pixels: the panel is its own GPU layer, and one left at a fractional offset is drawn soft. */
 const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRatio;
@@ -108,6 +134,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const setItem = (patch: Partial<Item>) => setDraft((x) => ({ ...x, item: { ...x.item, ...patch } }));
   const canGrow = !(quick && type === "NOTE");
   const canSave = lineMode ? text.trim() !== "" || type === "NOTE" : d.title.trim() !== "";
+  // "timer 10 min", "alarm 7am weekdays": on the phone the line can start a timer or set an alarm clock.
+  const clock = useMemo(() => (hasAlarms && lineMode && type !== "NOTE" ? parseClockCommand(text, new Date()) : null), [text, lineMode, type]);
 
   // The outline on the calendar follows the slot panel's day, time and colour.
   useEffect(() => {
@@ -118,6 +146,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
+    if (clock) { onClose(); void runClock(clock); return; }
     if (lineMode && type === "NOTE") {
       const id = saveItem(newItem({ type: "NOTE", title: text.trim() }));
       onClose();
@@ -283,7 +312,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   /** Keeps the keyboard up through taps on the panel's own controls. */
   const keepFocus = (e: React.MouseEvent) => { if (!(e.target as Element).closest("input")) e.preventDefault(); };
 
-  const parsedItem = lineMode && text.trim() && type !== "NOTE" ? d : null;
+  const parsedItem = lineMode && text.trim() && type !== "NOTE" && !clock ? d : null;
   const isEvent = d.type === "EVENT";
 
   /** Date, time, all day and colour: the settings the small panel can change. */
@@ -330,7 +359,12 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
             <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
               placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
-            {type !== "NOTE" && settings}
+            {type !== "NOTE" && !clock && settings}
+            {clock && (
+              <div className="gp-chips">
+                <span className="p-assist static"><MIcon name={clock.kind === "timer" ? "oTimer" : "oAlarm"} size={18} /> {clockText(clock)}</span>
+              </div>
+            )}
             {parsedItem && <>
               {(parsedItem.freq !== "NONE" || parsed.alerts.length > 0 || parsedItem.priority > 0 || parsed.tags.length > 0) && (
                 <div className="gp-chips">
@@ -340,7 +374,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
               )}
-              <div className="gp-tip">Tip: dates (tomorrow, fri, 12/3), times (3pm, 15:30), "every mon, wed", "remind 30m before", !alarm, !high, #tag</div>
+              <div className="gp-tip">Tip: dates (tomorrow, fri, 12/3), times (3pm, 15:30), "every mon, wed", "remind 30m before", !alarm, !high, #tag{hasAlarms && <>; or "timer 10 min", "alarm 7am weekdays"</>}</div>
             </>}
           </> : <>
             <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
@@ -367,7 +401,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           <div className="gp-actions">
             <TextButton onClick={() => { if (canGrow) grow(); else save(); }}>More options</TextButton>
             <span className="grow" />
-            <button className="p-filled-btn" disabled={!canSave} onClick={save}>{lineMode ? "Add" : "Save"}</button>
+            <button className="p-filled-btn" disabled={!canSave} onClick={save}>{clock ? (clock.kind === "timer" ? "Start" : "Set") : lineMode ? "Add" : "Save"}</button>
           </div>
         </animated.div>
       </animated.div>

@@ -22,14 +22,17 @@ import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.ts
 import "./phone.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
+import { hasAlarms } from "../../alarms/native.ts";
+import { PermissionHost, PhoneAlarms, openAlarmSection } from "./PhoneAlarms.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
-// Links section. Alarms will be the fifth: a key here, its page in Page and its icon in TabGlyph.
+// Links section. Alarms is the fifth where the alarm engine is (the phone build), not in a browser.
 const TABS: { key: string; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "calendar", label: "Calendar" },
   { key: "tasks", label: "Tasks" },
   { key: "notes", label: "Notes" },
+  ...(hasAlarms ? [{ key: "alarms", label: "Alarms" }] : []),
 ];
 const LAST = TABS.length - 1;
 /** Two taps on the same tab closer than this reset its page (HomeScreen.kt). */
@@ -116,6 +119,10 @@ export function PhoneApp() {
 
   // A route to a page (go("calendar"), the back button...) turns the pager there.
   useEffect(() => { if (routeTab >= 0 && routeTab !== tabRef.current) settle(routeTab, 0, true); }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "alarms/timer" (from a notification or the add line) opens that section of the Alarms page.
+  useEffect(() => {
+    if (route === "alarms" && path[1]) { openAlarmSection(path[1]); history.replaceState(null, "", "#/alarms"); }
+  }, [route, path[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const overlay = routeTab < 0 && route !== "" ? route : null;
   // Back: overlays and panels close first (they push their own handlers), then other tabs return to Today.
@@ -147,17 +154,19 @@ export function PhoneApp() {
         <animated.div className="p-track" style={{ transform: pos.to((p) => slide(p, -1)) }}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
-              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} />}
+              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay} />}
             </div>
           ))}
         </animated.div>
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
-      {!overlay && (
+      {/* The Alarms page has its own + button, which asks what to add. */}
+      {!overlay && TABS[tab].key !== "alarms" && (
         <button className="p-fab" aria-label="Add" onClick={openAdd}><MIcon name="fAdd" /></button>
       )}
       {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "")} route={route} path={path} query={query} />}
       <SnackbarHost raised={!!overlay} />
+      <PermissionHost />
       {adding && <AddPanel key={`${adding.mode}${adding.day}${adding.min}`} req={adding} onPreview={setPreview} onClose={() => { setAdding(null); setPreview(null); }} />}
     </div>
   );
@@ -176,15 +185,16 @@ function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview
 }
 
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
-const Page = memo(function Page({ tabKey, onNewAt, pending }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null }) {
+const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; active: boolean }) {
   switch (tabKey) {
     case "today": return <TodayView phone />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
     case "tasks": return <PhoneTasks />;
     case "notes": return <PhoneNotes />;
+    case "alarms": return <PhoneAlarms active={active} />;
     default: return null;
   }
-}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending));
+}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active));
 
 /** Full-screen pages over the pager: an item, a note, search, settings. */
 function Overlay({ route, path, query }: { route: string; path: string[]; query: URLSearchParams }) {

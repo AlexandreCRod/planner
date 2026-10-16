@@ -169,6 +169,9 @@ const PAGE = "M6 5H18a2.5 2.5 0 0 1 2.5 2.5V18a2.5 2.5 0 0 1 -2.5 2.5H6a2.5 2.5 
 const dot = (x: number, y: number, r = 1.1) => `M${x - r} ${y}a${r} ${r} 0 1 1 ${2 * r} 0a${r} ${r} 0 1 1 ${-2 * r} 0`;
 const DOTS = [dot(8, 14), dot(12, 14), dot(16, 14), dot(8, 17.5), dot(12, 17.5)].join("");
 const FILLED_PAGE = "M6 4.1H18a3.4 3.4 0 0 1 3.4 3.4V18a3.4 3.4 0 0 1 -3.4 3.4H6a3.4 3.4 0 0 1 -3.4 -3.4V7.5a3.4 3.4 0 0 1 3.4 -3.4ZM4.4 9.3H19.6V10.5H4.4Z";
+/** AlarmFilledIcon (TabIcons.kt): two bells' strokes, a solid face with the hands cut out. */
+const ALARM_BELLS = "M2.9 6.3L6.3 3.2M21.1 6.3L17.7 3.2";
+const ALARM_FACE = "M3.5 13a8.5 8.5 0 1 1 17 0a8.5 8.5 0 1 1 -17 0ZM11.1 8H12.9V12.1H15.8V13.9H11.1Z";
 const TASK_FILLED = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM6.3 12.4L7.7 11L10.5 13.8L16.3 8L17.7 9.4L10.5 16.6Z";
 
 /** One tab's icon, outlined or solid (TabIcons.kt and the Material icons HomeScreen.kt picks). */
@@ -193,6 +196,11 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
       }
       break;
     case "tasks": body = <path d={selected ? TASK_FILLED : ICONS.oTaskAlt} fill="currentColor" fillRule="evenodd" />; break;
+    case "alarms":
+      body = selected
+        ? <><path d={ALARM_BELLS} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" /><path d={ALARM_FACE} fill="currentColor" fillRule="evenodd" /></>
+        : <path d={ICONS.oAlarm} fill="currentColor" />;
+      break;
     case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
     default: body = <path d={selected ? ICONS.fHub : ICONS.oHub} fill="currentColor" />;
   }

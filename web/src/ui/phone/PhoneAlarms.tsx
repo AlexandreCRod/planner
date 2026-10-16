@@ -1,0 +1,586 @@
+// The Alarms tab, drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
+// one, a filter, close ones bundled), a timer, a stopwatch and a world clock, under Material 3 primary
+// tabs. The four sections also turn with a finger swiped sideways, live like a pager, with the tab
+// indicator riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
+// in a browser the tab isn't shown.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal, flushSync } from "react-dom";
+import {
+  NARROW_DAYS, TIMER_PRESETS, bundle, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
+} from "../../domain/alarms.ts";
+import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts";
+import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
+import { useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
+import { AppBarActions, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { BottomSheet, Switch, TextButton } from "./m3.tsx";
+import { TimePickerDialog } from "./pickers.tsx";
+import { spring, useSwipePager } from "./pager.ts";
+
+type Section = "alarm" | "timer" | "stopwatch" | "world";
+const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
+const LAST = SECTIONS.length - 1;
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+// A notification (or the quick-add line) can ask for a section; the page picks it up when it's shown.
+let wanted: Section | null = null;
+const wantListeners = new Set<() => void>();
+/** Shows [section] the next time the Alarms page is drawn (or at once if it is). */
+export function openAlarmSection(section: string) {
+  const s = SECTIONS.find(([k]) => k === section)?.[0];
+  if (!s) return;
+  wanted = s;
+  wantListeners.forEach((l) => l());
+}
+
+/** Dialogs and sheets go to the top of the page, so the sliding sections don't carry or clip them. */
+const Layer = ({ children }: { children: ReactNode }) => createPortal(children, document.body);
+
+/** The time now, every [period] ms while [active] (rememberTick). */
+function useTick(period: number, active: boolean): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    setNow(Date.now());
+    if (!active) return;
+    let t = 0;
+    const step = () => { const n = Date.now(); setNow(n); t = window.setTimeout(step, period - (n % period)); };
+    t = window.setTimeout(step, period - (Date.now() % period));
+    return () => clearTimeout(t);
+  }, [period, active]);
+  return now;
+}
+
+const relative = (d: Date) => relativeDay(epochOf(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+
+// ---------- Asking for permissions, with the reason ----------
+
+interface Ask { title: string; text: string; resolve: (ok: boolean) => void }
+let ask: Ask | null = null;
+const askListeners = new Set<() => void>();
+const setAsk = (a: Ask | null) => { ask = a; askListeners.forEach((l) => l()); };
+
+/**
+ * Makes sure notifications are allowed before something that needs them (an alarm, a timer), first
+ * saying why. Android only asks twice; after that the app's settings page opens instead.
+ */
+export async function ensureNotifications(what: string): Promise<boolean> {
+  if (!hasAlarms) return true;
+  await refreshAlarmState();
+  if (alarmState().perms.notifications) return true;
+  const yes = await new Promise<boolean>((resolve) => setAsk({
+    title: "Allow notifications?",
+    text: `${what} Android will ask you to allow them.`,
+    resolve,
+  }));
+  if (!yes) return false;
+  const r = await native.requestNotifications();
+  if (!r.granted) await native.openSettings("notifications");
+  await refreshAlarmState();
+  return r.granted;
+}
+
+/** Where the permission question shows (one per app, from PhoneApp). */
+export function PermissionHost() {
+  const a = useSyncExternalStore((l) => { askListeners.add(l); return () => { askListeners.delete(l); }; }, () => ask);
+  if (!a) return null;
+  const done = (ok: boolean) => { setAsk(null); a.resolve(ok); };
+  return (
+    <Dialog title={a.title} onClose={() => done(false)} actions={<>
+      <TextButton onClick={() => done(false)}>Not now</TextButton>
+      <TextButton onClick={() => done(true)}>Allow</TextButton>
+    </>}>{a.text}</Dialog>
+  );
+}
+
+/** Cards for what keeps alarms from ringing properly, each with the way to fix it. */
+function PermissionCards() {
+  const { perms } = useAlarmState();
+  const cards: { text: string; button: string; onClick: () => void }[] = [];
+  if (!perms.notifications) cards.push({
+    text: "Notifications are off for this app, so alarms and timers can't ring or show.",
+    button: "Allow", onClick: () => void ensureNotifications("Alarms ring and timers count down through notifications, so this app needs them allowed."),
+  });
+  if (perms.notifications && !perms.fullScreen) cards.push({
+    text: "Full-screen alarms are off: a ringing alarm shows as a notification instead of filling the locked screen.",
+    button: "Turn on", onClick: () => void native.openSettings("fullScreen"),
+  });
+  if (!perms.exact) cards.push({
+    text: "Alarms & reminders access is off, so alarms may ring a few minutes late.",
+    button: "Turn on", onClick: () => void native.openSettings("exact"),
+  });
+  if (!cards.length) return null;
+  return <>{cards.map((c) => (
+    <div key={c.text} className="pa-warn">
+      <MIcon name="oInfo" />
+      <span className="grow">{c.text}</span>
+      <TextButton onClick={c.onClick}>{c.button}</TextButton>
+    </div>
+  ))}</>;
+}
+
+// ---------- The page ----------
+
+/** The Alarms tab. [active]: it's the page on screen (clocks only tick then). */
+export function PhoneAlarms({ active }: { active: boolean }) {
+  const st = useAlarmState();
+  const [index, setIndex] = useState(() => {
+    const i = wanted ? SECTIONS.findIndex(([k]) => k === wanted) : 0;
+    wanted = null;
+    return Math.max(0, i);
+  });
+  const idx = useRef(index);
+  idx.current = index;
+  const [editing, setEditing] = useState<{ alarm: ClockAlarm; isNew: boolean } | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [newTimer, setNewTimer] = useState(false);
+  const [addZone, setAddZone] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLDivElement>(null);
+  const indicator = useRef<HTMLSpanElement>(null);
+  const stopSlide = useRef<(() => void) | null>(null);
+
+  /** Puts the tab indicator under the label at [p] (between two tabs while sliding). */
+  const placeIndicator = (p: number) => {
+    const row = tabs.current, ind = indicator.current;
+    if (!row || !ind) return;
+    const labels = row.querySelectorAll<HTMLElement>(".pa-tab-label");
+    p = clamp(p, 0, LAST);
+    const a = Math.floor(p), b = Math.min(LAST, a + 1), f = p - a;
+    const box = (i: number) => { const el = labels[i]; return { x: (el.parentElement as HTMLElement).offsetLeft + el.offsetLeft, w: el.offsetWidth }; };
+    const A = box(a), B = box(b);
+    const x = A.x + (B.x - A.x) * f, w = A.w + (B.w - A.w) * f;
+    ind.style.transform = `translateX(${x}px)`;
+    ind.style.width = `${w}px`;
+  };
+  useLayoutEffect(() => placeIndicator(index));
+  useEffect(() => {
+    const on = () => window.requestAnimationFrame(() => placeIndicator(idx.current));
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+
+  // Turning to a section another way: a tap on its tab slides there on the pager's spring.
+  const show = (i: number) => {
+    i = clamp(i, 0, LAST);
+    const from = idx.current;
+    if (i === from) return;
+    stopSlide.current?.();
+    const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
+    flushSync(() => setIndex(i));
+    if (!el || !w || Math.abs(i - from) > 1) { if (el) el.style.transform = ""; placeIndicator(i); return; }
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; placeIndicator(i - x / w); };
+    stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
+  };
+  useEffect(() => {
+    const on = () => { if (wanted) { const i = SECTIONS.findIndex(([k]) => k === wanted); wanted = null; if (i >= 0) show(i); } };
+    wantListeners.add(on);
+    on();
+    return () => { wantListeners.delete(on); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pager = useSwipePager<HTMLDivElement>({
+    layers: () => [strip.current],
+    onStep: (d) => setIndex((i) => clamp(i + d, 0, LAST)),
+    canStep: (d) => idx.current + d >= 0 && idx.current + d <= LAST,
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; placeIndicator(idx.current - x / w); },
+    allow: (t) => !t.closest(".p-switch, input, textarea, .pa-noswipe"),
+  });
+
+  const newAlarm = () => {
+    show(0);
+    setEditing({ alarm: { id: 0, hour: 7, minute: 0, label: "", days: 0, enabled: true, color: 0, sound: null }, isNew: true });
+  };
+  const startStopwatch = async () => {
+    show(2);
+    const sw = alarmState().tools.stopwatch;
+    if (sw.startedAt == null) await act(native.stopwatch("start"));
+  };
+
+  return (
+    <div className="p-scaffold pa-page">
+      <TopAppBar title="Alarms" actions={<AppBarActions />} />
+      <div className="pa-tabs" ref={tabs} role="tablist">
+        {SECTIONS.map(([k, label], i) => (
+          <button key={k} role="tab" aria-selected={index === i} className={`pa-tab ${index === i ? "on" : ""}`} onClick={() => show(i)}>
+            <span className="pa-tab-label">{label}</span>
+          </button>
+        ))}
+        <span className="pa-indicator" ref={indicator} />
+      </div>
+      <div className="pa-pager" ref={pager}>
+        <div className="pa-strip" ref={strip} style={{ left: `${-index * 100}%` }}>
+          {SECTIONS.map(([k], i) => (
+            <div key={k} className="pa-section" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
+              {Math.abs(i - index) <= 1 || k === "alarm" ? (
+                k === "alarm" ? <AlarmList alarms={st.alarms} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} />
+                  : k === "timer" ? <TimersPane timers={st.tools.timers} active={active && index === i} onNew={() => setNewTimer(true)} />
+                    : k === "stopwatch" ? <StopwatchPane active={active && index === i} />
+                      : <WorldClockPane zones={st.tools.zones} local={st.zone} active={active && index === i} onAdd={() => setAddZone(true)} />
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="p-menu-anchor pa-fab-anchor">
+        <button className="p-fab pa-fab" aria-label="Add" onClick={() => setMenu(true)}><MIcon name="fAdd" /></button>
+        <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
+          { label: "New alarm", icon: "oAlarm", onClick: newAlarm },
+          { label: "Start a timer", icon: "oTimer", onClick: () => { show(1); setNewTimer(true); } },
+          { label: "Start the stopwatch", icon: "oAvTimer", onClick: () => void startStopwatch() },
+          { label: "Add a world clock", icon: "oPublic", onClick: () => { show(3); setAddZone(true); } },
+        ]} />
+      </div>
+      {editing && <Layer><AlarmEditor alarm={editing.alarm} isNew={editing.isNew} onClose={() => setEditing(null)} /></Layer>}
+      {newTimer && <Layer><NewTimerDialog onClose={() => setNewTimer(false)} /></Layer>}
+      {addZone && <Layer><ZonePickerDialog local={st.zone} onClose={() => setAddZone(false)} /></Layer>}
+    </div>
+  );
+}
+
+// ---------- Alarms ----------
+
+type Show = "all" | "on" | "off";
+const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inactive"]];
+
+const save = (a: ClockAlarm) => act(native.saveClock(a));
+
+function AlarmList({ alarms, rings, active, onEdit }: {
+  alarms: ClockAlarm[]; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void;
+}) {
+  const [show, setShow] = useState<Show>("all");
+  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const now = new Date(useTick(15_000, active));
+  const list = alarms.filter((a) => show === "all" || (show === "on") === a.enabled);
+  const groups = bundle(list);
+  return (
+    <div className="pa-scroll">
+      <PermissionCards />
+      {!rings.rings && (
+        <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are ringing from the original Planner app.</span></div>
+      )}
+      <NextAlarm alarms={alarms} now={now} />
+      {alarms.length > 0 && (
+        <div className="pa-filter">
+          {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
+        </div>
+      )}
+      {list.length === 0 && <Empty icon="oAlarm" title={alarms.length ? `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms` : "No alarms"} text="Tap + to add one" />}
+      {groups.map((g) => g.length === 1
+        ? <AlarmCard key={g[0].id} a={g[0]} now={now} onClick={() => onEdit(g[0])} />
+        : <BundleCard key={g[0].id} group={g} now={now} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
+      {!rings.originalInstalled && (
+        <p className="pa-foot">Alarm clocks set in the original Planner app don't carry over to this one; set them again here.</p>
+      )}
+    </div>
+  );
+}
+
+function NextAlarm({ alarms, now }: { alarms: ClockAlarm[]; now: Date }) {
+  const on = alarms.filter((a) => a.enabled);
+  if (!on.length) return null;
+  const at = on.map((a) => nextRing(a, now)).reduce((x, y) => (y < x ? y : x));
+  return (
+    <div className="pa-next">
+      <div className="t-title-large">Alarm in {untilText(at, now)}</div>
+      <div className="t-body-medium muted">{relative(at)} at {formatTime(at.getHours() * 60 + at.getMinutes())}</div>
+    </div>
+  );
+}
+
+function Empty({ icon, title, text, action }: { icon: string; title: string; text?: string; action?: ReactNode }) {
+  return (
+    <div className="pa-empty">
+      <MIcon name={icon} size={56} />
+      <div className="t-title-medium">{title}</div>
+      {text && <div className="t-body-medium muted">{text}</div>}
+      {action}
+    </div>
+  );
+}
+
+function AlarmCard({ a, now, onClick }: { a: ClockAlarm; now: Date; onClick: () => void }) {
+  return (
+    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
+      <div className="grow">
+        {a.label.trim() && <div className="t-body-medium pa-label">{a.label.trim()}</div>}
+        <div className="pa-time48">{formatTime(a.hour * 60 + a.minute)}</div>
+        <div className="t-body-medium muted pa-line">{repeatText(a, now, relative)}</div>
+      </div>
+      <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
+    </div>
+  );
+}
+
+function BundleCard({ group, now, open, onOpen, onEdit }: {
+  group: ClockAlarm[]; now: Date; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void;
+}) {
+  const on = group.filter((a) => a.enabled).length;
+  const first = group[0], last = group[group.length - 1];
+  return (
+    <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
+      <div className="pa-bundle-head" role="button" onClick={onOpen}>
+        <div className="grow">
+          <div className="t-body-medium muted">{group.length} alarms · {on} on</div>
+          <div className="pa-time36">{formatTime(first.hour * 60 + first.minute)} – {formatTime(last.hour * 60 + last.minute)}</div>
+        </div>
+        <span className="muted pa-expand"><MIcon name={open ? "fExpandLess" : "fExpandMore"} /></span>
+        <Switch checked={on > 0} label="All on" onChange={(v) => void Promise.all(group.map((a) => native.saveClock({ ...a, enabled: v }))).then(refreshAlarmState)} />
+      </div>
+      <div className={`pa-bundle-body ${open ? "open" : ""}`}>
+        <div>
+          {group.map((a) => (
+            <div key={a.id} className={`pa-bundle-row ${a.enabled ? "" : "off"}`} role="button" onClick={() => onEdit(a)}>
+              <div className="grow">
+                <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
+                <div className="t-body-small muted pa-line">{[a.label.trim(), repeatText(a, now, relative)].filter(Boolean).join(" · ")}</div>
+              </div>
+              <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** New or changed alarm: a big time (tap to change), the days, a label and the sound (AlarmEditor). */
+function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: boolean; onClose: () => void }) {
+  const [minute, setMinute] = useState(alarm.hour * 60 + alarm.minute);
+  const [label, setLabel] = useState(alarm.label);
+  const [days, setDays] = useState(alarm.days);
+  const [sound, setSound] = useState(alarm.sound);
+  const [pickTime, setPickTime] = useState(isNew);
+  const pickSound = async () => {
+    const r = await native.pickSound(sound, "Alarm sound");
+    if (r.picked) setSound(r.uri ?? null);
+  };
+  return <>
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="pa-editor">
+        <div className="pa-editor-head">
+          <span className="t-title-medium grow">{isNew ? "New alarm" : "Alarm"}</span>
+          {!isNew && <TextButton className="icon" onClick={() => { void act(native.deleteClock(alarm.id)); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
+        </div>
+        <button className="pa-bigtime" onClick={() => setPickTime(true)}>{formatTime(minute)}</button>
+        <div className="pa-erow">
+          <MIcon name="fRepeat" />
+          <div className="pa-days">
+            {NARROW_DAYS.map((d, i) => {
+              const on = (days & (1 << i)) !== 0;
+              return <button key={i} className={on ? "on" : ""} aria-pressed={on} onClick={() => setDays(days ^ (1 << i))}>{d}</button>;
+            })}
+          </div>
+        </div>
+        <div className="t-body-small muted pa-days-text">{daysText(days)}</div>
+        <div className="p-divider" />
+        <label className="pa-erow">
+          <MIcon name="oLabel" />
+          <input className="pa-label-input" value={label} placeholder="Add label" enterKeyHint="done" autoCapitalize="sentences"
+            onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+        </label>
+        <div className="p-divider" />
+        <button className="pa-erow" onClick={() => void pickSound()}>
+          <MIcon name="oMusicNote" />
+          <span className="t-body-large">{sound == null ? "Default alarm sound" : "Custom sound"}</span>
+        </button>
+        <div className="p-divider" />
+        <div className="p-sheet-buttons">
+          <TextButton onClick={close}>Cancel</TextButton>
+          <button className="p-filled-btn" onClick={() => {
+            const a = { ...alarm, hour: Math.floor(minute / 60), minute: minute % 60, label: label.trim(), days, sound, enabled: true };
+            close();
+            void ensureNotifications("This alarm rings at its time even with the app closed, through a notification.").then(() => save(a));
+          }}>Save</button>
+        </div>
+      </div>
+    )}</BottomSheet>
+    {pickTime && <TimePickerDialog value={minute} onPick={setMinute} onClose={() => setPickTime(false)} />}
+  </>;
+}
+
+// ---------- Timer ----------
+
+const startTimer = async (durationMs: number, label = "") => {
+  await ensureNotifications("A running timer shows its countdown in a notification and rings when it's done, even with the screen locked.");
+  await act(native.timer("start", { durationMs, label }));
+};
+
+function TimersPane({ timers, active, onNew }: { timers: ClockTimer[]; active: boolean; onNew: () => void }) {
+  const running = timers.some((t) => t.endAt != null);
+  const now = useTick(250, active && running);
+  return (
+    <div className="pa-scroll pa-gap12 pa-top12">
+      <PermissionCards />
+      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap + or a length below" />}
+      <div className="pa-presets">
+        {TIMER_PRESETS.map((m) => <button key={m} className="p-assist pa-chip" onClick={() => void startTimer(m * 60_000)}>{presetText(m)}</button>)}
+        <button className="p-assist pa-chip" onClick={onNew}>Other…</button>
+      </div>
+      {[...timers].sort((a, b) => a.id - b.id).map((t) => <TimerCard key={t.id} t={t} now={now} />)}
+    </div>
+  );
+}
+
+function TimerCard({ t, now }: { t: ClockTimer; now: number }) {
+  const left = timerLeft(t, now);
+  const running = t.endAt != null;
+  const run = (action: "pause" | "resume" | "plus" | "reset" | "delete") => void act(native.timer(action, { id: t.id }));
+  return (
+    <div className="pa-card pa-timer">
+      <div className="pa-timer-head">
+        <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}</span>
+        <IconButton icon="fClose" label="Delete timer" onClick={() => run("delete")} />
+      </div>
+      <div className={`pa-time52 ${running ? "" : "muted"}`}>{formatDuration(left)}</div>
+      <div className="pa-buttons">
+        {running
+          ? <button className="pa-tonal" onClick={() => run("pause")}>Pause</button>
+          : <button className="p-filled-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
+        <button className="p-outlined-btn" onClick={() => run("plus")}>+1:00</button>
+        {left !== t.durationMs && <TextButton onClick={() => run("reset")}>Reset</TextButton>}
+      </div>
+    </div>
+  );
+}
+
+/** Hours, minutes and seconds (and a label) for a new timer; it starts on "Start" (NewTimerDialog). */
+function NewTimerDialog({ onClose }: { onClose: () => void }) {
+  const [h, setH] = useState(""), [m, setM] = useState(""), [s, setS] = useState(""), [label, setLabel] = useState("");
+  const total = ((Number(h) || 0) * 3600 + (Number(m) || 0) * 60 + (Number(s) || 0)) * 1000;
+  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
+  const start = () => { if (total > 0) { onClose(); void startTimer(total, label.trim()); } };
+  return (
+    <Dialog title="New timer" onClose={onClose} actions={<>
+      <TextButton onClick={onClose}>Cancel</TextButton>
+      <TextButton disabled={total <= 0} onClick={start}>Start</TextButton>
+    </>}>
+      <div className="pa-hms">
+        <Field label="h" value={h} onChange={(v) => setH(digits(v))} numeric autoFocus />
+        <Field label="min" value={m} onChange={(v) => setM(digits(v))} numeric />
+        <Field label="s" value={s} onChange={(v) => setS(digits(v))} numeric />
+      </div>
+      <Field label="Label (optional)" value={label} onChange={setLabel} onEnter={start} />
+    </Dialog>
+  );
+}
+
+function Field({ label, value, onChange, numeric, autoFocus, onEnter }: {
+  label: string; value: string; onChange: (v: string) => void; numeric?: boolean; autoFocus?: boolean; onEnter?: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (autoFocus) { const t = window.setTimeout(() => ref.current?.focus(), 60); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <label className="p-tf">
+      <input ref={ref} value={value} placeholder=" " inputMode={numeric ? "numeric" : "text"} enterKeyHint="done"
+        onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onEnter?.(); }} />
+      <span className="p-tf-label">{label}</span>
+    </label>
+  );
+}
+
+// ---------- Stopwatch ----------
+
+function StopwatchPane({ active }: { active: boolean }) {
+  const sw = useAlarmState().tools.stopwatch;
+  const running = sw.startedAt != null;
+  const now = useTick(31, active && running);
+  const total = elapsed(sw, now);
+  const lengths = lapLengths(sw.laps);
+  const run = (a: "start" | "pause" | "lap" | "reset") => void act(native.stopwatch(a));
+  return (
+    <div className="pa-scroll pa-sw">
+      <div className="pa-sw-time">{formatDuration(total, true)}</div>
+      <div className="pa-buttons center">
+        {running ? <>
+          <button className="p-outlined-btn" onClick={() => run("lap")}>Lap</button>
+          <button className="pa-tonal" onClick={() => run("pause")}>Pause</button>
+        </> : <>
+          {total > 0 && <button className="p-outlined-btn" onClick={() => run("reset")}>Reset</button>}
+          <button className="p-filled-btn" onClick={() => run("start")}>{total > 0 ? "Resume" : "Start"}</button>
+        </>}
+      </div>
+      {lengths.length > 0 && <>
+        <div className="p-divider pa-sw-divider" />
+        {/* Newest lap first, like a phone's clock app. */}
+        {lengths.map((len, i) => ({ n: i + 1, len, at: sw.laps[i] })).reverse().map((l) => (
+          <div key={l.n} className="pa-lap">
+            <span className="muted">Lap {l.n}</span>
+            <span className="mono">{formatDuration(l.len, true)}</span>
+            <span className="mono muted">{formatDuration(l.at, true)}</span>
+          </div>
+        ))}
+      </>}
+    </div>
+  );
+}
+
+// ---------- World clock ----------
+
+const systemZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function WorldClockPane({ zones, local, active, onAdd }: { zones: string[]; local: string; active: boolean; onAdd: () => void }) {
+  const now = useTick(1000, active);
+  const here = local || systemZone();
+  const h24 = use24h();
+  return (
+    <div className="pa-scroll pa-gap12 pa-top16">
+      <div className="pa-local">
+        <div className="pa-time52">{zoneClock(here, now, h24)}</div>
+        <div className="t-body-medium muted">{cityName(here)} · here</div>
+      </div>
+      {zones.length === 0 && <Empty icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
+      {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} />)}
+    </div>
+  );
+}
+
+function CityCard({ zone, here, now, h24, active }: { zone: string; here: string; now: number; h24: boolean; active: boolean }) {
+  const w = useWeather(zone, active);
+  const v = w ? weatherView(w, zone, now) : null;
+  let sub = "";
+  try { sub = [zoneDayLabel(zone, now, here), zoneOffsetLabel(zone, now, here)].filter(Boolean).join(" · "); } catch { return null; }
+  return (
+    <div className="pa-card pa-city">
+      <div className="grow pa-city-text">
+        <div className="t-title-medium pa-line">{cityName(zone)}</div>
+        <div className="t-body-small muted pa-line">{sub}</div>
+      </div>
+      {v && (
+        <button className="pa-wx" aria-label={`${v.label}, ${v.text}${v.unit}. Open the weather`} onClick={() => void native.openWeather(weatherPage(zone))}>
+          <MIcon name={v.icon} size={22} />
+          <span>{v.text}</span>
+        </button>
+      )}
+      <span className="pa-time26">{zoneClock(zone, now, h24)}</span>
+      <IconButton icon="fClose" label="Remove" onClick={() => void act(native.zone("remove", zone))} />
+    </div>
+  );
+}
+
+/** Cities to add to the world clock, by name, with a search box (ZonePickerDialog). */
+function ZonePickerDialog({ local, onClose }: { local: string; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const all = useMemo(() => {
+    const ids = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+    return cityZones(ids);
+  }, []);
+  const now = Date.now();
+  const here = local || systemZone();
+  const t = q.trim().toLowerCase();
+  const shown = all.filter((z) => !t || cityName(z).toLowerCase().includes(t) || z.toLowerCase().includes(t));
+  return (
+    <Dialog title="Add a city" onClose={onClose} actions={<TextButton onClick={onClose}>Cancel</TextButton>}>
+      <Field label="Search" value={q} onChange={setQ} autoFocus />
+      <div className="pa-zones">
+        {shown.map((z) => (
+          <button key={z} className="pa-zone" onClick={() => { onClose(); void act(native.zone("add", z)); }}>
+            <span className="t-body-large">{cityName(z)}</span>
+            <span className="t-body-small muted">{z.slice(0, z.indexOf("/"))} · {zoneOffsetLabel(z, now, here)}</span>
+          </button>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+

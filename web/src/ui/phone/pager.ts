@@ -57,6 +57,10 @@ export interface PagerOptions {
   onStep: (dir: 1 | -1) => void;
   /** Whether the drag may start here (e.g. not on something that has its own gesture). */
   allow?: (target: Element) => boolean;
+  /** Whether there is a page that way (at the first or last page the drag only gives a little, and springs back). */
+  canStep?: (dir: 1 | -1) => boolean;
+  /** Told where the pages are as they move (px, negative towards the next page), e.g. to move a tab indicator. */
+  onMove?: (x: number, w: number) => void;
 }
 
 /** Live pager on the element the returned ref goes on. */
@@ -77,10 +81,12 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     const place = (x: number) => {
       const t = x ? `translate3d(${x}px,0,0)` : "";
       for (const l of o.current.layers()) if (l) l.style.transform = t;
+      o.current.onMove?.(x, o.current.width?.() ?? el.clientWidth);
     };
     const settle = (dx: number, vx: number) => {
       const w = o.current.width?.() ?? el.clientWidth;
-      const dir = pageTarget(dx, vx, w);
+      let dir = pageTarget(dx, vx, w);
+      if (dir && o.current.canStep && !o.current.canStep(dir)) dir = 0;
       const end = () => {
         stopAnim = null; finishAnim = null;
         if (dir) flushSync(() => o.current.onStep(dir));
@@ -109,6 +115,8 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
         g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
       }
       g.dx = e.clientX - g.x0;
+      // Past the first or last page the content only gives a third of the finger's way.
+      if (g.dx && o.current.canStep && !o.current.canStep(g.dx < 0 ? 1 : -1)) g.dx /= 3;
       place(g.dx);
     };
     const onUp = (e: PointerEvent) => {

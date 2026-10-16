@@ -22,6 +22,8 @@ import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, 
 import { openExternal } from "./native.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { RichBar } from "./RichBar.tsx";
+import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
+import { useAlarmSettings } from "../../alarms/settings.ts";
 
 // ---------- Shared bits ----------
 
@@ -302,12 +304,21 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
   const mine = all.map((r, i) => [r, i] as const).filter(([r]) => (r.type === "ALARM") === alarms);
   const icon = alarms ? "oAlarm" : "oNotifications";
   const set = (i: number, r: Reminder) => onChange(all.map((x, j) => (j === i ? r : x)));
+  const untimed = ` (${formatTime(useAlarmSettings().defaultTaskTime)})`;
+  const pickSound = async (i: number, r: Reminder) => {
+    const p = await native.pickSound(r.soundUri, "Alarm sound");
+    if (p.picked) set(i, { ...r, soundUri: p.uri ?? null });
+  };
   return <>
     {mine.map(([r, i], n) => (
       <FieldRow key={i} icon={n === 0 ? icon : null}>
         <span className="grow">
-          <MenuText text={offsetText(r.offsetMin) + (timed ? "" : " (9 AM)")} items={OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) }))} />
+          <MenuText text={offsetText(r.offsetMin) + (timed ? "" : untimed)} items={OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) }))} />
         </span>
+        {alarms && hasAlarms && (
+          <IconButton icon="oMusicNote" className={r.soundUri ? "primary" : ""} label={r.soundUri ? "Alarm sound (custom)" : "Alarm sound (default)"}
+            onClick={() => void pickSound(i, r)} />
+        )}
         {!alarms && (
           <IconButton icon={r.type === "REMINDER" ? "oNotificationsActive" : "oNotificationsNone"} className={r.type === "REMINDER" ? "primary" : ""}
             label={r.type === "REMINDER" ? "Pops up with a sound (tap for silent)" : "Silent (tap to pop up with a sound)"}
@@ -322,8 +333,73 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
   </>;
 }
 
-/** Said once under the alerts: they are kept with the item, and ring on the Android app. */
-const ALERTS_HINT = "Alarms and notifications ring from the Planner Android app; this app keeps them with the item.";
+/** Said once under the alerts: where they ring (this phone, or the original app; on the PC, the Android app). */
+function AlertsHint({ className }: { className: string }) {
+  const { ring } = useAlarmState();
+  const text = !hasAlarms ? "Alarms and notifications ring from the Planner Android app; this app keeps them with the item."
+    : ring.rings ? "Alarms ring on this phone, even with the app closed."
+      : "Alarms and notifications ring from the original Planner app. To ring them here instead, turn on \"Ring event and task alarms on this phone\" in Settings.";
+  return <div className={`pe-small ${className}`}>{text}</div>;
+}
+
+/**
+ * From 23 hours before each of the item's alarms: when it will ring, with Snooze and Don't ring; and
+ * snoozed or skipped times that can be reset (native EarlyAlarmControls). The engine works them out;
+ * nothing shows where alarms don't ring on this phone.
+ */
+function EarlyAlarmControls({ itemId, reminders }: { itemId: number; reminders: Reminder[] }) {
+  const { ring } = useAlarmState();
+  const { snoozeMinutes } = useAlarmSettings();
+  const [list, setList] = useState<Control[]>([]);
+  const key = reminders.map((r) => `${r.id}:${r.offsetMin}:${r.type}`).join();
+  useEffect(() => {
+    if (!hasAlarms || !ring.rings) { setList([]); return; }
+    let live = true;
+    const load = () => void native.controls(itemId).then((c) => { if (live) setList(c); });
+    // A change made on the page reaches the engine a moment later; ask again then.
+    load();
+    const t1 = window.setTimeout(load, 700);
+    const t = window.setInterval(load, 30_000);
+    const off = onNative("changed", load);
+    return () => { live = false; clearTimeout(t1); clearInterval(t); off(); };
+  }, [itemId, key, ring.rings]);
+  if (!list.length) return null;
+  const atText = (ms: number) => {
+    const d = new Date(ms);
+    const rel = relativeDay(Math.floor((ms - d.getTimezoneOffset() * 60_000) / 86_400_000));
+    return `${["Today", "Tomorrow", "Yesterday"].includes(rel) ? rel.toLowerCase() : rel} at ${formatTime(d.getHours() * 60 + d.getMinutes())}`;
+  };
+  const minOf = (ms: number) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); };
+  const reload = () => void native.controls(itemId).then(setList);
+  const order = { rang: 0, soon: 1, skipped: 2 };
+  return <>{[...list].sort((a, b) => order[a.kind] - order[b.kind]).map((c) => {
+    let text: string;
+    let buttons: ReactNode;
+    if (c.kind === "rang") {
+      text = `Snoozed: rings again ${atText(c.at)}`;
+      buttons = <TextButton onClick={() => void native.resetAlarm(c.reminderId, null).then(reload)}>Reset</TextButton>;
+    } else if (c.kind === "skipped") {
+      text = `Won't ring ${atText(c.original)}`;
+      buttons = <TextButton onClick={() => void native.resetAlarm(c.reminderId, c.original).then(reload)}>Reset</TextButton>;
+    } else {
+      const snoozed = c.at !== c.original;
+      text = `Alarm rings ${atText(c.at)}` + (snoozed ? ` (snoozed from ${formatTime(minOf(c.original))})` : "");
+      buttons = <>
+        {snoozed && <TextButton onClick={() => void native.resetAlarm(c.reminderId, c.original).then(reload)}>Reset</TextButton>}
+        {c.canSnooze
+          ? <TextButton onClick={() => void native.earlySnooze(c.reminderId, c.original).then(reload)}>Snooze {snoozeMinutes} min</TextButton>
+          : <span className="pe-early-note">No snoozing in the last 15 min</span>}
+        <TextButton onClick={() => { void native.earlyStop(c.reminderId, c.original).then(reload); showSnackbar(`It won't ring ${atText(c.at)}`); }}>Don't ring</TextButton>
+      </>;
+    }
+    return (
+      <div key={`${c.kind}${c.reminderId}${c.original}`} className="pe-early">
+        <div className="pe-early-text"><MIcon name="oAlarm" /><span>{text}</span></div>
+        <div className="pe-early-buttons">{buttons}</div>
+      </div>
+    );
+  })}</>;
+}
 
 // ---------- Location ----------
 
@@ -513,6 +589,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
             <IconButton icon="oEdit" label="Change location" onClick={() => setEditing("location")} />
           </>} />
         )}
+        {alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
         {!isEvent && item.priority > 0 && (
           <span className="p-menu-anchor start wide">
@@ -571,7 +648,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         <BottomSheet onClose={() => setEditing(null)}>{() => <>
           <div className="p-sheet-title small">{editing === "alarms" ? "Alarms" : "Notifications"}</div>
           <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders} />
-          <div className="pe-small pad">{ALERTS_HINT}</div>
+          <AlertsHint className="pad" />
         </>}</BottomSheet>
       )}
       {pendingScope && <ScopeDialog title="Change" onCancel={() => setPendingScope(null)} onPick={(sc) => {
@@ -757,7 +834,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <AlertSection alarms all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} />
         <div className="p-divider" />
         <AlertSection alarms={false} all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} />
-        <div className="pe-small indent">{ALERTS_HINT}</div>
+        <AlertsHint className="indent" />
         <div className="p-divider" />
 
         <FieldRow icon="oPalette">
