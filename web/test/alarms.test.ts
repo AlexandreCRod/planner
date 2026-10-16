@@ -147,3 +147,17 @@ test("the stopwatch reads 00:00:00 at rest, two digits each", () => {
   assert.deepEqual(stopwatchParts(3_723_456), { main: "01:02:03", cs: "45" });
   assert.deepEqual(stopwatchParts(-5), { main: "00:00:00", cs: "00" });
 });
+
+test("the alarm filters: on or off, and ringing on weekdays or at the weekend", async () => {
+  const { alarmShown, WEEKDAYS, WEEKEND } = await import("../src/domain/alarms.ts");
+  const fri = new Date(2026, 9, 16, 12, 0); // a Friday, noon
+  const work = { hour: 7, minute: 0, days: WEEKDAYS, enabled: true };
+  const lie = { hour: 9, minute: 0, days: WEEKEND, enabled: false };
+  const both = { hour: 8, minute: 0, days: 0b0100001, enabled: true }; // Mon and Sat
+  const onceSat = { hour: 6, minute: 0, days: 0, enabled: true }; // 06:00 has passed: rings Saturday
+  const onceToday = { hour: 18, minute: 0, days: 0, enabled: true }; // rings this Friday
+  const f = (x: Parameters<typeof alarmShown>[0], k: Parameters<typeof alarmShown>[1]) => alarmShown(x, k, fri);
+  assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekdays")), [true, false, true, false, true]);
+  assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekend")), [false, true, true, true, false]);
+  assert.deepEqual([f(work, "on"), f(lie, "on"), f(lie, "off"), f(lie, "all")], [true, false, true, true]);
+});

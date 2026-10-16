@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  NARROW_DAYS, TIMER_PRESETS, bundle, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type AlarmFilter, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { epochOf, formatTime, relativeDay, use24h } from "../../domain/dates.ts";
@@ -275,8 +275,8 @@ function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void;
 
 // ---------- Alarms ----------
 
-type Show = "all" | "on" | "off";
-const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inactive"]];
+type Show = AlarmFilter;
+const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inactive"], ["weekdays", "Weekdays"], ["weekend", "Weekend"]];
 
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
@@ -286,7 +286,7 @@ function AlarmList({ alarms, rings, active, onEdit, onNew }: {
   const [show, setShow] = useState<Show>("all");
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
-  const list = alarms.filter((a) => show === "all" || (show === "on") === a.enabled);
+  const list = alarms.filter((a) => alarmShown(a, show, now));
   const groups = bundle(list);
   return (
     <div className="pa-scroll">
@@ -296,11 +296,11 @@ function AlarmList({ alarms, rings, active, onEdit, onNew }: {
       )}
       <NextAlarm alarms={alarms} now={now} />
       {alarms.length > 0 && (
-        <div className="pa-filter">
+        <div className="pa-filter pa-noswipe">
           {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
         </div>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={alarms.length ? `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms` : "No alarms"} text="Tap + to add one"
+      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? "No alarms" : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} onClick={() => onEdit(g[0])} />

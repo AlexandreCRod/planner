@@ -95,6 +95,23 @@ export function nextRing(a: Clockish, now: Date): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, a.hour, a.minute);
 }
 
+/** The weekdays [a] rings on (bit 0 = Monday): its repeat days, or the day it rings next if it rings once. */
+export function alarmDayMask(a: Clockish, now: Date): number {
+  return a.days !== 0 ? a.days : 1 << dayIndex(nextRing(a, now));
+}
+
+/** The Alarms page's filters: all, on, off, ringing on weekdays (Mon–Fri) or at the weekend. */
+export type AlarmFilter = "all" | "on" | "off" | "weekdays" | "weekend";
+export function alarmShown(a: Clockish & { enabled: boolean }, f: AlarmFilter, now: Date): boolean {
+  switch (f) {
+    case "all": return true;
+    case "on": return a.enabled;
+    case "off": return !a.enabled;
+    case "weekdays": return (alarmDayMask(a, now) & WEEKDAYS) !== 0;
+    case "weekend": return (alarmDayMask(a, now) & WEEKEND) !== 0;
+  }
+}
+
 /**
  * Splits alarms (sorted by time) into bundles: each alarm within 29 minutes of the previous one joins
  * its bundle, so 06:30, 06:55 and 07:20 travel together (AlarmsScreen.bundle).
