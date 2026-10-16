@@ -30,8 +30,24 @@ android {
     sourceSets {
         test.resources.srcDirs += ['../../../shared']
     }
+    // Release signing: the key lives outside the repo. PLANNER_KEYSTORE_PROPERTIES (in ~/.gradle/gradle.properties)
+    // points to a file with storeFile, storePassword, keyAlias and keyPassword. Without it, release builds are unsigned.
+    def signingProps = new Properties()
+    def signingFile = project.findProperty("PLANNER_KEYSTORE_PROPERTIES")
+    if (signingFile && file(signingFile).exists()) file(signingFile).withInputStream { signingProps.load(it) }
+    signingConfigs {
+        if (signingProps.storeFile) {
+            release {
+                storeFile file(signingProps.storeFile)
+                storePassword signingProps.storePassword
+                keyAlias signingProps.keyAlias
+                keyPassword signingProps.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (signingProps.storeFile) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
