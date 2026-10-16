@@ -30,4 +30,6 @@ test("the widgets get today's and tomorrow's tasks, and the coming events", () =
   assert.ok(w.days[1].tasks.some((t) => t.title === "Tomorrow"));
   assert.deepEqual(w.events.map((e) => [e.title, e.day, e.time]), [["Holiday", 100, "All day"], ["Dentist", 102, "15:00"]]);
   assert.equal(w.events[1].date, "day 102");
+  // When each one is over, so the widget drops it during the day: an untimed one at the end of its day.
+  assert.deepEqual(w.events.map((e) => [e.endDay, e.endMin]), [[100, null], [102, 960]]);
 });

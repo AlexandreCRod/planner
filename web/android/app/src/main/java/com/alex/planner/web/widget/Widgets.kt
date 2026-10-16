@@ -38,7 +38,14 @@ import java.time.ZoneId
 
 @Serializable data class WidgetTask(val id: Long, val day: Long, val title: String, val done: Boolean, val label: String, val overdue: Boolean, val color: String)
 @Serializable data class WidgetDay(val day: Long, val tasks: List<WidgetTask>)
-@Serializable data class WidgetEvent(val id: Long, val day: Long, val date: String, val time: String, val title: String, val color: String)
+@Serializable data class WidgetEvent(
+    val id: Long, val day: Long, val date: String, val time: String, val title: String, val color: String,
+    val endDay: Long = day, val endMin: Int? = null,
+) {
+    /** When it's over (an untimed one at the end of its last day), so Upcoming drops it during the day. */
+    fun endsAt(zone: ZoneId): Long =
+        LocalDate.ofEpochDay(endDay).atStartOfDay(zone).toInstant().toEpochMilli() + (endMin ?: 1440) * 60_000L
+}
 @Serializable data class WidgetPush(val days: List<WidgetDay> = emptyList(), val events: List<WidgetEvent> = emptyList())
 
 private val wjson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -105,7 +112,7 @@ object Widgets {
         val manager = AppWidgetManager.getInstance(ctx) ?: return
         for (id in manager.getAppWidgetIds(ComponentName(ctx, TodayWidget::class.java))) manager.updateAppWidget(id, today(ctx, manager.getAppWidgetOptions(id)))
         for (id in manager.getAppWidgetIds(ComponentName(ctx, UpcomingWidget::class.java))) manager.updateAppWidget(id, upcoming(ctx, manager.getAppWidgetOptions(id)))
-        scheduleMidnight(ctx)
+        scheduleRefresh(ctx)
     }
 
     /** A tick or un-tick from the Today widget. */
@@ -208,7 +215,9 @@ object Widgets {
 
     private fun upcoming(context: Context, options: Bundle?): RemoteViews {
         val t = today()
-        val events = WidgetStore.data(context).events.filter { it.day >= t }
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
+        val events = WidgetStore.data(context).events.filter { it.endsAt(zone) > now }
         val views = frame(context, "Upcoming")
         views.setViewVisibility(R.id.w_empty, View.GONE)
         if (events.isEmpty()) { empty(views, "No events in the next two weeks"); return views }
@@ -228,8 +237,9 @@ object Widgets {
         return views
     }
 
-    /** Draws the widgets again just after midnight, so Today shows the new day's tasks. */
-    private fun scheduleMidnight(context: Context) {
+    /** Draws the widgets again just after midnight, so Today shows the new day's tasks, or sooner when
+     *  one of Upcoming's events ends first, so it drops off. */
+    private fun scheduleRefresh(context: Context) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         val pi = PendingIntent.getBroadcast(
             context, 7301, Intent(context, WidgetReceiver::class.java).setAction(ACTION_MIDNIGHT),
@@ -239,7 +249,11 @@ object Widgets {
             AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, it)).isNotEmpty()
         }
         if (!anyPlaced) { am.cancel(pi); return }
-        val at = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() + 5_000
+        val zone = ZoneId.systemDefault()
+        val now = System.currentTimeMillis()
+        val midnight = LocalDate.now().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() + 5_000
+        val nextEnd = WidgetStore.data(context).events.map { it.endsAt(zone) }.filter { it > now }.minOrNull()
+        val at = if (nextEnd != null && nextEnd < midnight) nextEnd + 5_000 else midnight
         // Not exact: a minute or two late is fine, and it doesn't need the exact-alarm permission.
         am.set(AlarmManager.RTC, at, pi)
     }

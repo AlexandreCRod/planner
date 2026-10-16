@@ -7,7 +7,8 @@ import { type Item, displayTitle } from "./types.ts";
 
 export interface WidgetTask { id: number; day: number; title: string; done: boolean; label: string; overdue: boolean; color: string }
 export interface WidgetDay { day: number; tasks: WidgetTask[] }
-export interface WidgetEvent { id: number; day: number; date: string; time: string; title: string; color: string }
+/** endDay/endMin: when it's over, so the widget can drop it during the day (endMin null: at the end of endDay). */
+export interface WidgetEvent { id: number; day: number; date: string; time: string; title: string; color: string; endDay: number; endMin: number | null }
 export interface WidgetPush { days: WidgetDay[]; events: WidgetEvent[] }
 
 export interface WidgetFormat { time: (min: number) => string; date: (day: number) => string; color: (item: Item) => string }
@@ -35,6 +36,7 @@ export function buildWidgets(items: Item[], done: CompletionIndex, today: number
     .filter((o) => o.day >= today)
     .sort((a, b) => a.day - b.day || (a.startMin ?? -1) - (b.startMin ?? -1))
     .slice(0, MAX_EVENTS)
-    .map((o) => ({ id: o.item.id, day: o.day, date: f.date(o.day), time: o.timed && o.startMin !== null ? f.time(o.startMin) : "All day", title: displayTitle(o.item), color: f.color(o.item) }));
+    .map((o) => ({ id: o.item.id, day: o.day, date: f.date(o.day), time: o.timed && o.startMin !== null ? f.time(o.startMin) : "All day", title: displayTitle(o.item), color: f.color(o.item),
+      endDay: o.endDay, endMin: o.timed ? (o.endMin ?? o.startMin) : null }));
   return { days: [dayOf(today), dayOf(today + 1)], events };
 }
