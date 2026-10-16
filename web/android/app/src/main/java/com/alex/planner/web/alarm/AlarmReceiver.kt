@@ -122,7 +122,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 val snoozed = intent.getBooleanExtra(EXTRA_SNOOZE, false)
                 if (snoozed) AlarmOverrides.clearRingSnooze(context, reminderId)
                 if (reminder == null || item.deletedAt != null) return
-                // The original app rings these while it's on this phone (see RingDevice).
+                // Unless turned off in Settings (see RingDevice).
                 if (!RingDevice.ringsEvents(context)) return
                 if (!isDone()) {
                     val text = describe(item.startMin, item.allDay, day, reminder.offsetMin, snoozed)

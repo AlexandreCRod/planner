@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Planner (new)</string>
-    <string name="title_activity_main">Planner (new)</string>
+    <string name="app_name">Planner</string>
+    <string name="title_activity_main">Planner</string>
     <string name="package_name">com.alex.planner.web</string>
     <string name="custom_url_scheme">com.alex.planner.web</string>
     <string name="widget_today">Today</string>

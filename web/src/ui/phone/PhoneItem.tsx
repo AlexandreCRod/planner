@@ -346,12 +346,12 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
   </>;
 }
 
-/** Said once under the alerts: where they ring (this phone, or the original app; on the PC, the Android app). */
+/** Said once under the alerts: where they ring (this phone, unless turned off; on the PC, the Android app). */
 function AlertsHint({ className }: { className: string }) {
   const { ring } = useAlarmState();
   const text = !hasAlarms ? "Alarms and notifications ring from the Planner Android app; this app keeps them with the item."
     : ring.rings ? "Alarms ring on this phone, even with the app closed."
-      : "Alarms and notifications ring from the original Planner app. To ring them here instead, turn on \"Ring event and task alarms on this phone\" in Settings.";
+      : "Event and task alarms are off on this phone. To ring them, turn on \"Ring event and task alarms on this phone\" in Settings.";
   return <div className={`pe-small ${className}`}>{text}</div>;
 }
 

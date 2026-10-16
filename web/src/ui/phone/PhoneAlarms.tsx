@@ -286,7 +286,7 @@ const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inact
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
 function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
-  alarms: ClockAlarm[]; zone: string; rings: { rings: boolean; originalInstalled: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
+  alarms: ClockAlarm[]; zone: string; rings: { rings: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
 }) {
   const [show, setShow] = useState<Show>("all");
   const [open, setOpen] = useState<Record<number, boolean>>({});
@@ -298,7 +298,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
     <div className="pa-scroll">
       <PermissionCards />
       {!rings.rings && (
-        <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are ringing from the original Planner app.</span></div>
+        <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
       )}
       <NextAlarm alarms={alarms} now={now} />
       {alarms.length > 0 && (
@@ -311,9 +311,6 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />
         : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
-      {!rings.originalInstalled && (
-        <p className="pa-foot">Alarm clocks set in the original Planner app don't carry over to this one; set them again here.</p>
-      )}
     </div>
   );
 }

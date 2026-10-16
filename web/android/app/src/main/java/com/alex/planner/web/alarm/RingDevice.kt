@@ -1,41 +1,28 @@
 package com.alex.planner.web.alarm
 
 import android.content.Context
-import android.content.pm.PackageManager
 
 /**
- * Whether event and task alerts ring on this phone, from this app. The original Planner app
- * (com.alex.planner) sees the same synced reminders and rings them itself, so while it's installed
- * this app stays quiet for them unless told otherwise; once it's gone, this app rings them. An
- * explicit choice in Settings always wins. Kept on this phone only (never synced). Clock alarms,
- * timers and the stopwatch belong to this app alone and are not affected.
+ * Whether event and task alerts ring on this phone (Settings, "Ring event and task alarms on this
+ * phone"). On unless turned off. Kept on this phone only (never synced). Clock alarms, timers and the
+ * stopwatch are not affected.
  *
- * The original app is found with a single <queries> entry for its package (AndroidManifest.xml), which
- * shows this app that one package and nothing else.
+ * Before 2.0 it was off by default while another Planner app was installed. The first time 2.0 reads
+ * it, it's turned on once, for every install; after that only Settings changes it.
  */
 object RingDevice {
-    const val ORIGINAL = "com.alex.planner"
     private const val PREFS = "ring-device"
     private const val KEY = "ringEvents"
+    private const val MIGRATED = "onFrom2"
 
-    fun originalInstalled(context: Context): Boolean = try {
-        context.packageManager.getPackageInfo(ORIGINAL, 0)
-        true
-    } catch (_: PackageManager.NameNotFoundException) {
-        false
-    }
-
-    /** The choice made in Settings, or null to follow whether the original app is installed. */
-    fun explicit(context: Context): Boolean? {
+    fun ringsEvents(context: Context): Boolean {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return if (p.contains(KEY)) p.getBoolean(KEY, true) else null
+        if (!p.getBoolean(MIGRATED, false)) p.edit().putBoolean(KEY, true).putBoolean(MIGRATED, true).commit()
+        return p.getBoolean(KEY, true)
     }
 
-    fun ringsEvents(context: Context): Boolean = explicit(context) ?: !originalInstalled(context)
-
-    fun set(context: Context, value: Boolean?) {
-        val e = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-        if (value == null) e.remove(KEY) else e.putBoolean(KEY, value)
-        e.commit()
+    fun set(context: Context, value: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY, value).putBoolean(MIGRATED, true).commit()
     }
 }

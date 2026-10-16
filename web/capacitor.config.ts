@@ -1,9 +1,9 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-// Phone build of the web app (prototype). Installs beside the native app (com.alex.planner).
+// The phone build of the web app: the Planner Android app.
 const config: CapacitorConfig = {
   appId: "com.alex.planner.web",
-  appName: "Planner (new)",
+  appName: "Planner",
   webDir: "dist",
   android: {
     // Debug only: lets the https://localhost page call a plain-http dev server (http://10.0.2.2:8787).

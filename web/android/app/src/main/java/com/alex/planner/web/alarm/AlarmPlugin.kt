@@ -139,7 +139,7 @@ class AlarmPlugin : Plugin() {
     // ---------- State for the Alarms page ----------
 
     @Serializable
-    data class Ring(val rings: Boolean, val explicit: Boolean?, val originalInstalled: Boolean)
+    data class Ring(val rings: Boolean)
 
     @Serializable
     data class Perms(val notifications: Boolean, val fullScreen: Boolean, val exact: Boolean, val batteryExempt: Boolean)
@@ -152,7 +152,7 @@ class AlarmPlugin : Plugin() {
         val s = State(
             alarms = ClockAlarms.all(context),
             tools = ClockTools.current(context),
-            ring = Ring(RingDevice.ringsEvents(context), RingDevice.explicit(context), RingDevice.originalInstalled(context)),
+            ring = Ring(RingDevice.ringsEvents(context)),
             perms = perms(),
             zone = ZoneId.systemDefault().id,
             weatherApp = weatherApp()?.second,
@@ -313,10 +313,10 @@ class AlarmPlugin : Plugin() {
 
     // ---------- Ring on this phone ----------
 
-    /** true / false, or null to follow whether the original app is installed. */
+    /** On or off; a missing value means on (the default). */
     @PluginMethod
     fun setRingEvents(call: PluginCall) {
-        val v = if (call.data.isNull("value") || !call.data.has("value")) null else call.getBoolean("value")
+        val v = if (call.data.isNull("value") || !call.data.has("value")) true else call.getBoolean("value", true)!!
         RingDevice.set(context, v)
         if (RingDevice.ringsEvents(context)) AlarmScheduler.rescheduleAll(context) else AlarmScheduler.cancelAll(context)
         AlarmEvents.changed("ring")

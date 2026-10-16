@@ -14,7 +14,7 @@ export interface ClockAlarm {
 export interface ClockTimer { id: number; durationMs: number; label: string; endAt: number | null; remainingMs: number }
 export interface Stopwatch { startedAt: number | null; accumulatedMs: number; laps: number[] }
 export interface ClockToolsState { timers: ClockTimer[]; stopwatch: Stopwatch; zones: string[] }
-export interface RingState { rings: boolean; explicit: boolean | null; originalInstalled: boolean }
+export interface RingState { rings: boolean }
 export interface Perms { notifications: boolean; fullScreen: boolean; exact: boolean; batteryExempt: boolean }
 export interface AlarmState { alarms: ClockAlarm[]; tools: ClockToolsState; ring: RingState; perms: Perms; zone: string; weatherApp: string | null }
 /** One line of an item's early alarm controls (native EarlyAlarmControls). */
@@ -37,7 +37,7 @@ interface Plugin {
   timer(o: { action: string; id?: number; durationMs?: number; label?: string }): Promise<void>;
   stopwatch(o: { action: string }): Promise<void>;
   zone(o: { action: "add" | "remove"; zone: string }): Promise<void>;
-  setRingEvents(o: { value: boolean | null }): Promise<void>;
+  setRingEvents(o: { value: boolean }): Promise<void>;
   pickSound(o: { current: string | null; title?: string }): Promise<{ picked: boolean; uri?: string | null; name?: string | null }>;
   soundName(o: { uri: string }): Promise<{ name?: string | null }>;
   pickWeatherApp(): Promise<{ picked: boolean; label?: string }>;
@@ -75,7 +75,7 @@ export const native = {
     call((p) => p.timer({ action, ...o }), undefined),
   stopwatch: (action: "start" | "pause" | "lap" | "reset") => call((p) => p.stopwatch({ action }), undefined),
   zone: (action: "add" | "remove", zone: string) => call((p) => p.zone({ action, zone }), undefined),
-  setRingEvents: (value: boolean | null) => call((p) => p.setRingEvents({ value }), undefined),
+  setRingEvents: (value: boolean) => call((p) => p.setRingEvents({ value }), undefined),
   pickSound: (current: string | null, title?: string) => call((p) => p.pickSound({ current, title }), { picked: false }),
   soundName: async (uri: string) => (await call((p) => p.soundName({ uri }), {})).name ?? null,
   pickWeatherApp: () => call((p) => p.pickWeatherApp(), { picked: false }),
@@ -96,7 +96,7 @@ export function onNative(event: "changed" | "launch", fn: (what: string) => void
 
 const EMPTY: AlarmState = {
   alarms: [], tools: { timers: [], stopwatch: { startedAt: null, accumulatedMs: 0, laps: [] }, zones: [] },
-  ring: { rings: true, explicit: null, originalInstalled: false },
+  ring: { rings: true },
   perms: { notifications: true, fullScreen: true, exact: true, batteryExempt: true }, zone: "", weatherApp: null,
 };
 let state: AlarmState = EMPTY;

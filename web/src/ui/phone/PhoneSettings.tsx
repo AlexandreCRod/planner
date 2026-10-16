@@ -51,9 +51,8 @@ function SwitchRow({ title, checked, onChange, supporting }: { title: string; ch
 const SNOOZES: [string, string][] = SNOOZE_CHOICES.map((m) => [String(m), `${m} min`]);
 
 /**
- * "Reminders & alarms", as the native SettingsScreen has it, plus what only this build needs: whether
- * event and task alarms ring on this phone (not while the original app is there to ring them) and the
- * world clock's weather app. Phone build only; kept on this phone, not synced.
+ * "Reminders & alarms": whether event and task alarms ring on this phone (on by default), the alarm
+ * defaults, quiet hours, the world clock's weather app and the permissions alarms need. Phone build only; kept on this phone, not synced.
  */
 function AlarmSettingsSection() {
   const st = useAlarmSettings();
@@ -63,9 +62,8 @@ function AlarmSettingsSection() {
     const r = await native.pickSound(st.defaultAlarmSound, "Default alarm sound");
     if (r.picked) setAlarmSettings({ defaultAlarmSound: r.uri ?? null, defaultAlarmSoundName: r.uri ? r.name ?? null : null });
   };
-  const ringText = ring.originalInstalled
-    ? (ring.rings ? "On: they may ring twice, here and in the original Planner app" : "Off: the original Planner app rings them, so they don't ring twice")
-    : "Clock alarms, timers and the stopwatch always work";
+  const ringText = ring.rings ? "Clock alarms, timers and the stopwatch always work"
+    : "Off: events and tasks stay silent here. Clock alarms, timers and the stopwatch still work";
   return <>
     <div className="p-hr" />
     <SectionHeader>Reminders &amp; alarms</SectionHeader>

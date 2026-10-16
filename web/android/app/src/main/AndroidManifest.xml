@@ -120,7 +120,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Alarms, as the native app (com.alex.planner) has them. No location, no contacts, no app list. -->
+    <!-- Alarms. No location, no contacts, no app list. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
@@ -130,10 +130,4 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-    <!-- Only to know whether the original Planner app is installed (it then rings event and task
-         alarms itself, see alarm/RingDevice.kt). This reveals that one package and no other app. -->
-    <queries>
-        <package android:name="com.alex.planner" />
-    </queries>
 </manifest>

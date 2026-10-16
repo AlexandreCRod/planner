@@ -13,7 +13,7 @@ import java.time.ZoneId
 /**
  * Schedules the next firing of every reminder with AlarmManager (one pending alarm per reminder).
  * Copied from the native app's AlarmScheduler; it reads the engine's [Mirror] instead of Room, and
- * sets nothing for events and tasks while [RingDevice] says the original app rings them.
+ * sets nothing for events and tasks while they are turned off in Settings ([RingDevice]).
  */
 object AlarmScheduler {
     /** How long before an alarm its upcoming notice (with Snooze / Stop) appears. */
