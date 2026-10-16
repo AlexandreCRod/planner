@@ -100,48 +100,8 @@ The server also hosts the PC version.
 2. Enter your sync password.
 3. To install it like a desktop app, click **Install Planner** in the address bar.
 
-To try it on your own computer without deploying, run `npx vite` in the `web` folder and open http://127.0.0.1:5173.
-
 ## Privacy
 
 - Your data stays on your phone and on your own server. There is no one else's server in between, and no account.
 - Weather comes from [Open-Meteo](https://open-meteo.com). Only the city's coordinates are sent.
 - Place suggestions use the phone's own geocoder. On the PC they use OpenStreetMap.
-
-## Build from source
-
-You need [Node.js](https://nodejs.org) 22 or newer. For the phone app you also need Android Studio and a JDK 21.
-
-**What is in this repository**
-- `web/`: the app, written once in React and TypeScript. It is both the Android phone app and the PC version. `web/android` is the Capacitor Android project, with Kotlin parts for ringing alarms, the clock tools and home screen widgets.
-- `server/`: the sync server (a Cloudflare Worker with a Durable Object).
-- `shared/`: scheduling test cases that the tests check.
-
-**Web app**
-
-```bash
-cd web
-npm install
-npm test            # run the tests
-npm run build       # build the app
-```
-
-**Android app**
-
-```bash
-cd web
-npm run android:debug         # builds the web app, syncs it and makes a debug APK
-cd android
-gradlew assembleRelease       # a release APK, after "npm run cap:sync" in web
-```
-
-Release builds are signed with a key kept outside the repository. Set `PLANNER_KEYSTORE_PROPERTIES` in `~/.gradle/gradle.properties` to the path of a properties file with `storeFile`, `storePassword`, `keyAlias` and `keyPassword`. Without it, release builds are unsigned.
-
-**Server**
-
-```bash
-cd server
-npm install
-npm test
-npx wrangler deploy           # after building the web app
-```
