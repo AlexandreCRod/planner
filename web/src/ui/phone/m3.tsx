@@ -8,6 +8,7 @@ import { pushBack } from "./native.ts";
 import { spring } from "./pager.ts";
 import { sheetCloses } from "./sheet.ts";
 import { TOUCH_SLOP } from "./press.ts";
+import { frameWriter } from "./motion.ts";
 
 /** Material 3 switch: a 52×32 track; the thumb grows from 16 to 24 dp and slides across when on. */
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
@@ -168,7 +169,15 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
     if (!el) return;
     let g: { id: number; y0: number; dy: number; v: number; lastY: number; lastT: number; moving: boolean } | null = null;
     let stop: (() => void) | null = null;
-    const place = (y: number) => { el.style.transform = y > 0 ? `translate3d(0,${y}px,0)` : ""; };
+    // The sheet's height, measured once per drag; the scrim fades as the sheet goes down.
+    let h = 0;
+    const place = (y: number) => {
+      el.style.transform = y > 0 ? `translate3d(0,${y}px,0)` : "";
+      const sc = scrim.current;
+      if (sc && h) sc.style.opacity = y > 0 ? String(Math.max(0, 1 - y / h)) : "";
+    };
+    // Moves come faster than frames: the sheet is moved once a frame, to the latest.
+    const write = frameWriter(place);
     const onDown = (e: PointerEvent) => {
       if (closing.current || g || !(e.target as Element).closest(".p-sheet-top")) return;
       stop?.(); stop = null;
@@ -183,18 +192,28 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
       if (!g.moving && Math.abs(e.clientY - g.y0) <= TOUCH_SLOP) return;
       if (!g.moving) {
         g.moving = true; g.y0 += Math.sign(e.clientY - g.y0) * TOUCH_SLOP;
+        h = el.offsetHeight + 24;
+        if (scrim.current) scrim.current.style.transition = "none";
         try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
       }
       g.dy = Math.max(0, e.clientY - g.y0);
-      place(g.dy);
+      write(g.dy);
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       const cur = g;
       g = null;
       if (!cur.moving) return;
-      if (sheetCloses(cur.dy, el.offsetHeight, e.type === "pointercancel" ? 0 : cur.v)) close();
-      else stop = spring(cur.dy, 0, cur.v, place, () => { stop = null; });
+      write.cancel();
+      const v = e.type === "pointercancel" ? 0 : cur.v;
+      if (sheetCloses(cur.dy, h - 24, v)) {
+        // Off it goes, carrying on at the finger's speed; it's closed once it's out of sight.
+        closing.current = true;
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        let gone = false;
+        const away = () => { if (!gone) { gone = true; onCloseRef.current(); } };
+        stop = spring(cur.dy, h, Math.max(0, v), (y) => { place(y); if (y >= h - 1) away(); }, away);
+      } else stop = spring(cur.dy, 0, v, place, () => { stop = null; if (scrim.current) scrim.current.style.transition = ""; });
     };
     el.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
@@ -202,6 +221,7 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
     window.addEventListener("pointercancel", onUp);
     return () => {
       stop?.();
+      write.cancel();
       el.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);

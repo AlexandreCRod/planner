@@ -153,22 +153,29 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const stopSlide = useRef<(() => void) | null>(null);
   useEffect(() => { const open = () => setMenu(true); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
-  /** Puts the tab indicator under the label at [p] (between two tabs while sliding). */
+  // Where each tab's label sits, measured once (and again after a resize): reading them on every frame
+  // of a slide, just after moving the pages, would make the browser recalculate styles mid-frame.
+  const boxes = useRef<{ x: number; w: number }[] | null>(null);
+  /** Puts the tab indicator under the label at [p] (between two tabs while sliding): transform only. */
   const placeIndicator = (p: number) => {
     const row = tabs.current, ind = indicator.current;
     if (!row || !ind) return;
-    const labels = row.querySelectorAll<HTMLElement>(".pa-tab-label");
+    if (!boxes.current) {
+      boxes.current = [...row.querySelectorAll<HTMLElement>(".pa-tab-label")].map((el) => ({ x: (el.parentElement as HTMLElement).offsetLeft + el.offsetLeft, w: el.offsetWidth }));
+    }
+    const bx = boxes.current;
+    if (!bx.length) return;
     p = clamp(p, 0, LAST);
     const a = Math.floor(p), b = Math.min(LAST, a + 1), f = p - a;
-    const box = (i: number) => { const el = labels[i]; return { x: (el.parentElement as HTMLElement).offsetLeft + el.offsetLeft, w: el.offsetWidth }; };
-    const A = box(a), B = box(b);
-    const x = A.x + (B.x - A.x) * f, w = A.w + (B.w - A.w) * f;
-    ind.style.transform = `translateX(${x}px)`;
-    ind.style.width = `${w}px`;
+    const x = bx[a].x + (bx[b].x - bx[a].x) * f, w = bx[a].w + (bx[b].w - bx[a].w) * f;
+    // 100 px wide in CSS, stretched to the label; the corners are drawn back to 3 px after the stretch.
+    const k = w / 100;
+    ind.style.transform = `translate3d(${x}px,0,0) scaleX(${k})`;
+    ind.style.borderRadius = k > 0 ? `${3 / k}px ${3 / k}px 0 0 / 3px 3px 0 0` : "";
   };
   useLayoutEffect(() => placeIndicator(index));
   useEffect(() => {
-    const on = () => window.requestAnimationFrame(() => placeIndicator(idx.current));
+    const on = () => window.requestAnimationFrame(() => { boxes.current = null; placeIndicator(idx.current); });
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);

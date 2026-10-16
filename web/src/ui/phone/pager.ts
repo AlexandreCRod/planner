@@ -71,22 +71,27 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     // during a drag, so plain scrolling never waits on the page's script.
     const onTouchMove = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
     let finishAnim: (() => void) | null = null;
+    // The page width, measured once per gesture: reading it after each transform write would make the
+    // browser recalculate styles in the middle of every frame.
+    let cw = 0;
+    const width = () => cw || (cw = o.current.width?.() ?? el.clientWidth);
 
     const place = (x: number) => {
       const t = x ? `translate3d(${x}px,0,0)` : "";
       for (const l of o.current.layers()) if (l) l.style.transform = t;
-      o.current.onMove?.(x, o.current.width?.() ?? el.clientWidth);
+      o.current.onMove?.(x, width());
     };
     const write = frameWriter(place);
     const settle = (dx: number, vx: number) => {
       write.cancel();
-      const w = o.current.width?.() ?? el.clientWidth;
+      const w = width();
       let dir = pageTarget(dx, vx, w);
       if (dir && o.current.canStep && !o.current.canStep(dir)) dir = 0;
       const end = () => {
         stopAnim = null; finishAnim = null;
         if (dir) flushSync(() => o.current.onStep(dir));
         place(0);
+        cw = 0;
         o.current.onSettled?.();
       };
       finishAnim = end;
@@ -112,7 +117,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
         el.addEventListener("touchmove", onTouchMove, { passive: false });
         g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
       }
-      const w = o.current.width?.() ?? el.clientWidth;
+      const w = width();
       let x = SWIPE_GAIN * (e.clientX - g.x0);
       // Past the first or last page the content only gives a little, like a rubber band.
       if (x && o.current.canStep && !o.current.canStep(x < 0 ? 1 : -1)) x = rubberBand(x, w);
@@ -139,6 +144,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       if (textTouch(e.target)) return; // selecting or editing text: the browser's
       // A finger landing while a page is still settling finishes that at once.
       if (stopAnim) { stopAnim(); finishAnim?.(); }
+      cw = 0;
       g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vt: new VelocityTracker(), lastX: e.clientX, dx: 0 };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });

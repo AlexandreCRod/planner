@@ -338,8 +338,9 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   useEffect(() => {
     const el = bar.current;
     if (!el) return;
-    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number } | null = null;
-    const tabW = () => el.clientWidth / TABS.length;
+    // The tab width is measured once, as the finger lands, not on every move.
+    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number } | null = null;
+    const tabW = () => g?.w ?? el.clientWidth / TABS.length;
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -374,7 +375,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX };
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / TABS.length };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });

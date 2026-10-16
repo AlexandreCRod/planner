@@ -345,8 +345,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-segmented button { flex: 1; min-width: 0; border: 0; background: none; padding: 0 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); transition: background-color .15s; }
 .phone .p-segmented button + button { border-left: 1px solid var(--p-outline); }
 .phone .p-segmented button.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
-.phone .p-seg-check { display: inline-flex; width: 0; overflow: hidden; transition: width .15s, margin .15s; }
-.phone .p-segmented button.on .p-seg-check { width: 18px; margin-right: 8px; }
 /* SectionHeader (Common.kt): titleSmall in primary, 16 dp in, 10 above, 2 below. */
 .phone .p-section { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 10px 8px 2px 16px; border: 0; background: none; text-align: left; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary); }
 .phone .p-section svg { color: var(--muted); }
@@ -694,7 +692,6 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-save { margin: 0 8px 0 4px; }
 .phone .pe-indent { padding: 0 16px 8px 72px; }
 .phone .pe-freq .p-segmented button { padding: 0 2px; font-size: 11px; }
-.phone .pe-freq .p-segmented button.on .p-seg-check { width: 0; margin: 0; }
 .phone .pe-rec { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .pe-rec-row { display: flex; align-items: center; }
 .phone .pe-rec-row > b { min-width: 16px; text-align: center; }
@@ -814,7 +811,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pa-tab { position: relative; overflow: hidden; flex: 1; min-width: 0; border: 0; background: none; padding: 0 4px; display: grid; place-items: center; color: var(--muted); font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; text-align: center; }
 .phone .pa-tab.on { color: var(--p-primary); }
 .phone .pa-tab-label { display: inline-block; }
-.phone .pa-indicator { position: absolute; left: 0; bottom: -1px; height: 3px; width: 0; border-radius: 3px 3px 0 0; background: var(--p-primary); pointer-events: none; }
+.phone .pa-indicator { position: absolute; left: 0; bottom: -1px; height: 3px; width: 100px; transform: scaleX(0); transform-origin: 0 0; border-radius: 3px 3px 0 0; background: var(--p-primary); pointer-events: none; }
 /* The sections side by side; the strip slides under the finger (pager.ts). */
 .phone .pa-pager { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: pan-y; }
 .phone .pa-strip { position: absolute; top: 0; bottom: 0; width: 100%; }
