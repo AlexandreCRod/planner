@@ -6,7 +6,7 @@
 // - a fling that runs into an end carries on a little past it and springs back.
 // The page moves with a transform, clipped to its own box (clip-path), so nothing around it shifts.
 // Text selection, fields and the note editor are left alone, and so is anything with two fingers.
-import { EDGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, rubberBandInverse, type Animation } from "./motion.ts";
+import { EDGE_SPRING, FIRM_EDGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, rubberBandInverse, type Animation } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
 
 /** The pages that get rubber-band edges. */
@@ -17,13 +17,22 @@ const SKIP = "input, textarea, select, [contenteditable]:not([contenteditable=fa
 const FLING_SCALE = 0.45;
 const MAX_FLING = 3;
 
-interface Band { el: HTMLElement; shown: number; anim: Animation | null; write: ReturnType<typeof frameWriter<number>> }
+/**
+ * How an edge gives: [dim] the most it can show (as a share of the page's height), [c] how much of the
+ * finger's pull shows at first, [fling] how much of a fling's speed carries past the end. The calendar's
+ * edges are firm (a hint of give and a quick, settled return): its grid is a fixed thing, not a list.
+ */
+interface Edge { dim: number; c: number; fling: number; spring: typeof EDGE_SPRING }
+const SOFT: Edge = { dim: 1, c: 0.55, fling: FLING_SCALE, spring: EDGE_SPRING };
+const FIRM: Edge = { dim: 0.3, c: 0.3, fling: 0.16, spring: FIRM_EDGE_SPRING };
+
+interface Band { el: HTMLElement; shown: number; anim: Animation | null; write: ReturnType<typeof frameWriter<number>>; edge: Edge }
 const bands = new WeakMap<HTMLElement, Band>();
 
 function bandOf(el: HTMLElement): Band {
   let b = bands.get(el);
   if (!b) {
-    const band: Band = { el, shown: 0, anim: null, write: frameWriter<number>((v) => draw(band, v)) };
+    const band: Band = { el, shown: 0, anim: null, write: frameWriter<number>((v) => draw(band, v)), edge: el.closest(".p-cal") ? FIRM : SOFT };
     bands.set(el, band);
     b = band;
   }
@@ -48,8 +57,10 @@ function draw(b: Band, v: number) {
 function release(b: Band, v: number) {
   b.write.cancel();
   b.anim?.stop();
-  b.anim = animateSpring(b.shown, 0, v, (x) => draw(b, x), () => { b.anim = null; draw(b, 0); }, EDGE_SPRING);
+  b.anim = animateSpring(b.shown, 0, v, (x) => draw(b, x), () => { b.anim = null; draw(b, 0); }, b.edge.spring);
 }
+const band = (b: Band, over: number) => rubberBand(over, b.el.clientHeight * b.edge.dim, b.edge.c);
+const bandInverse = (b: Band, shown: number) => rubberBandInverse(shown, b.el.clientHeight * b.edge.dim, b.edge.c);
 
 const maxTop = (el: HTMLElement) => Math.max(0, el.scrollHeight - el.clientHeight);
 const atTop = (el: HTMLElement) => el.scrollTop <= 0.5;
@@ -117,14 +128,14 @@ function onMove(e: TouchEvent) {
     }
     t.pull = true;
     t.sign = down ? 1 : -1;
-    t.base = p.clientY - rubberBandInverse(t.from, el.clientHeight);
+    t.base = p.clientY - bandInverse(bandOf(el), t.from);
   }
   if (!t.pull) return;
   const over = p.clientY - t.base;
   const b = bandOf(t.el);
   if (over * t.sign >= 0) {
     if (e.cancelable) e.preventDefault();
-    b.write(rubberBand(over, t.el.clientHeight));
+    b.write(band(b, over));
   } else {
     // Back past where the pull began: the page is the browser's to scroll again.
     b.write.cancel();
@@ -141,8 +152,9 @@ function endTouch(v: number) {
   b.write.flush();
   if (b.shown) {
     // The band's own speed: the finger's, geared down by how stretched it is.
-    const over = rubberBandInverse(b.shown, t.el.clientHeight);
-    const gear = 0.55 / Math.pow((Math.abs(over) * 0.55) / t.el.clientHeight + 1, 2);
+    const dim = t.el.clientHeight * b.edge.dim, c = b.edge.c;
+    const over = bandInverse(b, b.shown);
+    const gear = c / Math.pow((Math.abs(over) * c) / dim + 1, 2);
     release(b, v * gear);
   }
 }
@@ -173,9 +185,9 @@ function onScroll(e: Event) {
   const b = bandOf(el);
   if (b.anim || b.shown) return;
   // Scrolling up into the top moves the content down, so the band goes positive.
-  const speed = Math.max(-MAX_FLING, Math.min(MAX_FLING, -v)) * FLING_SCALE;
+  const speed = Math.max(-MAX_FLING, Math.min(MAX_FLING, -v)) * b.edge.fling;
   last.delete(el);
-  b.anim = animateSpring(0, 0, speed, (x) => draw(b, x), () => { b.anim = null; draw(b, 0); }, EDGE_SPRING);
+  b.anim = animateSpring(0, 0, speed, (x) => draw(b, x), () => { b.anim = null; draw(b, 0); }, b.edge.spring);
 }
 
 let started = false;

@@ -23,6 +23,8 @@ export const GLIDE_SPRING: SpringConfig = { stiffness: 700, damping: 0.78 };
 export const POP_SPRING: SpringConfig = { stiffness: 900, damping: 0.62 };
 /** An edge giving back after a pull or a fling: soft, no overshoot. */
 export const EDGE_SPRING: SpringConfig = { stiffness: 380, damping: 1 };
+/** A firm edge (the calendar's) giving back: quicker, still without overshoot. */
+export const FIRM_EDGE_SPRING: SpringConfig = { stiffness: 900, damping: 1 };
 
 /**
  * Where a spring is [t] s after starting [d0] px from its target at [v0] px/s: the offset from the
