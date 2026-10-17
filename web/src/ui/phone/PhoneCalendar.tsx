@@ -8,6 +8,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
+import { isRoutineItem } from "../../domain/routines.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { type Placed, layoutDay } from "../CalendarView.tsx";
 import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
@@ -69,6 +70,9 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const [menu, setMenu] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [f, setF] = useState(filters);
+  // Routines (daily habits) can crowd the calendar: one switch in the menu hides them, on this phone only.
+  const [showRoutines, setShowRoutines] = useState(() => localStorage.getItem("calHideRoutines") !== "1");
+  const toggleRoutines = () => { const v = !showRoutines; localStorage.setItem("calHideRoutines", v ? "0" : "1"); setShowRoutines(v); };
   const setAnchor = (d: number) => { selected = d; setAnchorState(d); };
   const setFilters = (n: typeof filters) => { filters = n; setF(n); };
   /** Picked in the menu: remembered, like the native calendarView setting. */
@@ -84,13 +88,15 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const first = mode === "week" ? weekStart : anchor;
   const count = mode === "day" ? 1 : mode === "3day" ? 3 : 7;
   const items = useMemo(() => s.items.filter((i) =>
-    ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))), [s, f]);
+    ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))
+    && (showRoutines || !isRoutineItem(i))), [s, f, showRoutines]);
   const noteDays = useMemo(() => new Set(s.items.filter((i) => i.type === "NOTE" && i.noteDay !== null).map((i) => i.noteDay!)), [s]);
   const grid = mode === "day" || mode === "3day" || mode === "week";
 
   const menuItems: MenuItem[] = [
     ...MODES.map(([k, l]): MenuItem => ({ label: l, checked: mode === k, onClick: () => pickMode(k) })),
     { label: "Filter…", icon: "oFilterList", divider: true, onClick: () => setFilterOpen(true) },
+    { label: "Show routines", icon: "oTaskAlt", checked: showRoutines, onClick: toggleRoutines },
     { label: "Note for selected day", icon: "oEditNote", onClick: () => openDailyNote(s, anchor) },
     { label: "Search", icon: "oSearch", onClick: () => go("browse") },
     { label: "Settings", icon: "oSettings", onClick: () => go("settings") },
