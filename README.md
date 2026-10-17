@@ -13,6 +13,7 @@ Planner is a calm, simple app for your day. It keeps your tasks, calendar, notes
 **Calendar**
 - Switch between week, month and year views.
 - Tap an empty slot twice to add something there.
+- Hide routines from the calendar with one switch in its menu.
 
 **Tasks**
 - Two lists: **Scheduled** and **To-do**. Swipe sideways to switch between them.
@@ -54,6 +55,8 @@ Planner is a calm, simple app for your day. It keeps your tasks, calendar, notes
 5. Open Planner. Allow notifications when asked.
 6. The first time you open it, enter your server address and sync password (see the next section).
 
+**Updates.** When a new version is out, Planner offers it when you open the app. Tap **Update**, then **Install**. You can also tap **Check for updates** in Settings.
+
 For alarms that are never late, open the app's settings and allow **Full-screen alarms**. Also set Planner's battery use to unrestricted in Android.
 
 ## Set up sync (your own free server)
@@ -75,7 +78,7 @@ Full details are in [server/README.md](server/README.md).
 
 **Calendar.** Pick week, month or year from the view menu. Tap an empty slot once to mark it, and tap it again to add an event or task. Drag an item to move it.
 
-**Tasks.** Swipe sideways to go between **Scheduled** and **To-do**. Swipe a row to remove it. Deleted items go to the trash for a while, and you can undo.
+**Tasks.** Swipe sideways to go between **Scheduled** and **To-do**. Swipe a row to remove it. You get a few seconds to undo, then it goes to the trash for a while.
 
 **Notes.** Tap to write. Hold and drag the handle on a checklist line to move it. Hold a note to select it, then tap more notes and delete them together.
 
