@@ -3,7 +3,7 @@
 // browser's own <input type=date|time> pop-ups.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, daysInMonth, epochOf, formatDate, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
-import { IconButton, MIcon } from "./chrome.tsx";
+import { IconButton, MIcon, ModalLayer } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
 import { hapticTick, pushBack } from "./native.ts";
 import { useSwipePager } from "./pager.ts";
@@ -14,11 +14,7 @@ const WD = ["M", "T", "W", "T", "F", "S", "S"];
 /** The modal scrim and container both pickers sit in; back and a tap outside cancel. */
 function PickerShell({ onClose, className, children }: { onClose: () => void; className: string; children: React.ReactNode }) {
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <div className="p-dialog-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={className} role="dialog">{children}</div>
-    </div>
-  );
+  return <ModalLayer onClose={onClose}><div className={className} role="dialog">{children}</div></ModalLayer>;
 }
 
 // ---------- Date ----------

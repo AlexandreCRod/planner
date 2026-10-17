@@ -2,6 +2,7 @@
 // buttons, filter chips, segmented buttons, section headers, list rows, menus and dialogs. Sizes are
 // Compose's (1 CSS px = 1 dp) and text uses the M3 type scale classes in phone.css (.t-title-large...).
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { go } from "../common.tsx";
 import { ICONS } from "./icons.ts";
 import { pushBack } from "./native.ts";
@@ -192,16 +193,32 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
 }
 
 /** Material 3 basic dialog: title, content, and text buttons at the end. */
+/**
+ * A dialog's scrim, drawn at the top of the page whatever opened it: a dialog opened from a sheet or
+ * the add panel (which move with transforms) would otherwise be placed inside them, low or off screen.
+ * Its events stop here, so they don't reach what opened it (a row's click, a sheet's drag).
+ */
+export function ModalLayer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return createPortal(
+    <div className="p-dialog-scrim" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
+      onClick={stop} onPointerUp={stop} onPointerMove={stop} onTouchStart={stop} onTouchMove={stop} onTouchEnd={stop} onKeyDown={stop} onContextMenu={stop}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export function Dialog({ title, children, actions, onClose }: { title: ReactNode; children: ReactNode; actions: ReactNode; onClose: () => void }) {
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="p-dialog-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalLayer onClose={onClose}>
       <div className="p-dialog" role="dialog">
         <h2 className="p-dialog-title">{title}</h2>
         <div className="p-dialog-body">{children}</div>
         <div className="p-dialog-actions">{actions}</div>
       </div>
-    </div>
+    </ModalLayer>
   );
 }
 
