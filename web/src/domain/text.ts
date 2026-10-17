@@ -80,3 +80,63 @@ export function noteLines(html: string): NoteLine[] {
   flush();
   return out;
 }
+
+// ---------- Descriptions (tasks and events): plain text in, simple HTML stored ----------
+
+function decodeEntities(s: string): string {
+  return s.replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&(#39|apos);/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&")
+    .replace(/ /g, " ");
+}
+
+/**
+ * A description's stored HTML as the plain text it's edited as: one line per paragraph, list items as
+ * "• " or "1. " lines, checklist boxes kept as they are, formatting dropped. Plain text comes back as is.
+ */
+export function descriptionText(html: string): string {
+  if (!/[<&]/.test(html)) return html;
+  let out = "", afterBreak = false;
+  const lists: { numbered: boolean; n: number }[] = [];
+  const newLine = () => { if (out && !out.endsWith("\n")) out += "\n"; };
+  for (const m of html.matchAll(/<(\/?)([a-zA-Z0-9]+)[^>]*>|[^<]+/g)) {
+    const tag = (m[2] ?? "").toLowerCase();
+    if (!tag) {
+      const t = m[0].replace(/[\t\n\r ]+/g, " ");
+      if (!t.trim() && (!out || out.endsWith("\n"))) continue; // layout whitespace between blocks
+      out += decodeEntities(t);
+      afterBreak = false;
+      continue;
+    }
+    const closing = m[1] === "/";
+    if (tag === "ul" || tag === "ol") {
+      newLine();
+      if (closing) lists.pop(); else lists.push({ numbered: tag === "ol", n: 0 });
+    } else if (tag === "li") {
+      newLine();
+      if (!closing) {
+        const l = lists[lists.length - 1];
+        out += "  ".repeat(Math.max(0, lists.length - 1)) + (l?.numbered ? `${++l.n}. ` : "• ");
+      }
+    } else if (tag === "br") {
+      out += "\n";
+      afterBreak = true;
+      continue;
+    } else if (/^(p|div|h[1-6])$/.test(tag)) {
+      // An empty paragraph (<p><br></p>) is one blank line; a paragraph inside a list item is that item.
+      if (closing && !afterBreak && !lists.length) out += "\n";
+      else if (!closing) newLine();
+    }
+    afterBreak = false;
+  }
+  return out.replace(/[ \n]+$/, "").replace(/^\n+/, "");
+}
+
+const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Plain description text as the HTML every app reads: a paragraph per line (an empty one for a blank line). */
+export function plainToHtml(text: string): string {
+  const t = text.replace(/\s+$/, "");
+  if (!t.trim()) return "";
+  return t.split("\n").map((l) => (l.trim() ? `<p>${escapeHtml(l)}</p>` : "<p><br></p>")).join("");
+}

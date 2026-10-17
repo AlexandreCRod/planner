@@ -2,28 +2,26 @@
 // RecurrenceDetails. Opening one shows the view: only what it has, each field changed in place with a
 // tap (a picker, a menu or a small sheet, saved at once), and an Edit button for the full editor. The
 // full editor is the same one the add panel grows into.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, formatTime, monthShort, offsetLabel, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
-import { preview } from "../../domain/text.ts";
+import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
   type AlertType, type Freq, type Item, type ItemType, type OverduePolicy, type Reminder,
   NO_DAY, PRIORITIES, PRIORITY_COLORS_MUTED, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
-  type EditScope, type Snapshot, addLink, deleteOccurrence, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
+  type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
 } from "../../store/store.ts";
 import { go, openItem } from "../common.tsx";
 import { typeLabel } from "../LinksSection.tsx";
-import { RichEditor, type RichEditorHandle, sanitize } from "../RichEditor.tsx";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { openExternal } from "./native.ts";
 import { type Place, openPlace, searchPlaces } from "./device.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
-import { RichBar } from "./RichBar.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
@@ -548,7 +546,7 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
 
 // ---------- The view ----------
 
-type FieldEdit = "title" | "when" | "repeat" | "location" | "alarms" | "notifications" | "notes" | "tags" | "color" | null;
+type FieldEdit = "title" | "when" | "repeat" | "location" | "alarms" | "notifications" | "tags" | "color" | null;
 
 export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const s = useSnapshot();
@@ -590,7 +588,6 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const completion = item.startDay === null ? NO_DAY : isRecurring(item) ? (day ?? item.startDay) : item.startDay;
   const done = s.done.isDone(id, completion);
   const forDay = isRecurring(item) && day !== null ? ` for ${(() => { const r = relativeDay(day); return ["Today", "Tomorrow", "Yesterday"].includes(r) ? r.toLowerCase() : r; })()}` : "";
-  const hasNotes = preview(item.content, 10).trim() !== "";
   const alertLines = (list: Reminder[], kind: string | null) => [...list].sort((a, b) => b.offsetMin - a.offsetMin)
     .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin).toLowerCase()}`).join("\n");
   const edit = () => go(`item/${id}?edit=1${occ !== null ? `&occ=${occ}` : ""}`);
@@ -659,12 +656,11 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {alarms.length > 0 && <InfoRow icon="oAlarm" text={alertLines(alarms, "Alarm")} onClick={() => setEditing("alarms")} />}
         {notifications.length > 0 && <InfoRow icon="oNotifications" text={alertLines(notifications, null)} onClick={() => setEditing("notifications")} />}
         {tags.length > 0 && <InfoRow icon="oLabel" text={tags.map((x) => `#${x.name}`).join("  ")} onClick={() => setEditing("tags")} />}
-        {hasNotes
-          ? <div className="pe-info top" role="button" onClick={() => setEditing("notes")}>
-              <MIcon name="oNotes" size={22} />
-              <div className="grow rich pe-notes" dangerouslySetInnerHTML={{ __html: sanitize(item.content) }} />
-            </div>
-          : <InfoRow icon="oNotes" text="Add description" placeholder onClick={() => setEditing("notes")} />}
+        {/* The description is written where it shows: plain text, no formatting, saved as it's typed. */}
+        <div className="pe-info top pe-descrow">
+          <MIcon name="oNotes" size={22} />
+          <ViewDescription id={id} content={item.content} />
+        </div>
 
         {/* What it doesn't have yet, one tap away. */}
         <div className="pe-flow pad">
@@ -696,7 +692,6 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       }} />}
       {editing === "repeat" && <RepeatSheet item={item} onClose={() => setEditing(null)} onSave={commit} />}
       {editing === "location" && <LocationSheet item={item} onClose={() => setEditing(null)} onSave={commit} />}
-      {editing === "notes" && <NotesSheet item={item} onClose={() => setEditing(null)} onSave={(html) => commit({ ...item, content: preview(html, 10).trim() ? html : "" })} />}
       {(editing === "alarms" || editing === "notifications") && (
         <BottomSheet onClose={() => setEditing(null)}>{() => <>
           <div className="p-sheet-title small">{editing === "alarms" ? "Alarms" : "Notifications"}</div>
@@ -761,18 +756,58 @@ function LocationSheet({ item, onClose, onSave }: { item: Item; onClose: () => v
   );
 }
 
-function NotesSheet({ item, onClose, onSave }: { item: Item; onClose: () => void; onSave: (html: string) => void }) {
-  const rich = useRef<RichEditorHandle>(null);
-  useEffect(() => { const t = window.setTimeout(() => rich.current?.focus(), 120); return () => clearTimeout(t); }, []);
+/**
+ * A description box: plain text in an auto-growing field, no formatting tools. A tap puts the cursor
+ * after the last character (where one usually carries on writing); once in, taps place it as usual.
+ */
+function DescriptionField({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur?: () => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const toEnd = useRef(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  const end = () => { const el = ref.current; if (el) { const n = el.value.length; el.setSelectionRange(n, n); } };
   return (
-    <BottomSheet onClose={onClose}>{(close) => <>
-      <div className="p-sheet-pad">
-        <RichBar editor={rich} compact />
-        <div className="pe-notes-edit"><RichEditor ref={rich} initialHtml={item.content} onChange={() => {}} minHeight={120} noToolbar placeholder="Add description" /></div>
-      </div>
-      <SheetButtons onCancel={close} onSave={() => { onSave(rich.current?.html() ?? item.content); close(); }} />
-    </>}</BottomSheet>
+    <textarea ref={ref} className="grow pe-desc" rows={1} placeholder="Add description" value={value} autoCapitalize="sentences"
+      onFocus={() => { toEnd.current = true; end(); window.setTimeout(() => { toEnd.current = false; }, 500); }}
+      onClick={() => { if (toEnd.current) { toEnd.current = false; end(); } }}
+      onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
   );
+}
+
+/**
+ * The view's description, saved shortly after typing stops, on leaving the field or the page, and when
+ * the app is put away. Only a changed text is written back, so a rich description that's only looked at
+ * keeps its formatting.
+ */
+function ViewDescription({ id, content }: { id: number; content: string }) {
+  const [text, setText] = useState(() => descriptionText(content));
+  const base = useRef({ html: content, text });
+  const latest = useRef(text);
+  latest.current = text;
+  const timer = useRef<number>();
+  const save = () => {
+    clearTimeout(timer.current);
+    const t = latest.current;
+    if (t === base.current.text) return;
+    const cur = snapshot().byId.get(id);
+    if (!cur) return;
+    const html = plainToHtml(t);
+    base.current = { html, text: t };
+    if (html !== cur.content) saveItem({ ...cur, content: html });
+  };
+  // Changed elsewhere (another device) while this one has nothing unsaved: show that.
+  useEffect(() => {
+    if (content === base.current.html || latest.current !== base.current.text) return;
+    const t = descriptionText(content);
+    base.current = { html: content, text: t };
+    setText(t);
+  }, [content]);
+  useEffect(() => { const off = onFlush(save); return () => { off(); save(); }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <DescriptionField value={text} onBlur={save} onChange={(v) => { setText(v); latest.current = v; clearTimeout(timer.current); timer.current = window.setTimeout(save, 700); }} />;
 }
 
 // ---------- The full editor ----------
@@ -816,15 +851,14 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const [colorDialog, setColorDialog] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [deleteMenu, setDeleteMenu] = useState(false);
-  const [notesFocused, setNotesFocused] = useState(false);
-  const [notesEmpty, setNotesEmpty] = useState(() => !preview(d.content, 10).trim());
+  // The description, edited as plain text; written into the draft only once it's changed.
+  const [descStart] = useState(() => ({ html: d.content, text: descriptionText(d.content) }));
+  const [notes, setNotes] = useState(descStart.text);
   const [currentId, setCurrentId] = useState(id);
   // The Routine switch: the task's synced `routine` field, saved with it.
   const routine = d.routine === true;
   const setRoutineDraft = (on: boolean) => set({ routine: on });
   const canBeRoutine = d.type === "TASK" && d.freq !== "NONE";
-  const rich = useRef<RichEditorHandle>(null);
-  const [initialHtml] = useState(d.content);
   const category = d.categoryId !== null ? s.categoryById.get(d.categoryId) : undefined;
   const color = d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf({ ...d, categoryId: null, color: null });
   const tagList = () => cur.tags.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean);
@@ -833,7 +867,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const leaveTo = () => { if (draft) onClose(); };
 
   const finalItem = (): Item => {
-    const html = rich.current?.html() ?? d.content;
+    const html = d.content;
     let it: Item = { ...d, title: d.title.trim(), content: preview(html, 10).trim() ? html : "", location: (d.location ?? "").trim() };
     it = it.type === "EVENT" ? tidyWhen(it) : { ...it, endDay: null, endMin: null, allDay: false };
     if (it.freq !== "NONE" && it.startDay === null) it.startDay = todayEpoch();
@@ -925,13 +959,9 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         </>}
         <div className="p-divider" />
 
-        {/* Notes: one row ("Add description") until typed into; then the formatting bar and room to write. */}
+        {/* The description: one line until written in, growing with the text. */}
         <FieldRow icon="oNotes" top>
-          <div className="grow pe-notes-edit">
-            {notesFocused && <RichBar editor={rich} compact className="inline" />}
-            <RichEditor ref={rich} initialHtml={initialHtml} onChange={() => setNotesEmpty(!(rich.current?.html() ?? "").replace(/<[^>]*>/g, "").trim())}
-              minHeight={notesFocused || !notesEmpty ? 72 : 24} noToolbar placeholder="Add description" onFocusChange={(f) => { if (f) setNotesFocused(true); }} />
-          </div>
+          <DescriptionField value={notes} onChange={(v) => { setNotes(v); set({ content: v === descStart.text ? descStart.html : plainToHtml(v) }); }} />
         </FieldRow>
         <div className="p-divider" />
 

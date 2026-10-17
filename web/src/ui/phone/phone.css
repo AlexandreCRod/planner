@@ -702,6 +702,14 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-circles button { position: relative; overflow: hidden; flex: none; width: 36px; height: 36px; padding: 0; border: 1px solid var(--p-outline); border-radius: 18px; background: none; font-size: 12px; color: var(--text); }
 .phone .pe-circles button.wide { width: 52px; }
 .phone .pe-circles button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
+/* The description (view and editor): plain text, growing with what's written, one line when empty. */
+.phone textarea.pe-desc {
+  display: block; width: 100%; min-width: 0; margin: 0; padding: 0; border: 0; outline: none; background: none; resize: none; overflow: hidden;
+  font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere;
+  user-select: text; -webkit-user-select: text;
+}
+.phone textarea.pe-desc::placeholder { color: var(--muted); opacity: 1; }
+.phone .pe-row.top > textarea.pe-desc { flex: 1; }
 .phone .pe-notes-edit { min-width: 0; padding-top: 1px; }
 .phone .pe-notes-edit .rich { font-size: 16px; line-height: 22px; color: var(--text); outline: none; user-select: text; -webkit-user-select: text; }
 .phone .p-sheet .pe-notes-edit { margin-top: 4px; }
