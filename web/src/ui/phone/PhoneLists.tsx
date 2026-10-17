@@ -306,21 +306,22 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
   const graph = useMemo(() => buildGraph(s, types, orphans, focus, depth), [s, types, orphans, focus, depth]);
   const graphRef = useRef(graph);
   graphRef.current = graph;
-  const drawn = useRef({ scaleR: 0, labels: true });
 
   /** Writes every node and line where the layout and the view put them. */
   const draw = () => {
     const v = viewRef.current, { w, h } = size.current;
     const sx = (x: number) => w / 2 + v.x + x * v.k, sy = (y: number) => h / 2 + v.y + y * v.k;
     const scaleR = Math.min(1.6, Math.max(0.6, v.k));
-    const resize = scaleR !== drawn.current.scaleR;
-    drawn.current.scaleR = scaleR;
     const g = graphRef.current;
     for (const n of g.nodes) {
       const el = nodeEls.current.get(n.id), p = pos.current.get(n.id);
       if (!el || !p) continue;
       el.setAttribute("transform", `translate(${sx(p.x).toFixed(2)} ${sy(p.y).toFixed(2)})`);
-      if (resize) {
+      // Sized per node, at its first placing too: a node that has just arrived (the Unlinked filter) has
+      // no position for the first draw, so a size given only on zoom changes left it without a circle.
+      const key = `${scaleR}|${g.degree.get(n.id) ?? 0}`;
+      if (el.dataset.size !== key) {
+        el.dataset.size = key;
         const r = (7 + Math.sqrt(g.degree.get(n.id) ?? 0) * 4) * scaleR;
         for (const c of el.querySelectorAll<SVGCircleElement>("circle")) c.setAttribute("r", String(r * Number(c.dataset.f ?? 1) + Number(c.dataset.add ?? 0)));
         el.querySelector("text")?.setAttribute("y", String(r + 2));
@@ -337,7 +338,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
   drawRef.current = draw;
   const sim = useGraphSim(graph, pos, () => drawRef.current());
   // New nodes or a new selection re-render the elements: place them at once.
-  useLayoutEffect(() => { drawn.current.scaleR = 0; draw(); });
+  useLayoutEffect(() => { for (const el of nodeEls.current.values()) delete el.dataset.size; draw(); });
 
   const setView = (v: { x: number; y: number; k: number }) => { viewRef.current = v; setViewState(v); };
 
