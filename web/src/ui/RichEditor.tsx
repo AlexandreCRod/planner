@@ -77,6 +77,11 @@ export function useEditorHtml(rich: RefObject<RichEditorHandle>, fallback: () =>
   return () => rich.current?.html() ?? (node.current ? normalize(node.current) : fallback());
 }
 
+/** Nothing at all in the editor: no text, no list item (even an empty one), no picture or line. */
+function isBlank(root: HTMLElement): boolean {
+  return !(root.textContent ?? "").trim() && !root.querySelector("li,img,hr,table");
+}
+
 /** The block (paragraph or list item) holding the caret. */
 function currentBlock(root: HTMLElement): HTMLElement | null {
   const sel = getSelection();
@@ -122,12 +127,22 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const el = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState(!toolbarOnFocus);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
-  const checkEmpty = () => setEmpty(!(el.current?.textContent ?? "").trim());
+  const checkEmpty = () => setEmpty(!el.current || isBlank(el.current));
 
   useEffect(() => {
     if (el.current) el.current.innerHTML = sanitize(initialHtml);
     document.execCommand("defaultParagraphSeparator", false, "p");
   }, [initialHtml]);
+  // The "Start writing" hint goes as soon as anything is there: typing, but also a box, a bullet or a
+  // number added from the bar (which don't fire an input event).
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    const mo = new MutationObserver(checkEmpty);
+    mo.observe(root, { childList: true, subtree: true, characterData: true });
+    checkEmpty();
+    return () => mo.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useImperativeHandle(ref, () => ({
     html: () => (el.current ? normalize(el.current) : ""),
