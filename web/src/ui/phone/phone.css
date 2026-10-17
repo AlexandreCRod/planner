@@ -667,6 +667,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-heat span.done { background: var(--p-primary); }
 .phone .pe-heat span.missed { background: color-mix(in srgb, var(--danger) 35%, transparent); }
 .phone .pe-heat span.future { background: transparent; }
+.phone .pe-heat span.out { visibility: hidden; }
 .phone .pe-links { padding-bottom: 8px; }
 .phone .pe-links-head { display: flex; align-items: center; padding-right: 8px; }
 .phone .pe-links-head .p-section { flex: 1; padding-bottom: 10px; }

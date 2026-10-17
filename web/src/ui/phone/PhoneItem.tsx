@@ -520,7 +520,10 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   const st = streak(item, s.done, t);
   const rs = routineStreak(item, s.done, t);
   const done = s.done.days(item.id);
-  const gridStart = t - 7 * 15 - (weekday(t) - 1);
+  // The last 30 days (today included), in week columns as before.
+  const first = t - 29;
+  const gridStart = first - (weekday(first) - 1);
+  const weeks = Math.ceil((t - gridStart + 1) / 7);
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
@@ -530,12 +533,12 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
       </div>
       {rs.broken && <div className="pe-small">Last one was missed: the streak starts again</div>}
       <div className="pe-heat">
-        {Array.from({ length: 16 }, (_, w) => (
+        {Array.from({ length: weeks }, (_, w) => (
           <div key={w}>
             {Array.from({ length: 7 }, (_, di) => {
               const day = gridStart + w * 7 + di;
               // Today, still open, isn't missed yet.
-              const cls = day > t ? "future" : done.has(day) ? "done" : day < t && occursOn(item, day) ? "missed" : "";
+              const cls = day < first ? "out" : day > t ? "future" : done.has(day) ? "done" : day < t && occursOn(item, day) ? "missed" : "";
               return <span key={di} className={cls} />;
             })}
           </div>
