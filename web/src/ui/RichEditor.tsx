@@ -1,6 +1,6 @@
 // contenteditable editor that reads and writes the same HTML as the Android editor, including
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
-import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
+import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { formatDateTime } from "../domain/dates.ts";
 import { Icon } from "./common.tsx";
 
@@ -63,6 +63,18 @@ function normalize(root: HTMLElement): string {
   }
   const html = c.innerHTML;
   return html === "<p><br></p>" || html === "<br>" ? "" : html;
+}
+
+/**
+ * The editor's HTML, readable even from an unmount cleanup. React clears a component's handle (and its
+ * element refs) before the parent's useEffect cleanups run, so `rich.current?.html()` there is always
+ * undefined; a save on leaving that fell back to the text as it was when opened reverted every edit.
+ * This keeps hold of the editable element itself, which still holds the text once it's off the page.
+ */
+export function useEditorHtml(rich: RefObject<RichEditorHandle>, fallback: () => string): () => string {
+  const node = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => { const r = rich.current?.root(); if (r) node.current = r; });
+  return () => rich.current?.html() ?? (node.current ? normalize(node.current) : fallback());
 }
 
 /** The block (paragraph or list item) holding the caret. */

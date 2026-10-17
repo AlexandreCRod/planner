@@ -4,9 +4,10 @@ import "./styles.css";
 import { startNotifications } from "./notify.ts";
 import { startAlarmMirror } from "./alarms/mirror.ts";
 import { isNative } from "./platform.ts";
-import { ensureDefaults, load, setChangeHook, tidy } from "./store/store.ts";
+import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/store.ts";
 import { migrateLocalRoutines } from "./store/routines.ts";
-import { getToken, onStatus, requestSync, signOut, startAutoSync } from "./store/sync.ts";
+import { getToken, onStatus, requestSync, signOut, startAutoSync, syncNow } from "./store/sync.ts";
+import { App as CapApp } from "@capacitor/app";
 import { App } from "./ui/App.tsx";
 import { applyTheme } from "./ui/SettingsView.tsx";
 import { startPhoneTheme } from "./ui/phone/theme.ts";
@@ -18,6 +19,12 @@ startPhoneTheme();
 async function start() {
   await load();
   setChangeHook(() => requestSync());
+  // Put away (home, recents, the screen going off, the tab closing): every waiting save is written at
+  // once, and what changed goes to the server, as the app may be killed before any timer runs.
+  const putAway = () => { void flushAll(); if (getToken()) void syncNow(); };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") putAway(); });
+  window.addEventListener("pagehide", putAway);
+  if (isNative) void CapApp.addListener("pause", putAway);
   // Retention: ticked to-dos to the trash after 48 h, old trash deleted (domain/retention.ts).
   tidy();
   // The phone's old device-only routine marks move into the synced field once (when there are items).

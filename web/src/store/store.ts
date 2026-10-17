@@ -47,14 +47,36 @@ function list<T>(kind: Kind): T[] {
 }
 
 let saveTimer: number | undefined;
+let unsaved = false;
+const writeNow = () => { clearTimeout(saveTimer); saveTimer = undefined; unsaved = false; return db.put("records", [...records.entries()]); };
 /** Call after any change: refreshes the UI, saves to IndexedDB and lets sync know. */
 export function changed(fromSync = false) {
   version++;
   snap = null;
   listeners.forEach((l) => l());
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => void db.put("records", [...records.entries()]), 250);
+  unsaved = true;
+  saveTimer = window.setTimeout(() => void writeNow(), 250);
   if (!fromSync) onChange();
+}
+
+const flushers = new Set<() => void>();
+/**
+ * An editor with a save still waiting (its debounce) registers it here, so it's done before the app
+ * can be closed. Returns the unregister.
+ */
+export function onFlush(fn: () => void): () => void {
+  flushers.add(fn);
+  return () => { flushers.delete(fn); };
+}
+/**
+ * Saves everything now: editors' waiting saves, then IndexedDB without the usual 250 ms wait. Called
+ * when the app is put away (pause, hidden, pagehide), since a WebView in the background can be killed
+ * before any timer runs.
+ */
+export function flushAll(): Promise<void> {
+  flushers.forEach((f) => { try { f(); } catch { /* one editor failing mustn't stop the rest */ } });
+  return unsaved ? writeNow() : Promise.resolve();
 }
 
 export async function load() {

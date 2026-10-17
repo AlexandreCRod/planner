@@ -9,10 +9,10 @@ import { occurrencesIn } from "../../domain/schedule.ts";
 import { preview, stripHtml } from "../../domain/text.ts";
 import { type Item, type NoteImage, cssColor, newItem } from "../../domain/types.ts";
 import { importImage, useImageUrl } from "../../store/images.ts";
-import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../../store/store.ts";
+import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, onFlush, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../../store/store.ts";
 import { openItem } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
-import { RichEditor, type RichEditorHandle } from "../RichEditor.tsx";
+import { RichEditor, type RichEditorHandle, useEditorHtml } from "../RichEditor.tsx";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
@@ -50,8 +50,10 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   latest.current = { noteId, title, tags, style, place };
   const deleted = useRef(false);
 
+  // The text as it is now, also from the cleanup that saves on leaving (see useEditorHtml).
+  const html = useEditorHtml(rich, () => base.content);
   const current = (): Item => ({
-    ...base, id: latest.current.noteId, title: latest.current.title.trim(), content: rich.current?.html() ?? base.content, ...latest.current.style,
+    ...base, id: latest.current.noteId, title: latest.current.title.trim(), content: html(), ...latest.current.style,
     location: latest.current.place.location.trim(), lat: latest.current.place.lat, lng: latest.current.place.lng,
   });
   const tagList = () => latest.current.tags.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
@@ -67,7 +69,15 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
     adopt(saved);
     return saved;
   };
-  const scheduleSave = () => { clearTimeout(timer.current); timer.current = window.setTimeout(save, 1000); };
+  // Saved shortly after each change, and at once if the app is put away before that (store.onFlush).
+  const pending = useRef(false);
+  const flush = () => { clearTimeout(timer.current); if (pending.current && !deleted.current) { pending.current = false; save(); } };
+  const scheduleSave = () => { pending.current = true; clearTimeout(timer.current); timer.current = window.setTimeout(flush, 600); };
+  // Put away: also catches text that changed without an input event (some keyboards' corrections).
+  useEffect(() => onFlush(() => {
+    if (!pending.current && latest.current.noteId && snapshot().byId.get(latest.current.noteId)?.content !== html()) pending.current = true;
+    flush();
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const first = useRef(true);
   useEffect(() => { if (first.current) { first.current = false; return; } scheduleSave(); }, [title, tags, style, place]); // eslint-disable-line react-hooks/exhaustive-deps
 

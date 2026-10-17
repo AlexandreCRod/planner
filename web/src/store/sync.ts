@@ -6,6 +6,7 @@ import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
 import { type Kind, allRecords, applyRemote } from "./store.ts";
 import { count } from "../domain/plural.ts";
+import { remoteToApply } from "../domain/syncMerge.ts";
 
 type Rec = Record<string, unknown>;
 interface Base { seq: number; records: Record<string, Rec> }
@@ -63,11 +64,19 @@ function canonical(v: unknown): string {
 }
 
 let running: Promise<number> | null = null;
+let again = false;
 
-/** Runs one sync (or joins the one in progress). Returns how many records came in. */
+/**
+ * Runs one sync (or joins the one in progress). Returns how many records came in. A change made while
+ * one is running is sent by another round straight after it (it wasn't in the copy that one sent).
+ */
 export function syncNow(force = false): Promise<number> {
-  if (running) return running;
-  running = doSync(force).finally(() => { running = null; });
+  if (running) { again = true; return running; }
+  again = false;
+  running = doSync(force).finally(() => {
+    running = null;
+    if (again) { again = false; requestSync(300); }
+  });
   return running;
 }
 
@@ -76,7 +85,8 @@ async function doSync(force: boolean): Promise<number> {
   if (!navigator.onLine) { setStatus({ state: "offline", message: "Offline — changes are saved here and will sync later" }); return 0; }
   setStatus({ state: "syncing" });
   const base = (await db.get<Base>("base")) ?? { seq: 0, records: {} };
-  const local: Record<string, Rec> = Object.fromEntries(allRecords());
+  const sent = new Map(allRecords());
+  const local: Record<string, Rec> = Object.fromEntries(sent);
   const outgoing: Change[] = [];
   for (const key of new Set([...Object.keys(base.records), ...Object.keys(local)])) {
     const l = local[key], b = base.records[key];
@@ -94,7 +104,10 @@ async function doSync(force: boolean): Promise<number> {
       method: "POST",
       body: JSON.stringify({ since: base.seq, changes: outgoing }),
     }) as { seq: number; conflicts: number; changes: Change[] };
-    applyRemote(reply.changes);
+    // What was edited here while the request was out stays; the next round sends it.
+    const { apply, kept } = remoteToApply(reply.changes, sent, allRecords());
+    applyRemote(apply);
+    if (kept.length) again = true;
     const records = { ...base.records };
     for (const c of outgoing) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
     for (const c of reply.changes) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
