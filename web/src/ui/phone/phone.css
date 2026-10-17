@@ -103,6 +103,11 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 
 /* Full-screen pages over the pager (an item, a note, search, settings) */
 .phone .p-overlay { position: absolute; inset: 0; z-index: 30; background: var(--bg); animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
+/* Three-button navigation: a full-screen page stops at the buttons (an opaque strip under them, above the
+   page's content and below its sheets); with gestures there's no strip and the page runs to the edge. */
+.phone .p-navprobe { position: fixed; left: 0; bottom: 0; width: 0; height: var(--sab); visibility: hidden; pointer-events: none; }
+.phone .p-navstrip { display: none; }
+.phone.navbuttons .p-navstrip { display: block; position: fixed; left: 0; right: 0; bottom: 0; height: var(--sab); z-index: 54; background: var(--bg); pointer-events: auto; }
 @keyframes p-in { from { transform: translate3d(14%, 0, 0); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------- Page chrome ---------- */

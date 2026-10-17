@@ -131,6 +131,7 @@ export function PhoneApp() {
   const [preview, setPreview] = useState<SlotPreview | null>(null);
 
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
+  useLayoutEffect(() => watchNavButtons(), []);
 
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
@@ -297,7 +298,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "settings") {
     body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : <PhoneSettings />;
   }
-  return <div className="p-overlay">{body}</div>;
+  return <div className="p-overlay">{body}<div className="p-navstrip" aria-hidden="true" /></div>;
 }
 
 /**
@@ -398,6 +399,24 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       ))}
     </nav>
   );
+}
+
+/**
+ * With Android's three navigation buttons the bottom inset is a solid bar of buttons (about 48 dp), and
+ * full-screen pages mustn't scroll under it; with gesture navigation it's a thin handle (about 24 dp)
+ * over the page, as now. The inset is measured (a probe as tall as it) and html gets "navbuttons" when
+ * it's the tall kind; it's followed as the setting changes.
+ */
+function watchNavButtons(): () => void {
+  const probe = document.createElement("div");
+  probe.className = "p-navprobe";
+  document.body.appendChild(probe);
+  const check = () => document.documentElement.classList.toggle("navbuttons", probe.offsetHeight > 36);
+  check();
+  const ro = new ResizeObserver(check);
+  ro.observe(probe);
+  window.addEventListener("resize", check);
+  return () => { ro.disconnect(); window.removeEventListener("resize", check); probe.remove(); };
 }
 
 /**
