@@ -85,8 +85,8 @@ export function useNow(): number {
   return now;
 }
 
-export function Pill({ children, color, className = "" }: { children: ReactNode; color: string; className?: string }) {
-  return <span className={`pill ${className}`} style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)`, ["--pc" as string]: color }}>{children}</span>;
+export function Pill({ children, color, className = "", label }: { children: ReactNode; color: string; className?: string; label?: string }) {
+  return <span className={`pill ${className}`} role={label ? "img" : undefined} aria-label={label} data-tip={label ? "" : undefined} style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)`, ["--pc" as string]: color }}>{children}</span>;
 }
 
 /** Seconds a ticked task stays where it was (Settings → Checked tasks); -1 until the page is left. */
@@ -167,7 +167,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
           {isRecurring(item) && <RepeatBadge color={color} />}
-          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS_MUTED[item.priority]} /></span>}
+          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS_MUTED[item.priority]} /></span>}
           {item.title || "Untitled"}
         </div>
         {sub && <div className="sub ellipsis">
@@ -178,7 +178,8 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
         </div>}
       </div>
       <span className="pills">
-      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={PRIORITY_COLORS_MUTED[item.priority]}><span className="sub-icon flag"><Icon name="flag" size={12} /></span>{PRIORITIES[item.priority]}</Pill>}
+      {/* The flag alone, never the level's name (held, the phone shows it as a tooltip). */}
+      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={PRIORITY_COLORS_MUTED[item.priority]} label={`${PRIORITIES[item.priority]} priority`}><span className="sub-icon flag"><Icon name="flag" size={12} /></span></Pill>}
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}

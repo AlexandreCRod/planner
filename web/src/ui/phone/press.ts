@@ -76,6 +76,9 @@ let tipTimer = 0;
 
 /** A button showing only an icon, with a name to show. */
 function iconButton(t: Element): HTMLElement | null {
+  // A labelled symbol with nothing written ([data-tip]: a priority flag) is named the same way.
+  const sym = t.closest<HTMLElement>("[data-tip][aria-label]");
+  if (sym && !(sym.textContent ?? "").trim()) return sym;
   const b = t.closest<HTMLElement>("button, [role=button]");
   if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar")) return null;
   const label = b.getAttribute("aria-label")?.trim();

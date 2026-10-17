@@ -462,7 +462,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
                 <div className="gp-chips">
                   {parsedItem.freq !== "NONE" && <span className="p-assist static"><MIcon name="oRepeat" size={18} /> {describe(parsedItem)}</span>}
                   {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
-                  {parsedItem.priority > 0 && <span className="p-assist static"><MIcon name="oFlag" size={18} color={PRIORITY_COLORS_MUTED[parsedItem.priority]} /> {PRIORITIES[parsedItem.priority]} priority</span>}
+                  {parsedItem.priority > 0 && <span className="p-assist static" role="img" aria-label={`${PRIORITIES[parsedItem.priority]} priority`} data-tip><MIcon name="fFlag" size={18} color={PRIORITY_COLORS_MUTED[parsedItem.priority]} /></span>}
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
               )}

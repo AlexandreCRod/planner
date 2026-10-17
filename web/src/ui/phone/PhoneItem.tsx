@@ -116,16 +116,16 @@ function FieldRow({ icon, onClick, children, top }: { icon?: string | null; onCl
 }
 
 /** Tappable text in a row (a date, a time, a choice); placeholders are greyed. */
-function FieldText({ children, onClick, placeholder, grow }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean }) {
-  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
+function FieldText({ children, onClick, placeholder, grow, label }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean; label?: string }) {
+  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} aria-label={label} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
 }
 
 /** A row with a menu under its text. */
-function MenuText({ text, items, placeholder }: { text: string; items: MenuItem[]; placeholder?: boolean }) {
+function MenuText({ text, items, placeholder, label }: { text: ReactNode; items: MenuItem[]; placeholder?: boolean; label?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="p-menu-anchor start">
-      <FieldText placeholder={placeholder} onClick={() => setOpen(true)}>{text}</FieldText>
+      <FieldText placeholder={placeholder} label={label} onClick={() => setOpen(true)}>{text}</FieldText>
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={items} />
     </span>
   );
@@ -143,6 +143,8 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
   );
 }
 
+/** A priority's name, for its flag's label (held, it shows as a tooltip): "High priority". */
+export const priorityLabel = (p: number) => `${PRIORITIES[p]} priority`;
 const priorityItems = (pick: (p: number) => void): MenuItem[] =>
   PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? PRIORITY_COLORS_MUTED[i] : undefined, onClick: () => pick(i) }));
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
@@ -618,6 +620,13 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
               <DropdownMenu open={catMenu} onClose={() => setCatMenu(false)} items={categoryItems(s, (c) => commit({ ...item, categoryId: c }))} />
             </span>
           </div>
+          {/* Priority is its flag alone (hold it for its name); a tap changes it. */}
+          {!isEvent && item.priority > 0 && (
+            <span className="p-menu-anchor">
+              <IconButton label={priorityLabel(item.priority)} onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={PRIORITY_COLORS_MUTED[item.priority]} /></IconButton>
+              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
+            </span>
+          )}
         </div>
 
         {!isEvent && (
@@ -636,12 +645,6 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
         {alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
-        {!isEvent && item.priority > 0 && (
-          <span className="p-menu-anchor start wide">
-            <InfoRow icon="fFlag" tint={PRIORITY_COLORS_MUTED[item.priority]} text={`${PRIORITIES[item.priority]} priority`} onClick={() => setPrioMenu(true)} />
-            <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
-          </span>
-        )}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {!isEvent && isRecurring(item) && (
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
@@ -948,7 +951,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         </FieldRow>
         {!isEvent && <>
           <FieldRow icon="oFlag">
-            <MenuText text={d.priority === 0 ? "No priority" : `${PRIORITIES[d.priority]} priority`} items={priorityItems((p) => set({ priority: p }))} />
+            <MenuText text={d.priority === 0 ? "No priority" : <MIcon name="fFlag" color={PRIORITY_COLORS_MUTED[d.priority]} />}
+              label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
           {d.startDay !== null && !(canBeRoutine && routine) && (
