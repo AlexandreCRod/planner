@@ -81,6 +81,25 @@ export function noteLines(html: string): NoteLine[] {
   return out;
 }
 
+/**
+ * A note's preview for the Notes page: one line per paragraph (empty ones left out), checklist lines as
+ * "☐ " / "☑ ", list items as "• " / "1. ", indented two spaces a level; at most [maxLines] lines and
+ * about [maxChars] characters, a line cut short ending in "…".
+ */
+export function notePreview(html: string, maxChars = 220, maxLines = 8): string {
+  const out: string[] = [];
+  let left = maxChars;
+  for (const l of noteLines(html)) {
+    if (out.length >= maxLines || left <= 0) break;
+    const mark = l.kind === "CHECK" ? (l.checked ? CHECKED : UNCHECKED) + " " : l.kind === "BULLET" ? "• " : l.kind === "NUMBER" ? `${l.number}. ` : "";
+    let line = "  ".repeat(Math.min(4, l.level)) + mark + l.text.replace(/\s+/g, " ");
+    if (line.length > left) line = line.slice(0, Math.max(0, left - 1)).trimEnd() + "…";
+    left -= line.length;
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
 // ---------- Descriptions (tasks and events): plain text in, simple HTML stored ----------
 
 function decodeEntities(s: string): string {

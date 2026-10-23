@@ -7,7 +7,7 @@ import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
 import { isRoutineItem, isRoutineSeries, routineEntry } from "../../domain/routines.ts";
 import { showStreaks } from "../../store/routines.ts";
-import { preview } from "../../domain/text.ts";
+import { notePreview, preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { KINDS, subtitle } from "../BrowseView.tsx";
@@ -224,7 +224,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
     for (const n of notes) {
       const c = h[0] <= h[1] ? 0 : 1;
       out[c].push(n);
-      h[c] += 70 + Math.min(8, Math.ceil(preview(n.content, 220).length / 26)) * 16;
+      h[c] += 70 + Math.min(8, notePreview(n.content).split("\n").reduce((a, l) => a + Math.max(1, Math.ceil(l.length / 26)), 0)) * 16;
     }
     return out;
   }, [notes]);
@@ -257,7 +257,7 @@ function NoteCard({ n, s, sel }: { n: Item; s: Snapshot; sel: Selection }) {
   const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
   const fg = bg ? onColor(bg) : undefined;
   const accentArgb = n.color ?? (n.categoryId !== null ? s.categoryById.get(n.categoryId)?.color ?? null : null);
-  const text = preview(n.content, 220);
+  const text = notePreview(n.content);
   const tags = (s.tagsByItem.get(n.id) ?? []).map((t) => `#${t.name}`).join(" ");
   const links = s.neighbours(n.id).size;
   const updated = Math.floor((n.updatedAt - new Date(n.updatedAt).getTimezoneOffset() * 60000) / 86400000);
