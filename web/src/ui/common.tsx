@@ -75,6 +75,11 @@ export function useRoute(): [string[], URLSearchParams] {
 }
 
 export const go = (path: string) => { location.hash = "#/" + path; };
+/** Goes to [path] in place of the page shown (no new step for back). */
+export function replaceRoute(path: string) {
+  history.replaceState(null, "", "#/" + path);
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
 
 export function openItem(item: Item, occurrenceDay?: number | null) {
   if (item.type === "NOTE") go(`note/${item.id}`);

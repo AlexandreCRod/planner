@@ -10,13 +10,15 @@ import { preview, stripHtml } from "../../domain/text.ts";
 import { type NoteImage, cssColor } from "../../domain/types.ts";
 import { importImage, useImageUrl } from "../../store/images.ts";
 import { addImage, deleteImage, trash } from "../../store/store.ts";
-import { openItem } from "../common.tsx";
+import { openItem, replaceRoute } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
 import { RichEditor } from "../RichEditor.tsx";
 import { useNoteSession } from "../noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { CaretMarker } from "./CaretMarker.tsx";
 import { NoteFind, takePendingFind } from "./NoteFind.tsx";
+import { NotePeek, PeekPicker, peekInNextNote, takePendingPeek } from "./NotePeek.tsx";
+import { feel } from "./haptics.ts";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
@@ -28,7 +30,8 @@ import { RichBar, RichBarButton } from "./RichBar.tsx";
 const PASTELS = PAGE_COLORS.map((c) => (parseInt(c.slice(1), 16) | 0xff000000) | 0);
 const PATTERNS = ["Plain", "Lines", "Grid", "Dots"];
 
-export function PhoneNote({ id, day }: { id: number | null; day: number | null }) {
+/** [shown]: false while the note is put away in its chip (another page showing). */
+export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | null; day: number | null; shown?: boolean; onSaved?: (id: number) => void }) {
   const note = useNoteSession({ id, day, newTitle: isoOf });
   const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle, place, setPlace } = note;
   const [focused, setFocused] = useState(false);
@@ -42,7 +45,30 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const scrollBox = useRef<HTMLDivElement>(null);
   // Find in the note: from the menu, or already open on a note opened from Search.
   const [finding, setFinding] = useState<{ q: string; focus: boolean } | null>(() => { const q = takePendingFind(); return q ? { q, focus: false } : null; });
+  // Another note shown in a panel under this one (and the picker choosing it).
+  const [peek, setPeek] = useState<number | null>(takePendingPeek);
+  const [picking, setPicking] = useState(false);
+  const pageEl = useRef<HTMLDivElement>(null);
 
+  // Put away into the chip: menus, sheets and the find bar close (they'd keep the back button), and the
+  // text lets go of the focus (the caret is kept by the editor for when it comes back).
+  useEffect(() => { if (noteId) onSaved?.(noteId); }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (shown) return;
+    note.save();
+    setMenu(false); setOpen(""); setViewing(null); setFinding(null); setPicking(false);
+    const a = document.activeElement as HTMLElement | null;
+    if (a && pageEl.current?.contains(a)) a.blur();
+  }, [shown]);
+
+  /** Swap: the panel's note becomes the one written in, and this one goes to the panel. */
+  const swap = () => {
+    if (peek === null) return;
+    const mine = note.save() || noteId;
+    peekInNextNote(mine || null);
+    feel("confirm");
+    replaceRoute(`note/${peek}`);
+  };
   // The formatting bar goes with the keyboard; the text keeps the focus (and its caret) until a tap
   // elsewhere, so a tap on it brings the keyboard back where writing stopped (native.ts).
   const kbUp = useKeyboardUp();
@@ -70,7 +96,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const keepFocus = { onPointerDown: (e: React.PointerEvent) => e.preventDefault(), onMouseDown: (e: React.MouseEvent) => e.preventDefault() };
 
   return (
-    <div className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg!, ["--pn-bg" as string]: page } : undefined}>
+    <div ref={pageEl} className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg!, ["--pn-bg" as string]: page } : undefined}>
       <TopAppBar back title={isDaily ? formatDate(base.noteDay!) : ""} className="pn-appbar" actions={<>
         {writing && <span className="pn-undo" {...keepFocus}>
           <IconButton icon="fUndo" label="Undo" disabled={!undoState.undo} onClick={() => rich.current?.exec("undo")} />
@@ -83,6 +109,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
             { label: "Find in note", icon: "oFindInPage", onClick: () => setFinding({ q: finding?.q ?? "", focus: true }) },
             { label: "Add picture", icon: "oAddPhotoAlternate", onClick: pickPictures },
+            { label: "Show another note", icon: "oSplitscreen", onClick: () => setPicking(true) },
             { label: style.hidden ? "Show on Notes page" : "Hide from Notes page", icon: style.hidden ? "oVisibility" : "oVisibilityOff", onClick: () => {
               setStyle({ ...style, hidden: !style.hidden });
               showSnackbar(style.hidden ? "Shown on the Notes page again" : "Hidden from the Notes page. Search still finds it.");
@@ -135,6 +162,8 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           <PhoneLinks id={noteId} s={s} ensureSaved={() => note.save()} />
         </div>
       </div>
+
+      {peek !== null && <NotePeek key={peek} id={peek} host={() => pageEl.current} onSwap={swap} onClose={() => setPeek(null)} />}
 
       {writing && <RichBar editor={rich} onHold={setHeld} extra={<RichBarButton icon="oAddPhotoAlternate" label="Add picture" onClick={pickPictures} />} />}
 
@@ -194,6 +223,8 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           You can restore it from Settings → Trash for {NOTE_DAYS} days.
         </Dialog>
       )}
+
+      {picking && <PeekPicker exclude={noteId} onPick={(pid) => setPeek(pid)} onClose={() => setPicking(false)} />}
 
       {viewing && <Picture img={viewing} onClose={() => setViewing(null)} onRemove={() => { deleteImage(viewing); setViewing(null); }} />}
     </div>

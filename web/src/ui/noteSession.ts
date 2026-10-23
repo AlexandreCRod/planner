@@ -57,7 +57,8 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     latest.current.noteId = saved;
     if (leaving.current) return; // the page shown now is another one
     setNoteId(saved);
-    history.replaceState(null, "", `#/note/${saved}`);
+    // Only while it's the page shown (not while put away in its chip, another page showing).
+    if (location.hash.startsWith("#/note/")) history.replaceState(null, "", `#/note/${saved}`);
   };
 
   /** Saves what changed here, if anything; [force] saves a new note even untouched (to attach pictures to). Returns its id (0: not saved). */

@@ -17,7 +17,8 @@ import { SnackbarHost } from "./m3.tsx";
 import { DrumHost } from "./TimeWheel.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
-import { minimizeApp, setShellBack, startPhonePlumbing } from "./native.ts";
+import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
+import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendar, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
 import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.tsx";
 import "./phone.css";
@@ -130,6 +131,15 @@ export function PhoneApp() {
   // The outline the calendar draws where a new event from a slot will go (it follows the panel).
   const [preview, setPreview] = useState<SlotPreview | null>(null);
 
+  // The open note (one at a time). It stays open while another page is shown, shrunk into a chip above
+  // the bar, so coming back to it finds it exactly as it was; [hash] is its route (the note's id once saved).
+  const [dock, setDock] = useState<{ n: number; key: string; id: number | null; day: number | null; hash: string } | null>(null);
+  const [minimized, setMinimized] = useState(false);
+  const minimizedRef = useRef(false);
+  minimizedRef.current = minimized;
+  const minimizing = useRef(false);
+  const kbUp = useKeyboardUp(), kbHeight = useKeyboardHeight();
+
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
   useLayoutEffect(() => watchNavButtons(), []);
 
@@ -186,6 +196,15 @@ export function PhoneApp() {
    * second tap on the same tab within 350 ms puts it back to its base view.
    */
   const onTabTap = (i: number) => {
+    // A tab tapped while a note is open: the note shrinks into its chip and that page shows.
+    if (route === "note" && dock) {
+      minimizing.current = true;
+      lastTap.current = { i: -1, at: 0 };
+      history.replaceState(null, "", `#/${TABS[i].key}`);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      if (i === tabRef.current) popBar.current?.();
+      return;
+    }
     const now = performance.now();
     const prev = lastTap.current;
     if (prev.i === i && now - prev.at < DOUBLE_TAP_MS && tabRef.current === i) {
@@ -206,7 +225,25 @@ export function PhoneApp() {
     if (route === "alarms" && path[1]) { openAlarmSection(path[1]); history.replaceState(null, "", "#/alarms"); }
   }, [route, path[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The note's route opens it (or brings back the one in the chip); back to a page closes it, unless it was
+  // put away into the chip; another full-screen page (an item from its links) opens over it.
+  useLayoutEffect(() => {
+    if (route === "note") {
+      const id = path[1] && path[1] !== "new" ? Number(path[1]) : null;
+      const day = query.get("day") ? Number(query.get("day")) : null;
+      const key = (path[1] ?? "") + (day ?? "");
+      setDock((d) => (d && (d.key === key || d.hash === location.hash) ? d : { n: (d?.n ?? 0) + 1, key, id, day, hash: location.hash }));
+      setMinimized(false);
+    } else if (routeTab >= 0) {
+      if (minimizing.current) { minimizing.current = false; setMinimized(true); }
+      else if (!minimizedRef.current) setDock(null);
+    }
+  }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const overlay = routeTab < 0 && route !== "" ? route : null;
+  const noteShown = route === "note" && !!dock;
+  // While writing, the keyboard covers the bar: the note takes the whole screen.
+  const noteKb = noteShown && (isNative ? kbUp : kbHeight > 0);
   // Back: overlays and panels close first (they push their own handlers), then other tabs return to Today.
   useEffect(() => {
     setShellBack(() => {
@@ -231,7 +268,7 @@ export function PhoneApp() {
   };
 
   return (
-    <div className="p-root">
+    <div className={`p-root ${noteKb ? "note-kb" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
         <div className="p-track" ref={(el) => { pos.track = el; if (el) el.style.transform = slide(pos.p, -1); }}>
           {TABS.map((t, i) => (
@@ -248,9 +285,19 @@ export function PhoneApp() {
           <MIcon name="fAdd" />
         </button>
       )}
-      {overlay && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
+      {dock && (
+        <div className={`p-overlay p-notelayer ${noteShown ? "" : "away"}`} aria-hidden={!noteShown}>
+          <PhoneNote key={dock.n} id={dock.id} day={dock.day} shown={noteShown}
+            onSaved={(nid) => setDock((d) => (d && d.n === dock.n ? { ...d, hash: d.hash.replace(/^#\/note\/[^?]*/, `#/note/${nid}`) } : d))} />
+          {noteKb && <div className="p-navstrip" aria-hidden="true" />}
+        </div>
+      )}
+      {dock && minimized && routeTab >= 0 && (
+        <NoteChip key={dock.n} hash={dock.hash} onOpen={() => { location.hash = dock.hash; }} onClose={() => { setDock(null); setMinimized(false); }} />
+      )}
+      {overlay && overlay !== "note" && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
       <DrumHost />
-      <SnackbarHost raised={!!overlay} />
+      <SnackbarHost raised={!!overlay && (overlay !== "note" || noteKb)} />
       <PermissionHost />
       <InviteHost />
       {isNative && <UpdateHost />}
@@ -283,7 +330,7 @@ const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: 
   }
 }, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active));
 
-/** Full-screen pages over the pager: an item, a note, search, settings. */
+/** Full-screen pages over the pager: an item, search, settings. (The open note is the shell's own.) */
 function Overlay({ route, path, query }: { route: string; path: string[]; query: URLSearchParams }) {
   let body: ReactNode = null;
   if (route === "item" && path[1]) {
@@ -291,8 +338,6 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
     body = query.get("edit") === "1"
       ? <PhoneItemEditorPage key={`e${path[1]}`} id={Number(path[1])} occ={occ} dup={query.get("dup") === "1"} />
       : <PhoneItemView key={path[1]} id={Number(path[1])} occ={occ} />;
-  } else if (route === "note") {
-    body = <PhoneNote key={path[1] + (query.get("day") ?? "")} id={path[1] && path[1] !== "new" ? Number(path[1]) : null} day={query.get("day") ? Number(query.get("day")) : null} />;
   } else if (route === "graph") {
     body = <PhoneGraph focusId={Number(query.get("focus")) || 0} />;
   } else if (route === "browse") {
