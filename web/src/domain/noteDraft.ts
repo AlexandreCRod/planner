@@ -5,15 +5,17 @@
 // arrives from sync for a field the user hasn't touched is shown in the editor straight away.
 import type { Item } from "./types.ts";
 
-/** The parts of a note its editor can change. [tags] is the names, space separated. */
+/**
+ * The parts of a note its editor can change. [tags] is the names, space separated. (Notes no longer have
+ * a place: a place stored on an older note is never written here, so it's kept as it is.)
+ */
 export interface NoteDraft {
   title: string; content: string; tags: string;
   pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null;
   hidden: boolean;
-  location: string; lat: number | null; lng: number | null;
 }
 export type NoteField = keyof NoteDraft;
-export const NOTE_FIELDS: readonly NoteField[] = ["title", "content", "tags", "pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "hidden", "location", "lat", "lng"];
+export const NOTE_FIELDS: readonly NoteField[] = ["title", "content", "tags", "pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "hidden"];
 
 /**
  * What the editor last loaded or saved: [stored] is that note as stored; [shownContent] its text as the
@@ -32,7 +34,7 @@ export function draftOf(item: Item, tags: string[] | string): NoteDraft {
   return {
     title: item.title, content: item.content, tags: Array.isArray(tags) ? tags.join(" ") : tags,
     pinned: item.pinned, bgColor: item.bgColor, bgPattern: item.bgPattern, fontFamily: item.fontFamily,
-    categoryId: item.categoryId, color: item.color, hidden: item.hidden ?? false, location: item.location ?? "", lat: item.lat ?? null, lng: item.lng ?? null,
+    categoryId: item.categoryId, color: item.color, hidden: item.hidden ?? false,
   };
 }
 
@@ -59,7 +61,6 @@ export function localChanges(baseline: NoteBaseline, current: Omit<NoteDraft, "c
     if (f === "content") { if (current.content !== null && current.content !== baseline.shownContent) out.content = current.content; }
     else if (f === "title") { if (current.title.trim() !== baseline.stored.title.trim()) out.title = current.title.trim(); }
     else if (f === "tags") { if (!sameTags(current.tags, baseline.stored.tags)) out.tags = tagNames(current.tags).join(" "); }
-    else if (f === "location") { if (current.location.trim() !== baseline.stored.location.trim()) out.location = current.location.trim(); }
     else if (current[f] !== baseline.stored[f]) (out as Record<string, unknown>)[f] = current[f];
   }
   return out;

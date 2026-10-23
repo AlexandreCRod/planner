@@ -88,3 +88,16 @@ test("a new note is saved whole once something is typed", () => {
   assert.equal(plan.item.id, 0);
   assert.equal(plan.item.content, "<p>hi</p>");
 });
+
+// Item 81: notes no longer have a place. An older note's stored place is kept as it is when it's edited.
+test("an edited note keeps a place stored on it, and the editor never writes one", () => {
+  const older = newItem({ type: "NOTE", id: 9, title: "Trip", content: "<p>a</p>", location: "Lisbon", lat: 38.7, lng: -9.1 });
+  const base = baselineOf(older, "");
+  assert.equal("location" in base.stored, false);
+  const changes = localChanges(base, editorNow(older, "<p>b</p>"));
+  assert.deepEqual(changes, { content: "<p>b</p>" });
+  const plan = noteToSave(older, older, changes)!;
+  assert.equal(plan.item.location, "Lisbon");
+  assert.equal(plan.item.lat, 38.7);
+  assert.equal(plan.item.content, "<p>b</p>");
+});

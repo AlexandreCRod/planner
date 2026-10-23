@@ -1,6 +1,6 @@
 // The phone's note editor, laid out like NoteEditorScreen.kt: a top bar in the page's colour (back,
 // undo and redo while writing, pin, style, and a menu with pictures, templates, history and trash),
-// then the title, tags, place, pictures and the text, and the links under it. The formatting bar
+// then the title, tags, pictures and the text, and the links under it. The formatting bar
 // shows only while the text has the focus, sitting on the keyboard. Saving is the same as on the
 // PC: a second after each change, and a version is kept when you leave a note you changed.
 import { useEffect, useRef, useState } from "react";
@@ -23,7 +23,6 @@ import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndo
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
 import { pushBack, useKeyboardUp } from "./native.ts";
-import { openPlace } from "./device.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
 
@@ -33,7 +32,7 @@ const PATTERNS = ["Plain", "Lines", "Grid", "Dots"];
 /** [shown]: false while the note is put away in its chip (another page showing). */
 export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | null; day: number | null; shown?: boolean; onSaved?: (id: number) => void }) {
   const note = useNoteSession({ id, day, newTitle: isoOf });
-  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle, place, setPlace } = note;
+  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle } = note;
   const [focused, setFocused] = useState(false);
   const [held, setHeld] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -141,12 +140,6 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           <MIcon name="oLabel" />
           <input placeholder="tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} autoCapitalize="none" />
         </label>
-        <div className="pn-meta place">
-          <MIcon name="oLocationOn" />
-          {/* A typed place has no coordinates; the map is searched for the text. */}
-          <input placeholder="place" value={place.location} onChange={(e) => setPlace({ location: e.target.value, lat: null, lng: null })} />
-          {place.location.trim() && <IconButton icon="oMap" label="Open in Maps" onClick={() => openPlace(place.location.trim(), place.lat, place.lng)} />}
-        </div>
         {images.length > 0 && (
           <div className="pn-images">
             {images.map((img) => <Thumb key={img.id} img={img} onOpen={() => setViewing(img)} />)}

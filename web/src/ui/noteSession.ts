@@ -10,8 +10,12 @@ import { allRecords, deleteIfEmpty, isEmptyNote, onFlush, saveItem, saveVersion,
 import { type RichEditorHandle, useEditorHtml } from "./RichEditor.tsx";
 
 export interface NoteStyle { pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null; hidden: boolean }
-export interface NotePlace { location: string; lat: number | null; lng: number | null }
 
+/** A new note: no place fields at all (notes have none now; older notes keep theirs, untouched). */
+function newNote(day: number | null, newTitle: (day: number) => string): Item {
+  const { location: _l, lat: _a, lng: _g, ...note } = newItem({ type: "NOTE", noteDay: day, title: day !== null ? newTitle(day) : "" });
+  return note;
+}
 const styleOf = (i: Item): NoteStyle => ({ pinned: i.pinned, bgColor: i.bgColor, bgPattern: i.bgPattern, fontFamily: i.fontFamily, categoryId: i.categoryId, color: i.color, hidden: i.hidden ?? false });
 const tagsOf = (s: Snapshot, id: number) => (s.tagsByItem.get(id) ?? []).map((t) => t.name).join(" ");
 /** The note as stored, trashed or not (undefined when it's gone). */
@@ -19,20 +23,19 @@ const storedItem = (id: number) => (id ? allRecords().get(`items/${id}`) as Item
 
 export function useNoteSession({ id, day, newTitle }: { id: number | null; day: number | null; newTitle: (day: number) => string }) {
   const s = useSnapshot();
-  const [base] = useState<Item>(() => (id !== null ? s.byId.get(id) : undefined) ?? newItem({ type: "NOTE", noteDay: day, title: day !== null ? newTitle(day) : "" }));
+  const [base] = useState<Item>(() => (id !== null ? s.byId.get(id) : undefined) ?? newNote(day, newTitle));
   const [noteId, setNoteId] = useState(base.id);
   const [title, setTitleState] = useState(base.title);
   const [tags, setTagsState] = useState(() => tagsOf(s, base.id));
   const [style, setStyleState] = useState<NoteStyle>(() => styleOf(base));
-  const [place, setPlaceState] = useState<NotePlace>({ location: base.location ?? "", lat: base.lat ?? null, lng: base.lng ?? null });
   // What the editor is told to show; [n] makes it show the same text again.
   const [content, setContentState] = useState({ html: base.content, n: 0 });
   const rich = useRef<RichEditorHandle>(null);
   const baseline = useRef<NoteBaseline>(baselineOf(base, tags));
   // The editor's own reading of text it was given from the store is taken once it shows it.
   const readBack = useRef(true);
-  const latest = useRef({ noteId, title, tags, style, place });
-  latest.current = { noteId, title, tags, style, place };
+  const latest = useRef({ noteId, title, tags, style });
+  latest.current = { noteId, title, tags, style };
   const opened = useRef(base.content);
   const contentSaved = useRef(false);
   const deleted = useRef(false);
@@ -50,7 +53,7 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
   /** The editor now (content null while text from the store is still on its way in). */
   const current = () => {
     const l = latest.current;
-    return { title: l.title, tags: l.tags, ...l.style, ...l.place, content: readBack.current ? null : html() };
+    return { title: l.title, tags: l.tags, ...l.style, content: readBack.current ? null : html() };
   };
   const adopt = (saved: number) => {
     if (saved === latest.current.noteId) return;
@@ -97,10 +100,6 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     const st: Partial<NoteStyle> = {};
     for (const k of ["pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "hidden"] as const) if (k in d) (st as Record<string, unknown>)[k] = d[k];
     if (Object.keys(st).length) { l.style = { ...l.style, ...st }; setStyleState(l.style); }
-    if ("location" in d || "lat" in d || "lng" in d) {
-      l.place = { location: d.location ?? l.place.location, lat: "lat" in d ? d.lat! : l.place.lat, lng: "lng" in d ? d.lng! : l.place.lng };
-      setPlaceState(l.place);
-    }
     if (d.content !== undefined) { readBack.current = true; setContentState((c) => ({ html: d.content!, n: c.n + 1 })); }
   };
 
@@ -118,7 +117,7 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
   }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The user's own changes: shown, and saved shortly after.
-  const edit = <T,>(set: (v: T) => void, key: "title" | "tags" | "style" | "place") => (v: T) => {
+  const edit = <T,>(set: (v: T) => void, key: "title" | "tags" | "style") => (v: T) => {
     (latest.current as Record<string, unknown>)[key] = v;
     set(v);
     scheduleSave();
@@ -128,7 +127,6 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     title, setTitle: edit(setTitleState, "title"),
     tags, setTags: edit(setTagsState, "tags"),
     style, setStyle: edit(setStyleState, "style"),
-    place, setPlace: edit(setPlaceState, "place"),
     /** The text to give the editor, and its revision. */
     content: content.html, revision: content.n,
     /** Replaces the text (a template, an earlier version): a change of the user's, saved. */

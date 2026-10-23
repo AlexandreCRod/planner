@@ -74,9 +74,8 @@ export function NotesView() {
 
 export function NoteEditor({ id, day }: { id: number | null; day: number | null }) {
   const note = useNoteSession({ id, day, newTitle: isoOf });
-  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle, place, setPlace } = note;
+  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle } = note;
   const [viewing, setViewing] = useState<NoteImage | null>(null);
-  const [locating, setLocating] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<"" | "style" | "templates" | "versions">("");
 
@@ -96,16 +95,6 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
     e.preventDefault(); e.stopPropagation();
     void addPictures(files);
   };
-  const locate = () => {
-    if (!navigator.geolocation) { alert("This browser can't tell where you are."); return; }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setLocating(false); const { latitude: lat, longitude: lng } = pos.coords; setPlace({ location: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, lat, lng }); },
-      () => { setLocating(false); alert("Couldn't get this computer's location (permission refused or not available)."); },
-      { timeout: 15000 },
-    );
-  };
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : place.location.trim())}`;
   const images = s.images.get(noteId) ?? [];
 
   const isDaily = base.noteDay !== null;
@@ -172,13 +161,6 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
         {!isDaily && <input className="title-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); rich.current?.focusStart(); } }} style={{ color: fg, fontFamily: "inherit" }} />}
         <input className="tags-input" placeholder="# tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
-        <div className="place-row">
-          <Icon name="place" size={16} />
-          {/* A typed place has no coordinates; only "use my location" sets them. */}
-          <input className="tags-input" placeholder="place" value={place.location} onChange={(e) => setPlace({ location: e.target.value, lat: null, lng: null })} />
-          <button className="icon-btn" title="Use this computer's location" disabled={locating} onClick={locate}><Icon name="myLocation" size={18} /></button>
-          {place.location.trim() && <a className="icon-btn" title="Open in Google Maps" href={mapsUrl} target="_blank" rel="noreferrer"><Icon name="map" size={18} /></a>}
-        </div>
         {images.length > 0 && (
           <div className="image-strip">
             {images.map((img) => <Thumb key={img.id} img={img} onOpen={() => setViewing(img)} />)}
