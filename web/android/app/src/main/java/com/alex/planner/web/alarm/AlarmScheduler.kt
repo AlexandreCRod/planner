@@ -154,7 +154,10 @@ object AlarmScheduler {
         val live = HashSet<Long>()
         m.reminders.groupBy { it.itemId }.forEach { (itemId, rs) ->
             val item = items[itemId]
-            if (item == null || item.deletedAt != null) rs.forEach { cancel(context, it.id); Shown.forget(context, it.id) }
+            if (item == null || item.deletedAt != null) {
+                rs.forEach { cancel(context, it.id); Shown.forget(context, it.id) }
+                Notifications.cancelStarting(context, itemId)
+            }
             else {
                 scheduleItem(context, item, rs)
                 rs.forEach { live += it.id }

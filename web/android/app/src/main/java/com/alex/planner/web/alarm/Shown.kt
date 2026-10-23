@@ -60,6 +60,12 @@ object Shown {
                 occ.original in 1 until old -> remove(context, kind, r.id)
             }
         }
+        // "Starting now" goes once the task is ticked (it's about the occurrence starting within the last half hour).
+        if (item.type == ItemType.TASK) {
+            val today = java.time.LocalDate.now().epoch()
+            val day = if (item.isRecurring) today else item.startDay
+            if (day in done) Notifications.cancelStarting(context, item.id)
+        }
         val ringing = AlarmService.ringing
         if (ringing != null && ringing.itemId == item.id && item.type == ItemType.TASK) {
             val day = if (item.isRecurring) ringing.day else item.startDay
