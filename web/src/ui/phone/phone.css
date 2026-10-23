@@ -1288,6 +1288,18 @@ html.phone[data-theme="dark"] {
 .phone .p-mdp-days button.sel:not(.joinr) span { margin-right: 4px; }
 .phone .p-mdp-days button.sel:not(.joinl):not(.joinr) span { width: 40px; justify-self: center; margin: 0; }
 .phone .p-mdp .p-dp-actions .grow { flex: 1; }
+/* The range picker: the start and end days filled, a band across the days between. */
+.phone .p-rdp-head { display: flex; align-items: baseline; gap: 10px; }
+.phone .p-rdp-head > span:not(.sep) { color: var(--muted); }
+.phone .p-rdp-head > span.on { color: var(--text); text-decoration: underline; text-decoration-color: var(--p-primary); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.phone .p-rdp-days button.band::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 0; right: 0; background: var(--p-sec-container); }
+.phone .p-rdp-days button.band.one::before { display: none; }
+.phone .p-rdp-days button.band.rs::before { left: 50%; }
+.phone .p-rdp-days button.band.re::before { right: 50%; }
+.phone .p-rdp-days button.band.c0:not(.rs)::before { left: 4px; border-radius: 20px 0 0 20px; }
+.phone .p-rdp-days button.band.c6:not(.re)::before { right: 4px; border-radius: 0 20px 20px 0; }
+.phone .p-rdp-days button span { position: relative; z-index: 1; }
+.phone .p-rdp-days button.sel span { width: 40px; justify-self: center; margin: 0; border-radius: 50%; }
 .phone .p-dp-month.static { pointer-events: none; }
 .phone .p-daysheet .p-dp-nav { padding: 0 12px 0 16px; }
 .phone .p-daysheet .p-dp-month { font-size: 16px; color: var(--text); }

@@ -30,7 +30,7 @@ import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./nativ
 
 const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
 import { type Draft, PhoneItemEditor, firstAlerts, switchType } from "./PhoneItem.tsx";
-import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 
 /** What a timer or alarm typed on the add line will be: "Timer · 10:00 · pasta", "Alarm · 7:00 AM · Weekdays". */
 function clockText(c: ClockCommand): string {
@@ -416,6 +416,11 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (lineMode) setOv((o) => ({ ...o, startDay: e }));
     else { const span = (d.endDay ?? d.startDay ?? e) - (d.startDay ?? e); setItem({ startDay: e, endDay: d.type === "EVENT" ? e + span : null }); }
   };
+  /** An event's days, from the range picker. */
+  const pickDays = (a: number, b: number) => {
+    if (lineMode) setOv((o) => ({ ...o, startDay: a, endDay: b }));
+    else setItem({ startDay: a, endDay: b });
+  };
   const pickStart = (m: number) => {
     const len = d.startMin !== null && d.endMin !== null ? Math.max(15, d.endMin - d.startMin) : 60;
     const end = d.type === "EVENT" ? Math.min(DAY_END, m + len) : null;
@@ -595,7 +600,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
             </div>
             <div className="gp-row when">
               <MIcon name="oSchedule" />
-              <TextButton onClick={() => openPick({ kind: "date" })}>{d.startDay !== null ? formatDate(d.startDay) : "Add date"}</TextButton>
+              <TextButton onClick={() => openPick({ kind: "date" })}>{d.startDay === null ? "Add date" : isEvent && d.endDay !== null && d.endDay > d.startDay
+                ? `${formatDateShort(d.startDay)} – ${formatDateShort(d.endDay)}` : formatDate(d.startDay)}</TextButton>
               {d.startDay !== null && !d.allDay && <TextButton onClick={() => openPick({ kind: "start" })}>{formatTime(d.startMin ?? req.min ?? 540)}</TextButton>}
               {isEvent && !d.allDay && <>
                 <span>–</span>
@@ -610,7 +616,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           </div>
         </animated.div>
       </animated.div>
-      {pick?.kind === "date" && <DatePickerDialog value={d.startDay ?? req.day} onClose={closePick} onPick={pickDay} />}
+      {pick?.kind === "date" && !isEvent && <DatePickerDialog value={d.startDay ?? req.day} onClose={closePick} onPick={pickDay} />}
+      {pick?.kind === "date" && isEvent && <RangeDatePickerDialog start={d.startDay ?? req.day} end={d.endDay ?? d.startDay ?? req.day} onClose={closePick} onPick={pickDays} />}
       {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} />}
       {pick?.kind === "end" && <TimePickerDialog value={d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END)} onClose={closePick} onPick={pickEnd} />}
       {colorOpen && <CategoryDialog selected={d.categoryId} onClose={closePick} onPick={pickCategory} />}

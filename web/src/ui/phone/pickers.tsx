@@ -2,13 +2,14 @@
 // TimePicker dial in an AlertDialog, see DatePickDialog / TimePickDialog in Common.kt), instead of the
 // browser's own <input type=date|time> pop-ups.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { addMonths, daysInMonth, epochOf, formatDate, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
+import { addMonths, daysInMonth, epochOf, formatDate, formatDateShort, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
 import { IconButton, MIcon, ModalLayer } from "./chrome.tsx";
 import { BottomSheet, TextButton } from "./m3.tsx";
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { magnetMinute } from "./dial.ts";
+import { type RangePick, rangeRole, slideRange, tapRange } from "./range.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const WD = ["M", "T", "W", "T", "F", "S", "S"];
@@ -145,6 +146,92 @@ export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
         <span className="grow" />
         <TextButton onClick={onClose}>Cancel</TextButton>
         <TextButton onClick={() => { onPick([...sel].sort((a, b) => a - b)); onClose(); }}>OK</TextButton>
+      </div>
+    </PickerShell>
+  );
+}
+
+/**
+ * A run of days (a multi-day event's dates), in one calendar like the skip-days picker: tap the start
+ * day, then the end day; or press the start day and slide across the days (down, across, or both), the
+ * range following the finger and ending where it lifts; off the calendar, the last day it was on
+ * counts. The ends are filled circles, the days between a band; a light tick for each day crossed.
+ * [next] is the end a first tap sets (the end, when opened from the end date).
+ */
+export function RangeDatePickerDialog({ title = "Select dates", start, end, next = "start", onPick, onClose }: {
+  title?: string; start: number; end: number; next?: "start" | "end"; onPick: (start: number, end: number) => void; onClose: () => void;
+}) {
+  const t = todayEpoch();
+  const [r, setR] = useState<RangePick>(() => ({ start, end: Math.max(start, end), next }));
+  const [month, setMonth] = useState(() => { const { y, m } = ymd(next === "end" ? Math.max(start, end) : start); return epochOf(y, m, 1); });
+  const drag = useRef<{ id: number; anchor: number; last: number; moved: boolean; base: RangePick } | null>(null);
+  const dayAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]");
+    const d = el ? Number(el.dataset.day) : NaN;
+    return Number.isFinite(d) ? d : null;
+  };
+  const { y, m } = ymd(month);
+  const lead = month - startOfWeek(month, mondayFirst());
+  const n = daysInMonth(y, m);
+  const cells: (number | null)[] = [...Array.from({ length: lead }, () => null), ...Array.from({ length: n }, (_, i) => month + i)];
+  while (cells.length < 42) cells.push(null);
+  const end1 = r.next === "end" && drag.current === null; // the end is still to be picked
+  return (
+    <PickerShell onClose={onClose} className="p-datepicker p-mdp p-rdp">
+      <div className="p-dp-title">{title}</div>
+      <div className="p-dp-headline p-rdp-head">
+        <span className={r.next === "start" ? "on" : ""}>{formatDateShort(r.start)}</span>
+        <span className="sep">–</span>
+        <span className={r.next === "end" ? "on" : ""}>{end1 ? "End" : formatDateShort(r.end)}</span>
+      </div>
+      <div className="p-divider" />
+      <div className="p-dp-nav">
+        <span className="p-dp-month static">{monthLong(m)} {y}</span>
+        <span className="grow" />
+        <IconButton icon="fKeyboardArrowLeft" label="Previous month" onClick={() => setMonth(addMonths(month, -1))} />
+        <IconButton icon="fKeyboardArrowRight" label="Next month" onClick={() => setMonth(addMonths(month, 1))} />
+      </div>
+      <div className="p-dp-week">{weekLabels().map((l, i) => <span key={i}>{l}</span>)}</div>
+      <div className="p-dp-days p-mdp-days p-rdp-days"
+        onPointerDown={(e) => {
+          if (drag.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+          const d = dayAt(e.clientX, e.clientY);
+          if (d === null) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          drag.current = { id: e.pointerId, anchor: d, last: d, moved: false, base: r };
+        }}
+        onPointerMove={(e) => {
+          const g = drag.current;
+          if (!g || e.pointerId !== g.id) return;
+          // Off the calendar: the last day the finger was on stays.
+          const d = dayAt(e.clientX, e.clientY);
+          if (d === null || d === g.last) return;
+          g.moved = true;
+          g.last = d;
+          setR(slideRange(g.anchor, d));
+          feel("tick");
+        }}
+        onPointerUp={(e) => {
+          const g = drag.current;
+          if (!g || g.id !== e.pointerId) return;
+          drag.current = null;
+          if (!g.moved) { setR(tapRange(g.base, g.anchor)); feel("tick"); }
+          else setR(slideRange(g.anchor, g.last));
+        }}
+        onPointerCancel={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}>
+        {cells.map((d, i) => {
+          if (d === null) return <span key={i} />;
+          const role = end1 ? (d === r.start ? "single" : null) : rangeRole(r, d), col = i % 7;
+          const cls = [
+            role && role !== "inside" ? "sel" : "", role ? "band" : "", role === "single" ? "one" : "", role === "start" ? "rs" : "", role === "end" ? "re" : "",
+            col === 0 ? "c0" : "", col === 6 ? "c6" : "", d === t ? "today" : "",
+          ].join(" ");
+          return <button key={i} data-day={d} className={cls} aria-pressed={!!role}><span>{ymd(d).d}</span></button>;
+        })}
+      </div>
+      <div className="p-dp-actions">
+        <TextButton onClick={onClose}>Cancel</TextButton>
+        <TextButton onClick={() => { onPick(r.start, end1 ? r.start : r.end); onClose(); }}>OK</TextButton>
       </div>
     </PickerShell>
   );

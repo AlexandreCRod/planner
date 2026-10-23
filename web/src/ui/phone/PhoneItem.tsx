@@ -22,7 +22,7 @@ import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { NO_PLACE, type Place, mapsQuery, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
-import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
@@ -186,7 +186,12 @@ function WhenFields({ d, set }: { d: Item; set: (patch: Partial<Item>) => void }
         </>}
       </FieldRow>
     )}
-    {pick?.kind === "date" && (
+    {/* An event's days: start and end in one calendar. */}
+    {pick?.kind === "date" && isEvent && (
+      <RangeDatePickerDialog start={d.startDay ?? todayEpoch()} end={dateOf("end") ?? d.startDay ?? todayEpoch()} next={pick.which === "end" ? "end" : "start"}
+        onClose={() => setPick(null)} onPick={(a, b) => set({ startDay: a, endDay: b })} />
+    )}
+    {pick?.kind === "date" && !isEvent && (
       <DatePickerDialog value={dateOf(pick.which === "end" ? "end" : "start")} onClose={() => setPick(null)} onPick={(e) => {
         if (pick.which === "end") set({ endDay: Math.max(e, d.startDay ?? e) });
         else {
