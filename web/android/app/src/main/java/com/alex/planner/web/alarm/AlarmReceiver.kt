@@ -206,7 +206,8 @@ class AlarmReceiver : BroadcastReceiver() {
     /**
      * [item] starts ([at] when it was set for; the item may have moved since). Its reminders from before
      * the start are over: their notifications, snoozes and notices go, and an alarm put off past the start
-     * won't ring. Then a gentle "Starting now", unless something of its own rings at the start.
+     * won't ring. Reminders set for after the start (negative offsets) are left alone: they're still to come.
+     * Then a gentle "Starting now", unless something of its own rings at the start.
      */
     private fun handleStart(context: Context, item: Item, day: Long, at: Long) {
         if (item.deletedAt != null || item.allDay || item.startMin == null) return

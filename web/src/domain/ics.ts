@@ -19,7 +19,7 @@ export interface IcsEvent {
   allDay: boolean;
   rrule: string | null;
   exDays: number[];
-  /** Minutes before the start of each of the event's alerts. */
+  /** Minutes before the start of each of the event's alerts (negative: after it, as "10 minutes after"). */
   alerts: number[];
   /** Set on a changed occurrence of a series: the day it was originally on. */
   recurrenceOf: number | null;
@@ -257,7 +257,7 @@ function eventOf(props: Prop[], triggers: string[], zone: string): IcsEvent | nu
   if (!end) end = s.allDay ? { day: start.day + 1, min: 0 } : start;
   const exDays = props.filter((p) => p.name === "EXDATE").flatMap((p) =>
     p.value.split(",").map((v) => parseDateTime(v, p.params, zone)?.at.day).filter((d): d is number => d !== undefined));
-  const alerts = triggers.map(parseDuration).filter((d): d is number => d !== null && d <= 0).map((d) => -d);
+  const alerts = triggers.map(parseDuration).filter((d): d is number => d !== null && d <= 1440).map((d) => -d || 0);
   const rid = one("RECURRENCE-ID");
   return {
     uid: one("UID")?.value ?? null,

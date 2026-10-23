@@ -1,7 +1,7 @@
 // Side panel for tasks and events: a simple view when opened, the full editor after Edit (same fields as the phone's).
 import { useEffect, useRef, useState } from "react";
 import { searchNominatim } from "./phone/device.ts";
-import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { epochOf, formatDate, formatTime, offsetText, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
 import { canBeRoutine, isRoutineItem } from "../domain/routines.ts";
@@ -15,9 +15,8 @@ import { type EditScope, deleteForever, deleteOccurrence, saveItem, saveSeriesEd
 import { Icon, go } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor, type RichEditorHandle, sanitize } from "./RichEditor.tsx";
-import { count } from "../domain/plural.ts";
 
-const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080];
+const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080, -5, -10, -15, -30, -60];
 const toInput = (e: number | null) => { if (e === null) return ""; const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
 const fromInput = (v: string) => { const [y, m, d] = v.split("-").map(Number); return v ? epochOf(y, m, d) : null; };
 const timeInput = (min: number | null) => (min === null ? "" : `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`);
@@ -443,15 +442,6 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
   );
 }
 
-/** "At the time", "15 minutes before", "1 day before"... */
-function offsetText(min: number): string {
-  const plural = (n: number, w: string) => `${count(n, w)} before`;
-  if (min === 0) return "At the time";
-  if (min % 10080 === 0) return plural(min / 10080, "week");
-  if (min % 1440 === 0) return plural(min / 1440, "day");
-  if (min % 60 === 0) return plural(min / 60, "hour");
-  return `${count(min, "minute")} before`;
-}
 
 /** "Thu, 15 Oct · 15:00–16:00", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 09:00"... */
 function whenText(item: Item, day: number | null): string {

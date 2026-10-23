@@ -3,14 +3,15 @@ import { describe } from "../domain/recurrence.ts";
 import { formatTime, offsetLabel, relativeDay, today } from "../domain/dates.ts";
 import { parseQuickAdd } from "../domain/quickadd.ts";
 import { PRIORITIES, PRIORITY_COLORS_MUTED, newItem, type ItemType } from "../domain/types.ts";
-import { saveItem } from "../store/store.ts";
+import { saveItem, snapshot } from "../store/store.ts";
 import { go } from "./common.tsx";
 
 /** One-line entry in the top bar: "Dentist tue 3pm remind 1h before !alarm #health". */
 export function QuickAdd({ defaultDay }: { defaultDay?: number }) {
   const [text, setText] = useState("");
   const [type, setType] = useState<ItemType>("TASK");
-  const p = useMemo(() => parseQuickAdd(text), [text]);
+  const cats = snapshot().categories;
+  const p = useMemo(() => parseQuickAdd(text, undefined, cats.map((c) => c.name)), [text, cats]);
 
   const build = () => {
     const day = p.day ?? (type === "EVENT" ? defaultDay ?? today() : null);
@@ -20,11 +21,13 @@ export function QuickAdd({ defaultDay }: { defaultDay?: number }) {
       title: p.title || text.trim(),
       startDay: day ?? (p.freq !== "NONE" ? today() : null),
       startMin: start,
-      endDay: type === "EVENT" ? day : null,
+      endDay: type === "EVENT" ? p.endDay ?? day : null,
       endMin: type === "EVENT" ? p.endMin : null,
       allDay: type === "EVENT" && start === null,
-      freq: p.freq, interval: p.interval, weekDays: p.weekDays,
+      freq: p.freq, interval: p.interval, weekDays: p.weekDays, untilDay: p.untilDay,
       priority: type === "TASK" ? p.priority : 0,
+      categoryId: p.category !== null ? cats.find((c) => c.name === p.category)?.id ?? null : null,
+      location: p.place ?? "",
     });
   };
 

@@ -758,6 +758,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .gp-compact.slot .gp-chips.edit { margin-top: 0; }
 .phone .gp-chips > .p-chip { margin: 0; }
 .phone .gp-colordot { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+.phone .gp-colordot.small { width: 12px; height: 12px; margin: 0 2px; }
 .phone .p-assist.static { pointer-events: none; }
 .phone .gp-drag { flex: none; height: calc(var(--sat) + 22px); padding-top: var(--sat); display: grid; place-items: center; touch-action: none; }
 .phone .gp-drag .gp-handle { margin: 0; }

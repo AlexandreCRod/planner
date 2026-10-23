@@ -80,4 +80,21 @@ class AlarmSchedulerTest {
         assertEquals(false, AlarmScheduler.startingNow(daily.copy(allDay = true), listOf(early), day, emptySet()))
         assertEquals(true, AlarmScheduler.startingNow(daily.copy(type = ItemType.EVENT), listOf(early), day, setOf(day)))
     }
+
+    /** "10 min after": rings after the start, also for an occurrence that has already begun. */
+    @Test fun reminderAfterTheStart() {
+        val after = Reminder(id = 7, itemId = 1, offsetMin = -10, type = AlertType.ALARM)
+        val f = AlarmScheduler.nextFire(daily, after, LocalDateTime.of(mon, java.time.LocalTime.of(9, 5)), 540, { false })!!
+        assertEquals(millis(mon, 9, 10), f.atMillis)
+        assertEquals(mon, f.day)
+    }
+
+    /** A reminder after the start doesn't stand in for "Starting now"; one right at the start does. */
+    @Test fun startingNowWithAReminderAfterTheStart() {
+        val day = mon.toEpochDay()
+        val before = Reminder(id = 6, itemId = 1, offsetMin = 30, type = AlertType.REMINDER)
+        val after = Reminder(id = 7, itemId = 1, offsetMin = -10, type = AlertType.REMINDER)
+        assertEquals(true, AlarmScheduler.startingNow(daily, listOf(before, after), day, emptySet()))
+        assertEquals(false, AlarmScheduler.startingNow(daily, listOf(before, alarm), day, emptySet()))
+    }
 }

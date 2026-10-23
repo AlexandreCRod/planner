@@ -3,7 +3,7 @@
 // tap (a picker, a menu or a small sheet, saved at once), and an Edit button for the full editor. The
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { formatDate, formatTime, monthShort, offsetLabel, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
+import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
@@ -28,7 +28,6 @@ import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, showStreaks } from "../../store/routines.ts";
-import { count } from "../../domain/plural.ts";
 
 // ---------- Shared bits ----------
 
@@ -36,6 +35,8 @@ import { count } from "../../domain/plural.ts";
 export interface Draft { item: Item; reminders: Reminder[]; tags: string }
 
 const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080];
+/** Reminders after the start ("10 minutes after"), listed after the ones before it. */
+const AFTER_OFFSETS = [-5, -10, -15, -30, -60];
 const DAY_END = 24 * 60 - 1;
 
 export { defaultAlert };
@@ -54,15 +55,8 @@ export function switchType(d: Draft, t: ItemType): Draft {
   return { ...d, item, reminders };
 }
 
-/** "At the time", "15 minutes before", "1 day before"... */
-export function offsetText(min: number): string {
-  const plural = (n: number, w: string) => `${count(n, w)} before`;
-  if (min === 0) return "At the time";
-  if (min % 10080 === 0) return plural(min / 10080, "week");
-  if (min % 1440 === 0) return plural(min / 1440, "day");
-  if (min % 60 === 0) return plural(min / 60, "hour");
-  return `${count(min, "minute")} before`;
-}
+/** "At the time", "15 minutes before", "1 day before", "10 minutes after"... */
+export { offsetText };
 
 /** "Thu, 15 Oct · 3 PM – 4 PM", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 9 AM"... */
 export function whenText(item: Item, day: number | null): string {
@@ -333,7 +327,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
     {mine.map(([r, i], n) => (
       <FieldRow key={i} icon={n === 0 ? icon : null}>
         <span className="grow">
-          <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) }))} />
+          <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={[...OFFSETS, ...AFTER_OFFSETS].map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, divider: o === AFTER_OFFSETS[0], onClick: () => set(i, { ...r, offsetMin: o }) }))} />
         </span>
         {alarms && hasAlarms && (
           <IconButton icon="oMusicNote" className={r.soundUri ? "primary" : ""} label={r.soundUri ? "Alarm sound (custom)" : "Alarm sound (default)"}

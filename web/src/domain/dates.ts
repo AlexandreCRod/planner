@@ -164,12 +164,24 @@ export function dueCountdown(dueTs: number, now = Date.now()): string {
   return mins > 0 ? `in ${text}` : `${text} overdue`;
 }
 
+/** A reminder's lead time, short: "At time", "30 min before", "1 hour before", "10 min after" (negative: after the start). */
 export function offsetLabel(min: number): string {
   if (min === 0) return "At time";
-  if (min % 10080 === 0) return `${count(min / 10080, "week")} before`;
-  if (min % 1440 === 0) return `${count(min / 1440, "day")} before`;
-  if (min % 60 === 0) return `${count(min / 60, "hour")} before`;
-  return `${min} min before`;
+  const way = min < 0 ? "after" : "before", a = Math.abs(min);
+  if (a % 10080 === 0) return `${count(a / 10080, "week")} ${way}`;
+  if (a % 1440 === 0) return `${count(a / 1440, "day")} ${way}`;
+  if (a % 60 === 0) return `${count(a / 60, "hour")} ${way}`;
+  return `${a} min ${way}`;
+}
+
+/** A reminder's lead time in full: "At the time", "15 minutes before", "1 day before", "10 minutes after". */
+export function offsetText(min: number): string {
+  if (min === 0) return "At the time";
+  const way = min < 0 ? "after" : "before", a = Math.abs(min);
+  if (a % 10080 === 0) return `${count(a / 10080, "week")} ${way}`;
+  if (a % 1440 === 0) return `${count(a / 1440, "day")} ${way}`;
+  if (a % 60 === 0) return `${count(a / 60, "hour")} ${way}`;
+  return `${count(a, "minute")} ${way}`;
 }
 
 export function ordinal(n: number): string {

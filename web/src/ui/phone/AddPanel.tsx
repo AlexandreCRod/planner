@@ -9,7 +9,7 @@ import { animated, easings, to, useSpring } from "@react-spring/web";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { describe } from "../../domain/recurrence.ts";
-import { formatDate, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
+import { formatDate, formatDateShort, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
 import { daysText, formatDuration } from "../../domain/alarms.ts";
 import { act, hasAlarms, native } from "../../alarms/native.ts";
@@ -68,7 +68,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const imeCurve = (t: number) => 1 - Math.pow(1 - t, 3.2);
 
 /** What the quick panel's own date, time, all-day and colour controls changed (they win over the typed line). */
-interface Overrides { startDay?: number | null; startMin?: number | null; endMin?: number | null; allDay?: boolean; color?: number | null }
+interface Overrides { startDay?: number | null; endDay?: number | null; startMin?: number | null; endMin?: number | null; allDay?: boolean; color?: number | null; categoryId?: number | null }
 type Pick = { kind: "date" | "start" | "end" } | null;
 
 export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose: () => void; onPreview?: (p: SlotPreview | null) => void }) {
@@ -94,7 +94,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const [type, setType] = useState<ItemType>(req.type);
   const [text, setText] = useState("");
   const [ov, setOv] = useState<Overrides>({});
-  const parsed = useMemo(() => parseQuickAdd(text), [text]);
+  const categories = snapshot().categories;
+  const parsed = useMemo(() => parseQuickAdd(text, undefined, categories.map((c) => c.name)), [text, categories]);
   const quick = req.mode === "quick";
   const buildQuick = (): Draft => {
     const ev = type === "EVENT";
@@ -105,13 +106,19 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       title: parsed.title || text.trim(),
       startDay: day ?? (parsed.freq !== "NONE" ? req.day : null),
       startMin: start,
-      endDay: ev ? day : null,
+      endDay: ev ? parsed.endDay ?? day : null,
       endMin: ev ? parsed.endMin ?? (start !== null ? Math.min(start + 60, DAY_END) : null) : null,
       allDay: ev && start === null,
-      freq: parsed.freq, interval: parsed.interval, weekDays: parsed.weekDays,
+      freq: parsed.freq, interval: parsed.interval, weekDays: parsed.weekDays, untilDay: parsed.untilDay,
       priority: type === "TASK" ? parsed.priority : 0,
+      categoryId: parsed.category !== null ? categories.find((c) => c.name === parsed.category)?.id ?? null : null,
+      location: parsed.place ?? "",
     });
-    if ("startDay" in ov) { item.startDay = ov.startDay ?? null; if (ev) item.endDay = item.startDay; }
+    if ("startDay" in ov) {
+      const span = item.endDay !== null && item.startDay !== null ? item.endDay - item.startDay : 0;
+      item.startDay = ov.startDay ?? null;
+      if (ev) item.endDay = item.startDay !== null ? item.startDay + Math.max(0, ov.endDay !== undefined && ov.endDay !== null ? ov.endDay - item.startDay : span) : null;
+    }
     if ("startMin" in ov) {
       item.startMin = ov.startMin ?? null;
       if (ev) { item.allDay = item.startMin === null; item.endMin = ov.endMin ?? (item.startMin !== null ? Math.min(item.startMin + 60, DAY_END) : null); }
@@ -122,6 +129,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       else if (item.startMin === null) { item.startMin = req.min ?? 540; item.endMin = Math.min(item.startMin + 60, DAY_END); }
     }
     if ("color" in ov) item.color = ov.color ?? null;
+    if ("categoryId" in ov) item.categoryId = ov.categoryId ?? null;
     if (item.startDay === null) item.startMin = null;
     const reminders = parsed.alerts.length
       ? parsed.alerts.map(([offsetMin, t]): Reminder => ({ id: 0, itemId: 0, offsetMin, type: t, soundUri: null }))
@@ -163,7 +171,9 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (!canSave) return;
     // The editor saves what it holds (notes typed there included); before it exists, save the draft.
     if (saveRef.current) { saveRef.current(); return; }
-    const it = d.type === "EVENT" ? { ...d, endDay: d.startDay, title: d.title.trim() } : { ...d, endDay: null, endMin: null, title: d.title.trim() };
+    const it = d.type === "EVENT"
+      ? { ...d, endDay: d.startDay !== null ? Math.max(d.endDay ?? d.startDay, d.startDay) : null, title: d.title.trim() }
+      : { ...d, endDay: null, endMin: null, title: d.title.trim() };
     saveItem(it, { reminders: draft.reminders, tags: draft.tags.split(/\s+/).filter(Boolean) });
     onClose();
   };
@@ -416,7 +426,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const settings = (
     <div className="gp-chips edit">
       {(isEvent || d.startDay !== null || lineMode) && (
-        <AssistChip icon="oCalendarToday" label={d.startDay !== null ? relativeDay(d.startDay) : "Date"} onClick={() => openPick({ kind: "date" })} />
+        <AssistChip icon="oCalendarToday" label={d.startDay === null ? "Date" : isEvent && d.endDay !== null && d.endDay > d.startDay
+          ? `${formatDateShort(d.startDay)} – ${formatDateShort(d.endDay)}` : relativeDay(d.startDay)} onClick={() => openPick({ kind: "date" })} />
       )}
       {d.startDay !== null && !d.allDay && (
         <AssistChip icon="oSchedule" label={d.startMin !== null ? `${formatTime(d.startMin)}${isEvent && d.endMin !== null ? ` – ${formatTime(d.endMin)}` : ""}` : "Time"}
@@ -458,15 +469,19 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
               </div>
             )}
             {parsedItem && <>
-              {(parsedItem.freq !== "NONE" || parsed.alerts.length > 0 || parsedItem.priority > 0 || parsed.tags.length > 0) && (
+              {(parsedItem.freq !== "NONE" || parsed.alerts.length > 0 || parsedItem.priority > 0 || parsed.tags.length > 0 || parsed.category !== null || parsed.place !== null) && (
                 <div className="gp-chips">
+                  {parsed.category !== null && parsedItem.categoryId !== null && (
+                    <span className="p-assist static"><span className="gp-colordot small" style={{ background: color }} /> {parsed.category}</span>
+                  )}
+                  {parsed.place !== null && <span className="p-assist static"><MIcon name="oLocationOn" size={18} /> {parsed.place}</span>}
                   {parsedItem.freq !== "NONE" && <span className="p-assist static"><MIcon name="oRepeat" size={18} /> {describe(parsedItem)}</span>}
                   {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
                   {parsedItem.priority > 0 && <span className="p-assist static" role="img" aria-label={`${PRIORITIES[parsedItem.priority]} priority`} data-tip><MIcon name="fFlag" size={18} color={PRIORITY_COLORS_MUTED[parsedItem.priority]} /></span>}
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
               )}
-              <div className="gp-tip">Tip: dates (tomorrow, fri, 12/3), times (3pm, 15:30), "every mon, wed", "remind 30m before", !alarm, !high, #tag{hasAlarms && <>; or "timer 10 min", "alarm 7am weekdays"</>}</div>
+              <div className="gp-tip">Tip: dates (tomorrow, next fri, 27/10, 27 Oct till 8 Nov), times (at 18:30, 18-20h), "every mon", "alarm 30m before" or "10m after", #category, !1 to !4, @place{hasAlarms && <>; or "timer 10 min", "alarm 7am weekdays"</>}</div>
             </>}
           </> : <>
             <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"

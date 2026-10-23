@@ -45,7 +45,8 @@ object AlarmScheduler {
         if (item.type == ItemType.NOTE || item.startDay == null || item.deletedAt != null) return null
         val zone = ZoneId.systemDefault()
         val nowMillis = now.atZone(zone).toInstant().toEpochMilli()
-        val lookBack = r.offsetMin / (60 * 24) + 1L
+        // A reminder after the start (a negative offset) can still be due for an occurrence that began days ago.
+        val lookBack = kotlin.math.abs(r.offsetMin) / (60 * 24) + 1L
         var d = Recurrence.nextOnOrAfter(item, now.toLocalDate().minusDays(lookBack)) ?: return null
         repeat(500) {
             val original = originalAt(item, d, r.offsetMin, defaultTime, zone)
@@ -81,13 +82,14 @@ object AlarmScheduler {
 
     /**
      * Whether [item]'s start on [day] gets a gentle "Starting now" (after one of its reminders came before):
-     * it has a time, it isn't ticked, and none of its own reminders rings right at the start.
+     * it has a time, it isn't ticked, and none of its own reminders rings right at the start. One set for
+     * after the start ("10 min after") rings later, so it doesn't take the place of "Starting now".
      */
     fun startingNow(item: Item, reminders: List<Reminder>, day: Long, done: Set<Long>): Boolean {
         if (item.type == ItemType.NOTE || item.deletedAt != null || item.allDay || item.startMin == null || item.startDay == null) return false
         val completionDay = if (item.isRecurring) day else item.startDay
         if (item.type == ItemType.TASK && completionDay in done) return false
-        return reminders.none { it.itemId == item.id && it.offsetMin <= 0 }
+        return reminders.none { it.itemId == item.id && it.offsetMin == 0 }
     }
 
     /** Sets the start of [item]'s occurrence on [day]: its reminders are cleared then (see [AlarmReceiver.ACTION_START]). */

@@ -28,17 +28,24 @@ function check() {
     const item = s.byId.get(itemId);
     if (!item || item.type === "NOTE" || item.startDay === null) continue;
     for (const r of rs) {
-      const lookBack = Math.ceil(r.offsetMin / 1440) + 1;
-      for (const day of occurrences(item, t - 1, t + lookBack)) {
+      const lookBack = Math.ceil(Math.abs(r.offsetMin) / 1440) + 1;
+      for (const day of occurrences(item, t - (r.offsetMin < 0 ? lookBack : 1), t + lookBack)) {
         const time = item.allDay || item.startMin === null ? 9 * 60 : item.startMin;
         const fire = toTimestamp(day, time) - r.offsetMin * 60_000;
         if (fire <= from || fire > now) continue;
         const cday = isRecurring(item) ? day : item.startDay;
         if (item.type === "TASK" && s.done.isDone(item.id, cday)) continue;
-        new Notification(item.title || "Planner", { body: r.offsetMin ? `In ${Math.round(r.offsetMin / 60) >= 1 ? Math.round(r.offsetMin / 60) + " h" : r.offsetMin + " min"}` : "Now", tag: `${r.id}-${day}`, icon: "/icon.svg" });
+        new Notification(item.title || "Planner", { body: noticeText(r.offsetMin), tag: `${r.id}-${day}`, icon: "/icon.svg" });
       }
     }
   }
+}
+
+/** "In 30 min", "In 2 h", "Now", or for a reminder after the start "Started 10 min ago". */
+function noticeText(offset: number): string {
+  const a = Math.abs(offset), h = Math.round(a / 60);
+  const span = h >= 1 ? `${h} h` : `${a} min`;
+  return offset === 0 ? "Now" : offset > 0 ? `In ${span}` : `Started ${span} ago`;
 }
 
 export function startNotifications() { window.setInterval(check, 30_000); }
