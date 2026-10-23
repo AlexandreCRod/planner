@@ -17,6 +17,8 @@ import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
+import { usePinDrag } from "./pinDrag.ts";
+import { pinOrderChanges, sortNotes } from "../../domain/noteOrder.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
@@ -217,11 +219,19 @@ export const PhoneNotes = memo(function PhoneNotes() {
   const [tag, setTag] = useState<number | null>(null);
   // Hidden notes stay off the page (Search finds them); a Hidden chip lists them while there are any.
   const hiddenCount = useMemo(() => s.items.filter((i) => i.type === "NOTE" && i.hidden).length, [s]);
-  const notes = useMemo(() => s.items.filter((i) => i.type === "NOTE")
+  const matching = useMemo(() => s.items.filter((i) => i.type === "NOTE")
     .filter((n) => (filter === "hidden" ? !!n.hidden : !n.hidden))
     .filter((n) => (filter === "daily" ? n.noteDay !== null : filter === "hidden" || (n.noteDay === null && (filter !== "pinned" || n.pinned))))
-    .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt), [s, filter, tag]);
+    .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag)), [s, filter, tag, hiddenCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Pinned first in their own order (dragged into place), then the rest by last edit; while a pinned
+  // card is being dragged, the order it's being dragged into.
+  const [liveOrder, setLiveOrder] = useState<number[] | null>(null);
+  const notes = useMemo(() => {
+    const sorted = sortNotes(matching);
+    if (!liveOrder) return sorted;
+    const rank = new Map(liveOrder.map((id, i) => [id, i]));
+    return [...sorted.filter((n) => n.pinned).sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9)), ...sorted.filter((n) => !n.pinned)];
+  }, [matching, liveOrder]);
   // Two columns, each card going under the shorter one (a staggered grid, in list order).
   const cols = useMemo(() => {
     const out: [Item[], Item[]] = [[], []];
@@ -235,6 +245,13 @@ export const PhoneNotes = memo(function PhoneNotes() {
   }, [notes]);
   const shownIds = useMemo(() => notes.map((n) => n.id), [notes]);
   const sel = useSelection(shownIds);
+  const grid = useRef<HTMLDivElement>(null);
+  const pinnedIds = useMemo(() => notes.filter((n) => n.pinned).map((n) => n.id), [notes]);
+  const pinDrag = usePinDrag({
+    grid: () => grid.current, scroller: () => grid.current?.closest<HTMLElement>(".p-content") ?? null, pinned: pinnedIds,
+    setOrder: setLiveOrder, isSelected: (id) => sel.ids.has(id), unselect: (id) => sel.toggle(id),
+    onDrop: (ids) => { for (const c of pinOrderChanges(notes, ids)) { const n = s.byId.get(c.id); if (n) saveItem({ ...n, pinOrder: c.pinOrder }); } },
+  });
   return (
     <Scaffold title="Notes" flush bar={sel.active ? <SelectionBar sel={sel} items={(ids) => notes.filter((n) => ids.has(n.id))} /> : undefined} actions={<>
       <IconButton icon="oHub" label="Links" onClick={() => go("graph")} />
@@ -249,8 +266,8 @@ export const PhoneNotes = memo(function PhoneNotes() {
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
         {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
-        <div className="p-notegrid">
-          {cols.map((col, i) => <div key={i} className="p-notecol">{col.map((n) => <NoteCard key={n.id} n={n} s={s} sel={sel} />)}</div>)}
+        <div className="p-notegrid" ref={grid}>
+          {cols.map((col, i) => <div key={i} className="p-notecol">{col.map((n) => <NoteCard key={n.id} n={n} s={s} sel={sel} onPinDown={n.pinned ? pinDrag.down : undefined} />)}</div>)}
         </div>
         <div className="p-endspace" />
       </div>
@@ -258,7 +275,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
   );
 });
 
-function NoteCard({ n, s, sel }: { n: Item; s: Snapshot; sel: Selection }) {
+function NoteCard({ n, s, sel, onPinDown }: { n: Item; s: Snapshot; sel: Selection; onPinDown?: (id: number, e: React.PointerEvent<HTMLElement>) => void }) {
   const picked = sel.ids.has(n.id);
   const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
   const fg = bg ? onColor(bg) : undefined;
@@ -267,8 +284,11 @@ function NoteCard({ n, s, sel }: { n: Item; s: Snapshot; sel: Selection }) {
   const tags = (s.tagsByItem.get(n.id) ?? []).map((t) => `#${t.name}`).join(" ");
   const links = s.neighbours(n.id).size;
   const updated = Math.floor((n.updatedAt - new Date(n.updatedAt).getTimezoneOffset() * 60000) / 86400000);
+  // A pinned card can also be dragged into another place among the pinned ones (pinDrag.ts).
+  const sp = sel.pressProps(n.id);
+  const press = onPinDown ? { ...sp, onPointerDown: (e: React.PointerEvent<HTMLElement>) => { sp.onPointerDown(e); onPinDown(n.id, e); } } : sp;
   return (
-    <div className={`p-notecard ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined} {...sel.pressProps(n.id)}
+    <div className={`p-notecard ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined} data-note={n.id} {...press}
       onClick={() => sel.tap(n.id, () => openItem(n))} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
       {accentArgb !== null && <div className="accent" style={{ background: cssColor(accentArgb) }} />}
       {picked && <SelectedMark />}

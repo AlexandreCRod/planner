@@ -481,6 +481,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-notecol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .phone .p-notecard { position: relative; border-radius: 12px; overflow: hidden; background: var(--p-sc-high); color: var(--text); }
 .phone .p-notecard .accent { height: 4px; }
+.phone .p-notecard.p-dragging { z-index: 5; box-shadow: 0 6px 18px rgb(0 0 0 / .28); will-change: transform; transition: box-shadow .15s; }
 .phone .p-notecard .in { padding: 12px; }
 .phone .p-notecard .head { display: flex; align-items: center; gap: 4px; }
 .phone .p-notecard .head svg { opacity: .7; }

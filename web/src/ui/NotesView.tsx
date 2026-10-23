@@ -9,6 +9,7 @@ import { Icon, go, openItem } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
 import { RichEditor } from "./RichEditor.tsx";
 import { useNoteSession } from "./noteSession.ts";
+import { sortNotes } from "../domain/noteOrder.ts";
 import { SelectBox, SelectionBar, usePcSelection } from "./PcSelect.tsx";
 
 export const FONTS = ["system-ui, sans-serif", "Georgia, 'Times New Roman', serif", "Consolas, 'Courier New', monospace", "'Segoe Print', 'Comic Sans MS', cursive"];
@@ -33,7 +34,8 @@ export function NotesView() {
   const notes = s.items.filter((i) => i.type === "NOTE" && !i.hidden)
     .filter((n) => (filter === "daily" ? n.noteDay !== null : n.noteDay === null && (filter !== "pinned" || n.pinned)))
     .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
+;
+  notes.splice(0, notes.length, ...sortNotes(notes));
   const sel = usePcSelection(notes.map((n) => n.id));
   return (
     <>
