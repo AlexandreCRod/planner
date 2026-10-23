@@ -22,7 +22,6 @@ export function isNewerVersion(tag: string, installed: string): boolean {
   return compareVersions(tag, installed) > 0;
 }
 
-/** One line of release notes, for a calm plain-text rendering (no HTML from the release is used). */
 /** How often the app asks GitHub for a new release by itself: on a fresh start or a return to the app. */
 export const UPDATE_CHECK_EVERY_MS = 6 * 3600_000;
 
@@ -35,6 +34,7 @@ export function updateCheckDue(lastAt: number, now: number, every = UPDATE_CHECK
   return now < lastAt || now - lastAt >= every;
 }
 
+/** One line of release notes, for a calm plain-text rendering (no HTML from the release is used). */
 export interface NoteBlock { kind: "heading" | "bullet" | "text"; text: string }
 
 /**
