@@ -4,7 +4,7 @@
 // left out. Values are the same local keys the PC settings use.
 import { useEffect, useState } from "react";
 import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatDateTime } from "../../domain/dates.ts";
-import { RETENTION_TEXT, NOTE_DAYS, TASK_EVENT_DAYS } from "../../domain/retention.ts";
+import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
 import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
@@ -186,7 +186,7 @@ export function PhoneSettings() {
         <div className="p-hr" />
         <SectionHeader>Data</SectionHeader>
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
-        <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TASK_EVENT_DAYS} days (notes ${NOTE_DAYS})`}</span>} onClick={() => go("settings/trash")} />
+        <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
         {isNative && <UpdateRow />}
         <div className="p-endspace" />
       </div>

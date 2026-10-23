@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DONE_TODO_HOURS, doneTodosToTrash, expiredTrash } from "../src/domain/retention.ts";
+import { DONE_TODO_HOURS, TRASH_DAYS, doneTodosToTrash, expiredTrash } from "../src/domain/retention.ts";
 import { type ItemType, NO_DAY, newItem } from "../src/domain/types.ts";
 
 const H = 3_600_000;
 const D = 24 * H;
 const now = 1_800_000_000_000;
 
-// Same case as the Android TrashRetentionTest.
-test("tasks and events leave the trash after 7 days, notes after 14", () => {
+test("everything leaves the trash after 30 days", () => {
   const trashed = (id: number, type: ItemType, daysAgo: number) => newItem({ id, type, deletedAt: now - Math.round(daysAgo * D) });
   const items = [
-    trashed(1, "TASK", 6.9), trashed(2, "TASK", 7), trashed(3, "EVENT", 10),
-    trashed(4, "NOTE", 10), trashed(5, "NOTE", 14), newItem({ id: 6, type: "TASK" }),
+    trashed(1, "TASK", 29.9), trashed(2, "TASK", 30), trashed(3, "EVENT", 7), trashed(4, "EVENT", 31),
+    trashed(5, "NOTE", 14), trashed(6, "NOTE", 30), newItem({ id: 7, type: "TASK" }),
   ];
-  assert.deepEqual(expiredTrash(items, now), [2, 3, 5]);
+  assert.deepEqual(expiredTrash(items, now), [2, 4, 6]);
+  assert.equal(TRASH_DAYS, 30);
 });
 
 test("a ticked to-do moves to the trash 48 hours after it was ticked", () => {
@@ -44,7 +44,7 @@ test("a ticked to-do moves to the trash 48 hours after it was ticked", () => {
 
 test("a to-do ticked long ago goes through the trash and is then deleted for good", () => {
   const items = [newItem({ id: 1, type: "TASK" })];
-  const [moved] = doneTodosToTrash(items, [{ itemId: 1, day: NO_DAY, completedAt: now - 9 * D }], now);
+  const [moved] = doneTodosToTrash(items, [{ itemId: 1, day: NO_DAY, completedAt: now - 33 * D }], now);
   assert.deepEqual(expiredTrash([{ ...items[0], deletedAt: moved.deletedAt }], now), [1]);
   const [recent] = doneTodosToTrash(items, [{ itemId: 1, day: NO_DAY, completedAt: now - 3 * D }], now);
   assert.deepEqual(expiredTrash([{ ...items[0], deletedAt: recent.deletedAt }], now), []);

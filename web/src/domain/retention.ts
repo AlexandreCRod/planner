@@ -1,19 +1,22 @@
-// How long things stay: deleted items wait in the trash (as the Android app's TrashRetention), and a
-// ticked to-do (a task with no date) stays in the Completed list for two days before it moves to the
-// trash itself. Pure rules, used by the store and checked by test/retention.test.ts.
+// How long things stay: deleted items wait in the trash for 30 days, whatever they are, and a ticked
+// to-do (a task with no date) stays in the Completed list for two days before it moves to the trash
+// itself. A note's history keeps its versions for 30 days, and always its 3 newest. Pure rules, used by
+// the store and checked by test/retention.test.ts.
 import { type Completion, type Item, type ItemType, NO_DAY } from "./types.ts";
 
-export const TASK_EVENT_DAYS = 7;
-export const NOTE_DAYS = 14;
+/** Days anything stays in the trash (tasks, events and notes alike). */
+export const TRASH_DAYS = 30;
+export const TASK_EVENT_DAYS = TRASH_DAYS;
+export const NOTE_DAYS = TRASH_DAYS;
 export const DONE_TODO_HOURS = 48;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 export const keepDays = (type: ItemType) => (type === "NOTE" ? NOTE_DAYS : TASK_EVENT_DAYS);
 
-export const RETENTION_TEXT = `Tasks and events stay in the trash for ${TASK_EVENT_DAYS} days, notes for ${NOTE_DAYS}, then they're deleted for good.`;
+export const RETENTION_TEXT = `Everything stays in the trash for ${TRASH_DAYS} days, then it's deleted for good.`;
 
-/** Ids of trashed items whose time in the trash is up at [now] (same rule as TrashRetention.expired). */
+/** Ids of trashed items whose time in the trash is up at [now]. */
 export function expiredTrash(items: Item[], now: number): number[] {
   const out: number[] = [];
   for (const i of items) if (i.deletedAt !== null && now - i.deletedAt >= keepDays(i.type) * DAY_MS) out.push(i.id);
