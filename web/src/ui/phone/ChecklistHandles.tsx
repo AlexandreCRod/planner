@@ -44,8 +44,12 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       if (!root || !box || dragging.current) return;
       const base = box.getBoundingClientRect().top;
       const out: Handle[] = [];
-      linesOf(root).forEach((el, i) => {
-        if (el.tagName !== "P" || checklistDepth(el.textContent ?? "") < 0) return;
+      const lines = linesOf(root);
+      const isCheck = (el: HTMLElement | undefined) => !!el && el.tagName === "P" && checklistDepth(el.textContent ?? "") >= 0;
+      // A small gap after each run of checkbox lines, as lists have (the class is never saved: RichEditor's normalize).
+      lines.forEach((el, i) => { const end = isCheck(el) && !isCheck(lines[i + 1]); if (el.classList.contains("pn-check-end") !== end) el.classList.toggle("pn-check-end", end); });
+      lines.forEach((el, i) => {
+        if (!isCheck(el)) return;
         const r = el.getBoundingClientRect();
         const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
         out.push({ i, top: r.top - base, h: Math.min(r.height, lh) });

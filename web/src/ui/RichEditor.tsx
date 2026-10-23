@@ -47,6 +47,11 @@ function normalize(root: HTMLElement): string {
     if (el.style.color) el.style.color = toHex(el.style.color);
     if (el.style.backgroundColor) el.style.backgroundColor = toHex(el.style.backgroundColor);
   });
+  // The phone's own marks on lines (ChecklistHandles) aren't part of the note.
+  c.querySelectorAll<HTMLElement>("[class]").forEach((el) => {
+    for (const k of [...el.classList]) if (k.startsWith("pn-")) el.classList.remove(k);
+    if (!el.classList.length) el.removeAttribute("class");
+  });
   c.querySelectorAll("div").forEach((d) => {
     const p = document.createElement("p");
     p.innerHTML = d.innerHTML;

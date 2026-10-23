@@ -1227,6 +1227,7 @@ html.phone[data-theme="dark"] {
   position: relative; z-index: 2; border-radius: 8px; will-change: transform;
   background: color-mix(in srgb, var(--pn-fg) 9%, var(--pn-bg, var(--bg))); box-shadow: 0 6px 16px rgb(0 0 0 / .22);
 }
+.phone .pn-text .rich > p.pn-check-end:not(:last-child) { margin-bottom: 10px; }
 .phone .pn-text .rich > p.pn-sliding { transition: transform .18s cubic-bezier(.2, 0, 0, 1); will-change: transform; }
 
 /* ---------- Room for the system's navigation bar (3-button or gesture) ----------
