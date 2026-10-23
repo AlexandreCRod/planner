@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { downloadName, isVideo, lensPlace, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
+import { LENS_SMALL, downloadName, isVideo, lensPlace, lensPosFor, lensStep, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
 
 // Items 80 and 96: a note's pictures and videos.
 
@@ -39,7 +39,8 @@ test("the lens: the middle one big, the others smaller beside it, moving smoothl
   const W = 300;
   assert.deepEqual(lensPlace(0, W), { x: 0, scale: 1, opacity: 1 });
   const right = lensPlace(1, W), left = lensPlace(-1, W);
-  assert.ok(Math.abs(right.scale - 0.46) < 1e-9);
+  assert.ok(Math.abs(right.scale - LENS_SMALL) < 1e-9);
+  assert.ok(LENS_SMALL < 0.4); // much smaller than the big one
   assert.equal(left.x, -right.x);
   // The small one beside the big one doesn't overlap it.
   assert.ok(right.x - (W * right.scale) / 2 >= W / 2);
@@ -47,4 +48,18 @@ test("the lens: the middle one big, the others smaller beside it, moving smoothl
   const a = lensPlace(0.999, W).x, b = lensPlace(1.001, W).x;
   assert.ok(Math.abs(a - b) < 1);
   assert.ok(lensPlace(4, W).opacity === 0);
+});
+
+test("the lens follows the finger: the big one stays under it, left brings the next one in", () => {
+  const W = 246; // a 411 px wide phone
+  // Finger 30 px to the right: the big one moves 30 px to the right, toward the previous one.
+  const p = lensPosFor(2, 30, W);
+  assert.ok(p < 2);
+  assert.ok(Math.abs(lensPlace(2 - p, W).x - 30) < 1e-9);
+  // A whole step to the left: the next one is in the middle.
+  assert.ok(Math.abs(lensPosFor(2, -lensStep(W), W) - 3) < 1e-9);
+  // The previous and next ones are mostly in sight at the sides of the screen.
+  const next = lensPlace(1, W), screen = W / 0.6;
+  const visible = (screen / 2 - (next.x - (W * next.scale) / 2)) / (W * next.scale);
+  assert.ok(visible > 0.7, String(visible));
 });

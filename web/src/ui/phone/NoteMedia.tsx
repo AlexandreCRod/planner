@@ -1,10 +1,11 @@
 // A note's pictures and videos on the phone: a row of previews that a sideways swipe glides through,
-// one to the next; a tap opens one full screen; a long press opens the lens, the one pressed shown big
-// with the others smaller beside it, and the finger, still down, slides along them. Everything in the
+// one to the next; a tap opens one full screen; a long press opens the lens, a carousel: the one pressed
+// shown big with the previous and next much smaller at the sides, and the finger, still down, slides the
+// row (the big one stays under it, as with any swipe there). Everything in the
 // lens moves by transforms written straight to the elements each frame (no React render while it moves).
 // Any of them can be saved to the phone. Videos stay on the phone that added them (domain/media.ts).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { downloadName, isVideo, lensPlace, previewHash } from "../../domain/media.ts";
+import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, previewHash } from "../../domain/media.ts";
 import type { NoteImage } from "../../domain/types.ts";
 import { getBlob, useImageUrl } from "../../store/images.ts";
 import { Dialog, IconButton, MIcon } from "./chrome.tsx";
@@ -94,8 +95,8 @@ export function MediaStrip({ media, onOpen, onLens }: {
 }
 
 /**
- * The lens. [pointer]: the finger that opened it, still down, which slides along the row (a short slide
- * goes one further); after that, swipes move it, a tap on the big one opens it full screen, a tap on a
+ * The lens. [pointer]: the finger that opened it, still down, which slides the row; after that, swipes
+ * move it. Either way the row follows the finger one to one (the big one stays under it), a tap on the big one opens it full screen, a tap on a
  * small one brings it to the middle, and a tap beside them closes the lens.
  */
 export function MediaLens({ media, start, pointer, onClose, onOpen }: {
@@ -110,8 +111,9 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
   const anim = useRef<Animation | null>(null);
   const raf = useRef(0);
   const closing = useRef(false);
-  const W = Math.min(window.innerWidth * 0.74, 440);
-  const H = window.innerHeight * 0.56;
+  // The big one leaves room at the sides for the previous and next ones, small but in sight.
+  const W = Math.min(window.innerWidth * 0.6, 420);
+  const H = window.innerHeight * 0.5;
   const sizeOf = (m: NoteImage) => { const a = aspect(m); return a >= W / H ? { w: W, h: W / a } : { w: H * a, h: H }; };
 
   const draw = (p: number) => {
@@ -141,19 +143,19 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
   useLayoutEffect(() => { draw(start); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => pushBack(close), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // One finger at a time moves the row: [step] px of travel per item (shorter for the finger that opened
-  // it, which started on a small preview).
+  // One finger at a time moves the row, one to one: the finger to the left brings the next one in.
   useEffect(() => {
-    let g: { id: number; x0: number; y0: number; p0: number; step: number; moved: boolean; vt: VelocityTracker; x: number } | null = null;
-    const begin = (id: number, x: number, y: number, step: number, moved: boolean) => {
+    const step = lensStep(W);
+    let g: { id: number; x0: number; y0: number; p0: number; moved: boolean; vt: VelocityTracker; x: number } | null = null;
+    const begin = (id: number, x: number, y: number, moved: boolean) => {
       anim.current?.stop(); anim.current = null;
-      g = { id, x0: x, y0: y, p0: pos.current, step, moved, vt: new VelocityTracker(), x };
+      g = { id, x0: x, y0: y, p0: pos.current, moved, vt: new VelocityTracker(), x };
       g.vt.add(performance.now(), x);
     };
-    if (pointer) begin(pointer.id, pointer.x, 0, Math.max(64, window.innerWidth * 0.2), true);
+    if (pointer) begin(pointer.id, pointer.x, 0, true);
     /** Where the row is for the finger now. Past either end it gives a little, then stops. */
     const placeFor = (d: NonNullable<typeof g>) => {
-      const raw = d.p0 - (d.x - d.x0) / d.step;
+      const raw = lensPosFor(d.p0, d.x - d.x0, W);
       return raw < 0 ? -0.3 * (1 - Math.exp(raw / 0.6)) : raw > n - 1 ? n - 1 + 0.3 * (1 - Math.exp(-(raw - n + 1) / 0.6)) : raw;
     };
     const frame = () => {
@@ -162,7 +164,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
     };
     const onDown = (e: PointerEvent) => {
       if (g || closing.current || !e.isPrimary || (e.target as HTMLElement).closest("button")) return;
-      begin(e.pointerId, e.clientX, e.clientY, W * 0.62, false);
+      begin(e.pointerId, e.clientX, e.clientY, false);
     };
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
@@ -178,7 +180,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
       cancelAnimationFrame(raf.current); raf.current = 0;
       if (d.moved) {
         draw(placeFor(d));
-        const v = d.vt.velocity(e.timeStamp) / d.step; // items per ms, finger right is negative
+        const v = d.vt.velocity(e.timeStamp) / step; // items per ms, finger right is negative
         const to = clamp(Math.round(pos.current - v * 140), 0, n - 1);
         settle(to, -v);
         return;

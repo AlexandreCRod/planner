@@ -39,18 +39,36 @@ export function pieces(size: number, piece = 3 * 256 * 1024): [number, number][]
   return out;
 }
 
+/** The lens's small ones beside the big one, as a part of its size, and the space between them (px). */
+export const LENS_SMALL = 0.36;
+const LENS_GAP = 12;
+
 /**
- * The lens: the media in a row, the one at [offset] 0 big in the middle and the others smaller beside
- * it, by how far each is from the middle ([offset] is fractional while the row slides). [w] is the big
- * one's width. Returns where its centre goes (px from the middle), its scale, and how visible it is.
+ * The lens, a carousel: the media in a row, the one at [offset] 0 big in the middle and the others much
+ * smaller beside it (the previous and next still in sight at the sides), by how far each is from the
+ * middle ([offset] is fractional while the row slides). [w] is the big one's width. Returns where its
+ * centre goes (px from the middle), its scale, and how visible it is.
  */
 export function lensPlace(offset: number, w: number): { x: number; scale: number; opacity: number } {
   const a = Math.abs(offset), s = Math.sign(offset);
-  const SMALL = 0.46, GAP = 12;
   // Next to the big one: half of it, a gap, half of a small one; then one small one after another.
-  const near = w / 2 + GAP + (w * SMALL) / 2;
-  const x = a <= 1 ? s * a * near : s * (near + (a - 1) * (w * SMALL + GAP));
-  const scale = 1 - (1 - SMALL) * Math.min(1, a);
+  const near = lensStep(w);
+  const x = a <= 1 ? s * a * near : s * (near + (a - 1) * (w * LENS_SMALL + LENS_GAP));
+  const scale = 1 - (1 - LENS_SMALL) * Math.min(1, a);
   const opacity = a <= 2.5 ? 1 : Math.max(0, 1 - (a - 2.5) / 0.75);
   return { x, scale, opacity };
+}
+
+/**
+ * How far a finger slides the lens for one item: the distance from the middle to the next one, so the
+ * big one stays exactly under the finger (finger to the left brings the next one in, to the right the
+ * previous one).
+ */
+export function lensStep(w: number): number {
+  return w / 2 + LENS_GAP + (w * LENS_SMALL) / 2;
+}
+
+/** Where the lens's row is for a finger [dx] px from where it started at [p0] (an item index). */
+export function lensPosFor(p0: number, dx: number, w: number): number {
+  return p0 - dx / lensStep(w);
 }
