@@ -185,7 +185,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 /* Today: one line when the day is empty, and tomorrow at a glance (its first few items, "+3 more"). */
 .phone .today-list .hint.empty.p-nothing { padding: 16px 16px 4px; }
 .phone .today-list .p-glance-head { display: block; width: 100%; border: 0; background: none; text-align: left; font-family: inherit; }
-.phone .today-list .p-glance-head::after { content: " A"; }
+.phone .today-list .p-glance-head::after { content: " \203A"; }
 .phone .today-list .p-glance-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 16px; border: 0; background: none; text-align: left; font: inherit; color: var(--text); }
 .phone .today-list .p-glance-time { flex: none; width: 50px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-glance-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
