@@ -784,6 +784,8 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pn-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .phone .pn-text { padding: 8px 20px 0; }
 .phone .pn-text .rich { font-size: 16px; line-height: 24px; color: inherit; outline: none; user-select: text; -webkit-user-select: text; }
+.phone .pn-caretmark { position: absolute; left: 0; top: 0; width: 2px; border-radius: 1px; background: var(--p-primary); pointer-events: none; animation: pn-mark-in .2s cubic-bezier(.2, 0, 0, 1); }
+@keyframes pn-mark-in { from { opacity: 0; } to { opacity: 1; } }
 .phone .pn-text .rich.is-empty::before { color: color-mix(in srgb, var(--pn-fg) 35%, transparent); }
 .phone .pn-links { margin-top: 16px; border-top: 1px solid color-mix(in srgb, var(--pn-fg) 12%, transparent); color: var(--text); }
 .phone .pn.paper .pn-links .p-section, .phone .pn.paper .pn-links .headline, .phone .pn.paper .pn-links .pe-small { color: var(--pn-fg); }

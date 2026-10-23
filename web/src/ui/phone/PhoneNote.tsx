@@ -15,6 +15,7 @@ import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.t
 import { RichEditor } from "../RichEditor.tsx";
 import { useNoteSession } from "../noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
+import { CaretMarker } from "./CaretMarker.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
@@ -116,6 +117,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
           <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
             noToolbar placeholder="Start writing…" onFocusChange={setFocused} />
+          <CaretMarker editor={() => rich.current?.root() ?? null} host={() => textBox.current} show={focused && !kbUp} />
           <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks} />
         </div>
         <div className="pn-links">
