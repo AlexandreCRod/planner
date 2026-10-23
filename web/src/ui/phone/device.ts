@@ -1,11 +1,13 @@
 // The phone app's door to the small "Device" plugin (android/.../device/DevicePlugin.kt): the phone's
 // 24-hour setting, place search with Android's own geocoder, a place shown in the maps app, and the
-// touch feel's pulses (played through haptics.ts, never directly).
-// In a browser none of it exists: times follow the in-app choice, places come from OpenStreetMap.
+// touch feel's pulses (played through haptics.ts, never directly), and saving a note's picture or video.
+// In a browser none of it exists: times follow the in-app choice, places come from OpenStreetMap, and a
+// saved picture or video is an ordinary download.
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin } from "@capacitor/core";
 import { setDeviceClock24, use24h } from "../../domain/dates.ts";
 import { isNative } from "../../platform.ts";
+import { pieces } from "../../domain/media.ts";
 import { changed } from "../../store/store.ts";
 
 export interface Place { name: string; lat: number; lng: number }
@@ -16,6 +18,9 @@ interface DevicePlugin {
   openMap(o: { name: string; lat?: number | null; lng?: number | null }): Promise<void>;
   feel(o: { kind: string }): Promise<void>;
   selectionRect(o: { left: number; top: number; right: number; bottom: number } | { clear: true }): Promise<void>;
+  saveMediaStart(o: { name: string; mime: string }): Promise<{ id: string }>;
+  saveMediaPiece(o: { id: string; data: string }): Promise<void>;
+  saveMediaEnd(o: { id: string; cancel?: boolean }): Promise<void>;
 }
 
 const plugin = isNative ? registerPlugin<DevicePlugin>("Device") : null;
@@ -30,6 +35,37 @@ export function playFeel(kind: string) {
 /** Tells the app where the page's text selection is (its toolbar goes right above it); null: none. */
 export function setSelectionRect(r: { left: number; top: number; right: number; bottom: number } | null) {
   if (plugin) void plugin.selectionRect(r ?? { clear: true }).catch(() => {});
+}
+
+/** A piece of a file as base64. */
+async function base64Of(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/**
+ * Saves a file to the phone: in the app, to the gallery (Pictures/Planner or Movies/Planner), sent to
+ * Android in pieces; in a browser, as a download. Throws with a message to show when it can't.
+ */
+export async function saveToPhone(blob: Blob, name: string, mime: string): Promise<void> {
+  if (!plugin) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    return;
+  }
+  const { id } = await plugin.saveMediaStart({ name, mime });
+  try {
+    for (const [a, b] of pieces(blob.size)) await plugin.saveMediaPiece({ id, data: await base64Of(blob.slice(a, b)) });
+  } catch (e) {
+    await plugin.saveMediaEnd({ id, cancel: true }).catch(() => {});
+    throw e;
+  }
+  await plugin.saveMediaEnd({ id });
 }
 
 /** Reads the phone's clock format; every page is drawn again if it changed. */

@@ -1,9 +1,11 @@
-// Picture files for notes. Each file is stored in IndexedDB under its SHA-256 hash, and synced
-// through the server's /api/blobs/<hash> (the "images" records only carry the hash), the same
-// way the phone does it.
+// Picture and video files for notes. Each file is stored in IndexedDB under its SHA-256 hash. A
+// picture's file syncs through the server's /api/blobs/<hash> (the "images" records only carry the
+// hash); a video's file stays on the device that added it, and only its still (poster) syncs
+// (domain/media.ts says why).
 import { useEffect, useState } from "react";
 import { apiUrl } from "../platform.ts";
 import * as db from "./db.ts";
+import { MAX_VIDEO_BYTES } from "../domain/media.ts";
 import { getToken } from "./sync.ts";
 
 /** Longest side after shrinking, like the phone. */
@@ -49,10 +51,50 @@ export async function importImage(file: Blob): Promise<{ hash: string; mime: str
   return { hash, mime: "image/jpeg", width, height };
 }
 
+/**
+ * Stores a video as it is (videos aren't re-encoded: a browser can't shrink one quickly or well), with a
+ * still from it as its poster. Throws for a video over MAX_VIDEO_BYTES.
+ */
+export async function importVideo(file: File): Promise<{ hash: string; mime: string; width: number; height: number; poster?: string; size: number; duration?: number; phoneOnly: true }> {
+  if (file.size > MAX_VIDEO_BYTES) throw new Error(`Videos up to ${Math.round(MAX_VIDEO_BYTES / 1048576)} MB can be added`);
+  const hash = await sha256(file);
+  await putBlob(hash, file);
+  const still = await videoStill(file).catch(() => null);
+  return {
+    hash, mime: file.type || "video/mp4", width: still?.width ?? 0, height: still?.height ?? 0,
+    ...(still?.poster ? { poster: still.poster } : {}), size: file.size, ...(still?.duration ? { duration: still.duration } : {}), phoneOnly: true,
+  };
+}
+
+/** A frame from early in the video, as a stored JPEG, with the video's size and length. */
+async function videoStill(file: Blob): Promise<{ poster: string; width: number; height: number; duration: number }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+    await new Promise<void>((ok, fail) => { v.onloadeddata = () => ok(); v.onerror = () => fail(new Error("Can't read the video")); setTimeout(() => fail(new Error("timeout")), 8000); });
+    const duration = Number.isFinite(v.duration) ? v.duration : 0;
+    const at = Math.min(0.5, duration / 3);
+    if (at > 0) await new Promise<void>((ok) => { v.onseeked = () => ok(); v.currentTime = at; setTimeout(ok, 2000); });
+    const scale = Math.min(1, MAX_SIDE / Math.max(v.videoWidth, v.videoHeight, 1));
+    const width = Math.max(1, Math.round(v.videoWidth * scale)), height = Math.max(1, Math.round(v.videoHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width; canvas.height = height;
+    canvas.getContext("2d")!.drawImage(v, 0, 0, width, height);
+    const jpeg = await new Promise<Blob>((ok, fail) => canvas.toBlob((b) => (b ? ok(b) : fail(new Error("no still"))), "image/jpeg", 0.8));
+    const poster = await sha256(jpeg);
+    await putBlob(poster, jpeg);
+    return { poster, width: v.videoWidth, height: v.videoHeight, duration };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Object URL for a stored picture; updates when a file still downloading arrives. */
 export function useImageUrl(hash: string): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (!hash) { setUrl(null); return; }
     let current: string | null = null;
     let alive = true;
     const load = async () => {

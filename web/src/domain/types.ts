@@ -67,7 +67,13 @@ export interface ItemTag { itemId: number; tagId: number }
 export interface Link { sourceId: number; targetId: number; auto: boolean }
 export interface NoteVersion { id: number; itemId: number; title: string; content: string; savedAt: number }
 /** A picture on a note; the file is stored by its SHA-256 [hash] (see store/images.ts). */
-export interface NoteImage { id: number; itemId: number; hash: string; mime: string; width: number; height: number; createdAt: number }
+export interface NoteImage {
+  id: number; itemId: number; hash: string; mime: string; width: number; height: number; createdAt: number;
+  /** A video's still (a JPEG's hash), the part of a video that syncs (domain/media.ts). */
+  poster?: string;
+  /** A video: its size in bytes, its length in seconds, and that its file is only on the phone that added it. */
+  size?: number; duration?: number; phoneOnly?: boolean;
+}
 
 export const NO_DAY = 0;
 export const PRIORITIES = ["None", "Low", "Medium", "High", "Urgent"] as const;

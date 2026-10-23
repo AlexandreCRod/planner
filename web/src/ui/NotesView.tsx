@@ -4,6 +4,7 @@ import { occurrencesIn } from "../domain/schedule.ts";
 import { preview, stripHtml } from "../domain/text.ts";
 import { type NoteImage, argbOf, cssColor } from "../domain/types.ts";
 import { importImage, useImageUrl } from "../store/images.ts";
+import { previewHash } from "../domain/media.ts";
 import { addImage, deleteImage, trash, useSnapshot } from "../store/store.ts";
 import { Icon, go, openItem } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
@@ -179,7 +180,7 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
 }
 
 function Thumb({ img, onOpen }: { img: NoteImage; onOpen: () => void }) {
-  const url = useImageUrl(img.hash);
+  const url = useImageUrl(previewHash(img));
   return (
     <button className="thumb" title="Open picture" onClick={onOpen}>
       {url ? <img src={url} alt="" /> : <span className="hint">Downloading…</span>}
@@ -188,7 +189,7 @@ function Thumb({ img, onOpen }: { img: NoteImage; onOpen: () => void }) {
 }
 
 function Lightbox({ img, onClose, onRemove }: { img: NoteImage; onClose: () => void; onRemove: () => void }) {
-  const url = useImageUrl(img.hash);
+  const url = useImageUrl(previewHash(img));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);

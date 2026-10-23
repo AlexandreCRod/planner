@@ -1339,3 +1339,45 @@ html.phone[data-theme="dark"] {
 .phone .pn-peek-list { max-height: 55vh; overflow-y: auto; padding-bottom: 8px; }
 .phone .pn-peek-list .p-li { gap: 16px; padding-left: 20px; }
 .phone .pn-peek-none { padding: 16px 24px; color: var(--muted); }
+
+/* ---------- A note's pictures and videos (2.3) ---------- */
+/* The row: a sideways swipe glides from one to the next (the browser's own scrolling, snapped). */
+.phone .pn-media {
+  display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 8px 20px; scrollbar-width: none;
+  scroll-snap-type: x mandatory; scroll-padding: 0 20px; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+}
+.phone .pn-media::-webkit-scrollbar { display: none; }
+.phone .pn-media-item {
+  position: relative; flex: none; height: 168px; padding: 0; border: 0; border-radius: 14px; overflow: hidden; scroll-snap-align: start;
+  background: var(--p-sc-high); -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
+}
+.phone .pn-media-item img, .phone .pn-lens-item img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+.phone .pn-media-none { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); }
+.phone .pn-media-video {
+  position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 8px 0 4px;
+  border-radius: 12px; background: rgb(0 0 0 / .55); color: #fff; font-size: 12px; line-height: 16px; font-weight: 500; pointer-events: none;
+}
+
+/* The lens: the one in the middle big, the others smaller beside it; moved by transforms only. */
+.phone .pn-lens {
+  position: fixed; inset: 0; z-index: 62; background: rgb(0 0 0 / .86); touch-action: none; user-select: none; -webkit-user-select: none;
+  animation: pn-lens-in .2s cubic-bezier(.2, 0, 0, 1); transition: opacity .16s linear;
+}
+.phone .pn-lens.out { opacity: 0; pointer-events: none; }
+@keyframes pn-lens-in { from { opacity: 0; } }
+.phone .pn-lens-row { position: absolute; left: 50%; top: 46%; width: 0; height: 0; }
+.phone .pn-lens-item {
+  position: absolute; left: 0; top: 0; border-radius: 18px; overflow: hidden; background: #222; will-change: transform;
+  box-shadow: 0 10px 30px rgb(0 0 0 / .45); animation: pn-lens-grow .24s cubic-bezier(.2, 0, 0, 1);
+}
+@keyframes pn-lens-grow { from { opacity: 0; } }
+.phone .pn-lens-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.phone .pn-lens-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 4px; padding: 8px 8px calc(var(--sab) + 12px) 24px; color: #fff;
+}
+.phone .pn-lens-bar .p-icon { color: #fff; }
+.phone .pn-lens-count { flex: 1; font-size: 14px; line-height: 20px; letter-spacing: .25px; opacity: .85; }
+
+/* Full screen: a video plays with its controls; one only on another phone says so. */
+.phone .pn-picture video { max-width: 100%; max-height: 100%; }
+.phone .pn-picture-note { position: absolute; left: 24px; right: 24px; bottom: calc(var(--sab) + 32px); text-align: center; color: #fff; opacity: .85; font-size: 14px; line-height: 20px; }

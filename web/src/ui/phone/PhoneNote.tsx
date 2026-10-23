@@ -8,7 +8,9 @@ import { formatDate, formatDateTime, formatTime } from "../../domain/dates.ts";
 import { occurrencesIn } from "../../domain/schedule.ts";
 import { preview, stripHtml } from "../../domain/text.ts";
 import { type NoteImage, cssColor } from "../../domain/types.ts";
-import { importImage, useImageUrl } from "../../store/images.ts";
+import { importImage, importVideo } from "../../store/images.ts";
+import { MAX_VIDEO_BYTES } from "../../domain/media.ts";
+import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
 import { addImage, deleteImage, trash } from "../../store/store.ts";
 import { openItem, replaceRoute } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
@@ -22,7 +24,7 @@ import { feel } from "./haptics.ts";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
-import { pushBack, useKeyboardUp } from "./native.ts";
+import { useKeyboardUp } from "./native.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
 
@@ -38,6 +40,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const [menu, setMenu] = useState(false);
   const [open, setOpen] = useState<"" | "style" | "templates" | "versions" | "trash">("");
   const [viewing, setViewing] = useState<NoteImage | null>(null);
+  const [lens, setLens] = useState<{ start: number; pointer: { id: number; x: number } | null } | null>(null);
   const textBox = useRef<HTMLDivElement>(null);
   const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -72,14 +75,22 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   // elsewhere, so a tap on it brings the keyboard back where writing stopped (native.ts).
   const kbUp = useKeyboardUp();
 
-  /** Attaches pictures; a new note is saved first, even if nothing is typed yet. */
+  /**
+   * Attaches pictures and videos; a new note is saved first, even if nothing is typed yet. A picture is
+   * shrunk to sync; a video is kept as it is, on this phone only (its still syncs: domain/media.ts).
+   */
   const addPictures = async (files: Iterable<File>) => {
-    const pics = [...files].filter((f) => f.type.startsWith("image/"));
-    if (!pics.length) return;
+    const all = [...files].filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!all.length) return;
     const to = note.save(true);
     if (!to) return;
-    for (const f of pics) {
-      try { addImage(to, await importImage(f)); } catch { showSnackbar(`Couldn't add ${f.name || "the picture"}`); }
+    for (const f of all) {
+      const video = f.type.startsWith("video/");
+      if (video && f.size > MAX_VIDEO_BYTES) { showSnackbar(`Videos up to ${Math.round(MAX_VIDEO_BYTES / 1048576)} MB can be added`); continue; }
+      try {
+        addImage(to, video ? await importVideo(f) : await importImage(f));
+        if (video) showSnackbar("Video added. It stays on this phone; your other devices show a still of it.");
+      } catch { showSnackbar(`Couldn't add ${f.name || (video ? "the video" : "the picture")}`); }
     }
   };
   const pickPictures = () => fileInput.current?.click();
@@ -107,7 +118,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
             { label: "Find in note", icon: "oFindInPage", onClick: () => setFinding({ q: finding?.q ?? "", focus: true }) },
-            { label: "Add picture", icon: "oAddPhotoAlternate", onClick: pickPictures },
+            { label: "Add picture or video", icon: "oAddPhotoAlternate", onClick: pickPictures },
             { label: "Show another note", icon: "oSplitscreen", onClick: () => setPicking(true) },
             { label: style.hidden ? "Show on Notes page" : "Hide from Notes page", icon: style.hidden ? "oVisibility" : "oVisibilityOff", onClick: () => {
               setStyle({ ...style, hidden: !style.hidden });
@@ -119,7 +130,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           ]} />
         </span>
       </>} />
-      <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addPictures(e.target.files); e.target.value = ""; }} />
+      <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { if (e.target.files) void addPictures(e.target.files); e.target.value = ""; }} />
 
       {finding && <NoteFind key={finding.focus ? "f" : "s"} editor={() => rich.current?.root() ?? null} scroller={() => scrollBox.current}
         initial={finding.q} focus={finding.focus} onClose={() => setFinding(null)} />}
@@ -140,11 +151,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           <MIcon name="oLabel" />
           <input placeholder="tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} autoCapitalize="none" />
         </label>
-        {images.length > 0 && (
-          <div className="pn-images">
-            {images.map((img) => <Thumb key={img.id} img={img} onOpen={() => setViewing(img)} />)}
-          </div>
-        )}
+        {images.length > 0 && <MediaStrip media={images} onOpen={(i) => setViewing(images[i])} onLens={(start, pointer) => { feel("pickup"); setLens({ start, pointer }); }} />}
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
           <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
             noToolbar placeholder="Start writing…" onFocusChange={setFocused} />
@@ -158,7 +165,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
 
       {peek !== null && <NotePeek key={peek} id={peek} host={() => pageEl.current} onSwap={swap} onClose={() => setPeek(null)} />}
 
-      {writing && <RichBar editor={rich} onHold={setHeld} extra={<RichBarButton icon="oAddPhotoAlternate" label="Add picture" onClick={pickPictures} />} />}
+      {writing && <RichBar editor={rich} onHold={setHeld} extra={<RichBarButton icon="oAddPhotoAlternate" label="Add picture or video" onClick={pickPictures} />} />}
 
       {open === "style" && (
         <BottomSheet onClose={() => setOpen("")}>{() => (
@@ -219,36 +226,9 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
 
       {picking && <PeekPicker exclude={noteId} onPick={(pid) => setPeek(pid)} onClose={() => setPicking(false)} />}
 
-      {viewing && <Picture img={viewing} onClose={() => setViewing(null)} onRemove={() => { deleteImage(viewing); setViewing(null); }} />}
+      {lens && images.length > 0 && <MediaLens media={images} start={Math.min(lens.start, images.length - 1)} pointer={lens.pointer}
+        onClose={() => setLens(null)} onOpen={(i) => { setLens(null); setViewing(images[i]); }} />}
+      {viewing && <MediaViewer m={viewing} onClose={() => setViewing(null)} onRemove={() => { deleteImage(viewing); setViewing(null); }} />}
     </div>
   );
 }
-
-function Thumb({ img, onOpen }: { img: NoteImage; onOpen: () => void }) {
-  const url = useImageUrl(img.hash);
-  return <button className="pn-thumb" aria-label="Open picture" onClick={onOpen}>{url && <img src={url} alt="" />}</button>;
-}
-
-/** A picture full screen, with remove (asked first, as it goes from every device). */
-function Picture({ img, onClose, onRemove }: { img: NoteImage; onClose: () => void; onRemove: () => void }) {
-  const url = useImageUrl(img.hash);
-  const [ask, setAsk] = useState(false);
-  useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <div className="pn-picture" onClick={onClose}>
-      <div className="pn-picture-bar" onClick={(e) => e.stopPropagation()}>
-        <IconButton icon="fClose" label="Close" onClick={onClose} />
-        <span className="grow" />
-        <IconButton icon="oDelete" label="Remove picture" onClick={() => setAsk(true)} />
-      </div>
-      {url && <img src={url} alt="" onClick={(e) => e.stopPropagation()} />}
-      {ask && (
-        <Dialog title="Remove picture?" onClose={() => setAsk(false)} actions={<>
-          <TextButton onClick={() => setAsk(false)}>Cancel</TextButton>
-          <TextButton onClick={onRemove}>Remove</TextButton>
-        </>}>It's removed from this note on all your devices.</Dialog>
-      )}
-    </div>
-  );
-}
-

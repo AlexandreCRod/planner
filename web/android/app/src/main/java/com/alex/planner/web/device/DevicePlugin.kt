@@ -1,12 +1,16 @@
 package com.alex.planner.web.device
 
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Rect
 import android.location.Address
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
 import android.text.format.DateFormat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -14,13 +18,16 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import java.io.OutputStream
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Small things only Android knows, for the page (web/src/ui/phone/device.ts): whether the phone shows
  * 24-hour time, places matching a typed location (Android's own geocoder, as the original app's
  * Places.search), a place opened in the maps app (Places.openMap: shown, no directions started), and
- * the touch feel (Feel.kt, from web/src/ui/phone/haptics.ts).
+ * the touch feel (Feel.kt, from web/src/ui/phone/haptics.ts), and a note's picture or video saved to the
+ * phone's gallery.
  */
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
@@ -106,5 +113,58 @@ class DevicePlugin : Plugin() {
     fun feel(call: PluginCall) {
         Feel.play(context, call.getString("kind") ?: "tick")
         call.resolve()
+    }
+
+    // ---------- Saving a note's picture or video to the phone ----------
+    // Sent in pieces (base64), so a large video never goes through the bridge in one message: start (a
+    // new file in Pictures/Planner or Movies/Planner, hidden until finished), the pieces in order, end.
+    private class Saving(val uri: Uri, val out: OutputStream)
+    private val saving = HashMap<String, Saving>()
+
+    @PluginMethod
+    fun saveMediaStart(call: PluginCall) {
+        if (Build.VERSION.SDK_INT < 29) return call.reject("Saving to the phone needs Android 10 or later")
+        val name = call.getString("name")?.takeIf { it.isNotBlank() } ?: "Planner"
+        val mime = call.getString("mime") ?: "image/jpeg"
+        val video = mime.startsWith("video/")
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, (if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/Planner")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val collection = if (video) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val resolver = context.contentResolver
+        val uri = runCatching { resolver.insert(collection, values) }.getOrNull() ?: return call.reject("Couldn't create the file")
+        val out = runCatching { resolver.openOutputStream(uri) }.getOrNull()
+        if (out == null) { resolver.delete(uri, null, null); return call.reject("Couldn't open the file") }
+        val id = UUID.randomUUID().toString()
+        synchronized(saving) { saving[id] = Saving(uri, out) }
+        call.resolve(JSObject().put("id", id))
+    }
+
+    @PluginMethod
+    fun saveMediaPiece(call: PluginCall) {
+        val s = synchronized(saving) { saving[call.getString("id") ?: ""] } ?: return call.reject("No such save")
+        val data = call.getString("data") ?: return call.reject("No data")
+        runCatching { s.out.write(Base64.decode(data, Base64.DEFAULT)) }
+            .onSuccess { call.resolve() }
+            .onFailure { call.reject("Couldn't write the file") }
+    }
+
+    /** Finishes the file (shown in the gallery from now on), or with {cancel: true} removes it. */
+    @PluginMethod
+    fun saveMediaEnd(call: PluginCall) {
+        val s = synchronized(saving) { saving.remove(call.getString("id") ?: "") } ?: return call.reject("No such save")
+        val resolver = context.contentResolver
+        runCatching { s.out.close() }
+        if (call.getBoolean("cancel", false) == true) {
+            runCatching { resolver.delete(s.uri, null, null) }
+            return call.resolve()
+        }
+        runCatching { resolver.update(s.uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) }
+            .onSuccess { call.resolve() }
+            .onFailure { call.reject("Couldn't finish the file") }
     }
 }
