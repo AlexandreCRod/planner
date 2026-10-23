@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { limitScroll, selectScrollSpeed } from "../src/ui/phone/selectScroll.ts";
 
-test("a selection drag scrolls slowly inside the page and faster at its edge, never racing", () => {
-  assert.ok(selectScrollSpeed(0) < 0.1);
+test("a selection drag doesn't scroll inside the page, and scrolls faster nearer its edge, never racing", () => {
+  assert.equal(selectScrollSpeed(0), 0); // away from the edges: the selection follows the finger 1:1
+  assert.ok(selectScrollSpeed(0.1) > 0);
   assert.ok(selectScrollSpeed(0.5) > selectScrollSpeed(0));
   assert.ok(selectScrollSpeed(1) > selectScrollSpeed(0.5));
   assert.equal(selectScrollSpeed(5), selectScrollSpeed(1.25)); // past the edge it tops out
-  assert.ok(selectScrollSpeed(5) < 0.8); // under 800 px a second
+  assert.ok(selectScrollSpeed(5) < 1.5); // under 1500 px a second
   assert.equal(selectScrollSpeed(-3), selectScrollSpeed(0));
 });
 

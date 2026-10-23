@@ -1,16 +1,21 @@
 // Gentle scrolling while text is being selected. Dragging a selection (a long-press drag or a handle)
 // towards the top or bottom of a note or field makes the WebView scroll the selection's end into
 // view; each scroll slides more text under the finger, the selection grows, and it scrolls again, so
-// the page could race away. Here, while a selection is changing, the scroller holding it may move only
-// so fast: slowly while the selection's end is well inside it, a little faster as it nears the edge,
-// like dragging a selection in an ordinary Android text field. The page gets no touch events during
+// the page could race away. Here, while a selection is changing, the scroller holding it stays still
+// while the selection's end is well inside it (the selection follows the finger one to one), and
+// scrolls only with the end in the zone along its top or bottom edge, faster the nearer the edge. The page gets no touch events during
 // such a drag (the browser takes the finger), so the selection's end stands in for the finger.
 // Scrolling a page that merely has a selection in it is untouched: the selection isn't changing.
 
-/** px/ms a selection drag may scroll, with its end [depth] into the edge zone (0 outside, 1 at the edge). */
+/**
+ * px/ms a selection drag may scroll, with its end [depth] into the edge zone (0 outside, 1 at the edge).
+ * Away from the edges it doesn't scroll at all, so the selection follows the finger one to one; only
+ * in the zone along the top or bottom does it scroll, quickly near the very edge.
+ */
 export function selectScrollSpeed(depth: number): number {
-  const d = Math.max(0, Math.min(1.25, depth));
-  return 0.06 + 0.42 * d * d;
+  if (depth <= 0) return 0;
+  const d = Math.min(1.25, depth);
+  return 0.12 + 0.7 * d * d;
 }
 
 /** Where a scroller that went from [last] to [next] in [dt] ms may be, at [speed] px/ms at most. */
@@ -87,9 +92,10 @@ function glide(el: Element, top: number, left: number, speed: number, now: numbe
     const at = seen.get(el) ?? { top: el.scrollTop, left: el.scrollLeft };
     // Moved by something else meanwhile: a finger scrolling once the selection is done wins.
     if ((el.scrollTop !== at.top || el.scrollLeft !== at.left) && performance.now() - lastChange > ACTIVE_MS) { glides.delete(el); return; }
-    // Faster as the selection's end nears the edge it's heading for.
+    // Faster as the selection's end nears the edge it's heading for; none away from the edges.
     const end = selectionEnd();
     if (end && g.top !== at.top) g.speed = selectScrollSpeed(depthIn(el, end.rect, Math.sign(g.top - at.top)));
+    if (g.speed === 0 && performance.now() - lastChange > ACTIVE_MS) { glides.delete(el); return; }
     const y = limitScroll(at.top, g.top, dt, g.speed);
     const x = limitScroll(at.left, g.left, dt, g.speed);
     el.scrollTop = y;
