@@ -11,6 +11,7 @@ import { flushSync } from "react-dom";
 import { describe } from "../../domain/recurrence.ts";
 import { formatDate, formatDateShort, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
+import { type Frequent, frequentItems, suggestFrequent, titleKey } from "../../domain/frequent.ts";
 import { daysText, formatDuration } from "../../domain/alarms.ts";
 import { act, hasAlarms, native } from "../../alarms/native.ts";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
@@ -23,6 +24,7 @@ import { VelocityTracker } from "./motion.ts";
 import { TOUCH_SLOP, selectingText } from "./press.ts";
 import { swallowNextClick } from "./gesture.ts";
 import { panelTarget } from "./sheet.ts";
+import { feel } from "./haptics.ts";
 import { AssistChip, ColorPickerDialog, TextButton, showSnackbar } from "./m3.tsx";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
@@ -97,6 +99,11 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const categories = snapshot().categories;
   const parsed = useMemo(() => parseQuickAdd(text, undefined, categories.map((c) => c.name)), [text, categories]);
   const quick = req.mode === "quick";
+  // Frequent items: what's typed offers the tasks or events added often under that title; a picked one
+  // fills in what it usually has, for as long as the title still is its title.
+  const frequent = useMemo(() => (type === "NOTE" ? [] : frequentItems(snapshot().items, snapshot().reminders, type)), [type]);
+  const [tpl, setTpl] = useState<Frequent | null>(null);
+  const applied = tpl && tpl.type === type && titleKey(parsed.title || text) === titleKey(tpl.title) ? tpl : null;
   const buildQuick = (): Draft => {
     const ev = type === "EVENT";
     const day = parsed.day ?? (ev ? req.day : null);
@@ -114,6 +121,15 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       categoryId: parsed.category !== null ? categories.find((c) => c.name === parsed.category)?.id ?? null : null,
       location: parsed.place ?? "",
     });
+    if (applied) {
+      // What the frequent item usually has, where the line doesn't say otherwise.
+      if (parsed.category === null) { item.categoryId = applied.categoryId; item.color = applied.color; }
+      if (parsed.startMin === null && applied.startMin !== null) {
+        item.startMin = applied.startMin;
+        if (ev) { item.allDay = false; item.endMin = Math.min(applied.startMin + (applied.durationMin ?? 60), DAY_END); }
+      }
+      if (parsed.place === null && applied.place) Object.assign(item, applied.place);
+    }
     if ("startDay" in ov) {
       const span = item.endDay !== null && item.startDay !== null ? item.endDay - item.startDay : 0;
       item.startDay = ov.startDay ?? null;
@@ -131,8 +147,9 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if ("color" in ov) item.color = ov.color ?? null;
     if ("categoryId" in ov) item.categoryId = ov.categoryId ?? null;
     if (item.startDay === null) item.startMin = null;
-    const reminders = parsed.alerts.length
-      ? parsed.alerts.map(([offsetMin, t]): Reminder => ({ id: 0, itemId: 0, offsetMin, type: t, soundUri: null }))
+    const alerts = parsed.alerts.length ? parsed.alerts : applied ? applied.alerts : null;
+    const reminders = alerts
+      ? alerts.map(([offsetMin, t]): Reminder => ({ id: 0, itemId: 0, offsetMin, type: t, soundUri: null }))
       : firstAlerts(item);
     return { item, reminders, tags: parsed.tags.join(" ") };
   };
@@ -144,7 +161,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   });
   // While small (and never grown), the quick panel's line and controls are what the editor opens with.
   const lineMode = quick && !everGrown;
-  useEffect(() => { if (lineMode) setDraft(buildQuick()); }, [text, type, ov]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (lineMode) setDraft(buildQuick()); }, [text, type, ov, applied]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = draft.item;
   const setItem = (patch: Partial<Item>) => setDraft((x) => ({ ...x, item: { ...x.item, ...patch } }));
   const canGrow = !(quick && type === "NOTE");
@@ -416,10 +433,43 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     else setItem(v ? { allDay: true, startMin: null, endMin: null } : { allDay: false, startMin: d.startMin ?? req.min ?? 540, endMin: d.endMin ?? Math.min((d.startMin ?? req.min ?? 540) + 60, DAY_END) });
   };
   const color = snapshot().colorOf(d);
+  const slotFrequent = useMemo(() => (quick ? [] : frequentItems(snapshot().items, snapshot().reminders, d.type)), [quick, d.type]);
   /** Keeps the keyboard up through taps on the panel's own controls. */
   const keepFocus = (e: React.MouseEvent) => { if (!(e.target as Element).closest("input")) e.preventDefault(); };
 
   const parsedItem = lineMode && text.trim() && type !== "NOTE" && !clock ? d : null;
+  // The frequent items matching the title typed so far (the line's title, or the slot panel's).
+  const offered = type === "NOTE" || clock || (!lineMode && everGrown) ? [] : suggestFrequent(lineMode ? frequent : slotFrequent, lineMode ? parsed.title || text : d.title);
+  const pickFrequent = (f: Frequent) => {
+    feel("tick");
+    if (lineMode) {
+      if (applied === f) { setTpl(null); return; }
+      // The typed title becomes the frequent one's; the rest of the line stays as it is.
+      const t = parsed.title.trim(), at = t ? text.toLowerCase().indexOf(t.toLowerCase()) : -1;
+      setText(at >= 0 ? text.slice(0, at) + f.title + text.slice(at + t.length) : f.title);
+      setTpl(f);
+      return;
+    }
+    // On a slot the time is the slot's: the rest comes from the frequent item.
+    const start = d.startMin;
+    setDraft((x) => ({
+      ...x,
+      item: {
+        ...x.item, title: f.title, categoryId: f.categoryId, color: f.color, ...(f.place ?? {}),
+        ...(start !== null && f.durationMin !== null && !x.item.allDay ? { endMin: Math.min(start + f.durationMin, DAY_END) } : {}),
+      },
+      reminders: f.alerts.map(([offsetMin, t]): Reminder => ({ id: 0, itemId: 0, offsetMin, type: t, soundUri: null })),
+    }));
+  };
+  const frequentRow = offered.length > 0 && (
+    <div className="gp-chips gp-frequent" aria-label="Frequent">
+      {offered.map((f) => (
+        <button key={titleKey(f.title)} className={`p-assist ${applied === f ? "on" : ""}`} aria-pressed={applied === f} onClick={() => pickFrequent(f)}>
+          <MIcon name={applied === f ? "fCheck" : "oHistory"} size={18} /><span className="ellipsis">{f.title}</span>
+        </button>
+      ))}
+    </div>
+  );
   const isEvent = d.type === "EVENT";
 
   /** Date, time, all day and colour: the settings the small panel can change. */
@@ -462,6 +512,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
             <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
               placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
               onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            {frequentRow}
             {type !== "NOTE" && !clock && settings}
             {clock && (
               <div className="gp-chips">
@@ -486,6 +537,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           </> : <>
             <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
               onChange={(e) => setItem({ title: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            {frequentRow}
             <div className="gp-row">
               {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
               <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
