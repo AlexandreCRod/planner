@@ -197,8 +197,10 @@ export function PhoneApp() {
     settle(i, 0, true);
   };
 
-  // A route to a page (go("calendar"), the back button...) turns the pager there.
-  useEffect(() => { if (routeTab >= 0 && routeTab !== tabRef.current) settle(routeTab, 0, true); }, [routeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A route to a page (go("calendar"), the back button...) turns the pager there. Every new route counts
+  // (path is new each time the hash changes): the tabs move the pager without a hash change, so the same
+  // route asked for again, e.g. "tasks" from Today a second time, must still turn it.
+  useEffect(() => { if (routeTab >= 0 && routeTab !== tabRef.current) settle(routeTab, 0, true); }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
   // "alarms/timer" (from a notification or the add line) opens that section of the Alarms page.
   useEffect(() => {
     if (route === "alarms" && path[1]) { openAlarmSection(path[1]); history.replaceState(null, "", "#/alarms"); }

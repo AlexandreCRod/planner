@@ -44,35 +44,39 @@ function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
  * own swipe to the trash keeps the other way: on Scheduled a swipe left turns to To-do and a swipe right
  * removes a row; on To-do a swipe right turns back and a swipe left removes one.
  */
-/** Opens Tasks on its To-do tab (from Today's "2 tasks without a date"). */
+/** Opens Tasks on its To-do tab (from Today's "2 tasks without a date"), every time. */
 export function openTodoTab() {
   try { localStorage.setItem("tasksTab", "todo"); } catch { /* private mode */ }
   todoListener?.();
   go("tasks");
 }
 let todoListener: (() => void) | null = null;
+const savedTab = () => { try { return localStorage.getItem("tasksTab") === "todo"; } catch { return false; } };
 
 export const PhoneTasks = memo(function PhoneTasks() {
-  const [todo, setTodo] = useState(() => localStorage.getItem("tasksTab") === "todo");
+  const [todo, setTodo] = useState(savedTab);
   const index = todo ? 1 : 0;
   const idx = useRef(index);
   idx.current = index;
   const strip = useRef<HTMLDivElement>(null);
   const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  const setIndex = (i: number) => { setTodo(i === 1); localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); };
-  // A tap on the switch slides there on the pager's spring.
-  const showTab = (v: "scheduled" | "todo") => {
+  const setIndex = (i: number) => { idx.current = i; setTodo(i === 1); try { localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); } catch { /* private mode */ } };
+  /** Puts the strip back where its tab is, with nothing left over from a slide. */
+  const rest = () => { stopSlide.current?.(); stopSlide.current = null; if (strip.current) strip.current.style.transform = ""; };
+  // A tap on the switch slides there on the pager's spring; from elsewhere ([slide] false) it's just there.
+  const showTab = (v: "scheduled" | "todo", slide = true) => {
     const i = v === "todo" ? 1 : 0, from = idx.current;
+    rest();
     if (i === from) return;
-    stopSlide.current?.();
     const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
     flushSync(() => setIndex(i));
-    if (!el || !w) return;
+    if (!slide || !el || !w) return;
     const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
     stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
   };
-  useEffect(() => { todoListener = () => showTab("todo"); return () => { todoListener = null; }; });
+  // The page is opened on To-do from Today while it's out of sight: no slide, just the right tab.
+  useEffect(() => { todoListener = () => showTab("todo", false); return () => { todoListener = null; }; });
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [strip.current],
     onStep: (d) => setIndex(Math.min(1, Math.max(0, idx.current + d))),

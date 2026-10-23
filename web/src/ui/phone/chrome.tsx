@@ -118,7 +118,17 @@ export function Segmented<T extends string>({ value, options, onChange, track }:
   const at = useRef<number | null>(null);
   const anim = useRef<Animation | null>(null);
   const put = (p: number) => { const el = ind.current; if (el) el.style.transform = `translate3d(${p * 100}%,0,0)`; };
-  useLayoutEffect(() => { if (at.current === null && !anim.current) put(index); }, [index]);
+  useLayoutEffect(() => {
+    if (at.current !== null) return; // a finger is on it
+    // Still settling toward the old segment: turn the spring to the new one, so it can't end on a stale tab.
+    if (anim.current) {
+      const from = anim.current.now().x, el = ind.current;
+      anim.current.stop();
+      anim.current = animateSpring(from, index, 0, put, () => { anim.current = null; if (el) el.style.transition = ""; }, PAGE_SPRING);
+      return;
+    }
+    put(index);
+  }, [index]);
   if (track) track.current = (p, v = 0) => {
     const el = ind.current;
     if (!el) return;
