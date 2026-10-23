@@ -8,7 +8,7 @@ import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences,
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
-  type AlertType, type Freq, type Item, type ItemType, type OverduePolicy, type Reminder,
+  type Freq, type Item, type ItemType, type OverduePolicy, type Reminder,
   NO_DAY, PRIORITIES, PRIORITY_COLORS_MUTED, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
@@ -24,6 +24,7 @@ import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
+import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, showStreaks } from "../../store/routines.ts";
 import { count } from "../../domain/plural.ts";
@@ -36,14 +37,10 @@ export interface Draft { item: Item; reminders: Reminder[]; tags: string }
 const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080];
 const DAY_END = 24 * 60 - 1;
 
-/** Notifications follow the kind of item: popping up for an event, silent for a task. */
-export const defaultAlert = (type: ItemType): AlertType => (type === "EVENT" ? "REMINDER" : "NOTIFICATION");
+export { defaultAlert };
 
-/** A new item's first alert, as the native editor gives it. */
-export function firstAlerts(item: Item): Reminder[] {
-  if (item.startDay === null) return [];
-  return [{ id: 0, itemId: 0, offsetMin: item.type === "EVENT" && item.startMin !== null ? 15 : 0, type: defaultAlert(item.type), soundUri: null }];
-}
+/** A new item's first alert: 30 minutes before a timed task or event, at the day's time for an untimed one. */
+export const firstAlerts = firstReminders;
 
 /** Event or task, the way the editor's chips switch it (EditorDraft.switchType). */
 export function switchType(d: Draft, t: ItemType): Draft {
@@ -51,7 +48,9 @@ export function switchType(d: Draft, t: ItemType): Draft {
   const item = t === "EVENT"
     ? { ...it, type: t, startDay: it.startDay ?? todayEpoch(), endDay: it.startDay ?? todayEpoch(), allDay: it.startMin === null, endMin: it.startMin !== null ? Math.min(it.startMin + 60, DAY_END) : null }
     : { ...it, type: t };
-  return { ...d, item, reminders: d.reminders.map((r) => (r.type === "ALARM" ? r : { ...r, type: defaultAlert(t) })) };
+  // Untouched first reminders become the new kind's; changed ones keep their times, in the new kind's style.
+  const reminders = isDefaultReminders(d.reminders, it) ? firstReminders(item) : d.reminders.map((r) => (r.type === "ALARM" ? r : { ...r, type: defaultAlert(t) }));
+  return { ...d, item, reminders };
 }
 
 /** "At the time", "15 minutes before", "1 day before"... */
@@ -340,7 +339,7 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
         <IconButton icon="fClose" label="Remove" onClick={() => onChange(all.filter((_, j) => j !== i))} />
       </FieldRow>
     ))}
-    <FieldRow icon={mine.length ? null : icon} onClick={() => onChange([...all, { id: 0, itemId: 0, offsetMin: type === "EVENT" && timed ? 15 : 0, type: alarms ? "ALARM" : defaultAlert(type), soundUri: null }])}>
+    <FieldRow icon={mine.length ? null : icon} onClick={() => onChange([...all, { id: 0, itemId: 0, offsetMin: timed ? DEFAULT_REMINDER_MIN : 0, type: alarms ? "ALARM" : defaultAlert(type), soundUri: null }])}>
       <span className="pe-label ph">{alarms ? "Add alarm" : "Add notification"}</span>
     </FieldRow>
   </>;
@@ -847,11 +846,17 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const cur = draft ?? local;
   const curRef = useRef(cur);
   curRef.current = cur;
-  // Several changes in one tap each build on the last (the prop only updates on the next render).
-  const emit = (n: Draft) => { curRef.current = n; if (onDraft) onDraft(n); else setLocal(n); };
+  const isNew = !original;
+  // Several changes in one tap each build on the last (the prop only updates on the next render). On a
+  // new item, reminders still as they started follow its date and time (a time added: 30 minutes before).
+  const emit = (n: Draft) => {
+    const prev = curRef.current;
+    if (isNew && n.reminders === prev.reminders) n = { ...n, reminders: followDefaults(prev.reminders, prev.item, n.item) };
+    curRef.current = n;
+    if (onDraft) onDraft(n); else setLocal(n);
+  };
   const d = cur.item;
   const set = (patch: Partial<Item>) => emit({ ...curRef.current, item: { ...curRef.current.item, ...patch } });
-  const isNew = !original;
   const isEvent = d.type === "EVENT";
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [colorDialog, setColorDialog] = useState(false);

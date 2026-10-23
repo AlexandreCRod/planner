@@ -5,6 +5,7 @@ import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } fr
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
 import { isRoutineItem } from "../domain/routines.ts";
+import { defaultOffset, firstReminders } from "../domain/reminders.ts";
 import { preview } from "../domain/text.ts";
 import {
   type AlertType, type Freq, type Item, type OverduePolicy, type Reminder,
@@ -67,12 +68,9 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
   const emit = (n: Draft) => { draftRef.current = n; onDraft?.(n); };
   const [remindersLocal, setRemindersLocal] = useState<Reminder[]>(() => {
     const saved = (s.reminders.get(id) ?? []).map((r) => ({ ...r }));
-    // A new item starts with one alert, like Google Calendar: a reminder 15 minutes before an event,
-    // a silent notification when a dated task is due.
-    if (isNewPlaceholder && !saved.length && original?.startDay != null) {
-      const ev = original.type === "EVENT";
-      return [{ id: 0, itemId: id, offsetMin: ev && original.startMin !== null ? 15 : 0, type: ev ? "REMINDER" : "NOTIFICATION", soundUri: null }];
-    }
+    // A new item starts with one alert (domain/reminders.ts): 30 minutes before a timed one, a
+    // reminder for an event, a silent notification for a task.
+    if (isNewPlaceholder && !saved.length && original?.startDay != null) return firstReminders(original).map((r) => ({ ...r, itemId: id }));
     return saved;
   });
   const reminders = draft ? draft.reminders : remindersLocal;
@@ -262,7 +260,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
   const showRepeat = d.freq !== "NONE" || added.has("repeat");
   // Alerts follow the kind: reminders for events, silent notifications for tasks (the alarm button makes one ring).
   const kindAlert = (type: Item["type"]): AlertType => (type === "EVENT" ? "REMINDER" : "NOTIFICATION");
-  const newAlert = () => setReminders([...reminders, { id: 0, itemId: id, offsetMin: isEvent && !d.allDay ? 15 : 0, type: kindAlert(d.type), soundUri: null }]);
+  const newAlert = () => setReminders([...reminders, { id: 0, itemId: id, offsetMin: defaultOffset(d), type: kindAlert(d.type), soundUri: null }]);
   const untimed = d.allDay || d.startMin === null;
 
   const form = (
