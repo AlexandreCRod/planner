@@ -489,11 +489,17 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 
 /* ---------- Notes: staggered cards ---------- */
 .phone .p-list.notes { padding: 0 12px; }
-.phone .p-notegrid { display: flex; gap: 8px; align-items: flex-start; }
-.phone .p-notecol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The grid (noteDrag.ts): two columns, each card placed by a transform from its measured height. */
+.phone .p-notegrid { position: relative; }
+.phone .p-notegrid > .p-notecard { position: absolute; left: 0; top: 0; width: calc(50% - 4px); box-sizing: border-box; }
 .phone .p-notecard { position: relative; border-radius: 12px; overflow: hidden; background: var(--p-sc-high); color: var(--text); }
 .phone .p-notecard .accent { height: 4px; }
-.phone .p-notecard.p-dragging { z-index: 5; box-shadow: 0 6px 18px rgb(0 0 0 / .28); will-change: transform; transition: box-shadow .15s; }
+/* Dragging one (like Google Keep): lifted with a slight scale and shadow, the others sliding out of its way. */
+/* (Attributes, not classes: React rewrites a card's class when it's picked or unpicked.) */
+.phone .p-notegrid[data-live] > .p-notecard { transition: transform .24s cubic-bezier(.2, 0, 0, 1); }
+.phone .p-notegrid > .p-notecard[data-lift] { z-index: 5; box-shadow: 0 8px 22px rgb(0 0 0 / .3); transition: transform .15s cubic-bezier(.2, 0, 0, 1), box-shadow .15s; }
+.phone .p-notegrid > .p-notecard[data-lift="drag"] { will-change: transform; transition: box-shadow .2s; }
+.phone .p-notegrid > .p-notecard[data-lift][data-down] { box-shadow: 0 0 0 rgb(0 0 0 / 0); }
 .phone .p-notecard .in { padding: 12px; }
 .phone .p-notecard .head { display: flex; align-items: center; gap: 4px; }
 .phone .p-notecard .head svg { opacity: .7; }

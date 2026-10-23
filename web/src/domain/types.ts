@@ -63,6 +63,9 @@ export interface Item {
   /** A pinned note's place among the pinned ones (lower first), set by dragging them; missing = after
    *  those that have one, oldest first. */
   pinOrder?: number;
+  /** An unpinned note's place on the Notes page once dragged there, on the scale of edit times (higher
+   *  first, among the others' last edits); missing = where its last edit puts it. */
+  listOrder?: number;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }
