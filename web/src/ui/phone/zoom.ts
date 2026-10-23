@@ -19,6 +19,14 @@ export function zoomScrollTop(scrollTop: number, focusY: number, oldH: number, n
   return Math.max(0, (scrollTop + focusY) * (newH / oldH) - focusY);
 }
 
+/** Room left above the 06:00 line when the grid opens, so its label (centred on the line) reads whole. */
+export const OPENING_ROOM = 9;
+
+/** Where the grid opens: at 06:00, with a little room above its line for the label. */
+export function openingScrollTop(hourH: number): number {
+  return Math.max(0, hourH * 6 - OPENING_ROOM);
+}
+
 /** The opening zoom: 06:00 to 24:00 fills [viewH], within the limits; or the zoom chosen before. */
 export function openingHourHeight(viewH: number, saved: number | null): number {
   const minH = viewH / 24;

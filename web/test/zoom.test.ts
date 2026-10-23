@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { MAX_HOUR_HEIGHT, openingHourHeight, pinchHourHeight, zoomScrollTop } from "../src/ui/phone/zoom.ts";
 import { noteLines } from "../src/domain/text.ts";
 import { barTarget, pageTarget } from "../src/ui/phone/pager.ts";
+import { OPENING_ROOM, openingScrollTop } from "../src/ui/phone/zoom.ts";
 import { panelTarget, sheetCloses } from "../src/ui/phone/sheet.ts";
 
 test("pinch scales the hour height with the fingers' spread", () => {
@@ -89,4 +90,10 @@ test("the add panel opens or closes after a short pull, and a flick decides", ()
   assert.equal(barTarget(1, 1.05, 0.3, 4), 2);
   // A slow drag let go still settles on the nearest.
   assert.equal(pageTarget(-24, -0.1, 400), 0);
+});
+
+test("the grid opens at 06:00 with room above for its label", () => {
+  assert.equal(openingScrollTop(40), 240 - OPENING_ROOM);
+  assert.ok(OPENING_ROOM >= 7); // the label reaches 7 px above its line
+  assert.equal(openingScrollTop(1), 0);
 });

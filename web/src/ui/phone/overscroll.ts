@@ -6,7 +6,7 @@
 // - a fling that runs into an end carries on a little past it and springs back.
 // The page moves with a transform, clipped to its own box (clip-path), so nothing around it shifts.
 // Text selection, fields and the note editor are left alone, and so is anything with two fingers.
-import { EDGE_SPRING, FIRM_EDGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, rubberBandInverse, type Animation } from "./motion.ts";
+import { EDGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, rubberBandInverse, type Animation } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
 
 /** The pages that get rubber-band edges. */
@@ -20,11 +20,11 @@ const MAX_FLING = 3;
 /**
  * How an edge gives: [dim] the most it can show (as a share of the page's height), [c] how much of the
  * finger's pull shows at first, [fling] how much of a fling's speed carries past the end. The calendar's
- * edges are firm (a hint of give and a quick, settled return): its grid is a fixed thing, not a list.
+ * edges give about half as much as a list's (its grid is a fixed thing), and settle a little quicker.
  */
 interface Edge { dim: number; c: number; fling: number; spring: typeof EDGE_SPRING }
 const SOFT: Edge = { dim: 1, c: 0.55, fling: FLING_SCALE, spring: EDGE_SPRING };
-const FIRM: Edge = { dim: 0.3, c: 0.3, fling: 0.16, spring: FIRM_EDGE_SPRING };
+const CALENDAR: Edge = { dim: 0.5, c: 0.4, fling: 0.25, spring: { stiffness: 600, damping: 1 } };
 
 interface Band { el: HTMLElement; shown: number; anim: Animation | null; write: ReturnType<typeof frameWriter<number>>; edge: Edge }
 const bands = new WeakMap<HTMLElement, Band>();
@@ -32,7 +32,7 @@ const bands = new WeakMap<HTMLElement, Band>();
 function bandOf(el: HTMLElement): Band {
   let b = bands.get(el);
   if (!b) {
-    const band: Band = { el, shown: 0, anim: null, write: frameWriter<number>((v) => draw(band, v)), edge: el.closest(".p-cal") ? FIRM : SOFT };
+    const band: Band = { el, shown: 0, anim: null, write: frameWriter<number>((v) => draw(band, v)), edge: el.closest(".p-cal") ? CALENDAR : SOFT };
     bands.set(el, band);
     b = band;
   }

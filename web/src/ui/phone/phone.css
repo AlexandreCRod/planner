@@ -215,6 +215,13 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-dh .wd { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
 .phone .pg-dh .num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; font-weight: 500; }
 .phone .pg-dh.today .num { background: var(--p-primary); color: var(--p-on-primary); }
+/* One day: the date across the header. */
+.phone .pg-dh.one { flex-direction: row; align-items: center; justify-content: flex-start; gap: 12px; padding: 2px 12px 2px 8px; text-align: left; }
+.phone .pg-dh.one .num { width: 40px; height: 40px; font-size: 22px; flex: none; }
+.phone .pg-dh.one .when { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.phone .pg-dh.one .wdl { font-size: 16px; line-height: 22px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pg-dh.one .my { font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; }
+.phone .pg-dh.one .note { flex: none; font-size: 12px; padding: 6px 4px; }
 .phone .pg-allday { flex: none; display: flex; padding-bottom: 2px; overflow: hidden; }
 .phone .pg-allday .pg-gutter { font-size: 9px; text-align: center; color: var(--muted); padding-top: 3px; }
 .phone .pg-allday-days { flex: 1; min-width: 0; overflow: hidden; }
@@ -231,7 +238,8 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-labels span { position: absolute; top: -7px; left: 0; right: 0; text-align: center; font-size: 10px; line-height: 14px; color: var(--muted); }
 .phone .pg-grid {
   flex: 1; min-width: 0; position: relative; overflow: hidden;
-  background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px); background-size: 100% var(--hour);
+  /* Each hour's line at the foot of the hour before it: no line at 00:00, where the header's own is. */
+  background-image: linear-gradient(to top, var(--line) 1px, transparent 1px); background-size: 100% var(--hour);
 }
 .phone .pg-layer { position: absolute; inset: 0; }
 .phone .pg-col { position: absolute; top: 0; bottom: 0; }

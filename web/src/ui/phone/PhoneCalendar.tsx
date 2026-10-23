@@ -20,11 +20,12 @@ import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
-import { openingHourHeight, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
+import { openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 
 type Mode = "day" | "3day" | "week" | "month" | "year" | "agenda";
 const MODES: [Mode, string][] = [["day", "Day"], ["3day", "3 days"], ["week", "Week"], ["month", "Month"], ["year", "Year"], ["agenda", "Agenda"]];
 const NARROW = ["M", "T", "W", "T", "F", "S", "S"];
+const WEEKDAYS_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const DAY_MIN = 1440;
 const LONG_PRESS_MS = 400;
@@ -406,8 +407,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   const props = useRef({ onStep, onNewAt, s });
   props.current = { onStep, onNewAt, s };
 
-  // Opening: 06:00 to 24:00 fills the grid, scrolled to 06:00 (as the native app does), unless a zoom
-  // was pinched before. (Measured once it has a real height; later size changes keep the zoom.)
+  // Opening: 06:00 to 24:00 fills the grid, scrolled to 06:00 (as the native app does; a few pixels
+  // above, so the 06:00 label isn't cut), unless a zoom was pinched before. (Measured once it has a
+  // real height; later size changes keep the zoom.)
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -418,7 +420,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       const h = openingHourHeight(el.clientHeight, savedHour);
       hourRef.current = h;
       setHourH(h);
-      pendingScroll.current = h * 6;
+      pendingScroll.current = openingScrollTop(h);
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -742,7 +744,17 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       <div className="pg-head">
         <div className="pg-gutter" />
         <div className="pg-head-days"><div className="pg-strip" ref={headDays}>
-          {all.map((d, j) => (
+          {all.map((d, j) => count === 1 ? (
+            // One day: its date fills the header (the number large, the weekday and month beside it).
+            <div key={d} className={`pg-dh one ${d === t ? "today" : ""}`} role="button" onClick={() => onDayHeader(d)}>
+              <span className="num">{ymd(d).d}</span>
+              <span className="when">
+                <span className="wdl">{WEEKDAYS_LONG[weekday(d) - 1]}</span>
+                <span className="my">{monthLong(ymd(d).m)} {ymd(d).y}</span>
+              </span>
+              <button className="note" onClick={(e) => { e.stopPropagation(); onDayNote(d); }}>{noteDays.has(d) ? "Note" : "＋ note"}</button>
+            </div>
+          ) : (
             <div key={d} className={`pg-dh ${d === t ? "today" : ""} ${j % count === 0 ? "range" : ""}`} role="button" onClick={() => onDayHeader(d)}>
               <span className="wd">{NARROW[weekday(d) - 1]}</span>
               <span className="num">{ymd(d).d}</span>
