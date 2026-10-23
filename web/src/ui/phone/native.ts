@@ -47,6 +47,8 @@ export function startPhonePlumbing() {
   }
   if (isNative) {
     void CapApp.addListener("backButton", () => onBack());
+    kbUp = false;
+    startKeyboardKeeper();
   }
 }
 
@@ -81,4 +83,35 @@ export function onKeyboardHide(fn: () => void): () => void {
   if (!isNative) return () => {};
   const h = Keyboard.addListener("keyboardWillHide", fn);
   return () => { void h.then((x) => x.remove()); };
+}
+
+// ---------- Keyboard up or down ----------
+// Whether the soft keyboard is up (in a browser there's no telling: always taken as up). Putting the
+// keyboard away no longer takes the focus from the text: the caret stays where it was (a marker for
+// where writing goes on), and a tap on the text brings the keyboard back.
+let kbUp = true;
+const upListeners = new Set<() => void>();
+const setKbUp = (v: boolean) => { if (v !== kbUp) { kbUp = v; upListeners.forEach((l) => l()); } };
+export function useKeyboardUp(): boolean {
+  return useSyncExternalStore((l) => { upListeners.add(l); return () => { upListeners.delete(l); }; }, () => kbUp);
+}
+
+/** Text that takes typing (a field, or the note's text). */
+const isTextTarget = (el: Element | null) => !!el && (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !/^(button|checkbox|radio|range|color|file|submit|reset)$/.test(el.type)) || (el as HTMLElement).isContentEditable);
+
+/**
+ * Android's spelling menu (a tap on an underlined word: suggestions, "Add to dictionary", "Delete") is a
+ * window of its own, so the keyboard goes down while it shows. Once it's gone and the text has the
+ * window again, the keyboard comes back up, as in an ordinary Android text field.
+ */
+function startKeyboardKeeper() {
+  let hidAt = -1e9, leftAt = -1e9;
+  const near = () => Math.abs(hidAt - leftAt) < 800;
+  void Keyboard.addListener("keyboardWillShow", () => setKbUp(true));
+  void Keyboard.addListener("keyboardWillHide", () => { hidAt = performance.now(); setKbUp(false); });
+  window.addEventListener("blur", () => { leftAt = performance.now(); });
+  window.addEventListener("focus", () => {
+    if (!kbUp && near() && performance.now() - Math.max(hidAt, leftAt) < 60_000 && isTextTarget(document.activeElement)) showKeyboard();
+    hidAt = leftAt = -1e9;
+  });
 }

@@ -18,7 +18,7 @@ import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
-import { onKeyboardHide, pushBack } from "./native.ts";
+import { pushBack, useKeyboardUp } from "./native.ts";
 import { openPlace } from "./device.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
@@ -38,11 +38,9 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // The bar goes with the keyboard: putting the keyboard away ends the writing.
-  useEffect(() => onKeyboardHide(() => {
-    const a = document.activeElement as HTMLElement | null;
-    if (a?.closest(".pn-text")) a.blur();
-  }), []);
+  // The formatting bar goes with the keyboard; the text keeps the focus (and its caret) until a tap
+  // elsewhere, so a tap on it brings the keyboard back where writing stopped (native.ts).
+  const kbUp = useKeyboardUp();
 
   /** Attaches pictures; a new note is saved first, even if nothing is typed yet. */
   const addPictures = async (files: Iterable<File>) => {
@@ -59,7 +57,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const isDaily = base.noteDay !== null;
   const page = style.bgColor !== null ? cssColor(style.bgColor) : null;
   const fg = page ? contentColor(page) : null;
-  const writing = focused || held;
+  const writing = (focused && kbUp) || held;
   const images = s.images.get(noteId) ?? [];
   const dayOcc = isDaily ? occurrencesIn(s.items, s.done, base.noteDay!, base.noteDay!) : [];
   const versions = s.versions.get(noteId) ?? [];
