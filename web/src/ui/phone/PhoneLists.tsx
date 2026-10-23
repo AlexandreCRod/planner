@@ -28,6 +28,7 @@ import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Sele
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 import { count } from "../../domain/plural.ts";
+import { StreaksSheet } from "./StreaksSheet.tsx";
 
 // ---------- Tasks ----------
 
@@ -59,6 +60,8 @@ const savedTab = () => { try { return localStorage.getItem("tasksTab") === "todo
 
 export const PhoneTasks = memo(function PhoneTasks() {
   const [todo, setTodo] = useState(savedTab);
+  const [menu, setMenu] = useState(false);
+  const [streaksOpen, setStreaksOpen] = useState(false);
   const index = todo ? 1 : 0;
   const idx = useRef(index);
   idx.current = index;
@@ -91,7 +94,13 @@ export const PhoneTasks = memo(function PhoneTasks() {
     allow: (t) => !t.closest("input, textarea, .p-chiprow"),
   });
   return (
-    <Scaffold title="Tasks" flush>
+    <Scaffold title="Tasks" flush actions={<>
+      <AppBarActions />
+      <span className="p-menu-anchor">
+        <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />
+        <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[{ label: "Streaks", icon: "fLocalFireDepartment", onClick: () => setStreaksOpen(true) }]} />
+      </span>
+    </>}>
       <div className="p-seg-wrap">
         <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} track={track} />
       </div>
@@ -105,6 +114,7 @@ export const PhoneTasks = memo(function PhoneTasks() {
           </div>
         </div>
       </div>
+      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </Scaffold>
   );
 });

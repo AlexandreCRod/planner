@@ -25,6 +25,7 @@ import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
+import { StreaksSheet } from "./StreaksSheet.tsx";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -135,6 +136,7 @@ export function PhoneSettings() {
   const [showDone, setShowDone] = useState(showDoneOnToday());
   const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
+  const [streaksOpen, setStreaksOpen] = useState(false);
   const [dialog, setDialog] = useState<"" | "server" | "signout">("");
   const [server, setServerShown] = useState(getServer());
   const [busy, setBusy] = useState(false);
@@ -183,8 +185,9 @@ export function PhoneSettings() {
           onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
         <SwitchRow title="Show completed tasks on Today" supporting="Off: ticked tasks leave today's list once their moment is up" checked={showDone}
           onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
-        {/* Each routine's days-in-a-row on Today, the task lists and its history. */}
-        <ChoiceRow title="Streaks" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
+        {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
+        <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
+        <ListItem headline="Streaks" supporting="Each routine's current and best streak, and its last 14 days" onClick={() => setStreaksOpen(true)} />
 
         {hasAlarms && <AlarmSettingsSection />}
 
@@ -209,6 +212,7 @@ export function PhoneSettings() {
         <TextFieldDialog title="Server" label="Server URL" initial={server} onClose={() => setDialog("")}
           onSave={(u) => { setServer(u); setServerShown(getServer()); void syncNow(); }} />
       )}
+      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
       {dialog === "signout" && (
         <Dialog title="Sign out?" onClose={() => setDialog("")} actions={<>
           <TextButton onClick={() => setDialog("")}>Cancel</TextButton>

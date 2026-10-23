@@ -28,7 +28,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
-import { setRoutine, showStreaks, streakSymbol } from "../../store/routines.ts";
+import { setRoutine, streakSymbol } from "../../store/routines.ts";
 
 // ---------- Shared bits ----------
 
@@ -560,7 +560,7 @@ function ItemPicker({ s, exclude, onPick, onClose }: { s: Snapshot; exclude: Set
 
 // ---------- History (routines) ----------
 
-/** A routine's history and streak. Shown on routines only, and not with "Show streaks" off in Settings. */
+/** A routine's history and streak, on its own page (shown whatever the Streak badges setting). */
 function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   const t = todayEpoch();
   const st = streak(item, s.done, t);
@@ -738,7 +738,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           )}
         </div>
 
-        {isRoutineSeries(item) && showStreaks() && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
+        {/* A routine's own streak and history always show here, whatever the Streak badges setting. */}
+        {isRoutineSeries(item) && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
         {hasLinks && <PhoneLinks id={id} s={s} />}
         <div style={{ height: 96 }} />
       </div>

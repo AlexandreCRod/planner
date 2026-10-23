@@ -11,17 +11,26 @@ const LEGACY_KEY = "routines";
 const STREAKS_KEY = "showStreaks";
 const STYLE_KEY = "streakStyle";
 
-/** How streaks show (Settings > Streaks): not at all, as a count, or as a count with the flame. */
+/** How streak badges show (Settings > Streak badges): not at all (the default), as a count, or as a count with the flame. */
 export type StreakStyle = "off" | "streak" | "symbol";
 export const STREAK_STYLES: [StreakStyle, string][] = [["off", "Off"], ["streak", "Streak"], ["symbol", "Streak and symbol"]];
 
+/** Set once streaks have been switched off for this device (2.4): from then on the choice made sticks. */
+const OFF_ONCE_KEY = "streaksOffOnce";
+
+// Off unless chosen (2.4). Installs from before then had them showing; they're switched off once, and a
+// later choice in Settings is kept.
 let style: StreakStyle = (() => {
   try {
+    if (localStorage.getItem(OFF_ONCE_KEY) === null) {
+      localStorage.setItem(STYLE_KEY, "off");
+      localStorage.setItem(STREAKS_KEY, "false");
+      localStorage.setItem(OFF_ONCE_KEY, "1");
+      return "off";
+    }
     const v = localStorage.getItem(STYLE_KEY);
-    if (v === "off" || v === "streak" || v === "symbol") return v;
-    // Before 2.4 it was on or off.
-    return localStorage.getItem(STREAKS_KEY) === "false" ? "off" : "symbol";
-  } catch { return "symbol"; }
+    return v === "streak" || v === "symbol" ? v : "off";
+  } catch { return "off"; }
 })();
 
 /** Marks [item] as a routine or not; saved with the item, so it syncs. */
@@ -51,14 +60,14 @@ export function migrateLocalRoutines(allItems: Item[] = snapshot().allItems): nu
   return marked.length;
 }
 
-/** Settings > Streaks: Off hides them everywhere in this app. */
+/** Settings > Streak badges: Off hides them on the lists and Today (the Streaks sheet and each routine's own page still show them). */
 export const showStreaks = () => style !== "off";
 /** Whether a streak shows the flame by its count. */
 export const streakSymbol = () => style === "symbol";
 export const streakStyle = () => style;
 export function setStreakStyle(v: StreakStyle) {
   style = v;
-  try { localStorage.setItem(STYLE_KEY, v); localStorage.setItem(STREAKS_KEY, String(v !== "off")); } catch { /* private mode */ }
+  try { localStorage.setItem(STYLE_KEY, v); localStorage.setItem(STREAKS_KEY, String(v !== "off")); localStorage.setItem(OFF_ONCE_KEY, "1"); } catch { /* private mode */ }
   changed(true);
 }
 /** The PC's on/off box: on keeps the flame. */

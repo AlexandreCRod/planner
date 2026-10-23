@@ -116,3 +116,33 @@ export function routineList(items: Item[], done: CompletionIndex, today: number)
 export function routineProgress(list: TaskEntry[]): { done: number; total: number } {
   return { done: list.filter((e) => e.status === "DONE").length, total: list.length };
 }
+
+/** One day in a routine's recent history: ticked, missed, today's still open, or not one of its days. */
+export type DayMark = "done" | "missed" | "open" | "off";
+
+/**
+ * The last [n] days of a routine, oldest first, today last: the same counting as its streak (a tick on
+ * the day it was due; today, while it's still open, isn't missed yet). Days before it started are off.
+ */
+export function recentDays(item: Item, done: CompletionIndex, today: number, n = 14): DayMark[] {
+  const ticked = done.days(item.id);
+  return Array.from({ length: n }, (_, k): DayMark => {
+    const day = today - (n - 1) + k;
+    if (ticked.has(day)) return "done";
+    if (!occursOn(item, day)) return "off";
+    return day < today ? "missed" : "open";
+  });
+}
+
+/** A routine on the Streaks sheet: its current and best streak and its last days. */
+export interface StreakRow {
+  item: Item;
+  repeat: string;
+  streak: RoutineStreak;
+  days: DayMark[];
+}
+
+/** Every routine (tasks and events) for the Streaks sheet, in the routine list's order. */
+export function streakRows(items: Item[], done: CompletionIndex, today: number, n = 14): StreakRow[] {
+  return routineList(items, done, today).map((r) => ({ item: r.item, repeat: r.repeat, streak: r.streak, days: recentDays(r.item, done, today, n) }));
+}
