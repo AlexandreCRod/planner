@@ -146,9 +146,15 @@ class AlarmService : Service() {
     private fun listenToVolumeKeys() {
         session = runCatching {
             MediaSession(this, "PlannerAlarm").apply {
+                // Volume adjustments reach the provider through the session's callback handler,
+                // so without a callback they are silently dropped.
+                setCallback(object : MediaSession.Callback() {}, handler)
                 setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, 10, 5) {
                     override fun onAdjustVolume(direction: Int) {
                         if (direction != 0) handler.post { finishAlarm() }
+                    }
+                    override fun onSetVolumeTo(volume: Int) {
+                        if (volume != currentVolume) handler.post { finishAlarm() }
                     }
                 })
                 setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
