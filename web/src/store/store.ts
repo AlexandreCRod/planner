@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import * as db from "./db.ts";
 import { newId, tagIdFor } from "../domain/ids.ts";
 import { parseDays } from "../domain/recurrence.ts";
-import { doneTodosToTrash, expiredTrash } from "../domain/retention.ts";
+import { doneTodosToTrash, expiredTrash, staleVersions } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
 import {
@@ -223,9 +223,9 @@ function removeItemDeep(id: number) {
 export function deleteForever(id: number) { removeItemDeep(id); changed(); }
 
 /**
- * The retention rules (domain/retention.ts): to-dos ticked 48 hours ago move to the trash, and what has
- * been in the trash too long is deleted for good (the next sync sends that, like the phone's purge).
- * Runs at start, after each sync and hourly; returns how many items it moved or deleted.
+ * The retention rules (domain/retention.ts): to-dos ticked 48 hours ago move to the trash, what has
+ * been in the trash too long is deleted for good (the next sync sends that, like the phone's purge), and
+ * old note versions go. Runs at start, after each sync and hourly; returns how many records it changed.
  */
 export function tidy(now = Date.now()): number {
   let n = 0;
@@ -235,6 +235,7 @@ export function tidy(now = Date.now()): number {
     n++;
   }
   for (const id of expiredTrash(list<Item>("items"), now)) { removeItemDeep(id); n++; }
+  n += pruneVersions(now);
   if (n) changed();
   return n;
 }
@@ -289,11 +290,19 @@ export function removeLink(a: number, b: number) {
   changed();
 }
 
+/** Keeps a version of a note (see staleVersions: 30 days, and always the 3 newest). */
 export function saveVersion(item: Item) {
-  put("versions", { id: newId(), itemId: item.id, title: item.title, content: item.content, savedAt: Date.now() });
-  const vs = list<NoteVersion>("versions").filter((v) => v.itemId === item.id).sort((a, b) => b.savedAt - a.savedAt);
-  for (const v of vs.slice(30)) del("versions", v);
+  const now = Date.now();
+  put("versions", { id: newId(), itemId: item.id, title: item.title, content: item.content, savedAt: now });
+  pruneVersions(now);
   changed();
+}
+
+/** Drops note versions past their time; returns how many. */
+function pruneVersions(now: number): number {
+  const stale = new Set(staleVersions(list<NoteVersion>("versions"), now));
+  if (stale.size) for (const v of list<NoteVersion>("versions")) if (stale.has(v.id)) del("versions", v);
+  return stale.size;
 }
 
 export function saveCategory(c: Category) { put("categories", { ...c, id: c.id || newId() }); changed(); }

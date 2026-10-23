@@ -2,13 +2,16 @@
 // to-do (a task with no date) stays in the Completed list for two days before it moves to the trash
 // itself. A note's history keeps its versions for 30 days, and always its 3 newest. Pure rules, used by
 // the store and checked by test/retention.test.ts.
-import { type Completion, type Item, type ItemType, NO_DAY } from "./types.ts";
+import { type Completion, type Item, type ItemType, type NoteVersion, NO_DAY } from "./types.ts";
 
 /** Days anything stays in the trash (tasks, events and notes alike). */
 export const TRASH_DAYS = 30;
 export const TASK_EVENT_DAYS = TRASH_DAYS;
 export const NOTE_DAYS = TRASH_DAYS;
 export const DONE_TODO_HOURS = 48;
+/** Days a note's saved versions are kept, and how many of its newest are kept whatever their age. */
+export const VERSION_DAYS = 30;
+export const VERSIONS_ALWAYS_KEPT = 3;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -35,6 +38,24 @@ export function doneTodosToTrash(items: Item[], completions: Completion[], now: 
     if (i.type !== "TASK" || i.startDay !== null || i.deletedAt !== null) continue;
     const at = doneAt.get(i.id);
     if (at !== undefined && now - at >= DONE_TODO_HOURS * HOUR_MS) out.push({ id: i.id, deletedAt: at + DONE_TODO_HOURS * HOUR_MS });
+  }
+  return out;
+}
+
+/**
+ * Note versions to delete at [now]: those older than [VERSION_DAYS], except each note's
+ * [VERSIONS_ALWAYS_KEPT] newest, which stay however old they are (a note left alone keeps its last few).
+ */
+export function staleVersions(versions: NoteVersion[], now: number): number[] {
+  const byNote = new Map<number, NoteVersion[]>();
+  for (const v of versions) {
+    const list = byNote.get(v.itemId);
+    if (list) list.push(v); else byNote.set(v.itemId, [v]);
+  }
+  const out: number[] = [];
+  for (const list of byNote.values()) {
+    list.sort((a, b) => b.savedAt - a.savedAt);
+    list.forEach((v, i) => { if (i >= VERSIONS_ALWAYS_KEPT && now - v.savedAt > VERSION_DAYS * DAY_MS) out.push(v.id); });
   }
   return out;
 }

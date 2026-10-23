@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DONE_TODO_HOURS, TRASH_DAYS, doneTodosToTrash, expiredTrash } from "../src/domain/retention.ts";
+import { DONE_TODO_HOURS, TRASH_DAYS, doneTodosToTrash, expiredTrash, staleVersions } from "../src/domain/retention.ts";
 import { type ItemType, NO_DAY, newItem } from "../src/domain/types.ts";
 
 const H = 3_600_000;
@@ -48,4 +48,18 @@ test("a to-do ticked long ago goes through the trash and is then deleted for goo
   assert.deepEqual(expiredTrash([{ ...items[0], deletedAt: moved.deletedAt }], now), [1]);
   const [recent] = doneTodosToTrash(items, [{ itemId: 1, day: NO_DAY, completedAt: now - 3 * D }], now);
   assert.deepEqual(expiredTrash([{ ...items[0], deletedAt: recent.deletedAt }], now), []);
+});
+
+test("note versions stay 30 days, and each note always keeps its 3 newest", () => {
+  const v = (id: number, itemId: number, daysAgo: number) => ({ id, itemId, title: "", content: "", savedAt: now - daysAgo * D });
+  const versions = [
+    // Note 1, edited often: the recent ones stay, those past 30 days go (it has 3 newer ones).
+    v(1, 1, 1), v(2, 1, 5), v(3, 1, 29), v(4, 1, 31), v(5, 1, 90),
+    // Note 2, left alone for months: its 3 newest stay however old, the 4th goes.
+    v(6, 2, 100), v(7, 2, 200), v(8, 2, 300), v(9, 2, 400),
+    // Note 3: only two versions, both old: kept.
+    v(10, 3, 60), v(11, 3, 70),
+  ];
+  assert.deepEqual(staleVersions(versions, now).sort((a, b) => a - b), [4, 5, 9]);
+  assert.deepEqual(staleVersions([], now), []);
 });
