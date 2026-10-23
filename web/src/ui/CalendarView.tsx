@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, dayShort, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, forCalendar } from "../domain/schedule.ts";
+import { carryOver } from "../store/prefs.ts";
 import { type Item, displayTitle, isRecurring, newItem } from "../domain/types.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../store/store.ts";
 import { EventRow, Icon, go, openItem } from "./common.tsx";
@@ -62,7 +63,7 @@ export function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Ite
   const start = startOfWeek(first, mondayFirst());
   const days = Array.from({ length: 42 }, (_, i) => start + i);
   const rows = ymd(days[35]).m !== m ? 5 : 6;
-  const occ = forCalendar(items, s.done, days[0], days[rows * 7 - 1], todayEpoch());
+  const occ = forCalendar(items, s.done, days[0], days[rows * 7 - 1], todayEpoch(), carryOver());
   const t = todayEpoch();
   const byDay = new Map<number, Occurrence[]>();
   for (const o of occ) for (let d = o.day; d <= o.endDay; d++) byDay.set(d, [...(byDay.get(d) ?? []), o]);
@@ -94,7 +95,7 @@ export function MonthGrid({ s, items, anchor, onDay }: { s: Snapshot; items: Ite
 }
 
 export function Agenda({ s, items, from }: { s: Snapshot; items: Item[]; from: number }) {
-  const occ = forCalendar(items, s.done, from, from + 90, todayEpoch());
+  const occ = forCalendar(items, s.done, from, from + 90, todayEpoch(), carryOver());
   const byDay = new Map<number, Occurrence[]>();
   for (const o of occ) byDay.set(o.day, [...(byDay.get(o.day) ?? []), o]);
   return (
@@ -144,7 +145,7 @@ function TimeGrid({ s, items, days, hour, setHour, fit, setFit, onDayHeader }: {
   // The clicked empty slot (one across all columns): outlined first, a second click creates the event.
   const [slot, setSlot] = useState<{ day: number; min: number } | null>(null);
   const t = todayEpoch();
-  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[days.length - 1], todayEpoch()), [items, s, days]);
+  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[days.length - 1], todayEpoch(), carryOver()), [items, s, days]);
   const allDay = days.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
   const timed = days.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d)));
   const headH = 52 + (allDay.some((l) => l.length) ? Math.min(3, Math.max(...allDay.map((l) => l.length))) * 22 + 6 : 0);

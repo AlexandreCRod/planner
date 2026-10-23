@@ -7,6 +7,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
+import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { isRoutineItem } from "../../domain/routines.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
@@ -174,7 +175,7 @@ function MonthView({ s, items, anchor, noteDays, onStep, onPick, onLong, onDayNo
     layers: () => [strip.current], onStep: (dir) => onStep(dir),
   });
   const months = [monthOf(addMonths(anchor, -1)), monthOf(anchor), monthOf(addMonths(anchor, 1))];
-  const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
+  const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
   return (
     <div className="p-monthview">
       <div className="p-hpager" ref={pager}>
@@ -207,7 +208,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
   const start = startOfWeek(first, mondayFirst());
   const days = Array.from({ length: 42 }, (_, i) => start + i);
   const month = ymd(first).m;
-  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[41], t), [items, s, first, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  const occ = useMemo(() => forCalendar(items, s.done, days[0], days[41], t, carryOver()), [items, s, first, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const byDay = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
     for (const o of occ) for (let d = Math.max(o.day, days[0]); d <= Math.min(o.endDay, days[41]); d++) { const l = map.get(d); if (l) l.push(o); else map.set(d, [o]); }
@@ -295,7 +296,7 @@ function YearView({ s, items, anchor, onStep, onMonth }: { s: Snapshot; items: I
 const YearPanel = memo(function YearPanel({ s, items, year, t, onMonth }: { s: Snapshot; items: Item[]; year: number; t: number; onMonth: (first: number) => void }) {
   const busy = useMemo(() => {
     const counts = new Map<number, number>();
-    for (const o of forCalendar(items, s.done, epochOf(year, 1, 1), epochOf(year, 12, 31), t)) counts.set(o.day, (counts.get(o.day) ?? 0) + 1);
+    for (const o of forCalendar(items, s.done, epochOf(year, 1, 1), epochOf(year, 12, 31), t, carryOver())) counts.set(o.day, (counts.get(o.day) ?? 0) + 1);
     return counts;
   }, [items, s, year, t]);
   const mf = mondayFirst();
@@ -334,7 +335,7 @@ function AgendaView({ s, items, from }: { s: Snapshot; items: Item[]; from: numb
   const t = todayEpoch();
   const groups = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
-    for (const o of forCalendar(items, s.done, from, from + 90, t)) { const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]); }
+    for (const o of forCalendar(items, s.done, from, from + 90, t, carryOver())) { const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]); }
     return [...map].sort((a, b) => a[0] - b[0]);
   }, [items, s, from, t]);
   return (
@@ -389,7 +390,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
   // (like a pager) instead of empty space. Index `count` is the first day in view.
   const all = useMemo(() => Array.from({ length: count * 3 }, (_, i) => first - count + i), [first, count]);
-  const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t), [items, s, all, t]);
+  const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t, carryOver()), [items, s, all, t]);
   const allDay = all.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
   const timed = useMemo(() => all.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d))), [occ, all]);
   const placed = useRef(new Map<string, { p: Placed; di: number }>());

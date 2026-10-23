@@ -2,6 +2,7 @@ import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
+import { carryOver } from "../store/prefs.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
@@ -101,13 +102,13 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   const withoutRoutines = skipRoutines;
   let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
   if (isToday) {
-    const tasks = withoutRoutines(tasksForDay(s.items, s.done, t));
+    const tasks = withoutRoutines(tasksForDay(s.items, s.done, t, carryOver()));
     overdue = tasks.filter((e) => e.status === "OVERDUE");
     dayTasks = tasks.filter((e) => e.status === "DUE" || e.status === "CARRIED" || e.status === "DONE");
     anytime = tasks.filter((e) => e.status === "ANYTIME").length;
   } else {
     // Tasks still overdue today carry on to the days ahead until they're ticked.
-    if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t)).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
+    if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t, carryOver())).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
     dayTasks = withoutRoutines(tasksOnDay(s.items, s.done, day, t));
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);

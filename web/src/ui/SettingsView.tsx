@@ -7,6 +7,7 @@ import { notificationsEnabled, setNotificationsEnabled } from "../notify.ts";
 import { getServer, isNative } from "../platform.ts";
 import { typeLabel } from "./LinksSection.tsx";
 import { checkedLinger, showDoneOnToday } from "./common.tsx";
+import { carryOver } from "../store/prefs.ts";
 import { count } from "../domain/plural.ts";
 import { setShowStreaks, showStreaks } from "../store/routines.ts";
 
@@ -37,6 +38,7 @@ export function SettingsView() {
   const [linger, setLinger] = useState(String(checkedLinger()));
   const [showDone, setShowDone] = useState(showDoneOnToday());
   const [streaks, setStreaks] = useState(showStreaks());
+  const [carry, setCarry] = useState(carryOver());
   const [editing, setEditing] = useState<Category | null>(null);
   useEffect(() => { localStorage.setItem("theme", theme); localStorage.setItem("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { localStorage.setItem("weekStartsMonday", String(monday)); }, [monday]);
@@ -73,6 +75,10 @@ export function SettingsView() {
         </select>
       </div>
 
+      <label className="row" style={{ marginTop: 8 }}>
+        <input type="checkbox" checked={carry} onChange={(e) => { setCarry(e.target.checked); localStorage.setItem("carryOver", String(e.target.checked)); }} />
+        Carry unfinished tasks over to today
+      </label>
       <label className="row" style={{ marginTop: 8 }}>
         <input type="checkbox" checked={showDone} onChange={(e) => { setShowDone(e.target.checked); localStorage.setItem("showDoneOnToday", String(e.target.checked)); }} />
         Show completed tasks on Today

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { epochOf } from "../src/domain/dates.ts";
 import { isRoutineItem, routineEntry, routineProgress, routineStreak, routinesOnDay, withoutRoutines } from "../src/domain/routines.ts";
-import { CompletionIndex, tasksForDay } from "../src/domain/schedule.ts";
+import { CompletionIndex, forCalendar, tasksForDay } from "../src/domain/schedule.ts";
 import { type Completion, type Item, newItem } from "../src/domain/types.ts";
 
 const today = epochOf(2026, 10, 16); // a Friday
@@ -26,8 +26,8 @@ test("a missed routine doesn't pile up as overdue on Today", () => {
   const plain = daily(2);        // a plain repeating task, also missed
   const done = new CompletionIndex(ticks(1, today - 3));
   const all = tasksForDay([r, plain], done, today);
-  // Without the routine rule, both show as overdue.
-  assert.deepEqual(all.filter((e) => e.status === "OVERDUE").map((e) => e.item.id), [1, 2]);
+  // Only the plain task is overdue: a routine never is, anywhere (Today, the widgets).
+  assert.deepEqual(all.filter((e) => e.status === "OVERDUE").map((e) => e.item.id), [2]);
   const rest = withoutRoutines(all);
   assert.deepEqual(rest.map((e) => [e.item.id, e.status]), [[2, "OVERDUE"], [2, "DUE"]]);
   // The routine is only on its own checklist, for today.
@@ -97,4 +97,24 @@ test("the phone's old device-only marks move into the synced field once", async 
   // Run again on the result: nothing more to mark.
   const after = items.map((i) => out.find((o) => o.id === i.id) ?? i);
   assert.deepEqual(itemsToMarkAsRoutines(after, [1, 2, 3, 9]), []);
+});
+
+test("routines never carry over; other tasks do unless carrying over is turned off", () => {
+  const r = newItem({ id: 7, type: "TASK", title: "Pills", startDay: today - 3, freq: "DAILY", routine: true, overduePolicy: "CARRY_OVER" });
+  const day = newItem({ id: 8, type: "TASK", title: "Pills (moved)", startDay: today - 1, parentId: 7, routine: true }); // one changed day of it
+  const once = newItem({ id: 9, type: "TASK", title: "Call", startDay: today - 2 });                                  // shows as overdue
+  const carried = newItem({ id: 10, type: "TASK", title: "Post", startDay: today - 1, overduePolicy: "CARRY_OVER" });
+  const items = [r, day, once, carried];
+  const none = new CompletionIndex([]);
+  const late = (carry: boolean) => tasksForDay(items, none, today, carry).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED").map((e) => e.item.id);
+  assert.deepEqual(late(true).sort(), [10, 9].sort());
+  assert.deepEqual(late(false), []);
+  // Today's own tasks stay either way.
+  assert.deepEqual(tasksForDay(items, none, today, false).map((e) => e.item.id), [7]);
+  // The calendar: missed one-time tasks move to today, except a routine's day; off, they stay put.
+  const moved = (carry: boolean) => forCalendar(items, none, today - 7, today + 7, today, carry).filter((o) => o.overdue).map((o) => o.item.id).sort();
+  assert.deepEqual(moved(true), [10, 9].sort());
+  assert.deepEqual(moved(false), []);
+  assert.ok(forCalendar(items, none, today - 7, today + 7, today, false).some((o) => o.item.id === 9 && o.day === today - 2));
+  assert.ok(forCalendar(items, none, today - 7, today + 7, today, true).some((o) => o.item.id === 8 && o.day === today - 1));
 });

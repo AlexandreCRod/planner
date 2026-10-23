@@ -71,12 +71,19 @@ export function occurrencesIn(items: Item[], done: CompletionIndex, from: number
 }
 
 /**
- * Occurrences for the calendar: like occurrencesIn, except that an unticked one-time task whose day has
- * passed moves forward to today, untimed (like Google Calendar), unless it's set to be skipped when missed.
+ * A routine, or one day of one changed on its own (see domain/routines.ts): never overdue or carried
+ * over, a missed day only ends its streak.
  */
-export function forCalendar(items: Item[], done: CompletionIndex, from: number, to: number, today: number): Occurrence[] {
-  const late = items.filter((i) => i.type === "TASK" && !isRecurring(i) && i.startDay !== null && i.startDay < today &&
-    i.overduePolicy !== "SKIP" && !done.isDone(i.id, i.startDay));
+const routineMark = (i: Item) => i.routine === true && i.type === "TASK" && (isRecurring(i) || i.parentId !== null);
+
+/**
+ * Occurrences for the calendar: like occurrencesIn, except that an unticked one-time task whose day has
+ * passed moves forward to today, untimed (like Google Calendar), unless it's set to be skipped when missed,
+ * it's a routine's day, or carrying over is turned off ([carry] false: it stays on its own day).
+ */
+export function forCalendar(items: Item[], done: CompletionIndex, from: number, to: number, today: number, carry = true): Occurrence[] {
+  const late = !carry ? [] : items.filter((i) => i.type === "TASK" && !isRecurring(i) && i.startDay !== null && i.startDay < today &&
+    i.overduePolicy !== "SKIP" && !routineMark(i) && !done.isDone(i.id, i.startDay));
   const lateIds = new Set(late.map((i) => i.id));
   const rest = occurrencesIn(items.filter((i) => !lateIds.has(i.id)), done, from, to);
   if (today < from || today > to) return rest;
@@ -141,10 +148,15 @@ export function tickedDuring(items: Item[], completions: Completion[], day: numb
     });
 }
 
-export function tasksForDay(items: Item[], done: CompletionIndex, today: number): TaskEntry[] {
+/**
+ * Today's tasks: today's, and the missed ones still owed (overdue or carried over), except for routines
+ * and when carrying over is turned off ([carry] false).
+ */
+export function tasksForDay(items: Item[], done: CompletionIndex, today: number, carry = true): TaskEntry[] {
   return items
     .filter((i) => i.type === "TASK")
     .flatMap((i) => entriesFor(i, done, today))
+    .filter((e) => (e.status !== "OVERDUE" && e.status !== "CARRIED") || (carry && !routineMark(e.item)))
     .sort((a, b) => order(a.status) - order(b.status) || b.item.priority - a.item.priority ||
       (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || byTitle(a, b));
 }

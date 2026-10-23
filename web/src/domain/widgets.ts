@@ -17,10 +17,10 @@ export interface WidgetFormat { time: (min: number) => string; date: (day: numbe
 const EVENT_DAYS = 14;
 const MAX_EVENTS = 20;
 
-export function buildWidgets(items: Item[], done: CompletionIndex, today: number, f: WidgetFormat): WidgetPush {
+export function buildWidgets(items: Item[], done: CompletionIndex, today: number, f: WidgetFormat, carry = true): WidgetPush {
   const dayOf = (t: number): WidgetDay => ({
     day: t,
-    tasks: tasksForDay(items, done, t)
+    tasks: tasksForDay(items, done, t, carry)
       .filter((e) => e.status !== "ANYTIME")
       .map((e) => ({
         id: e.item.id,

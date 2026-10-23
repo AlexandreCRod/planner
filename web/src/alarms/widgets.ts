@@ -5,6 +5,7 @@
 import { buildWidgets } from "../domain/widgets.ts";
 import { formatDate, formatTime, today } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
+import { carryOver } from "../store/prefs.ts";
 import { hasAlarms, native, onNative } from "./native.ts";
 
 let last = "";
@@ -12,7 +13,7 @@ let timer: number | undefined;
 
 function push() {
   const s = snapshot();
-  const payload = buildWidgets(s.items, s.done, today(), { time: formatTime, date: formatDate, color: (i) => s.colorOf(i) });
+  const payload = buildWidgets(s.items, s.done, today(), { time: formatTime, date: formatDate, color: (i) => s.colorOf(i) }, carryOver());
   const text = JSON.stringify(payload);
   if (text === last) return;
   last = text;
