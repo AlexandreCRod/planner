@@ -22,6 +22,7 @@ import { pinOrderChanges, sortNotes } from "../../domain/noteOrder.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
+import { useGlide } from "./glide.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
 import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
@@ -178,7 +179,13 @@ function TodoList() {
     saveItem(newItem({ type: "TASK", title }));
     setText("");
   };
-  return <>
+  // A ticked to-do glides down into Completed (or into its header, when it's folded away).
+  const box = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const doneKeys = new Set(done.map((i) => `t${i.id}`));
+  useGlide(box, layer, (k) => doneKeys.has(k));
+  return <div className="p-glide" ref={box}>
+    <div ref={layer} />
     <div className="p-todo-add">
       <MIcon name="oAddTask" />
       <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
@@ -186,20 +193,26 @@ function TodoList() {
     </div>
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
-      <SwipeToTrash key={e.item.id} item={e.item}>
-        <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
-      </SwipeToTrash>
+      <div key={e.item.id} data-glide={`t${e.item.id}`}>
+        <SwipeToTrash item={e.item}>
+          <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
+        </SwipeToTrash>
+      </div>
     ))}
     {done.length > 0 && <>
-      <SectionHeader expanded={showDone} onClick={() => setShowDone(!showDone)}>Completed ({done.length})</SectionHeader>
+      <div data-glide="completed" data-glide-into="">
+        <SectionHeader expanded={showDone} onClick={() => setShowDone(!showDone)}>Completed ({done.length})</SectionHeader>
+      </div>
       {showDone && done.map((item) => (
-        <SwipeToTrash key={`d${item.id}`} item={item}>
-          <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
-        </SwipeToTrash>
+        <div key={`d${item.id}`} data-glide={`t${item.id}`}>
+          <SwipeToTrash item={item}>
+            <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
+          </SwipeToTrash>
+        </div>
       ))}
     </>}
     <div className="p-endspace" />
-  </>;
+  </div>;
 }
 
 // ---------- Notes ----------
