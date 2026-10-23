@@ -75,6 +75,33 @@ html.wide {
 .wide .p-page:is([data-tab=today], [data-tab=tasks], [data-tab=alarms]) > .p-scaffold,
 .wide .p-overlay:not(.p-notelayer):not(.graph) > .p-scaffold { max-width: var(--page-w); margin: 0 auto; position: relative; }
 
+/* Today in two columns: tasks on the left; the schedule, the next 7 days and the day's note on the right. */
+.wide .p-page[data-tab=today] > .p-scaffold { max-width: 1160px; }
+.wide .p-today-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; padding: 0 8px; }
+.wide .p-today-col { min-width: 0; }
+.wide .today-list .p-note-gap { height: 8px; }
+.wide .p-week { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 4px 16px 0; }
+.wide .p-weekday {
+  display: flex; flex-direction: column; gap: 2px; min-height: 92px; padding: 8px 10px; border: 0; border-radius: 12px;
+  background: var(--p-sc-low); text-align: left; font: inherit; color: var(--text); overflow: hidden;
+}
+.wide .p-weekday-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+.wide .p-weekday-head .wd { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.wide .p-weekday-head .num { font-size: 16px; line-height: 24px; font-weight: 500; }
+.wide .p-weekday-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wide .p-weekday-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 18px; letter-spacing: .25px; }
+.wide :is(.p-weekday-free, .p-weekday-more) { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+@media (hover: hover) {
+  html.wide .p-weekday:hover { background: var(--p-sc); }
+  /* A task under the pointer: Done, Move to the next day and Open over the end of its row. */
+  html.wide .today-list .task { position: relative; }
+  html.wide .today-list .task:hover .p-quick {
+    display: flex; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); padding-left: 16px;
+    background: linear-gradient(to right, transparent, color-mix(in srgb, var(--text) 4%, var(--bg)) 16px);
+  }
+  html.wide .today-list .task .p-quick .p-icon { width: 40px; height: 40px; }
+}
+
 /* Notes: the list on the left; the note opens in the rest (PhoneApp's notes-split), a word there until then. */
 .wide .p-page[data-tab=notes] > .p-scaffold { width: var(--notes-list-w); box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
 .wide .p-notes-pane {

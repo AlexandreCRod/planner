@@ -29,6 +29,7 @@ import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 import { count } from "../../domain/plural.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
+import { keepValue, keptValue, useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 
 // ---------- Tasks ----------
 
@@ -344,15 +345,18 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
  */
 export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: number }) {
   const s = useSnapshot();
-  const [types, setTypes] = useState<Set<ItemType>>(new Set(["NOTE", "TASK", "EVENT"]));
-  const [orphans, setOrphans] = useState(false);
-  const [focus, setFocus] = useState(focusId);
-  const [depth, setDepth] = useState(2);
-  const [selected, setSelected] = useState(0);
+  // Back from an item opened here finds the graph as it was: filters, focus, the picked node, the
+  // view and where every node had settled (the layout doesn't start over).
+  const keep = useKeep();
+  const [types, setTypes] = useKeptState<Set<ItemType>>(keep, "types", () => new Set(["NOTE", "TASK", "EVENT"]));
+  const [orphans, setOrphans] = useKeptState(keep, "orphans", false);
+  const [focus, setFocus] = useKeptState(keep, "focus", focusId);
+  const [depth, setDepth] = useKeptState(keep, "depth", 2);
+  const [selected, setSelected] = useKeptState(keep, "selected", 0);
   // The view (pan and zoom) lives in a ref while fingers move; the state copy only re-renders labels.
-  const [view, setViewState] = useState({ x: 0, y: 0, k: 1 });
+  const [view, setViewState] = useState(() => keptValue<{ x: number; y: number; k: number }>(keep, "view") ?? { x: 0, y: 0, k: 1 });
   const viewRef = useRef(view);
-  const pos = useRef(new Map<number, P>());
+  const [pos] = useState(() => { const p = { current: keptValue<Map<number, P>>(keep, "pos") ?? new Map<number, P>() }; keepValue(keep, "pos", p.current); return p; });
   const box = useRef<HTMLDivElement>(null);
   const size = useRef({ w: 400, h: 600 });
   const [svgSize, setSvgSize] = useState({ w: 400, h: 600 });
@@ -391,7 +395,9 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
   };
   const drawRef = useRef(draw);
   drawRef.current = draw;
-  const sim = useGraphSim(graph, pos, () => drawRef.current());
+  const sim = useGraphSim(graph, pos, () => drawRef.current(), keep.back);
+  // The view as it is when the page goes (an item opened from it), for coming back.
+  useEffect(() => () => keepValue(keep, "view", viewRef.current), []); // eslint-disable-line react-hooks/exhaustive-deps
   // New nodes or a new selection re-render the elements: place them at once.
   useLayoutEffect(() => { for (const el of nodeEls.current.values()) delete el.dataset.size; draw(); });
 
@@ -578,9 +584,11 @@ const PAGE_KINDS: Record<string, string[]> = {
 
 export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; from?: string }) {
   const s = useSnapshot();
-  const [q, setQ] = useState("");
+  // Back to Search (from a result) finds it as it was: words, filters, sort and scroll.
+  const keep = useKeep();
+  const [q, setQ] = useKeptState(keep, "q", "");
   // The kinds shown (several can be picked; none is All). Opened from a page, that page's kinds.
-  const [kinds, setKinds] = useState<ReadonlySet<string>>(() => new Set(
+  const [kinds, setKinds] = useKeptState<ReadonlySet<string>>(keep, "kinds", () => new Set(
     (initialKind ? initialKind.split(",") : PAGE_KINDS[from] ?? []).filter((k) => KINDS.some(([x]) => x === k && x !== "ALL"))));
   const toggleKind = (k: string) => setKinds((ks) => {
     if (k === "ALL") return new Set();
@@ -588,13 +596,15 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
     if (n.has(k)) n.delete(k); else n.add(k);
     return n;
   });
-  const [cat, setCat] = useState<number | null>(null);
-  const [tag, setTag] = useState<number | null>(null);
-  const [sort, setSort] = useState("updated");
+  const [cat, setCat] = useKeptState<number | null>(keep, "cat", null);
+  const [tag, setTag] = useKeptState<number | null>(keep, "tag", null);
+  const [sort, setSort] = useKeptState(keep, "sort", "updated");
   const [menu, setMenu] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  // As BrowseScreen.kt: the field takes the focus unless the page was opened on a kind.
-  useEffect(() => { if (!initialKind) { const t = window.setTimeout(() => input.current?.focus(), 250); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const root = useRef<HTMLDivElement>(null);
+  useKeptScroll(keep, "list", () => root.current?.querySelector<HTMLElement>(".p-list"));
+  // As BrowseScreen.kt: the field takes the focus unless the page was opened on a kind (or is come back to).
+  useEffect(() => { if (!initialKind && !keep.back) { const t = window.setTimeout(() => input.current?.focus(), 250); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => new Map(KINDS.map(([k, , t]) => [k, s.items.filter(t).length])), [s]);
   const results = useMemo(() => {
     const tests = KINDS.filter(([k]) => kinds.has(k)).map(([, , t]) => t);
@@ -613,7 +623,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
   const sel = useSelection(shownIds);
 
   return (
-    <div className="p-scaffold">
+    <div className="p-scaffold" ref={root}>
       {sel.active ? <SelectionBar sel={sel} items={(ids) => results.filter((i) => ids.has(i.id))} /> : <TopAppBar back className="search" title={
         <div className="p-searchfield">
           <MIcon name="oSearch" />

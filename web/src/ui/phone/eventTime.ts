@@ -1,7 +1,7 @@
 // Changing a time on Today by holding its digits (the drum, TimeWheel.tsx): an event moves keeping
 // its length (or, from its end time, changes its end); a task moves. A repeating item changes on that
 // day only, as the calendar's drag does. The snackbar offers Undo.
-import { formatTime } from "../../domain/dates.ts";
+import { formatDateShort, formatTime } from "../../domain/dates.ts";
 import type { Occurrence, TaskEntry } from "../../domain/schedule.ts";
 import { isRecurring, type Item } from "../../domain/types.ts";
 import { deleteForever, saveItem, saveSeriesEdit } from "../../store/store.ts";
@@ -41,4 +41,16 @@ export function setEventEnd(o: Occurrence, t: number) {
 export function moveTask(e: TaskEntry, t: number) {
   if (t === e.item.startMin || e.day === null) return;
   change(e.item, e.day, { startMin: t }, `Moved to ${formatTime(t)}`);
+}
+
+/** Whether a task can be put off to the next day from Today: a one-time task with a day, not ticked. */
+export const canPostpone = (e: TaskEntry) => e.day !== null && e.item.startDay !== null && !isRecurring(e.item) && e.status !== "DONE";
+
+/** The task moved a day on (an overdue one to tomorrow), its span kept, with Undo. */
+export function postponeTask(e: TaskEntry, today: number) {
+  const item = e.item;
+  if (item.startDay === null) return;
+  const to = Math.max(item.startDay, today) + 1;
+  const shift = to - item.startDay;
+  change(item, item.startDay, { startDay: to, endDay: item.endDay !== null ? item.endDay + shift : null }, to === today + 1 ? "Moved to tomorrow" : `Moved to ${formatDateShort(to)}`);
 }

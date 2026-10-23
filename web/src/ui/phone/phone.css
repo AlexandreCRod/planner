@@ -192,6 +192,14 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .today-list .p-glance-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; letter-spacing: .25px; }
 .phone .today-list .p-glance-more { display: block; padding: 4px 16px 0 76px; border: 0; background: none; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-note-gap { height: 16px; }
+/* What folds away on today's page (PhoneToday.tsx): "2 done · hidden", "2 earlier · hidden"; a tap shows them. */
+.phone .today-list .p-fold {
+  display: flex; align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 0 16px 0 52px; border: 0; background: none; text-align: left;
+  font: inherit; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted);
+}
+.phone .today-list .p-fold svg { opacity: .8; }
+/* The wide Today's quick actions on a task (wide.css shows them on hover). */
+.phone .task .p-quick { display: none; }
 
 .phone .today-list .note-preview {
   margin: 2px 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 12px;

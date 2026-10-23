@@ -2,7 +2,8 @@
 // TrashCategories.kt: section headers, Material 3 list rows with switches or a menu of choices, and
 // dialogs. Settings this build can't act on (backups, the widget, calendar import, wallpaper colours) are
 // left out. Values are the same local keys the PC settings use.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useKeep, useKeptScroll } from "./keep.ts";
 import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatDateTime } from "../../domain/dates.ts";
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
@@ -147,6 +148,10 @@ export function PhoneSettings() {
 
   useEffect(() => { store("theme", theme); store("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { store("pureBlack", String(pureBlack)); applyPureBlack(); }, [pureBlack]);
+  // Back from Categories or Trash finds Settings scrolled where it was.
+  const keep = useKeep();
+  const box = useRef<HTMLDivElement>(null);
+  useKeptScroll(keep, "settings", () => box.current);
   /** A display setting: kept, then every page redrawn with it. */
   const redraw = (k: string, v: string) => { store(k, v); changed(true); };
 
@@ -156,7 +161,7 @@ export function PhoneSettings() {
 
   return (
     <Scaffold title="Settings" back flush>
-      <div className="p-content ps">
+      <div className="p-content ps" ref={box}>
         <SectionHeader>Appearance</SectionHeader>
         <div className="ps-pad">
           <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
@@ -187,7 +192,7 @@ export function PhoneSettings() {
         <ChoiceRow title="Checked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
         <SwitchRow title="Carry unfinished tasks over to today" supporting="Off: a missed task stays on its own day. Routines never carry over" checked={carry}
           onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
-        <SwitchRow title="Show completed tasks on Today" supporting="Off: ticked tasks leave today's list once their moment is up" checked={showDone}
+        <SwitchRow title="Show completed tasks on Today" supporting="On: ticked tasks fold into one line you can tap to see. Off: they leave today's list once their moment is up" checked={showDone}
           onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
         {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
         <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />

@@ -42,14 +42,19 @@ export interface GraphSim {
   unpin(id: number, vx: number, vy: number): void;
 }
 
-/** Runs the layout physics (domain/graphSim.ts) on [pos] for [graph], calling [onFrame] after each step. */
-export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number, P>>, onFrame: () => void): GraphSim {
+/**
+ * Runs the layout physics (domain/graphSim.ts) on [pos] for [graph], calling [onFrame] after each step.
+ * [settled]: the positions are kept from before (a page come back to), so its first graph starts at rest.
+ */
+export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number, P>>, onFrame: () => void, settled = false): GraphSim {
+  const calm = useRef(settled ? graph : null);
   const frame = useRef(onFrame);
   frame.current = onFrame;
   const ctl = useRef<{ alpha: number; raf: number; pinned: Map<number, { x: number; y: number }>; run: () => void }>({ alpha: 0, raf: 0, pinned: new Map(), run: () => {} });
   useEffect(() => {
     const c = ctl.current;
     const ids = graph.nodes.map((n) => n.id);
+    const unplaced = ids.some((id) => !pos.current.has(id));
     for (const id of ids) if (!pos.current.has(id)) pos.current.set(id, seedPosition(id, ids.length));
     const index = new Map(ids.map((id, i) => [id, i]));
     const nodes = ids.map((id) => pos.current.get(id)!);
@@ -71,8 +76,10 @@ export function useGraphSim(graph: Graph, pos: React.MutableRefObject<Map<number
       if (c.alpha > 0.02 || pinned.size) c.raf = requestAnimationFrame(tick);
     };
     c.run = () => { if (!c.raf) c.raf = requestAnimationFrame(tick); };
-    c.alpha = 1;
-    c.run();
+    // Come back to, the first layout is only drawn where it was (a node not placed yet still settles).
+    const fresh = calm.current !== graph || unplaced;
+    c.alpha = fresh ? 1 : 0;
+    if (fresh) c.run(); else frame.current();
     return () => { cancelAnimationFrame(c.raf); c.raf = 0; };
   }, [graph]); // eslint-disable-line react-hooks/exhaustive-deps
   return useMemo<GraphSim>(() => ({

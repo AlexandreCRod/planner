@@ -124,8 +124,10 @@ function ReminderIcon({ kind }: { kind: AlertType | null }) {
 }
 const REMINDER_EMOJI: Record<AlertType, string> = { ALARM: "⏰", REMINDER: "🔔", NOTIFICATION: "🔕" };
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past }: {
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** Buttons shown over the end of the row while the pointer is on it (the wide Today). */
+  actions?: ReactNode;
   /** Today's page: behind us now (shown very slightly faded). */
   past?: boolean;
   /** The time, which can be held to change it (Today; other lists pass none). */
@@ -178,6 +180,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
         ? <Pill color="#ff7043"><span className="fire-emoji">🔥 </span><span className="sub-icon fire"><Icon name="fire" size={12} /></span>{streakInfo.current}</Pill>
         : <Pill color="#ff7043">{streakInfo.current} in a row</Pill>)}
       </span>
+      {actions && <span className="p-quick" onClick={(e) => e.stopPropagation()}>{actions}</span>}
     </div>
   );
 }
