@@ -12,6 +12,8 @@ const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 
 export interface RichEditorHandle {
   html(): string; focus(): void; insertText(t: string): void;
+  /** A divider line between paragraphs, after the one with the caret (before it, at its very start). */
+  separator(): void;
   /** Puts the caret at the start of the text (Enter in a note's title). */
   focusStart(): void;
   /** The formatting commands, for a toolbar drawn elsewhere (the phone's, above the keyboard). */
@@ -197,6 +199,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   useImperativeHandle(ref, () => ({
     html: () => (el.current ? normalize(el.current) : ""),
     focus: () => el.current?.focus(),
+    separator: () => separator(),
     focusStart: () => {
       const root = el.current;
       if (!root) return;
@@ -238,6 +241,41 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     } else if (t) t.insertData(info.indent, BOX + " ");
     else block.prepend(document.createTextNode(BOX + " "));
     placeCaretAtEnd(block);
+    onChange();
+  };
+
+  const separator = () => {
+    const root = el.current;
+    if (!root) return;
+    root.focus();
+    // The top-level block holding the caret: the divider goes between it and its neighbour.
+    let block: Node | null = getSelection()?.anchorNode ?? null;
+    while (block && block.parentNode !== root) block = block.parentNode;
+    const hr = document.createElement("hr");
+    let next: HTMLElement;
+    if (!block) {
+      root.appendChild(hr);
+      next = document.createElement("p"); next.appendChild(document.createElement("br")); root.appendChild(next);
+    } else {
+      const sel = getSelection()!;
+      const before = document.createRange();
+      before.setStart(block, 0);
+      try { before.setEnd(sel.anchorNode!, sel.anchorOffset); } catch { before.collapse(true); }
+      const atStart = !before.toString().length && (block.textContent ?? "").length > 0;
+      if (atStart) { block.parentNode!.insertBefore(hr, block); next = block as HTMLElement; }
+      else {
+        (block as ChildNode).after(hr);
+        const after = hr.nextElementSibling as HTMLElement | null;
+        if (after && after.tagName !== "HR") next = after;
+        else { next = document.createElement("p"); next.appendChild(document.createElement("br")); hr.after(next); }
+      }
+    }
+    const r = document.createRange();
+    r.selectNodeContents(next);
+    r.collapse(true);
+    const sel = getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(r);
     onChange();
   };
 
