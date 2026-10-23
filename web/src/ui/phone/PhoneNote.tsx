@@ -16,6 +16,7 @@ import { RichEditor } from "../RichEditor.tsx";
 import { useNoteSession } from "../noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { CaretMarker } from "./CaretMarker.tsx";
+import { NoteFind, takePendingFind } from "./NoteFind.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
@@ -38,6 +39,9 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const textBox = useRef<HTMLDivElement>(null);
   const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const scrollBox = useRef<HTMLDivElement>(null);
+  // Find in the note: from the menu, or already open on a note opened from Search.
+  const [finding, setFinding] = useState<{ q: string; focus: boolean } | null>(() => { const q = takePendingFind(); return q ? { q, focus: false } : null; });
 
   // The formatting bar goes with the keyboard; the text keeps the focus (and its caret) until a tap
   // elsewhere, so a tap on it brings the keyboard back where writing stopped (native.ts).
@@ -77,6 +81,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
         <span className="p-menu-anchor">
           <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
+            { label: "Find in note", icon: "oFindInPage", onClick: () => setFinding({ q: finding?.q ?? "", focus: true }) },
             { label: "Add picture", icon: "oAddPhotoAlternate", onClick: pickPictures },
             { label: "Insert template", icon: "oViewQuilt", onClick: () => setOpen("templates") },
             { label: "Version history", icon: "oHistory", disabled: !noteId, onClick: () => setOpen("versions") },
@@ -86,7 +91,9 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
       </>} />
       <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addPictures(e.target.files); e.target.value = ""; }} />
 
-      <div className={`p-content pn-scroll ${style.bgPattern ? `pattern-${style.bgPattern}` : ""}`} style={{ fontFamily: FONTS[style.fontFamily] }}>
+      {finding && <NoteFind key={finding.focus ? "f" : "s"} editor={() => rich.current?.root() ?? null} scroller={() => scrollBox.current}
+        initial={finding.q} focus={finding.focus} onClose={() => setFinding(null)} />}
+      <div ref={scrollBox} className={`p-content pn-scroll ${style.bgPattern ? `pattern-${style.bgPattern}` : ""}`} style={{ fontFamily: FONTS[style.fontFamily] }}>
         {isDaily && dayOcc.length > 0 && (
           <div className="pn-day">
             {dayOcc.map((o) => (

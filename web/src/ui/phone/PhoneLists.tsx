@@ -16,6 +16,7 @@ import { type P, buildGraph, useGraphSim } from "../GraphView.tsx";
 import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
+import { findInNextNote } from "./NoteFind.tsx";
 import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
@@ -576,7 +577,7 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
             const picked = sel.ids.has(i.id);
             return (
               <div key={i.id} className={`p-itemrow ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined}
-                {...sel.pressProps(i.id)} onClick={() => sel.tap(i.id, () => openItem(i))}>
+                {...sel.pressProps(i.id)} onClick={() => sel.tap(i.id, () => { if (i.type === "NOTE") findInNextNote(q); openItem(i); })}>
                 <MIcon name={TYPE_ICON[i.type]} size={20} color={s.colorOf(i)} />
                 <div className="grow">
                   <div className="title">{displayTitle(i)}</div>

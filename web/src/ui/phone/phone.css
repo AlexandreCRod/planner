@@ -785,6 +785,13 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pn-text { padding: 8px 20px 0; }
 .phone .pn-text .rich { font-size: 16px; line-height: 24px; color: inherit; outline: none; user-select: text; -webkit-user-select: text; }
 .phone .pn-text .rich hr { height: 0; margin: 14px 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--pn-fg) 22%, transparent); }
+.phone .pn-find { display: flex; align-items: center; gap: 0; min-height: 48px; margin: 0 8px 4px; padding-left: 12px; border-radius: 24px; background: color-mix(in srgb, var(--pn-fg) 8%, transparent); color: inherit; }
+.phone .pn-find > svg { flex: none; opacity: .6; }
+.phone .pn-find input { flex: 1; min-width: 0; height: 40px; margin-left: 10px; padding: 0; border: 0; background: none; outline: none; font: inherit; font-size: 16px; color: inherit; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
+.phone .pn-find-count { flex: none; min-width: 36px; text-align: right; font-size: 13px; opacity: .65; font-variant-numeric: tabular-nums; }
+.phone .pn-find .p-icon { color: inherit; }
+::highlight(pn-find) { background-color: color-mix(in srgb, #ffd54f 45%, transparent); color: inherit; }
+::highlight(pn-find-cur) { background-color: #ffb300; color: #1b1b1b; }
 .phone .pn-caretmark { position: absolute; left: 0; top: 0; width: 2px; border-radius: 1px; background: var(--p-primary); pointer-events: none; animation: pn-mark-in .2s cubic-bezier(.2, 0, 0, 1); }
 @keyframes pn-mark-in { from { opacity: 0; } to { opacity: 1; } }
 .phone .pn-text .rich.is-empty::before { color: color-mix(in srgb, var(--pn-fg) 35%, transparent); }
