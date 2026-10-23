@@ -254,7 +254,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
   });
   return (
     <Scaffold title="Notes" flush bar={sel.active ? <SelectionBar sel={sel} items={(ids) => notes.filter((n) => ids.has(n.id))} /> : undefined} actions={<>
-      <IconButton icon="oHub" label="Links" onClick={() => go("graph")} />
+      <IconButton icon="oConstellation" label="Links" onClick={() => go("graph")} />
       <AppBarActions />
     </>}>
       <div className="p-list notes">

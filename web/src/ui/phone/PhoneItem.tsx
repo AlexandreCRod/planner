@@ -500,7 +500,7 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
     <div className="pe-links">
       <div className="pe-links-head">
         <SectionHeader className="grow">Links</SectionHeader>
-        {id !== 0 && <TextButton className="icon" onClick={() => { onLeave?.(); go(`graph?focus=${id}`); }}><MIcon name="oHub" size={18} />Graph</TextButton>}
+        {id !== 0 && <TextButton className="icon" onClick={() => { onLeave?.(); go(`graph?focus=${id}`); }}><MIcon name="oConstellation" size={18} />Graph</TextButton>}
         <TextButton className="icon" onClick={() => setPicking(true)}><MIcon name="oAddLink" size={18} />Link</TextButton>
       </div>
       {rows.length === 0 && <div className="pe-small pad">Connect this to other notes, tasks or events with Link.</div>}

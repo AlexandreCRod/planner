@@ -285,7 +285,7 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
         : <path d={ICONS.oAlarm} fill="currentColor" />;
       break;
     case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
-    default: body = <path d={selected ? ICONS.fHub : ICONS.oHub} fill="currentColor" />;
+    default: body = <path d={ICONS.oConstellation} fill="currentColor" />;
   }
   return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="p-svg">{body}</svg>;
 }
