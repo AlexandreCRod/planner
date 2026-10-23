@@ -9,6 +9,7 @@ import { MIcon } from "./chrome.tsx";
 import { useHorizontalSwipe } from "./gesture.ts";
 import { onFlush, restore, trash } from "../../store/store.ts";
 import { showSnackbar } from "./m3.tsx";
+import { feel } from "./haptics.ts";
 
 const EASE = "cubic-bezier(.2, 0, 0, 1)";
 
@@ -35,7 +36,9 @@ export function SwipeToTrash({ item, children }: { item: Item; children: ReactNo
       if (!f || !box || gone.current) return;
       f.style.transform = `translate3d(${dx}px,0,0)`;
       box.classList.toggle("left", dx < 0);
-      box.classList.toggle("armed", Math.abs(dx) > box.offsetWidth * 0.4);
+      // Reaching the point where letting go removes it (or going back from it) ticks once.
+      const armed = Math.abs(dx) > box.offsetWidth * 0.4;
+      if (armed !== box.classList.contains("armed")) { box.classList.toggle("armed", armed); feel("tick"); }
     },
     onEnd: (dx, vx) => {
       const f = front.current, box = ref.current;

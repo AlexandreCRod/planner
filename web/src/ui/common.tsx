@@ -5,6 +5,7 @@ import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } fr
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
 import { PRIORITY_COLORS_MUTED, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
 import { type Snapshot, toggleCompletion } from "../store/store.ts";
+import { feel } from "./phone/haptics.ts";
 
 // Material Symbols paths (24 px viewBox).
 const PATHS: Record<string, string> = {
@@ -163,7 +164,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
     <div className="task" style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
       <span className="bar" style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
-        onChange={(e) => { onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
+        onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
           {isRecurring(item) && <RepeatBadge color={color} />}

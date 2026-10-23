@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import type { Item } from "../../domain/types.ts";
 import { IconButton } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
-import { hapticLift, pushBack } from "./native.ts";
+import { pushBack } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { keepShown, selectAll, toggleId } from "./selection.ts";
 import { trashManyWithUndo } from "./PhoneItem.tsx";
@@ -53,7 +54,7 @@ export function useSelection(shown: readonly number[]): Selection {
           if (hold.current !== h) return;
           hold.current = null;
           swallowClick();
-          hapticLift();
+          feel("pickup");
           setIds((cur) => (cur.has(id) ? cur : toggleId(cur, id)));
         }, LONG_PRESS);
         hold.current = h;

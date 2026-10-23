@@ -18,7 +18,8 @@ import java.util.Locale
 /**
  * Small things only Android knows, for the page (web/src/ui/phone/device.ts): whether the phone shows
  * 24-hour time, places matching a typed location (Android's own geocoder, as the original app's
- * Places.search), and a place opened in the maps app (Places.openMap: shown, no directions started).
+ * Places.search), a place opened in the maps app (Places.openMap: shown, no directions started), and
+ * the touch feel (Feel.kt, from web/src/ui/phone/haptics.ts).
  */
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
@@ -82,6 +83,13 @@ class DevicePlugin : Plugin() {
             runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(q)}"))) }
                 .onFailure { return call.reject("can't open") }
         }
+        call.resolve()
+    }
+
+    /** One soft pulse of the named strength: "tick", "pickup", "settle" or "confirm" (Feel.kt). */
+    @PluginMethod
+    fun feel(call: PluginCall) {
+        Feel.play(context, call.getString("kind") ?: "tick")
         call.resolve()
     }
 }

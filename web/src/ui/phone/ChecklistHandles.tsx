@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { checklistBlock, checklistDepth, checklistRun, checklistSlots } from "../../domain/checklist.ts";
 import { MIcon } from "./chrome.tsx";
 import { GLIDE_SPRING, animateSpring } from "./motion.ts";
-import { hapticLift, hapticTick } from "./native.ts";
+import { feel } from "./haptics.ts";
 
 interface Handle { i: number; top: number; h: number }
 
@@ -99,7 +99,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const y0 = e.clientY;
     let k = k0, raf = 0, dy = 0;
     dragging.current = true;
-    hapticLift();
+    feel("pickup");
     for (const el of dragged) el.classList.add("pn-lifted");
     for (const u of units) for (const el of u.els) el.classList.add("pn-sliding");
     const draw = () => {
@@ -110,7 +110,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       while (nk < units.length && restTop[nk] + units[nk].h / 2 < c) nk++;
       // Only where the line may go (never between another line and its sub-items).
       while (nk > 0 && !allowed.has(slotOf(nk))) nk--;
-      if (nk !== k) { k = nk; hapticTick(); }
+      if (nk !== k) { k = nk; feel("tick"); }
       units.forEach((u, ui) => {
         const shift = u.above ? (ui >= k ? h : 0) : (ui < k ? -h : 0);
         for (const el of u.els) el.style.transform = shift ? `translate3d(0,${shift}px,0)` : "";

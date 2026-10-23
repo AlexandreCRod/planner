@@ -8,7 +8,7 @@ import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts"
 import { showStreaks } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
 import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
-import { hapticLift } from "./phone/native.ts";
+import { feel } from "./phone/haptics.ts";
 import { useSwipePager } from "./phone/pager.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
 import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
@@ -190,7 +190,7 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
         return (
           <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
             streak={st && st.current > 1 ? st.current : 0}
-            onToggle={() => toggleCompletion(e.item.id, day, !ticked)} onOpen={() => openItem(e.item, e.day)} />
+            onToggle={() => { if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); }} onOpen={() => openItem(e.item, e.day)} />
         );
       })}
       <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
@@ -294,7 +294,7 @@ function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { titl
       onPointerDown={(e) => {
         clear();
         const h = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
-        h.timer = window.setTimeout(() => { h.fired = true; hapticLift(); onOpen(); }, CHIP_HOLD_MS);
+        h.timer = window.setTimeout(() => { h.fired = true; feel("pickup"); onOpen(); }, CHIP_HOLD_MS);
         hold.current = h;
       }}
       onPointerMove={(e) => { const h = hold.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 8) { clear(); hold.current = null; } }}

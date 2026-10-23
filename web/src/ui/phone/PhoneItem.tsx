@@ -19,6 +19,7 @@ import { typeLabel } from "../LinksSection.tsx";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { openExternal } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { type Place, openPlace, searchPlaces } from "./device.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
@@ -632,8 +633,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         </div>
 
         {!isEvent && (
-          <div className="pe-done" role="button" onClick={() => toggleCompletion(id, completion, !done)}>
-            <Checkbox checked={done} color={color} onChange={(v) => toggleCompletion(id, completion, v)} />
+          <div className="pe-done" role="button" onClick={() => { if (!done) feel("confirm"); toggleCompletion(id, completion, !done); }}>
+            <Checkbox checked={done} color={color} onChange={(v) => { if (v) feel("confirm"); toggleCompletion(id, completion, v); }} />
             <span>{done ? "Done" : "Mark done"}{forDay}</span>
           </div>
         )}

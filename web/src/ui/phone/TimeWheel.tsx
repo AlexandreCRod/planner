@@ -12,7 +12,8 @@ import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes } from "react";
 import { use24h } from "../../domain/dates.ts";
 import { type Animation, type SpringConfig, VelocityTracker, animateCoast, animateSpring, bandClamp, snapIndex } from "./motion.ts";
-import { hapticLift, hapticTick, pushBack } from "./native.ts";
+import { pushBack } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { joinTime, nearestSlot, splitTime, wheelHours, wheelMinutes, wrapIndex } from "./wheelMath.ts";
@@ -84,7 +85,8 @@ export class WheelDrive {
   private toSlot(s: number, v = 0) {
     this.anim?.stop();
     const to = this.clampSlot(s) * this.o.rowH;
-    this.anim = animateCoast(this.offset, to, v, (x) => this.draw(x), () => { this.anim = null; this.o.onSettle?.(this.index); }, this.o.rowH * 0.3);
+    // A short coast (about half a second at most), so a fling lands crisply rather than drifting.
+    this.anim = animateCoast(this.offset, to, v, (x) => this.draw(x), () => { this.anim = null; this.o.onSettle?.(this.index); }, this.o.rowH * 0.3, 420);
   }
   /** Turns to row [i] (the shortest way round on a drum). */
   glide(i: number) { this.toSlot(this.o.wrap ? nearestSlot(this.slot, i, this.o.count) : i); }
@@ -271,7 +273,7 @@ function Drum({ anchor, values, index, wrap, label, pointerId, onPick, onClose }
     const d = new WheelDrive({
       count: n, rowH: g.rowH, index, wrap,
       write: (off) => { st.current.offset = off; draw(); },
-      onRow: (i) => { hapticTick(); root.current?.setAttribute("aria-valuetext", values[i]); },
+      onRow: (i) => { feel("tick"); root.current?.setAttribute("aria-valuetext", values[i]); },
       onSettle: (i) => {
         if (i !== last.current) { last.current = i; onPick(i); }
         if (foldOnRest.current) fold();
@@ -345,7 +347,7 @@ let hold: { id: number; x0: number; y0: number; timer: number; fired: boolean } 
 let swallowClick = false;
 
 /**
- * Props for something that opens a drum when held (450 ms, with the lift haptic): [onHold] gets the
+ * Props for something that opens a drum when held (450 ms, with the soft pick-up feel): [onHold] gets the
  * finger's pointer id, so the same finger can go on to turn it. The click after a hold is swallowed,
  * so the row or button under it doesn't open too.
  */
@@ -356,7 +358,7 @@ export function holdProps(onHold: (pointerId: number) => void): HTMLAttributes<H
       if (hold) clearTimeout(hold.timer);
       swallowClick = false;
       const h = { id: e.pointerId, x0: e.clientX, y0: e.clientY, fired: false, timer: 0 };
-      h.timer = window.setTimeout(() => { h.fired = true; swallowClick = true; hapticLift(); onHold(h.id); }, HOLD_MS);
+      h.timer = window.setTimeout(() => { h.fired = true; swallowClick = true; feel("pickup"); onHold(h.id); }, HOLD_MS);
       hold = h;
     },
     onPointerMove: (e) => {

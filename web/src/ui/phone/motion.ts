@@ -168,16 +168,16 @@ export function coastTau(dist: number, v0: number, min = 60, max = 900): number 
   return Math.max(min, Math.min(max, dist / v0));
 }
 
-/** A wheel's last few px onto its row: a soft spring with the faintest overshoot. */
-export const SNAP_SPRING: SpringConfig = { stiffness: 320, damping: 0.72 };
+/** A wheel's last few px onto its row: a quick spring with the faintest overshoot (never back past a row). */
+export const SNAP_SPRING: SpringConfig = { stiffness: 460, damping: 0.8 };
 
 /**
  * Carries a flung value from [from] to [to] (a wheel's row): it coasts from the finger's [v0] px/ms,
- * slowing all the way, and the last [snapAt] px are a soft spring onto the row, carrying the coast's
- * speed. A slow or backwards release is the spring alone.
+ * slowing all the way (taking at most about [maxTau] ms to slow down), and the last [snapAt] px are a
+ * soft spring onto the row, carrying the coast's speed. A slow or backwards release is the spring alone.
  */
-export function animateCoast(from: number, to: number, v0: number, frame: (x: number) => void, done?: () => void, snapAt = 10): Animation {
-  const tau = coastTau(to - from, v0);
+export function animateCoast(from: number, to: number, v0: number, frame: (x: number) => void, done?: () => void, snapAt = 10, maxTau = 900): Animation {
+  const tau = coastTau(to - from, v0, 60, maxTau);
   if (tau === null || Math.abs(to - from) <= snapAt) return animateSpring(from, to, v0, frame, done, SNAP_SPRING);
   const d = to - from, t0 = performance.now();
   let raf = 0, x = from, v = v0, snap: Animation | null = null;

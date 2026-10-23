@@ -1,6 +1,5 @@
-// Phone-only helpers: haptics, the soft keyboard's height, and the Android back button.
+// Phone-only helpers: the soft keyboard's height and the Android back button. (The touch feel is haptics.ts.)
 import { App as CapApp } from "@capacitor/app";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Keyboard } from "@capacitor/keyboard";
 import { startSelectScroll } from "./selectScroll.ts";
 import { useSyncExternalStore } from "react";
@@ -9,17 +8,6 @@ import { startPressFeedback } from "./press.ts";
 import { startPhoneTheme } from "./theme.ts";
 import { startDeviceClock } from "./device.ts";
 import { startOverscroll } from "./overscroll.ts";
-
-// ---------- Haptics (no-ops in a browser) ----------
-export const hapticLift = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {}); };
-/** A wheel's row going by: the light selection tick (the plugin only ticks once a selection started). */
-let selecting = false;
-export const hapticTick = () => {
-  if (!isNative) return;
-  if (!selecting) { selecting = true; void Haptics.selectionStart().catch(() => {}); }
-  void Haptics.selectionChanged().catch(() => {});
-};
-export const hapticLight = () => { if (isNative) void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); };
 
 // ---------- Keyboard ----------
 // How much of the bottom of the page the keyboard covers, in CSS px. In the app, Capacitor's

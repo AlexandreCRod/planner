@@ -18,7 +18,7 @@ import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton
 import { onColor } from "./PhoneCalendar.tsx";
 import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
-import { hapticLift } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
 import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
@@ -385,6 +385,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
     const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawRef.current(); }); };
     const letGo = (t: number) => {
       if (!held) return;
+      if (held.moved) feel("settle");
       const k = viewRef.current.k;
       // px per ms on screen → world units per layout step (about 16.7 ms).
       sim.unpin(held.id, (held.vt.velocity(t) * 16.7) / k, (held.vtY.velocity(t) * 16.7) / k);
@@ -412,7 +413,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
       if (held && held.pointer === e.pointerId) {
         held.vt.addEvent(e, "x"); held.vtY.addEvent(e, "y");
         if (tap) return;
-        if (!held.moved) { held.moved = true; hapticLift(); }
+        if (!held.moved) { held.moved = true; feel("pickup"); }
         const w = toWorld(e.clientX, e.clientY);
         sim.pin(held.id, w.x + held.dx, w.y + held.dy);
         return;

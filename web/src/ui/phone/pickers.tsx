@@ -5,7 +5,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, daysInMonth, epochOf, formatDate, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
 import { IconButton, MIcon, ModalLayer } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
-import { hapticTick, pushBack } from "./native.ts";
+import { pushBack } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
@@ -117,7 +118,7 @@ export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
           e.currentTarget.setPointerCapture(e.pointerId);
           drag.current = { id: e.pointerId, from: d, add: !sel.has(d), base: sel, last: d };
           apply(drag.current, d);
-          hapticTick();
+          feel("tick");
         }}
         onPointerMove={(e) => {
           const g = drag.current;
@@ -126,7 +127,7 @@ export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
           if (d === null || d === g.last) return;
           g.last = d;
           apply(g, d);
-          hapticTick();
+          feel("tick");
         }}
         onPointerUp={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}
         onPointerCancel={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}>

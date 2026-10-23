@@ -1,5 +1,6 @@
 // The phone app's door to the small "Device" plugin (android/.../device/DevicePlugin.kt): the phone's
-// 24-hour setting, place search with Android's own geocoder, and a place shown in the maps app.
+// 24-hour setting, place search with Android's own geocoder, a place shown in the maps app, and the
+// touch feel's pulses (played through haptics.ts, never directly).
 // In a browser none of it exists: times follow the in-app choice, places come from OpenStreetMap.
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin } from "@capacitor/core";
@@ -13,9 +14,17 @@ interface DevicePlugin {
   clock(): Promise<{ is24: boolean }>;
   geocode(o: { query: string; max?: number }): Promise<{ places: Place[] }>;
   openMap(o: { name: string; lat?: number | null; lng?: number | null }): Promise<void>;
+  feel(o: { kind: string }): Promise<void>;
 }
 
 const plugin = isNative ? registerPlugin<DevicePlugin>("Device") : null;
+
+/** Whether the phone can play the touch feel (the app; never a browser). */
+export const canFeel = plugin !== null;
+/** One pulse of the touch feel, unspaced: use feel() in haptics.ts, which spaces them. */
+export function playFeel(kind: string) {
+  if (plugin) void plugin.feel({ kind }).catch(() => {});
+}
 
 /** Reads the phone's clock format; every page is drawn again if it changed. */
 async function readClock() {

@@ -15,7 +15,7 @@ import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
 import { ScopeDialog } from "../ItemEditor.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
-import { hapticLift, hapticLight } from "./native.ts";
+import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
@@ -256,7 +256,7 @@ function useLongPress(onLong: (d: number) => void, onTap: (d: number) => void) {
   return (d: number) => ({
     onPointerDown: (e: React.PointerEvent) => {
       const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
-      p.timer = window.setTimeout(() => { p.fired = true; hapticLift(); cb.current.onLong(d); }, 500);
+      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onLong(d); }, 500);
       st.current = p;
     },
     onPointerMove: (e: React.PointerEvent) => {
@@ -452,7 +452,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     if (!a) {
       a = slotAnim.current = { x: null, y: null, s: null, pos: { x: tx, y: ty, s: 0.6 }, key };
       a.s = animateSpring(0.6, 1, 0, (v) => { a!.pos.s = v; draw(); }, () => { a!.s = null; }, POP_SPRING);
-      hapticLight();
+      feel("tick");
     } else if (a.key !== key) {
       a.key = key;
       const glide = (axis: "x" | "y", to: number) => {
@@ -461,7 +461,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         a![axis] = animateSpring(cur.x, to, cur.v, (v) => { a!.pos[axis] = v; draw(); }, () => { a![axis] = null; }, GLIDE_SPRING);
       };
       glide("x", tx); glide("y", ty);
-      hapticLight();
+      feel("tick");
     } else {
       a.x?.stop(); a.y?.stop(); a.x = a.y = null;
       a.pos.x = tx; a.pos.y = ty;
@@ -529,6 +529,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       const dDay = Math.max(-di, Math.min(daysRef.current.length - 1 - di, Math.round(g.dx / colW())));
       const snap = `${start}|${dDay}`;
       if (snap !== g.snap) {
+        if (g.snap) feel("tick");
         g.snap = snap;
         const isTask = p.o.item.type === "TASK";
         setGhost({ key: g.key, start, dDay, length: p.end - p.start, color: props.current.s.colorOf(p.o.item), isTask });
@@ -547,11 +548,11 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       g.raf = requestAnimationFrame(autoScroll);
     };
 
-    // The long-press lift is the one place with a buzz, as an Android drag-and-drop pick-up.
+    // The long-press lift: a soft pick-up, as an Android drag-and-drop; each slot passed ticks, landing settles.
     const lift = () => {
       if (!g || !g.block) return;
       g.lifted = true;
-      hapticLift();
+      feel("pickup");
       g.block.classList.add("lifted");
       el.classList.add("dragging");
       updateDrag();
@@ -621,6 +622,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         if (info && cur.block) {
           const { p } = info;
           const dMin = snap[0] - p.start, dDay = snap[1];
+          feel("settle");
           if (!dMin && !dDay) {
             // Not moved: back into place.
             cur.block.animate([{ transform: cur.block.style.transform }, { transform: "none" }], { duration: 160, easing: "ease-out" });
