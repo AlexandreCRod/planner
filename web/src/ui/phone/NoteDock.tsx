@@ -8,7 +8,7 @@ import { cssColor } from "../../domain/types.ts";
 import { useSnapshot } from "../../store/store.ts";
 import { MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
-import { GLIDE_SPRING, VelocityTracker, animateSpring } from "./motion.ts";
+import { FLICK, GLIDE_SPRING, VelocityTracker, animateSpring } from "./motion.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
 
 /** The note's id in a route like "#/note/12?day=…" (0: a new note not saved yet). */
@@ -68,7 +68,7 @@ export function NoteChip({ hash, onOpen, onClose }: { hash: string; onOpen: () =
     const v = d.vt.velocity(e.timeStamp);
     const w = el.current?.offsetWidth ?? 300;
     // Far enough, or flung that way: closed; otherwise it springs back.
-    if (Math.abs(d.dx) > w * 0.35 || (Math.abs(v) > 0.6 && Math.sign(v) === Math.sign(d.dx))) close(d.dx, v);
+    if (Math.abs(d.dx) > w * 0.35 || (Math.abs(v) > FLICK && Math.sign(v) === Math.sign(d.dx))) close(d.dx, v);
     else animateSpring(d.dx, 0, v, draw, () => draw(0), GLIDE_SPRING);
   };
 

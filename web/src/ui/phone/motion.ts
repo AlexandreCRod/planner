@@ -108,6 +108,13 @@ export function rubberBandInverse(shown: number, dim: number, c = 0.55): number 
 }
 
 /**
+ * How fast a flick is (px per ms, 250 dp/s): faster than this, a swipe goes on to the next page, the
+ * next tab or the sheet's next size, however short it was. The same everywhere, so a short flick
+ * always completes. (Deleting a row by a swipe asks for more.)
+ */
+export const FLICK = 0.25;
+
+/**
  * The finger's speed from its recent samples, as Android's VelocityTracker does: a least-squares line
  * through the last 100 ms of positions. A finger that stopped (nothing for 40 ms) has no speed.
  */

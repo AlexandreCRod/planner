@@ -2,9 +2,11 @@
 // short pull (56 dp, or a fifth of the way), and a flick decides whatever the distance: up opens it
 // fully, down brings it back to its small size or closes it.
 
+import { FLICK } from "./motion.ts";
+
 /** How far a pull must go to count (px), and how fast a flick is (px per ms). */
 export const SHEET_DISTANCE = 56;
-export const SHEET_FLING = 0.35;
+export const SHEET_FLING = FLICK;
 
 /**
  * The add panel after a drag that started [from] its small or full size, now at [p] (0 small, 1 full,

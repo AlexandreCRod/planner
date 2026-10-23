@@ -9,10 +9,10 @@ import { useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
-import { PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
+import { FLICK, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
 
-/** Compose's pager fling threshold, 400 dp/s, in px per ms. */
-export const SNAP_VELOCITY = 0.4;
+/** A flick turns the page whatever the distance (motion.ts FLICK; Compose's own is 400 dp/s). */
+export const SNAP_VELOCITY = FLICK;
 /** Inner pagers move this much further than the finger, so a short swipe turns a page. */
 export const SWIPE_GAIN = 1.2;
 
@@ -163,7 +163,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
 /** The bottom bar's drag: the pages move this many tabs per tab width the finger slides along the bar. */
 export const BAR_GAIN = 1.3;
 /** A flick along the bar faster than this (px per ms) turns a page whatever the distance. */
-export const BAR_FLING = 0.3;
+export const BAR_FLING = FLICK;
 /** Settings > "Reverse bottom bar swipe": a slide along the bar turns the pages the other way. */
 export const BAR_REVERSED_KEY = "barSwipeReversed";
 export const barSwipeReversed = () => { try { return localStorage.getItem(BAR_REVERSED_KEY) === "true"; } catch { return false; } };

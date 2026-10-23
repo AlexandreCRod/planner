@@ -80,4 +80,13 @@ test("the add panel opens or closes after a short pull, and a flick decides", ()
   assert.equal(sheetCloses(40, 500, 0), false);
   assert.equal(sheetCloses(10, 500, 0.5), true);
   assert.equal(sheetCloses(45, 200, 0), true);
+  // Short flicks complete everywhere.
+  assert.equal(sheetCloses(8, 500, 0.3), true);
+  assert.equal(panelTarget("compact", 0.01, 0, 600, -0.3), "full");
+  assert.equal(panelTarget("compact", 0, 6, 600, 0.3), "close");
+  assert.equal(pageTarget(-24, -0.3, 400), 1);
+  assert.equal(pageTarget(24, 0.3, 400), -1);
+  assert.equal(barTarget(1, 1.05, 0.3, 4), 2);
+  // A slow drag let go still settles on the nearest.
+  assert.equal(pageTarget(-24, -0.1, 400), 0);
 });

@@ -13,7 +13,7 @@ import { FONTS } from "../NotesView.tsx";
 import { IconButton, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, contentColor } from "./m3.tsx";
-import { GLIDE_SPRING, VelocityTracker, animateSpring } from "./motion.ts";
+import { FLICK, GLIDE_SPRING, VelocityTracker, animateSpring } from "./motion.ts";
 
 let pending: number | null = null;
 /** The next note opened shows note [id] in its panel (Swap). */
@@ -109,7 +109,7 @@ export function NotePeek({ id, host, onSwap, onClose }: { id: number; host: () =
     if (!d || e.pointerId !== d.id) return;
     g.current = null;
     const v = d.vt.velocity(e.timeStamp); // px/ms, down is positive
-    if (d.h < MIN_H - 24 || (v > 1.2 && d.h < d.h0)) { close(d.h, v); return; }
+    if (d.h < MIN_H - 24 || (v > 2 * FLICK && d.h < d.h0)) { close(d.h, v); return; }
     const to = Math.max(MIN_H, Math.min(most(), d.h));
     setH(to);
     if (to !== d.h) animateSpring(d.h, to, -v, size, () => size(to), GLIDE_SPRING);
