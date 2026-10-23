@@ -166,7 +166,8 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
               <span className="dot" style={{ background: s.colorOf(o.item) }} />{o.startMin !== null ? formatTime(o.startMin) + " " : ""}{o.item.title}</button>)}
           </div>
         )}
-        {!isDaily && <input className="title-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} style={{ color: fg, fontFamily: "inherit" }} />}
+        {!isDaily && <input className="title-input" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); rich.current?.focusStart(); } }} style={{ color: fg, fontFamily: "inherit" }} />}
         <input className="tags-input" placeholder="# tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
         <div className="place-row">
           <Icon name="place" size={16} />

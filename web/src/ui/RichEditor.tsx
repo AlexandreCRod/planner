@@ -12,6 +12,8 @@ const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 
 export interface RichEditorHandle {
   html(): string; focus(): void; insertText(t: string): void;
+  /** Puts the caret at the start of the text (Enter in a note's title). */
+  focusStart(): void;
   /** The formatting commands, for a toolbar drawn elsewhere (the phone's, above the keyboard). */
   exec(cmd: string, value?: string): void; toggleChecklist(): void; indent(deeper: boolean): void; setSize(px: number | null): void;
   /** The editable element itself (the phone's checklist handles sit beside its lines). */
@@ -190,6 +192,17 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   useImperativeHandle(ref, () => ({
     html: () => (el.current ? normalize(el.current) : ""),
     focus: () => el.current?.focus(),
+    focusStart: () => {
+      const root = el.current;
+      if (!root) return;
+      root.focus({ preventScroll: true });
+      const r = document.createRange();
+      const t = firstText(root);
+      if (t) r.setStart(t, 0); else r.setStart(root, 0);
+      r.collapse(true);
+      const sel = getSelection();
+      sel?.removeAllRanges(); sel?.addRange(r);
+    },
     insertText: (t: string) => { el.current?.focus(); document.execCommand("insertText", false, t); },
     exec: (cmd: string, value?: string) => exec(cmd, value),
     toggleChecklist: () => toggleChecklist(),

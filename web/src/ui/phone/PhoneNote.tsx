@@ -96,7 +96,8 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
             ))}
           </div>
         )}
-        {!isDaily && <input className="pn-title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} enterKeyHint="next" />}
+        {!isDaily && <input className="pn-title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); rich.current?.focusStart(); } }} enterKeyHint="next" />}
         <label className="pn-meta">
           <MIcon name="oLabel" />
           <input placeholder="tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} autoCapitalize="none" />
