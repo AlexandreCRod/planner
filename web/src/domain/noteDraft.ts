@@ -9,10 +9,11 @@ import type { Item } from "./types.ts";
 export interface NoteDraft {
   title: string; content: string; tags: string;
   pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null;
+  hidden: boolean;
   location: string; lat: number | null; lng: number | null;
 }
 export type NoteField = keyof NoteDraft;
-export const NOTE_FIELDS: readonly NoteField[] = ["title", "content", "tags", "pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "location", "lat", "lng"];
+export const NOTE_FIELDS: readonly NoteField[] = ["title", "content", "tags", "pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "hidden", "location", "lat", "lng"];
 
 /**
  * What the editor last loaded or saved: [stored] is that note as stored; [shownContent] its text as the
@@ -31,7 +32,7 @@ export function draftOf(item: Item, tags: string[] | string): NoteDraft {
   return {
     title: item.title, content: item.content, tags: Array.isArray(tags) ? tags.join(" ") : tags,
     pinned: item.pinned, bgColor: item.bgColor, bgPattern: item.bgPattern, fontFamily: item.fontFamily,
-    categoryId: item.categoryId, color: item.color, location: item.location ?? "", lat: item.lat ?? null, lng: item.lng ?? null,
+    categoryId: item.categoryId, color: item.color, hidden: item.hidden ?? false, location: item.location ?? "", lat: item.lat ?? null, lng: item.lng ?? null,
   };
 }
 

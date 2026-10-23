@@ -9,10 +9,10 @@ import { type Item, newItem } from "../domain/types.ts";
 import { allRecords, deleteIfEmpty, isEmptyNote, onFlush, saveItem, saveVersion, type Snapshot, snapshot, useSnapshot } from "../store/store.ts";
 import { type RichEditorHandle, useEditorHtml } from "./RichEditor.tsx";
 
-export interface NoteStyle { pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null }
+export interface NoteStyle { pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null; hidden: boolean }
 export interface NotePlace { location: string; lat: number | null; lng: number | null }
 
-const styleOf = (i: Item): NoteStyle => ({ pinned: i.pinned, bgColor: i.bgColor, bgPattern: i.bgPattern, fontFamily: i.fontFamily, categoryId: i.categoryId, color: i.color });
+const styleOf = (i: Item): NoteStyle => ({ pinned: i.pinned, bgColor: i.bgColor, bgPattern: i.bgPattern, fontFamily: i.fontFamily, categoryId: i.categoryId, color: i.color, hidden: i.hidden ?? false });
 const tagsOf = (s: Snapshot, id: number) => (s.tagsByItem.get(id) ?? []).map((t) => t.name).join(" ");
 /** The note as stored, trashed or not (undefined when it's gone). */
 const storedItem = (id: number) => (id ? allRecords().get(`items/${id}`) as Item | undefined : undefined);
@@ -94,7 +94,7 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     if (d.title !== undefined) { l.title = d.title; setTitleState(d.title); }
     if (d.tags !== undefined) { l.tags = d.tags; setTagsState(d.tags); }
     const st: Partial<NoteStyle> = {};
-    for (const k of ["pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color"] as const) if (k in d) (st as Record<string, unknown>)[k] = d[k];
+    for (const k of ["pinned", "bgColor", "bgPattern", "fontFamily", "categoryId", "color", "hidden"] as const) if (k in d) (st as Record<string, unknown>)[k] = d[k];
     if (Object.keys(st).length) { l.style = { ...l.style, ...st }; setStyleState(l.style); }
     if ("location" in d || "lat" in d || "lng" in d) {
       l.place = { location: d.location ?? l.place.location, lat: "lat" in d ? d.lat! : l.place.lat, lng: "lng" in d ? d.lng! : l.place.lng };

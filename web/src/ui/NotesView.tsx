@@ -29,7 +29,8 @@ export function NotesView() {
   // Daily notes only show under their own chip, so the page is about regular notes.
   const [filter, setFilter] = useState<"notes" | "pinned" | "daily">("notes");
   const [tag, setTag] = useState<number | null>(null);
-  const notes = s.items.filter((i) => i.type === "NOTE")
+  // Hidden notes (set on the phone) stay off this page; Search still finds them.
+  const notes = s.items.filter((i) => i.type === "NOTE" && !i.hidden)
     .filter((n) => (filter === "daily" ? n.noteDay !== null : n.noteDay === null && (filter !== "pinned" || n.pinned)))
     .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);

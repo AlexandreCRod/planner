@@ -83,6 +83,10 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
             { label: "Find in note", icon: "oFindInPage", onClick: () => setFinding({ q: finding?.q ?? "", focus: true }) },
             { label: "Add picture", icon: "oAddPhotoAlternate", onClick: pickPictures },
+            { label: style.hidden ? "Show on Notes page" : "Hide from Notes page", icon: style.hidden ? "oVisibility" : "oVisibilityOff", onClick: () => {
+              setStyle({ ...style, hidden: !style.hidden });
+              showSnackbar(style.hidden ? "Shown on the Notes page again" : "Hidden from the Notes page. Search still finds it.");
+            } },
             { label: "Insert template", icon: "oViewQuilt", onClick: () => setOpen("templates") },
             { label: "Version history", icon: "oHistory", disabled: !noteId, onClick: () => setOpen("versions") },
             { label: "Move to trash", icon: "oDelete", divider: true, onClick: () => setOpen("trash") },

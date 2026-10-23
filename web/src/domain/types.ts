@@ -52,6 +52,11 @@ export interface Item {
   /** A repeating task done as a habit: on Today's own checklist, a missed day only ends its streak
    *  (domain/routines.ts). Missing on records made before routines synced. */
   routine?: boolean;
+  /** A note kept off the Notes page (still found by Search). Missing = shown. */
+  hidden?: boolean;
+  /** A pinned note's place among the pinned ones (lower first), set by dragging them; missing = after
+   *  those that have one, oldest first. */
+  pinOrder?: number;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }

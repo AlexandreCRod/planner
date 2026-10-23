@@ -203,8 +203,9 @@ function TodoList() {
 // ---------- Notes ----------
 
 const NOTE_FONTS = ["", "Georgia, 'Noto Serif', serif", "'Droid Sans Mono', 'Roboto Mono', monospace", "'Dancing Script', cursive"];
-type NoteFilter = "notes" | "pinned" | "daily";
+type NoteFilter = "notes" | "pinned" | "daily" | "hidden";
 const EMPTY_NOTES: Record<NoteFilter, string> = {
+  hidden: "No hidden notes.",
   daily: "No daily notes yet. Open a day's note from Today or the calendar.",
   pinned: "No pinned notes.",
   notes: "No notes yet. Tap + to write one.",
@@ -214,8 +215,11 @@ export const PhoneNotes = memo(function PhoneNotes() {
   const s = useSnapshot();
   const [filter, setFilter] = useState<NoteFilter>("notes");
   const [tag, setTag] = useState<number | null>(null);
+  // Hidden notes stay off the page (Search finds them); a Hidden chip lists them while there are any.
+  const hiddenCount = useMemo(() => s.items.filter((i) => i.type === "NOTE" && i.hidden).length, [s]);
   const notes = useMemo(() => s.items.filter((i) => i.type === "NOTE")
-    .filter((n) => (filter === "daily" ? n.noteDay !== null : n.noteDay === null && (filter !== "pinned" || n.pinned)))
+    .filter((n) => (filter === "hidden" ? !!n.hidden : !n.hidden))
+    .filter((n) => (filter === "daily" ? n.noteDay !== null : filter === "hidden" || (n.noteDay === null && (filter !== "pinned" || n.pinned))))
     .filter((n) => tag === null || (s.tagsByItem.get(n.id) ?? []).some((t) => t.id === tag))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt), [s, filter, tag]);
   // Two columns, each card going under the shorter one (a staggered grid, in list order).
@@ -241,6 +245,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
           {(["notes", "pinned", "daily"] as const).map((k) => (
             <FilterChip key={k} selected={filter === k} onClick={() => setFilter(k)}>{k === "notes" ? "Notes" : k === "pinned" ? "Pinned" : "Daily notes"}</FilterChip>
           ))}
+          {(hiddenCount > 0 || filter === "hidden") && <FilterChip selected={filter === "hidden"} onClick={() => setFilter(filter === "hidden" ? "notes" : "hidden")}>Hidden</FilterChip>}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
         {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
