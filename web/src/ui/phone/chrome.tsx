@@ -115,7 +115,7 @@ export function ChipRow({ children, className = "" }: { children: ReactNode; cla
  * springs to the chosen segment, carrying [v] (segments per ms) when given.
  */
 export function Segmented<T extends string>({ value, options, onChange, track }: {
-  value: T; options: [T, string][]; onChange: (v: T) => void; track?: MutableRefObject<((p: number | null, v?: number) => void) | null>;
+  value: T; options: [T, string][]; onChange: (v: T) => void; track?: MutableRefObject<((p: number | null, v?: number, to?: number) => void) | null>;
 }) {
   const ind = useRef<HTMLSpanElement>(null);
   const index = Math.max(0, options.findIndex(([k]) => k === value));
@@ -123,19 +123,23 @@ export function Segmented<T extends string>({ value, options, onChange, track }:
   indexRef.current = index;
   const at = useRef<number | null>(null);
   const anim = useRef<Animation | null>(null);
+  // Where the running spring is going (a swipe's let-go can aim it before the choice is redrawn).
+  const aim = useRef<number | null>(null);
   const put = (p: number) => { const el = ind.current; if (el) el.style.transform = `translate3d(${p * 100}%,0,0)`; };
   useLayoutEffect(() => {
     if (at.current !== null) return; // a finger is on it
     // Still settling toward the old segment: turn the spring to the new one, so it can't end on a stale tab.
     if (anim.current) {
+      if (aim.current === index) return; // already on its way there, at its own speed
       const from = anim.current.now().x, el = ind.current;
       anim.current.stop();
+      aim.current = index;
       anim.current = animateSpring(from, index, 0, put, () => { anim.current = null; if (el) el.style.transition = ""; }, PAGE_SPRING);
       return;
     }
     put(index);
   }, [index]);
-  if (track) track.current = (p, v = 0) => {
+  if (track) track.current = (p, v = 0, to) => {
     const el = ind.current;
     if (!el) return;
     el.style.transition = "none";
@@ -145,11 +149,13 @@ export function Segmented<T extends string>({ value, options, onChange, track }:
       put(at.current);
       return;
     }
-    // Let go: from where it is to the chosen segment, on the pagers' spring.
+    // Let go: from where it is to the chosen segment (or [to], the one about to be chosen), on the pagers' spring.
     const from = at.current ?? anim.current?.now().x ?? indexRef.current;
+    const target = to ?? indexRef.current;
     anim.current?.stop();
     at.current = null;
-    anim.current = animateSpring(from, indexRef.current, v, put, () => { anim.current = null; el.style.transition = ""; }, PAGE_SPRING);
+    aim.current = target;
+    anim.current = animateSpring(from, target, v, put, () => { anim.current = null; aim.current = null; el.style.transition = ""; }, PAGE_SPRING);
   };
   return (
     <div className="p-segmented" role="radiogroup">

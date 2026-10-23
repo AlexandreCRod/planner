@@ -1,6 +1,6 @@
 // Where a dragged sheet (the add panel, a bottom sheet) settles when let go. It opens or closes after a
 // short pull (56 dp, or a fifth of the way), and a flick decides whatever the distance: up opens it
-// fully, down brings it back to its small size or closes it.
+// fully, down closes it (the full editor let go partway down settles back to its small size).
 
 import { FLICK } from "./motion.ts";
 
@@ -20,7 +20,8 @@ export function panelTarget(from: "compact" | "full", p: number, down: number, r
     if (v > SHEET_FLING) return "compact";
     return far(p * range) ? "full" : "compact";
   }
-  if (v > SHEET_FLING) return "compact";
+  // From the full editor: a flick down closes it, a flick up keeps it; let go partway, it settles small.
+  if (v > SHEET_FLING) return "close";
   if (v < -SHEET_FLING) return "full";
   return far((1 - p) * range) ? "compact" : "full";
 }

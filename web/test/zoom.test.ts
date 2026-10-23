@@ -71,7 +71,8 @@ test("the add panel opens or closes after a short pull, and a flick decides", ()
   // From full: a short pull down or a flick down makes it small again.
   assert.equal(panelTarget("full", 0.9, 0, 600, 0), "compact");
   assert.equal(panelTarget("full", 0.97, 0, 600, 0), "full");
-  assert.equal(panelTarget("full", 0.98, 0, 600, 0.6), "compact");
+  assert.equal(panelTarget("full", 0.98, 0, 600, 0.6), "close"); // flicked down: closes
+  assert.equal(panelTarget("full", 0.5, 0, 600, 0.1), "compact"); // let go partway: the small panel
   // Pulled below its small place: closes past 48 px or on a flick down.
   assert.equal(panelTarget("compact", 0, 50, 600, 0), "close");
   assert.equal(panelTarget("compact", 0, 20, 600, 0.5), "close");

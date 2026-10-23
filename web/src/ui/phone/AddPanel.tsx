@@ -6,8 +6,7 @@
 // closes. Once open, the editor's own handle drags it back down the same way. A sideways swipe on the
 // small panel switches between Task and Event, the switch's indicator following the finger.
 import { animated, easings, to, useSpring } from "@react-spring/web";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { describe } from "../../domain/recurrence.ts";
 import { formatDate, formatDateShort, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
@@ -291,7 +290,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   // editor's handle strip does (its content scrolls). The panel's transform is written here, in the
   // pointer's own event, so it never trails the finger; the springs are only told where it is.
   const panelRef = useRef<HTMLDivElement>(null);
-  const typeTrack = useRef<((p: number | null, v?: number) => void) | null>(null);
+  const typeTrack = useRef<((p: number | null, v?: number, to?: number) => void) | null>(null);
   const live = useRef({ canGrow, type, lineMode, setType: (t: ItemType) => {} });
   live.current = {
     canGrow, type: lineMode ? type : d.type, lineMode,
@@ -310,7 +309,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     const onDown = (e: PointerEvent) => {
       if (g || closing.current || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       const t = e.target as Element;
-      if (grownRef.current && !t.closest(".gp-drag")) return;
+      // Grown, the editor drags by its handle strip and its top bar (not the bar's buttons); its content scrolls.
+      if (grownRef.current && !t.closest(".gp-drag") && !(t.closest(".gp-full .p-appbar") && !t.closest("button, input, a"))) return;
       if (t.closest(".p-dialog-scrim, .p-menu")) return;
       if (selectingText()) return; // text selected in the field: the browser's
       const seg = el.querySelector<HTMLElement>(".gp-compact .p-segmented");
@@ -380,9 +380,11 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
         const i = TYPES.findIndex(([k]) => k === live.current.type);
         const vx = cancelled ? 0 : SWIPE_GAIN * cur.vt.velocity(e.timeStamp);
         const dir = cancelled ? 0 : -pageTarget(SWIPE_GAIN * (e.clientX - cur.x0), vx, cur.segW);
-        const next = TYPES[Math.max(0, Math.min(TYPES.length - 1, i + dir))][0];
-        if (next !== live.current.type) flushSync(() => live.current.setType(next));
-        typeTrack.current?.(null, vx / cur.segW);
+        const ni = Math.max(0, Math.min(TYPES.length - 1, i + dir)), next = TYPES[ni][0];
+        // The indicator springs on at once, at the finger's speed; the panel (and the editor under it)
+        // redraws for the new type alongside, without holding the spring's frames up.
+        typeTrack.current?.(null, vx / cur.segW, ni);
+        if (next !== live.current.type) startTransition(() => live.current.setType(next));
         return;
       }
       const v = cancelled ? 0 : cur.vy;
