@@ -26,7 +26,7 @@ import { App as CapApp } from "@capacitor/app";
 import { isNative } from "../../platform.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { BAR_GAIN, barTarget, spring } from "./pager.ts";
+import { BAR_GAIN, barSwipeReversed, barTarget, spring } from "./pager.ts";
 import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
@@ -341,7 +341,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "graph") {
     body = <PhoneGraph focusId={Number(query.get("focus")) || 0} />;
   } else if (route === "browse") {
-    body = <PhoneSearch initialKind={query.get("kind") ?? ""} />;
+    body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
     body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : <PhoneSettings />;
   }
@@ -382,7 +382,9 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     const el = bar.current;
     if (!el) return;
     // The tab width is measured once, as the finger lands, not on every move.
-    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number } | null = null;
+    // dir: 1 when the pages follow the finger along the bar (the indicator under it), -1 when reversed
+    // in Settings (a slide to the right goes back, as a swipe on the pages does).
+    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1 } | null = null;
     const tabW = () => g?.w ?? el.clientWidth / TABS.length;
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -399,14 +401,14 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       if (!g.sliding) { pill.current?.classList.remove("pop"); g.x0 += Math.sign(dx) * TOUCH_SLOP; }
       g.sliding = true;
       // The pages go a little further than the finger, so a short slide turns a page.
-      pos.follow(clamp(g.from + (BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST));
+      pos.follow(clamp(g.from + (g.dir * BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST));
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       if (g.sliding) {
         swallowNextClick();
-        const at = clamp(g.from + (BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
-        const vx = g.vt.velocity(e.timeStamp);
+        const at = clamp(g.from + (g.dir * BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
+        const vx = g.dir * g.vt.velocity(e.timeStamp);
         // A flick turns a page whatever the distance; otherwise the nearest one.
         settleRef.current(barTarget(g.from, at, vx, LAST), (BAR_GAIN * vx) / tabW());
       } else if (e.type === "pointerup") {
@@ -418,7 +420,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / TABS.length };
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / TABS.length, dir: barSwipeReversed() ? -1 : 1 };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });

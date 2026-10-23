@@ -15,7 +15,7 @@ import { type Placed, layoutDay } from "../CalendarView.tsx";
 import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
 import { ScopeDialog } from "../ItemEditor.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
-import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
+import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
@@ -99,7 +99,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     { label: "Filter…", icon: "oFilterList", divider: true, onClick: () => setFilterOpen(true) },
     { label: "Show routines", icon: "oTaskAlt", checked: showRoutines, onClick: toggleRoutines },
     { label: "Note for selected day", icon: "oEditNote", onClick: () => openDailyNote(s, anchor) },
-    { label: "Search", icon: "oSearch", onClick: () => go("browse") },
+    { label: "Search", icon: "oSearch", onClick: openSearch },
     { label: "Settings", icon: "oSettings", onClick: () => go("settings") },
   ];
 

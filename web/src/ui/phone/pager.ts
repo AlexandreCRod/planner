@@ -164,6 +164,9 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
 export const BAR_GAIN = 1.3;
 /** A flick along the bar faster than this (px per ms) turns a page whatever the distance. */
 export const BAR_FLING = 0.3;
+/** Settings > "Reverse bottom bar swipe": a slide along the bar turns the pages the other way. */
+export const BAR_REVERSED_KEY = "barSwipeReversed";
+export const barSwipeReversed = () => { try { return localStorage.getItem(BAR_REVERSED_KEY) === "true"; } catch { return false; } };
 
 /**
  * Where the pager settles after a slide along the bottom bar: from page [from], the pages now at [pos]

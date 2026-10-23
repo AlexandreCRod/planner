@@ -80,9 +80,15 @@ export function Scaffold({ title, children, flush, back, actions, bar }: {
   );
 }
 
+/** Opens Search with the filters of the page it's opened from (from Notes, Notes). */
+export function openSearch() {
+  const page = location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] || "today";
+  go(`browse?from=${encodeURIComponent(page)}`);
+}
+
 export function AppBarActions() {
   return <>
-    <IconButton icon="oSearch" label="Search and browse" onClick={() => go("browse")} />
+    <IconButton icon="oSearch" label="Search and browse" onClick={openSearch} />
     <IconButton icon="oSettings" label="Settings" onClick={() => go("settings")} />
   </>;
 }

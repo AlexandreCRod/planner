@@ -557,10 +557,25 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
 const SORTS: [string, string][] = [["updated", "Recently edited"], ["date", "Date"], ["title", "Title"], ["links", "Most connected"]];
 const TYPE_ICON: Record<ItemType, string> = { TASK: "oTaskAlt", EVENT: "fEvent", NOTE: "oDescription" };
 
-export function PhoneSearch({ initialKind }: { initialKind: string }) {
+/** The kinds Search starts with when opened from a page: that page's own (none: All). */
+const PAGE_KINDS: Record<string, string[]> = {
+  notes: ["NOTES"],
+  tasks: ["TASKS", "RECURRING_TASKS"],
+  calendar: ["EVENTS", "RECURRING_EVENTS"],
+};
+
+export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; from?: string }) {
   const s = useSnapshot();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState(KINDS.find((k) => k[0] === initialKind)?.[0] ?? "ALL");
+  // The kinds shown (several can be picked; none is All). Opened from a page, that page's kinds.
+  const [kinds, setKinds] = useState<ReadonlySet<string>>(() => new Set(
+    (initialKind ? initialKind.split(",") : PAGE_KINDS[from] ?? []).filter((k) => KINDS.some(([x]) => x === k && x !== "ALL"))));
+  const toggleKind = (k: string) => setKinds((ks) => {
+    if (k === "ALL") return new Set();
+    const n = new Set(ks);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    return n;
+  });
   const [cat, setCat] = useState<number | null>(null);
   const [tag, setTag] = useState<number | null>(null);
   const [sort, setSort] = useState("updated");
@@ -570,7 +585,8 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
   useEffect(() => { if (!initialKind) { const t = window.setTimeout(() => input.current?.focus(), 250); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => new Map(KINDS.map(([k, , t]) => [k, s.items.filter(t).length])), [s]);
   const results = useMemo(() => {
-    const test = KINDS.find((k) => k[0] === kind)![2];
+    const tests = KINDS.filter(([k]) => kinds.has(k)).map(([, , t]) => t);
+    const test = (i: Item) => !tests.length || tests.some((t) => t(i));
     const ql = q.toLowerCase();
     const qt = ql.replace(/^#/, "");
     return s.items
@@ -580,7 +596,7 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
       .filter((i) => !ql.trim() || i.title.toLowerCase().includes(ql) || preview(i.content, 10000).toLowerCase().includes(ql) || (s.tagsByItem.get(i.id) ?? []).some((t) => t.name.toLowerCase().includes(qt)))
       .sort((a, b) => sort === "title" ? a.title.toLowerCase().localeCompare(b.title.toLowerCase()) : sort === "date" ? (a.startDay ?? a.noteDay ?? 1e9) - (b.startDay ?? b.noteDay ?? 1e9)
         : sort === "links" ? s.neighbours(b.id).size - s.neighbours(a.id).size : b.updatedAt - a.updatedAt);
-  }, [s, q, kind, cat, tag, sort]);
+  }, [s, q, kinds, cat, tag, sort]);
   const shownIds = useMemo(() => results.map((i) => i.id), [results]);
   const sel = useSelection(shownIds);
 
@@ -600,7 +616,7 @@ export function PhoneSearch({ initialKind }: { initialKind: string }) {
       } />}
       <div className="p-content flush">
         <ChipRow className="search">
-          {KINDS.map(([k, l]) => <FilterChip key={k} selected={kind === k} onClick={() => setKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
+          {KINDS.map(([k, l]) => <FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
         </ChipRow>
         {(s.categories.length > 0 || s.tags.length > 0) && (
           <ChipRow className="search">
