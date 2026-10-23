@@ -8,6 +8,7 @@ import { BottomSheet, TextButton } from "./m3.tsx";
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
+import { magnetMinute } from "./dial.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const WD = ["M", "T", "W", "T", "F", "S", "S"];
@@ -259,8 +260,9 @@ export function TimePickerDialog({ value, onPick, onClose }: { value: number | n
       }
       setMin(nh * 60 + mm);
     } else {
-      let nm = Math.round(a * 60) % 60;
-      if (snap) nm = (Math.round(nm / 5) * 5) % 60;
+      // A touch lands on the nearest five; a drag can stop on any minute, drawn gently onto the fives.
+      const nm = snap ? (Math.round(a * 12) * 5) % 60 : magnetMinute(a);
+      if (!snap && nm !== mm && nm % 5 === 0) feel("tick");
       setMin(h * 60 + nm);
     }
   };
