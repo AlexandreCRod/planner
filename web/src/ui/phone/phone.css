@@ -1281,3 +1281,8 @@ html.phone[data-theme="dark"] {
 
 /* A to-do's reminders without a date: the row to pick one. */
 .phone .pe-label.primary-text { color: var(--p-primary); }
+.phone .pa-alarm > .grow { min-width: 0; }
+
+/* The task or event window while its alarm rings: Snooze and Stop at the top. */
+.phone .pe-ringing { display: flex; align-items: center; gap: 8px; margin: 8px 16px 4px; padding: 6px 8px 6px 16px; border-radius: 16px;
+  background: var(--p-primary-container, var(--p-sc-high)); color: var(--p-on-primary-container, var(--text)); font-size: 16px; line-height: 24px; font-weight: 500; }

@@ -49,4 +49,35 @@ class AlarmSchedulerTest {
         assertEquals(false, AlarmScheduler.canSnoozeEarly(now + 15 * 60_000L, now))
         assertEquals(false, AlarmScheduler.canSnoozeEarly(now + 5 * 60_000L, now))
     }
+
+    /** What's out for an occurrence goes once it's ticked, moved, taken out of the series or deleted. */
+    @Test fun shownRemindersNoLongerApplyOnceTickedOrMoved() {
+        val before = Reminder(id = 6, itemId = 1, offsetMin = 30, type = AlertType.REMINDER)
+        val day = mon.toEpochDay()
+        val original = millis(mon, 8, 30)
+        val zone = ZoneId.systemDefault()
+        assertEquals(false, AlarmScheduler.noLongerApplies(daily, before, day, original, emptySet(), 540, zone))
+        assertEquals(true, AlarmScheduler.noLongerApplies(daily, before, day, original, setOf(day), 540, zone))          // ticked that day
+        assertEquals(false, AlarmScheduler.noLongerApplies(daily, before, day, original, setOf(day + 1), 540, zone))    // another day ticked
+        assertEquals(true, AlarmScheduler.noLongerApplies(daily.copy(startMin = 10 * 60), before, day, original, emptySet(), 540, zone)) // moved
+        assertEquals(true, AlarmScheduler.noLongerApplies(daily.copy(excludedDays = "$day"), before, day, original, emptySet(), 540, zone))
+        assertEquals(true, AlarmScheduler.noLongerApplies(daily.copy(deletedAt = 1L), before, day, original, emptySet(), 540, zone))
+        assertEquals(true, AlarmScheduler.noLongerApplies(null, before, day, original, emptySet(), 540, zone))
+        // An event isn't ticked; a time not known isn't checked.
+        val event = daily.copy(type = ItemType.EVENT)
+        assertEquals(false, AlarmScheduler.noLongerApplies(event, before, day, original, setOf(day), 540, zone))
+        assertEquals(false, AlarmScheduler.noLongerApplies(daily.copy(startMin = 10 * 60), before, day, 0L, emptySet(), 540, zone))
+    }
+
+    /** At the start, "Starting now" only for a timed, unticked item with nothing of its own ringing then. */
+    @Test fun startingNowOnlyWhenNothingRingsAtTheStart() {
+        val day = mon.toEpochDay()
+        val early = Reminder(id = 6, itemId = 1, offsetMin = 30, type = AlertType.REMINDER)
+        assertEquals(true, AlarmScheduler.startingNow(daily, listOf(early), day, emptySet()))
+        assertEquals(false, AlarmScheduler.startingNow(daily, listOf(early, alarm), day, emptySet()))   // the alarm rings at the start
+        assertEquals(false, AlarmScheduler.startingNow(daily, listOf(early), day, setOf(day)))          // ticked
+        assertEquals(false, AlarmScheduler.startingNow(daily.copy(startMin = null), listOf(early), day, emptySet()))
+        assertEquals(false, AlarmScheduler.startingNow(daily.copy(allDay = true), listOf(early), day, emptySet()))
+        assertEquals(true, AlarmScheduler.startingNow(daily.copy(type = ItemType.EVENT), listOf(early), day, setOf(day)))
+    }
 }

@@ -145,7 +145,14 @@ class AlarmPlugin : Plugin() {
     data class Perms(val notifications: Boolean, val fullScreen: Boolean, val exact: Boolean, val batteryExempt: Boolean)
 
     @Serializable
-    data class State(val alarms: List<ClockAlarm>, val tools: ClockToolsState, val ring: Ring, val perms: Perms, val zone: String, val weatherApp: String?)
+    data class State(
+        val alarms: List<ClockAlarm>, val tools: ClockToolsState, val ring: Ring, val perms: Perms, val zone: String, val weatherApp: String?,
+        /** What's ringing now, if anything (the item's window shows Stop and Snooze then). */
+        val ringing: Ringing? = null,
+    )
+
+    @Serializable
+    data class Ringing(val itemId: Long, val reminderId: Long, val day: Long, val clockId: Long, val timerId: Long)
 
     @PluginMethod
     fun state(call: PluginCall) {
@@ -156,8 +163,19 @@ class AlarmPlugin : Plugin() {
             perms = perms(),
             zone = ZoneId.systemDefault().id,
             weatherApp = weatherApp()?.second,
+            ringing = AlarmService.ringing?.let { Ringing(it.itemId, it.reminderId, it.day, it.clockId, it.timerId) },
         )
         ok(call, json.encodeToString(State.serializer(), s))
+    }
+
+    /** Stops what's ringing ("stop"), or snoozes it ("snooze"), as the ringing screen's buttons do. */
+    @PluginMethod
+    fun stopRinging(call: PluginCall) {
+        if (AlarmService.ringing == null) return ok(call)
+        val action = if (call.getString("action") == "snooze") AlarmService.ACTION_SNOOZE else AlarmService.ACTION_DISMISS
+        runCatching { context.startService(Intent(context, AlarmService::class.java).setAction(action)) }
+            .onFailure { return call.reject("can't stop: ${it.message}") }
+        ok(call)
     }
 
     private fun perms(): Perms {

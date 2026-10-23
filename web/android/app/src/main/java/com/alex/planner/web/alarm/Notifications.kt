@@ -21,7 +21,10 @@ object Notifications {
     const val CH_ALARM = "alarms"
     const val CH_UPCOMING = "upcoming"
     const val CH_TIMER = "timers"
+    /** "Starting now" when an item starts: pops up, but without a sound. */
+    const val CH_STARTING = "starting"
     private const val TAG_UPCOMING = "upcoming"
+    private const val TAG_STARTING = "starting"
 
     const val EXTRA_OPEN_ITEM = "openItemId"
     /** Opens a section of the Alarms page ("alarm", "timer"...). */
@@ -52,6 +55,11 @@ object Notifications {
                 // The countdown while a timer runs; the ringing itself goes through the alarm channel.
                 NotificationChannel(CH_TIMER, "Timers", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Time left on running timers"
+                    setSound(null, null)
+                    enableVibration(false)
+                },
+                NotificationChannel(CH_STARTING, "Starting now", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "When a task or event that had a reminder starts; pops up quietly while you use the phone"
                     setSound(null, null)
                     enableVibration(false)
                 },
@@ -139,6 +147,7 @@ object Notifications {
         if (nm.areNotificationsEnabled()) {
             try {
                 nm.notify(TAG_UPCOMING, smallId(reminderId), b.build())
+                Shown.put(context, Shown.UPCOMING, reminderId, day, original)
             } catch (_: SecurityException) {
             }
         }
@@ -147,10 +156,49 @@ object Notifications {
     fun cancelUpcoming(context: Context, reminderId: Long) =
         NotificationManagerCompat.from(context).cancel(TAG_UPCOMING, smallId(reminderId))
 
-    fun actionIntent(context: Context, action: String, itemId: Long, reminderId: Long, day: Long, original: Long = 0L): PendingIntent {
+    /**
+     * "Starting now" for [item]: a quiet pop-up while the phone is in use, otherwise (locked, screen off, or
+     * quiet hours) a plain entry in the shade. Goes by itself after a while.
+     */
+    fun showStarting(context: Context, item: Item, day: Long, quiet: Boolean) {
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
+        val inUse = power?.isInteractive == true && keyguard?.isKeyguardLocked != true
+        val popUp = inUse && !quiet
+        val start = item.startMin ?: return
+        val b = NotificationCompat.Builder(context, if (popUp) CH_STARTING else CH_NOTIFY)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(item.title.ifBlank { "Untitled" })
+            .setContentText("Starting now · ${formatTime(start)}")
+            .setContentIntent(openItemIntent(context, item.id))
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(STARTING_SHOWN_MS)
+            .setCategory(if (item.type == ItemType.EVENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(if (popUp) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
+        if (item.type == ItemType.TASK) {
+            b.addAction(0, "Done", actionIntent(context, AlarmReceiver.ACTION_DONE, item.id, 0L, day, key = "start-${item.id}"))
+        }
+        val nm = NotificationManagerCompat.from(context)
+        if (nm.areNotificationsEnabled()) {
+            try {
+                nm.notify(TAG_STARTING, smallId(item.id), b.build())
+            } catch (_: SecurityException) {
+            }
+        }
+    }
+
+    /** How long "Starting now" stays in the shade. */
+    private const val STARTING_SHOWN_MS = 30 * 60_000L
+
+    fun cancelStarting(context: Context, itemId: Long) =
+        NotificationManagerCompat.from(context).cancel(TAG_STARTING, smallId(itemId))
+
+    /** [key] tells the buttons' intents apart (by default the reminder; "Starting now" has none). */
+    fun actionIntent(context: Context, action: String, itemId: Long, reminderId: Long, day: Long, original: Long = 0L, key: String = reminderId.toString()): PendingIntent {
         val i = Intent(context, AlarmReceiver::class.java).apply {
             this.action = action
-            data = Uri.parse("planner-alarm://action/$reminderId/${action.substringAfterLast('.')}")
+            data = Uri.parse("planner-alarm://action/$key/${action.substringAfterLast('.')}")
             putExtra(AlarmReceiver.EXTRA_ITEM, itemId)
             putExtra(AlarmReceiver.EXTRA_REMINDER, reminderId)
             putExtra(AlarmReceiver.EXTRA_DAY, day)

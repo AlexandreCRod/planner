@@ -6,13 +6,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.media.VolumeProvider
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -24,8 +30,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Rings an alarm on the alarm audio stream (audible in silent mode) until dismissed or snoozed,
- * showing [AlarmActivity] full screen. Gives up after [TIMEOUT_MS] and leaves a missed-alarm notice.
+ * Rings an alarm on the alarm audio stream (audible in silent and vibrate mode) until stopped or snoozed,
+ * showing [AlarmActivity] full screen. It can always be stopped: Stop on the screen and in the
+ * notification, a volume button (on the screen, and through a media session while only the notification
+ * shows), swiping the notification away, or the item's own window ([ringing], AlarmPlugin.stopRinging).
+ * Gives up after the minutes set in Settings ([AlarmSettings.alarmRingMinutes] for events and tasks,
+ * [AlarmSettings.clockRingMinutes] for clock alarms and timers) and leaves a missed-alarm notice.
  * (Copied from the native app's AlarmService.)
  */
 class AlarmService : Service() {
@@ -36,7 +46,16 @@ class AlarmService : Service() {
         const val ACTION_SNOOZE = "com.alex.planner.web.ALARM_SNOOZE"
         const val ACTION_COMPLETE = "com.alex.planner.web.ALARM_COMPLETE"
         private const val NOTIF_ID = 777_000
-        private const val TIMEOUT_MS = 5 * 60_000L
+
+        /** What's ringing now (ids are 0 when not that kind), for the page's item window. */
+        data class Ringing(val itemId: Long, val reminderId: Long, val day: Long, val clockId: Long, val timerId: Long)
+
+        @Volatile var ringing: Ringing? = null
+            private set
+
+        /** How long it rings before it stops by itself, from Settings. */
+        fun ringMillis(settings: AlarmSettings, clockOrTimer: Boolean): Long =
+            (if (clockOrTimer) settings.clockRingMinutes else settings.alarmRingMinutes).coerceIn(1, 60) * 60_000L
 
         fun stopIntent(context: Context, action: String) =
             PendingIntent.getService(
@@ -47,10 +66,13 @@ class AlarmService : Service() {
 
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
+    private var session: MediaSession? = null
+    private var focus: AudioFocusRequest? = null
     private val handler = Handler(Looper.getMainLooper())
     private var itemId = 0L
     private var reminderId = 0L
     private var day = 0L
+    private var original = 0L
     private var title = ""
     /** Set when a clock alarm (Alarms page) is ringing rather than a task or event's alarm. */
     private var clockId = 0L
@@ -69,6 +91,7 @@ class AlarmService : Service() {
         itemId = intent?.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0) ?: 0
         reminderId = intent?.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0) ?: 0
         day = intent?.getLongExtra(AlarmReceiver.EXTRA_DAY, 0) ?: 0
+        original = intent?.getLongExtra(AlarmReceiver.EXTRA_ORIGINAL, 0) ?: 0
         clockId = intent?.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) ?: 0
         timerId = intent?.getLongExtra(ClockTools.EXTRA_TIMER, 0) ?: 0
         val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty()
@@ -77,7 +100,7 @@ class AlarmService : Service() {
         val clock = if (clockId != 0L) ClockAlarms.get(this, clockId) else null
         title = when {
             timerId != 0L -> "Time's up"
-            clockId != 0L -> "Alarm"
+            clockId != 0L -> clock?.label?.trim()?.ifBlank { null } ?: "Alarm"
             else -> Mirror.item(this, itemId)?.title?.ifBlank { "Alarm" } ?: "Alarm"
         }
         val full = Intent(this, AlarmActivity::class.java).apply {
@@ -99,15 +122,39 @@ class AlarmService : Service() {
             .setOngoing(true)
             .setFullScreenIntent(fullPi, true)
             .setContentIntent(fullPi)
-            .addAction(0, "Dismiss", stopIntent(this, ACTION_DISMISS))
+            .addAction(0, "Stop", stopIntent(this, ACTION_DISMISS))
             .addAction(0, if (timerId != 0L) "+1 min" else "Snooze", stopIntent(this, ACTION_SNOOZE))
+            // Newer Androids let a ringing alarm's notification be swiped away: that stops it, so it
+            // never rings on with nothing left to stop it with.
+            .setDeleteIntent(stopIntent(this, ACTION_DISMISS))
             .build()
         // Started from the foreground-service start the receiver made, so this must come straight away.
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
         ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
         startRinging(sound)
-        handler.postDelayed({ timeout(text) }, TIMEOUT_MS)
+        listenToVolumeKeys()
+        handler.postDelayed({ timeout(text) }, ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L))
+        ringing = Ringing(itemId, reminderId, day, clockId, timerId)
+        AlarmEvents.changed("ringing")
         return START_NOT_STICKY
+    }
+
+    /**
+     * A volume button stops it while only the notification shows (the full screen handles its own keys):
+     * an active media session with its own volume control takes the presses.
+     */
+    private fun listenToVolumeKeys() {
+        session = runCatching {
+            MediaSession(this, "PlannerAlarm").apply {
+                setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, 10, 5) {
+                    override fun onAdjustVolume(direction: Int) {
+                        if (direction != 0) handler.post { finishAlarm() }
+                    }
+                })
+                setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
+                isActive = true
+            }
+        }.getOrNull()
     }
 
     private fun startRinging(sound: String?) {
@@ -121,17 +168,30 @@ class AlarmService : Service() {
         } else {
             @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
         }
-        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 600), 0))
+        // As an alarm, so it buzzes in silent mode too.
+        val wave = VibrationEffect.createWaveform(longArrayOf(0, 800, 600), 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator?.vibrate(wave, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
+        } else {
+            @Suppress("DEPRECATION") vibrator?.vibrate(wave, alarmAudio)
+        }
     }
 
+    /** The alarm stream: it plays at alarm volume whatever the ringer mode (silent, vibrate). */
+    private val alarmAudio: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .setLegacyStreamType(AudioManager.STREAM_ALARM)
+        .build()
+
     private fun play(uri: Uri): MediaPlayer? = runCatching {
+        if (focus == null) {
+            // Other sound (music, a video) pauses while it rings.
+            focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(alarmAudio).build()
+                .also { getSystemService(AudioManager::class.java)?.requestAudioFocus(it) }
+        }
         MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
+            setAudioAttributes(alarmAudio)
             setDataSource(this@AlarmService, uri)
             isLooping = true
             prepare()
@@ -144,6 +204,10 @@ class AlarmService : Service() {
         player?.runCatching { stop(); release() }
         player = null
         vibrator?.cancel()
+        session?.runCatching { isActive = false; release() }
+        session = null
+        focus?.let { f -> getSystemService(AudioManager::class.java)?.runCatching { abandonAudioFocusRequest(f) } }
+        focus = null
     }
 
     private fun timeout(text: String) {
@@ -161,6 +225,7 @@ class AlarmService : Service() {
     private fun snoozeAndStop() {
         val ctx = applicationContext
         val (i, r, d) = Triple(itemId, reminderId, day)
+        val o = original
         val clock = clockId
         val timer = timerId
         CoroutineScope(Dispatchers.IO).launch {
@@ -179,7 +244,7 @@ class AlarmService : Service() {
             val item = Mirror.item(ctx, i)
             val reminder = Mirror.reminder(ctx, r)
             if (item != null && reminder != null) {
-                AlarmScheduler.snooze(ctx, item, reminder, d, Mirror.settings(ctx).snoozeMinutes)
+                AlarmScheduler.snooze(ctx, item, reminder, d, Mirror.settings(ctx).snoozeMinutes, o)
             }
         }
         finishAlarm()
@@ -191,12 +256,15 @@ class AlarmService : Service() {
         CoroutineScope(Dispatchers.IO).launch {
             val item = Mirror.item(ctx, i) ?: return@launch
             Mirror.markDone(ctx, i, if (item.isRecurring) d else (item.startDay ?: d))
+            // Its other reminders for that day go too.
+            AlarmScheduler.refreshItem(ctx, i)
         }
         finishAlarm()
     }
 
     private fun finishAlarm() {
         stopRinging()
+        if (ringing != null) { ringing = null; AlarmEvents.changed("ringing") }
         sendBroadcast(Intent(AlarmActivity.ACTION_CLOSE).setPackage(packageName))
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -204,6 +272,7 @@ class AlarmService : Service() {
 
     override fun onDestroy() {
         stopRinging()
+        if (ringing != null) { ringing = null; AlarmEvents.changed("ringing") }
         super.onDestroy()
     }
 }

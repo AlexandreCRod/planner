@@ -360,6 +360,20 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
   </>;
 }
 
+/** While one of the item's alarms rings: Snooze and Stop right here (it rings on whatever the screen shows). */
+function RingingNow({ itemId }: { itemId: number }) {
+  const { ringing } = useAlarmState();
+  if (!ringing || ringing.itemId !== itemId) return null;
+  return (
+    <div className="pe-ringing" role="alert">
+      <MIcon name="oAlarm" size={22} />
+      <span className="grow">Ringing now</span>
+      <TextButton onClick={() => void native.stopRinging("snooze")}>Snooze</TextButton>
+      <button className="p-filled-btn" onClick={() => void native.stopRinging("stop")}>Stop</button>
+    </div>
+  );
+}
+
 /** Said once under the alerts: where they ring (this phone, unless turned off; on the PC, the Android app). */
 function AlertsHint({ className }: { className: string }) {
   const { ring } = useAlarmState();
@@ -631,6 +645,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         </span>
       </>} />
       <div className="p-content pe-body">
+        <RingingNow itemId={id} />
         <div className="pe-head">
           <button className="pe-bar" style={{ background: color }} aria-label="Colour" onClick={() => setEditing("color")} />
           <div className="grow">

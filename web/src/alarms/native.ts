@@ -16,7 +16,13 @@ export interface Stopwatch { startedAt: number | null; accumulatedMs: number; la
 export interface ClockToolsState { timers: ClockTimer[]; stopwatch: Stopwatch; zones: string[] }
 export interface RingState { rings: boolean }
 export interface Perms { notifications: boolean; fullScreen: boolean; exact: boolean; batteryExempt: boolean }
-export interface AlarmState { alarms: ClockAlarm[]; tools: ClockToolsState; ring: RingState; perms: Perms; zone: string; weatherApp: string | null }
+/** What's ringing right now (AlarmService): an item's alarm, a clock alarm or a timer; ids are 0 when not that kind. */
+export interface Ringing { itemId: number; reminderId: number; day: number; clockId: number; timerId: number }
+export interface AlarmState {
+  alarms: ClockAlarm[]; tools: ClockToolsState; ring: RingState; perms: Perms; zone: string; weatherApp: string | null;
+  /** Missing from engines before 2.2. */
+  ringing?: Ringing | null;
+}
 /** One line of an item's early alarm controls (native EarlyAlarmControls). */
 export interface Control { kind: "soon" | "skipped" | "rang"; reminderId: number; at: number; original: number; canSnooze: boolean }
 
@@ -45,6 +51,7 @@ interface Plugin {
   openWeather(o: { url: string }): Promise<{ opened: string }>;
   requestNotifications(): Promise<{ granted: boolean }>;
   openSettings(o: { which: "notifications" | "fullScreen" | "battery" | "exact" }): Promise<void>;
+  stopRinging(o: { action: "stop" | "snooze" }): Promise<void>;
   addListener(event: "changed" | "launch", fn: (e: { what?: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
@@ -83,9 +90,11 @@ export const native = {
   openWeather: (url: string) => call((p) => p.openWeather({ url }), { opened: "" }),
   requestNotifications: () => call((p) => p.requestNotifications(), { granted: false }),
   openSettings: (which: "notifications" | "fullScreen" | "battery" | "exact") => call((p) => p.openSettings({ which }), undefined),
+  /** Stops what's ringing, or snoozes it. */
+  stopRinging: (action: "stop" | "snooze") => call((p) => p.stopRinging({ action }), undefined),
 };
 
-/** Listens to the engine: "changed" carries what changed ("clock", "tools", "overrides", "done", "widget", "ring", "resume"). */
+/** Listens to the engine: "changed" carries what changed ("clock", "tools", "overrides", "done", "widget", "ring", "ringing", "resume"). */
 export function onNative(event: "changed" | "launch", fn: (what: string) => void): () => void {
   if (!plugin) return () => {};
   const h = plugin.addListener(event, (e) => fn(e?.what ?? ""));

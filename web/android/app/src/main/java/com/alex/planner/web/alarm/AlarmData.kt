@@ -69,6 +69,10 @@ data class AlarmSettings(
     val dateFormat: Int = 0,
     /** Index into [accents], for the ringing screen. */
     val accent: Int = 0,
+    /** How long an event or task alarm rings before it stops by itself, in minutes. */
+    val alarmRingMinutes: Int = 1,
+    /** The same for clock alarms and timers. */
+    val clockRingMinutes: Int = 10,
 )
 
 @Serializable

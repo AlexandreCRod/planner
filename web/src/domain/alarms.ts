@@ -18,6 +18,10 @@ export interface AlarmSettings {
   quietHoursEnabled: boolean;
   quietStart: number;
   quietEnd: number;
+  /** How long an event or task alarm rings before it stops by itself, in minutes (missing before 2.2: 1). */
+  alarmRingMinutes: number;
+  /** The same for clock alarms and timers (missing before 2.2: 10). */
+  clockRingMinutes: number;
 }
 
 /** The fields of an item the engine schedules with (its Item class). */

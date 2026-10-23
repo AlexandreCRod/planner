@@ -21,7 +21,7 @@ import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
-import { SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
+import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
 
@@ -51,6 +51,7 @@ function SwitchRow({ title, checked, onChange, supporting }: { title: string; ch
 }
 
 const SNOOZES: [string, string][] = SNOOZE_CHOICES.map((m) => [String(m), `${m} min`]);
+const minutesChoice = (m: number): [string, string] => [String(m), m === 1 ? "1 minute" : `${m} minutes`];
 
 /**
  * "Reminders & alarms": whether event and task alarms ring on this phone (on by default), the alarm
@@ -74,6 +75,10 @@ function AlarmSettingsSection() {
     <ListItem headline="Time for untimed reminders" supporting={<span className="ps-pre">{`${formatTime(st.defaultTaskTime)}\nUsed for tasks without a time and all-day events`}</span>} onClick={() => setTime("task")} />
     <ListItem headline="Default alarm sound" supporting={st.defaultAlarmSound == null ? "System alarm" : st.defaultAlarmSoundName ?? "Custom"} onClick={() => void pickSound()} />
     <ChoiceRow title="Snooze length" value={String(st.snoozeMinutes)} options={SNOOZES} onPick={(v) => setAlarmSettings({ snoozeMinutes: Number(v) })} />
+    <ChoiceRow title="Event and task alarms ring for" value={String(st.alarmRingMinutes)} options={ALARM_RING_CHOICES.map(minutesChoice)}
+      onPick={(v) => setAlarmSettings({ alarmRingMinutes: Number(v) })} />
+    <ChoiceRow title="Clock alarms and timers ring for" value={String(st.clockRingMinutes)} options={CLOCK_RING_CHOICES.map(minutesChoice)}
+      onPick={(v) => setAlarmSettings({ clockRingMinutes: Number(v) })} />
     <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
       supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
     <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />

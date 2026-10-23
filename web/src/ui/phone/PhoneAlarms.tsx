@@ -358,7 +358,7 @@ function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hour
   return (
     <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
       <div className="grow">
-        {a.label.trim() && <div className="t-body-medium pa-label">{a.label.trim()}</div>}
+        {a.label.trim() && <div className="t-body-medium pa-label pa-line">{a.label.trim()}</div>}
         <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
         <div className="t-body-medium muted pa-line">{scheduleLine(a, now)}</div>
       </div>
@@ -466,7 +466,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
         <div className="p-divider" />
         <label className="pa-erow">
           <MIcon name="oLabel" />
-          <input className="pa-label-input" value={label} placeholder="Add label" enterKeyHint="done" autoCapitalize="sentences"
+          <input className="pa-label-input" value={label} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
             onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
         </label>
         <div className="p-divider" />
