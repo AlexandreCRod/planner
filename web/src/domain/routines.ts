@@ -6,11 +6,28 @@ import { type CompletionIndex, type TaskEntry, currentEntry, streak } from "./sc
 import { type Item, isRecurring } from "./types.ts";
 
 /**
- * Whether [item] counts as a routine: marked as one, and still a repeating task. A mark left on a task
- * that no longer repeats (or was turned into an event, or is in the trash) is ignored.
+ * Whether [item] counts as a routine: marked as one, and still a repeating task, or one day of a routine
+ * changed on its own (a copy with the series as parent, which doesn't repeat itself). A mark left on a
+ * task that no longer repeats (or was turned into an event, or is in the trash) is ignored.
  */
 export function isRoutineItem(item: Item): boolean {
-  return item.routine === true && item.type === "TASK" && isRecurring(item) && item.startDay !== null && item.deletedAt === null;
+  return item.routine === true && item.type === "TASK" && (isRecurring(item) || item.parentId !== null) &&
+    item.startDay !== null && item.deletedAt === null;
+}
+
+/** A routine itself (the repeating one), not one of its days changed on its own: for lists and streaks. */
+export function isRoutineSeries(item: Item): boolean {
+  return isRoutineItem(item) && isRecurring(item);
+}
+
+/** The routine a day belongs to: the series for one of its days changed on its own, else [item] itself. */
+export function routineSeriesOf(item: Item, byId: ReadonlyMap<number, Item>): Item {
+  return !isRecurring(item) && item.parentId !== null ? byId.get(item.parentId) ?? item : item;
+}
+
+/** Whether a task can carry the routine mark: one that repeats, or a single changed day of one. */
+export function canBeRoutine(item: Pick<Item, "type" | "freq" | "parentId">): boolean {
+  return item.type === "TASK" && (item.freq !== "NONE" || item.parentId !== null);
 }
 
 /**
@@ -80,7 +97,7 @@ export interface RoutineRow {
 /** Every routine, for the list opened from Today's chips: by time (untimed last), then title. */
 export function routineList(items: Item[], done: CompletionIndex, today: number): RoutineRow[] {
   return items
-    .filter((i) => isRoutineItem(i))
+    .filter((i) => isRoutineSeries(i))
     .map((item): RoutineRow => {
       const on = occursOn(item, today);
       return {

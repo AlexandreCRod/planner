@@ -4,7 +4,7 @@ import { searchNominatim } from "./phone/device.ts";
 import { epochOf, formatDate, formatTime, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
-import { isRoutineItem } from "../domain/routines.ts";
+import { canBeRoutine, isRoutineItem } from "../domain/routines.ts";
 import { defaultOffset, firstReminders } from "../domain/reminders.ts";
 import { preview } from "../domain/text.ts";
 import {
@@ -128,7 +128,7 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
     } else it = { ...it, endDay: null, endMin: null, allDay: false };
     if (it.freq !== "NONE" && it.startDay === null) it.startDay = todayEpoch();
     // Only a repeating task can be a routine.
-    if (it.routine && !(it.type === "TASK" && it.freq !== "NONE")) it.routine = false;
+    if (it.routine && !canBeRoutine(it)) it.routine = false;
     return it;
   };
 

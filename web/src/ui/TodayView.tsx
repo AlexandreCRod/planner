@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
-import { isRoutineItem, routineList, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
+import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
 import { showStreaks } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
@@ -187,7 +187,7 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
     <div className="p-rchips" role="list">
       {list.map((e) => {
         const ticked = e.status === "DONE";
-        const st = streaks ? routineStreak(e.item, s.done, t) : null;
+        const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
         return (
           <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
             streak={st && st.current > 1 ? st.current : 0}
@@ -239,7 +239,7 @@ function PcRoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; d
     <div className="rchips" role="list">
       {list.map((e) => {
         const ticked = e.status === "DONE";
-        const st = streaks ? routineStreak(e.item, s.done, t) : null;
+        const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
         const title = e.item.title || "Untitled";
         return (
           <span key={e.item.id} role="listitem" className={`rchip ${ticked ? "done" : ""} ${e.status === "MISSED" ? "missed" : ""}`}>

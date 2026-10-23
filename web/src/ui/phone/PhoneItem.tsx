@@ -26,7 +26,7 @@ import { HeldTime } from "./TimeWheel.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
-import { isRoutineItem, routineEntry, routineStreak } from "../../domain/routines.ts";
+import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, showStreaks } from "../../store/routines.ts";
 import { count } from "../../domain/plural.ts";
 
@@ -649,7 +649,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
-        {!isEvent && isRecurring(item) && (
+        {canBeRoutine(item) && (
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
             onClick={() => setRoutine(item, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(item, v)} label="Routine" />} />
         )}
@@ -683,7 +683,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           )}
         </div>
 
-        {routine && showStreaks() && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
+        {isRoutineSeries(item) && showStreaks() && <><SectionHeader>History</SectionHeader><TaskStats item={item} s={s} /></>}
         {hasLinks && <PhoneLinks id={id} s={s} />}
         <div style={{ height: 96 }} />
       </div>
@@ -870,7 +870,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   // The Routine switch: the task's synced `routine` field, saved with it.
   const routine = d.routine === true;
   const setRoutineDraft = (on: boolean) => set({ routine: on });
-  const canBeRoutine = d.type === "TASK" && d.freq !== "NONE";
+  const routinable = canBeRoutine(d);
   const category = d.categoryId !== null ? s.categoryById.get(d.categoryId) : undefined;
   const color = d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf({ ...d, categoryId: null, color: null });
   const tagList = () => cur.tags.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean);
@@ -888,8 +888,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const save = (scope?: EditScope) => {
     const item = finalItem();
     if (original && isRecurring(original) && occ !== null && !scope) { setScopeOpen(true); return; }
-    // Only a repeating task can be a routine; one that stops repeating loses the mark.
-    if (item.routine && !(item.type === "TASK" && item.freq !== "NONE")) item.routine = false;
+    // Only a repeating task (or one day of one) can be a routine; one that stops repeating loses the mark.
+    if (item.routine && !canBeRoutine(item)) item.routine = false;
     if (original && scope && occ !== null) {
       const edited = scope === "THIS" ? { ...item, startDay: item.startDay !== original.startDay ? item.startDay : occ } : item;
       saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
@@ -937,7 +937,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
 
         <WhenFields d={d} set={set} />
         <RepeatEditor d={d} expanded={d.freq !== "NONE" || added.has("repeat")} onExpand={() => setAdded(new Set([...added, "repeat"]))} onChange={(i) => emit({ ...curRef.current, item: i })} />
-        {canBeRoutine && (
+        {routinable && (
           <FieldRow icon="oTaskAlt" onClick={() => setRoutineDraft(!routine)}>
             <span className="pe-label grow">Routine<span className="pe-sublabel">On Today's checklist; a missed day ends the streak instead of piling up</span></span>
             <Switch checked={routine} onChange={setRoutineDraft} label="Routine" />
@@ -964,7 +964,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
               label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
-          {d.startDay !== null && !(canBeRoutine && routine) && (
+          {d.startDay !== null && !(routinable && routine) && (
             <FieldRow icon="oUpdate">
               <MenuText text={overdueText(d.overduePolicy)} items={overdueItems((p) => set({ overduePolicy: p }))} />
             </FieldRow>

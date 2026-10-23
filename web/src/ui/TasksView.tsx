@@ -2,7 +2,7 @@ import { useState } from "react";
 import { today as todayEpoch } from "../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../domain/schedule.ts";
 import { NO_DAY, isRecurring, newItem } from "../domain/types.ts";
-import { isRoutineItem, routineEntry } from "../domain/routines.ts";
+import { isRoutineItem, isRoutineSeries, routineEntry } from "../domain/routines.ts";
 import { showStreaks } from "../store/routines.ts";
 import { saveItem, toggleCompletion, useSnapshot } from "../store/store.ts";
 import { Icon, TaskRow, go, useCheckedHold, useNow } from "./common.tsx";
@@ -68,7 +68,7 @@ export function TasksView() {
               setCollapsed(n);
             }}>{isCollapsed ? "▸" : "▾"} {g} ({list.length})</div>
             {!isCollapsed && list.map((e, index) => (
-              <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={streaks && isRoutineItem(e.item) ? streak(e.item, s.done, t) : undefined}
+              <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
                 onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
             ))}
           </div>

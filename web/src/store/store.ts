@@ -262,13 +262,17 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
   const freshReminders = reminders.map((r) => ({ ...r, id: 0 }));
   if (scope === "ALL") return saveItem({ ...edited, id: series.id }, { reminders, tags });
   if (scope === "THIS") {
+    const wasDone = s.done.isDone(series.id, day);
     deleteOccurrence(series, day);
     const startDay = edited.startDay !== series.startDay ? edited.startDay : day;
     const newIdNum = saveItem(
-      // A single changed day doesn't repeat, so it isn't a routine (the series keeps its mark).
-      { ...edited, id: 0, freq: "NONE", parentId: series.id, excludedDays: "", untilDay: null, startDay, endDay: (startDay ?? day) + span, routine: false },
+      // A single changed day of a routine is still that routine's day: it keeps the mark (and stays on
+      // Today's checklist instead of the series' own day), and a tick it already had comes with it.
+      { ...edited, id: 0, freq: "NONE", parentId: series.id, excludedDays: "", untilDay: null, startDay, endDay: (startDay ?? day) + span,
+        routine: series.routine === true && edited.routine !== false && series.type === "TASK" && edited.type === "TASK" },
       { reminders: freshReminders, tags },
     );
+    if (wasDone && startDay !== null) put("completions", { itemId: newIdNum, day: startDay, completedAt: Date.now() });
     addLink(newIdNum, series.id);
     return newIdNum;
   }

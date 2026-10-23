@@ -5,7 +5,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { formatDate } from "../../domain/dates.ts";
 import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
-import { isRoutineItem, routineEntry } from "../../domain/routines.ts";
+import { isRoutineItem, isRoutineSeries, routineEntry } from "../../domain/routines.ts";
 import { showStreaks } from "../../store/routines.ts";
 import { preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
@@ -145,7 +145,7 @@ function ScheduledList() {
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
             <SwipeToTrash key={e.item.id} item={e.item}>
-              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineItem(e.item) ? streak(e.item, s.done, t) : undefined}
+              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
                 onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
             </SwipeToTrash>
           ))}
