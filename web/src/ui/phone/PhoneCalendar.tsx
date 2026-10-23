@@ -526,9 +526,17 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     // While the days slide, every day keeps its line (the one before the first day in view too), and
     // the lines between one range and the next are drawn in a stronger colour, so the step from week to week shows.
     const root = el.parentElement;
+    let lines: HTMLElement[] | null = null;
     const moveLayers = (x: number) => {
       for (const l of layers()) if (l) l.style.transform = x ? `translate3d(${x}px,0,0)` : "";
       root?.classList.toggle("swiping", x !== 0);
+      // The lines between ranges: strongest midway, gone at rest (where the days started or end up).
+      const w = layer.current?.clientWidth ?? 0;
+      if (!lines) lines = root ? [...root.querySelectorAll<HTMLElement>(".pg-rangeline")] : [];
+      const away = w > 0 ? Math.max(0, Math.min(Math.abs(x), w - Math.abs(x))) : 0;
+      const o = away > 0.5 ? String(Math.min(1, away / (0.18 * w))) : "";
+      for (const ln of lines) ln.style.opacity = o;
+      if (!x) lines = null;
     };
     const colW = () => (layer.current?.clientWidth ?? 300) / daysRef.current.length;
     // The days follow 1.2 times the finger, written once per frame.
@@ -764,6 +772,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       <div className="pg-head">
         <div className="pg-gutter" />
         <div className="pg-head-days"><div className="pg-strip" ref={headDays}>
+          {[0, 1, 2].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${(k * 100) / 3}%` }} />)}
           {all.map((d, j) => count === 1 ? (
             // One day: its date fills the header (the number large, the weekday and month beside it).
             <div key={d} className={`pg-dh one ${d === t ? "today" : ""}`} role="button" onClick={() => onDayHeader(d)}>
@@ -802,6 +811,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
               );
             })}
             <SpanBars lanes={adLanes} cap={3} cols={all.length} byKey={spanByKey} s={s} className="pg-chip pg-bar" open />
+            {[0, 1, 2].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${(k * 100) / 3}%` }} />)}
           </div></div>
         </div>
       )}
@@ -812,6 +822,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           </div>
           <div className="pg-grid">
             <div className="pg-layer" ref={layer}>
+              {[-1, 0, 1].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${k * 100}%` }} />)}
               {all.map((d, j) => (
                 <div key={d} className={`pg-col ${j === count ? "first" : ""} ${j % count === 0 ? "range" : ""}`} style={{ left: `${(j - count) * colPct}%`, width: `${colPct}%` }}>
                   {timed[j].map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}

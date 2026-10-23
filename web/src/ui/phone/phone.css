@@ -244,7 +244,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-layer { position: absolute; inset: 0; }
 .phone .pg-col { position: absolute; top: 0; bottom: 0; }
 .phone .pg-col { border-left: 1px solid var(--line); }
-.phone .pg-col.first { border-left: 0; }
 .phone .pg-block {
   position: absolute; z-index: 1; border: 1px solid transparent; background-clip: padding-box !important; border-radius: 7px;
   padding: 2px 4px; overflow: hidden; font-size: 11px; line-height: 12px; font-weight: 500;
@@ -761,12 +760,12 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-rb-more .p-rb-btn { flex: none; width: 48px; }
 .phone .p-rb-btn.on { color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 12%, transparent); background-clip: content-box; padding: 4px; }
 .phone .rich.is-empty::before { content: attr(data-placeholder); color: var(--muted); opacity: 1; }
-/* While the days slide: a line before every day (none is missing at the edge of the old range), and a
-   stronger one where one range meets the next, through the header, the all-day strip and the grid:
-   as thin as the day lines, in the outline colour instead of outline-variant. */
-.phone .pg.swiping .pg-col.first { border-left: 1px solid var(--line); }
-.phone .pg.swiping .pg-col.range { border-left: 1px solid var(--p-outline); }
-.phone .pg.swiping .pg-dh.range, .phone .pg.swiping .pg-adcol.range { box-shadow: inset 1px 0 0 var(--p-outline); }
+/* Where one range of days meets the next, a stronger line through the header, the all-day strip and
+   the grid: shown while the days slide, fading in as they leave their place and out as they reach the
+   next, so nothing jumps when they settle (TimeGrid sets the opacity with the transform). */
+.phone .pg-rangeline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--p-outline); opacity: 0; pointer-events: none; z-index: 3; }
+/* The sliding layers are the compositor's own, so a swipe only moves them (no repaint). */
+.phone .pg-layer, .phone .pg-strip { will-change: transform; }
 /* The slot tapped for a new event: just its outline, in the event's colour. */
 .phone .pg-slot { box-sizing: border-box; background: none; border: 2px solid #039be5; padding: 0; color: inherit; }
 /* Add panel: the small panel's settings chips, and the full editor's handle strip. */
