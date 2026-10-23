@@ -1,14 +1,13 @@
-// App updates (phone build only): when the app opens, at most every 6 hours, it asks GitHub for the
-// project's latest release (one plain GET, no token, nothing about this phone or its data is sent).
+// App updates (phone build only): when the app opens, and when it's brought back from the background,
+// at most every 6 hours, it asks GitHub for the project's latest release (one plain GET, no token, nothing about this phone or its data is sent).
 // A newer version than the installed one is offered in a popup (UpdateHost.tsx); "Later" hides it
 // until a still newer release appears. The download and Android's installer are in UpdatePlugin.kt.
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
-import { isNewerVersion } from "../../domain/version.ts";
+import { isNewerVersion, updateCheckDue } from "../../domain/version.ts";
 import { isNative } from "../../platform.ts";
 
 const LATEST_URL = "https://api.github.com/repos/AlexandreCRod/planner/releases/latest";
-const CHECK_EVERY_MS = 6 * 3600_000;
 const CHECKED_KEY = "updateCheckedAt";
 const DISMISSED_KEY = "updateDismissed";
 /** Debug builds only: pretend to be this version, to try the popup (ignored in release builds). */
@@ -71,10 +70,7 @@ export type CheckResult = "newer" | "current" | "failed";
  */
 export async function checkForUpdate(manual: boolean): Promise<CheckResult> {
   if (!plugin) return "failed";
-  if (!manual) {
-    const last = Number(get(CHECKED_KEY) ?? 0);
-    if (Date.now() - last < CHECK_EVERY_MS && Date.now() >= last) return "current";
-  }
+  if (!manual && !updateCheckDue(Number(get(CHECKED_KEY) ?? 0), Date.now())) return "current";
   set(CHECKED_KEY, String(Date.now()));
   const installed = await installedVersion();
   const release = await fetchLatest();
@@ -84,6 +80,22 @@ export async function checkForUpdate(manual: boolean): Promise<CheckResult> {
   if (!manual && dismissed && !isNewerVersion(release.tag, dismissed)) return "newer";
   setOffer({ release, installed });
   return "newer";
+}
+
+/**
+ * Checks on a fresh start and again whenever the app comes back from the background (Capacitor's
+ * resume, or the page becoming visible), each time only if the last check is 6 hours old. Returns the
+ * function that stops listening.
+ */
+export function watchForUpdates(delayMs = 2500): () => void {
+  if (!plugin) return () => {};
+  let timer = 0;
+  const soon = () => { clearTimeout(timer); timer = window.setTimeout(() => void checkForUpdate(false), delayMs); };
+  soon();
+  const onVisible = () => { if (document.visibilityState === "visible") soon(); };
+  document.addEventListener("visibilitychange", onVisible);
+  const h = CapApp.addListener("resume", soon);
+  return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", onVisible); void h.then((x) => x.remove()); };
 }
 
 /** "Later": hidden until a newer release than this one appears. */

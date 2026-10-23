@@ -6,7 +6,7 @@ import { releaseNoteBlocks } from "../../domain/version.ts";
 import { Dialog } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
 import {
-  askInstallPermission, canInstall, checkForUpdate, closeOffer, currentOffer, dismissOffer, downloadUpdate, openInstaller, subscribeOffer,
+  askInstallPermission, canInstall, closeOffer, currentOffer, dismissOffer, downloadUpdate, openInstaller, subscribeOffer, watchForUpdates,
 } from "./update.ts";
 
 type Step = "offer" | "permission" | "downloading" | "failed";
@@ -15,8 +15,8 @@ export function UpdateHost() {
   const offer = useSyncExternalStore(subscribeOffer, currentOffer);
   const [step, setStep] = useState<Step>("offer");
   const [progress, setProgress] = useState<number | null>(null);
-  // Once per opening of the app (update.ts keeps it to every 6 hours).
-  useEffect(() => { const t = window.setTimeout(() => void checkForUpdate(false), 2500); return () => clearTimeout(t); }, []);
+  // On opening the app and on coming back to it (update.ts keeps it to every 6 hours).
+  useEffect(() => watchForUpdates(), []);
   useEffect(() => { if (offer) { setStep("offer"); setProgress(null); } }, [offer]);
   if (!offer) return null;
   const { release, installed } = offer;

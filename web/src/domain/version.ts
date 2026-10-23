@@ -23,6 +23,18 @@ export function isNewerVersion(tag: string, installed: string): boolean {
 }
 
 /** One line of release notes, for a calm plain-text rendering (no HTML from the release is used). */
+/** How often the app asks GitHub for a new release by itself: on a fresh start or a return to the app. */
+export const UPDATE_CHECK_EVERY_MS = 6 * 3600_000;
+
+/**
+ * Whether an automatic update check is due at [now], the last one having been at [lastAt] (0: never).
+ * A clock set back (last check "in the future") counts as due, so a wrong date never stops the checks.
+ */
+export function updateCheckDue(lastAt: number, now: number, every = UPDATE_CHECK_EVERY_MS): boolean {
+  if (!Number.isFinite(lastAt) || lastAt <= 0) return true;
+  return now < lastAt || now - lastAt >= every;
+}
+
 export interface NoteBlock { kind: "heading" | "bullet" | "text"; text: string }
 
 /**

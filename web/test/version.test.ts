@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareVersions, isNewerVersion, parseVersion, releaseNoteBlocks } from "../src/domain/version.ts";
+import { UPDATE_CHECK_EVERY_MS, compareVersions, isNewerVersion, parseVersion, releaseNoteBlocks, updateCheckDue } from "../src/domain/version.ts";
 
 test("versions compare part by part, not as text", () => {
   assert.ok(compareVersions("v2.10", "2.9") > 0);
@@ -34,4 +34,15 @@ test("release notes become plain headings, bullets and text", () => {
     { kind: "text", text: "Thanks!" },
   ]);
   assert.deepEqual(releaseNoteBlocks(""), []);
+});
+
+test("automatic update checks: at most every 6 hours, on a start or a return to the app", () => {
+  const h = 3600_000, t0 = 1_800_000_000_000;
+  assert.equal(UPDATE_CHECK_EVERY_MS, 6 * h);
+  assert.equal(updateCheckDue(0, t0), true);                 // never checked
+  assert.equal(updateCheckDue(NaN, t0), true);               // unreadable
+  assert.equal(updateCheckDue(t0, t0 + 1000), false);        // a return a moment later
+  assert.equal(updateCheckDue(t0, t0 + 6 * h - 1), false);
+  assert.equal(updateCheckDue(t0, t0 + 6 * h), true);        // six hours on
+  assert.equal(updateCheckDue(t0, t0 - h), true);            // the clock went back
 });
