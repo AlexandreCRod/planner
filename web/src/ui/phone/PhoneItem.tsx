@@ -313,8 +313,15 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
  * One of an item's two alert lists, alarms or notifications: "15 minutes before" lines (each with a
  * menu of offsets), the sound / pop-up toggle and remove, then an "Add" line. [onChange] gets the whole list.
  */
-function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean; all: Reminder[]; type: ItemType; timed: boolean; onChange: (r: Reminder[]) => void }) {
+/**
+ * An item's alarms or notifications. [onDate]: a task with no date yet, whose reminders can't ring
+ * until it has one; its rows say so, with a row to pick the date and time there and then.
+ */
+function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
+  alarms: boolean; all: Reminder[]; type: ItemType; timed: boolean; onChange: (r: Reminder[]) => void; onDate?: (day: number, min: number) => void;
+}) {
   const mine = all.map((r, i) => [r, i] as const).filter(([r]) => (r.type === "ALARM") === alarms);
+  const [picking, setPicking] = useState<null | "date" | number>(null);
   const icon = alarms ? "oAlarm" : "oNotifications";
   const set = (i: number, r: Reminder) => onChange(all.map((x, j) => (j === i ? r : x)));
   const untimed = ` (${formatTime(useAlarmSettings().defaultTaskTime)})`;
@@ -326,7 +333,7 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
     {mine.map(([r, i], n) => (
       <FieldRow key={i} icon={n === 0 ? icon : null}>
         <span className="grow">
-          <MenuText text={offsetText(r.offsetMin) + (timed ? "" : untimed)} items={OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) }))} />
+          <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) }))} />
         </span>
         {alarms && hasAlarms && (
           <IconButton icon="oMusicNote" className={r.soundUri ? "primary" : ""} label={r.soundUri ? "Alarm sound (custom)" : "Alarm sound (default)"}
@@ -340,9 +347,16 @@ function AlertSection({ alarms, all, type, timed, onChange }: { alarms: boolean;
         <IconButton icon="fClose" label="Remove" onClick={() => onChange(all.filter((_, j) => j !== i))} />
       </FieldRow>
     ))}
+    {onDate && mine.length > 0 && (
+      <FieldRow icon={null} onClick={() => setPicking("date")}>
+        <span className="pe-label primary-text">Pick date & time</span>
+      </FieldRow>
+    )}
     <FieldRow icon={mine.length ? null : icon} onClick={() => onChange([...all, { id: 0, itemId: 0, offsetMin: timed ? DEFAULT_REMINDER_MIN : 0, type: alarms ? "ALARM" : defaultAlert(type), soundUri: null }])}>
       <span className="pe-label ph">{alarms ? "Add alarm" : "Add notification"}</span>
     </FieldRow>
+    {picking === "date" && <DatePickerDialog value={null} onClose={() => setPicking((p) => (p === "date" ? null : p))} onPick={(d) => setPicking(d)} />}
+    {typeof picking === "number" && <TimePickerDialog value={null} onClose={() => setPicking(null)} onPick={(m) => { onDate?.(picking, m); setPicking(null); }} />}
   </>;
 }
 
@@ -592,6 +606,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   };
   const completion = item.startDay === null ? NO_DAY : isRecurring(item) ? (day ?? item.startDay) : item.startDay;
   const done = s.done.isDone(id, completion);
+  // A ticked task's alarms and notifications are off (the phone cancels them; see AlarmScheduler), so
+  // they're out of sight until it's unticked; they stay saved with it all the same.
+  const alerts = isEvent || !done;
   const forDay = isRecurring(item) && day !== null ? ` for ${(() => { const r = relativeDay(day); return ["Today", "Tomorrow", "Yesterday"].includes(r) ? r.toLowerCase() : r; })()}` : "";
   const alertLines = (list: Reminder[], kind: string | null) => [...list].sort((a, b) => b.offsetMin - a.offsetMin)
     .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin).toLowerCase()}`).join("\n");
@@ -646,7 +663,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
             <IconButton icon="oEdit" label="Change location" onClick={() => setEditing("location")} />
           </>} />
         )}
-        {alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
+        {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {canBeRoutine(item) && (
@@ -659,8 +676,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
             <DropdownMenu open={overdueMenu} onClose={() => setOverdueMenu(false)} items={overdueItems((p) => commit({ ...item, overduePolicy: p }))} />
           </span>
         )}
-        {alarms.length > 0 && <InfoRow icon="oAlarm" text={alertLines(alarms, "Alarm")} onClick={() => setEditing("alarms")} />}
-        {notifications.length > 0 && <InfoRow icon="oNotifications" text={alertLines(notifications, null)} onClick={() => setEditing("notifications")} />}
+        {alerts && alarms.length > 0 && <InfoRow icon="oAlarm" text={alertLines(alarms, "Alarm")} onClick={() => setEditing("alarms")} />}
+        {alerts && notifications.length > 0 && <InfoRow icon="oNotifications" text={alertLines(notifications, null)} onClick={() => setEditing("notifications")} />}
+        {!alerts && reminders.length > 0 && <InfoRow icon="oAlarmOff" placeholder text={`${reminders.length === 1 ? "Its reminder is" : "Its reminders are"} off while it's done`} />}
         {tags.length > 0 && <InfoRow icon="oLabel" text={tags.map((x) => `#${x.name}`).join("  ")} onClick={() => setEditing("tags")} />}
         {/* The description is written where it shows: plain text, no formatting, saved as it's typed. */}
         <div className="pe-info top pe-descrow">
@@ -671,8 +689,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {/* What it doesn't have yet, one tap away. */}
         <div className="pe-flow pad">
           {!(item.location ?? "").trim() && <AssistChip icon="oLocationOn" label="Location" onClick={() => setEditing("location")} />}
-          {alarms.length === 0 && <AssistChip icon="oAlarm" label="Alarm" onClick={() => setEditing("alarms")} />}
-          {notifications.length === 0 && <AssistChip icon="oNotifications" label="Notification" onClick={() => setEditing("notifications")} />}
+          {alerts && alarms.length === 0 && <AssistChip icon="oAlarm" label="Alarm" onClick={() => setEditing("alarms")} />}
+          {alerts && notifications.length === 0 && <AssistChip icon="oNotifications" label="Notification" onClick={() => setEditing("notifications")} />}
           {!isRecurring(item) && <AssistChip icon="oRepeat" label="Repeat" onClick={() => setEditing("repeat")} />}
           {tags.length === 0 && <AssistChip icon="oLabel" label="Tags" onClick={() => setEditing("tags")} />}
           {!isEvent && item.priority === 0 && (
@@ -701,7 +719,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       {(editing === "alarms" || editing === "notifications") && (
         <BottomSheet onClose={() => setEditing(null)}>{() => <>
           <div className="p-sheet-title small">{editing === "alarms" ? "Alarms" : "Notifications"}</div>
-          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders} />
+          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders}
+            onDate={item.startDay === null ? (day, min) => commit({ ...item, startDay: day, startMin: min, allDay: false }) : undefined} />
           <AlertsHint className="pad" />
         </>}</BottomSheet>
       )}
@@ -875,6 +894,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const color = d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf({ ...d, categoryId: null, color: null });
   const tagList = () => cur.tags.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean);
   const timed = !(d.allDay || d.startMin === null);
+  // A to-do without a date: its reminders' rows offer to pick one (they can't ring before).
+  const pickWhen = d.type === "TASK" && d.startDay === null ? (day: number, min: number) => set({ startDay: day, startMin: min, allDay: false }) : undefined;
   /** From the panel, going elsewhere in the app means closing the panel first. */
   const leaveTo = () => { if (draft) onClose(); };
 
@@ -948,9 +969,9 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <LocationField d={d} set={set} />
         <div className="p-divider" />
 
-        <AlertSection alarms all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} />
+        <AlertSection alarms all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} onDate={pickWhen} />
         <div className="p-divider" />
-        <AlertSection alarms={false} all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} />
+        <AlertSection alarms={false} all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} onDate={pickWhen} />
         <AlertsHint className="indent" />
         <div className="p-divider" />
 

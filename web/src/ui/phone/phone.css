@@ -1278,3 +1278,6 @@ html.phone[data-theme="dark"] {
 .phone .p-update-progress .active.busy { animation: p-update-busy 1.2s ease-in-out infinite alternate; }
 @keyframes p-update-busy { from { transform: translateX(-60%); } to { transform: translateX(260%); } }
 .phone .p-update-size { color: var(--muted); font-size: 12px; }
+
+/* A to-do's reminders without a date: the row to pick one. */
+.phone .pe-label.primary-text { color: var(--p-primary); }
