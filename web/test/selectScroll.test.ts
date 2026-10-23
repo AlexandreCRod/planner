@@ -17,3 +17,12 @@ test("a scroll jump while selecting is held to the allowed speed, either way", (
   assert.equal(limitScroll(100, 104, 16, 0.5), 104); // within the limit: as it was
   assert.equal(limitScroll(100, 700, 1000, 0.5), 125); // a long gap counts as at most 50 ms
 });
+
+test("a dragged checklist line scrolls the note near either edge, both ways, and not in between", async () => {
+  const { edgeSpeed } = await import("../src/ui/phone/selectScroll.ts");
+  assert.equal(edgeSpeed(400, 0, 800), 0);
+  assert.ok(edgeSpeed(10, 0, 800) < 0); // up near the top
+  assert.ok(edgeSpeed(790, 0, 800) > 0); // down near the bottom
+  assert.equal(edgeSpeed(-50, 0, 800), -16); // past the edge: full speed
+  assert.ok(Math.abs(edgeSpeed(60, 0, 800)) < Math.abs(edgeSpeed(20, 0, 800)));
+});

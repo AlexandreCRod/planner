@@ -19,6 +19,13 @@ export function limitScroll(last: number, next: number, dt: number, speed: numbe
   return Math.max(last - most, Math.min(last + most, next));
 }
 
+/** px per frame to scroll while a finger dragging at [y] is near the [top] or [bottom] edge (negative: up). */
+export function edgeSpeed(y: number, top: number, bottom: number, zone = 72, most = 16): number {
+  const d = y < top + zone ? -(top + zone - y) / zone : y > bottom - zone ? (y - (bottom - zone)) / zone : 0;
+  const m = Math.min(1, Math.abs(d));
+  return Math.sign(d) * most * m * m;
+}
+
 /** The edge zone's height, px. */
 const ZONE = 56;
 /** How long after the selection last changed a drag counts as still going, ms. */

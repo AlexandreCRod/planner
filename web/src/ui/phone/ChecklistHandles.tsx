@@ -9,10 +9,20 @@ import { checklistBlock, checklistDepth, checklistRun, checklistSlots } from "..
 import { MIcon } from "./chrome.tsx";
 import { GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { feel } from "./haptics.ts";
+import { edgeSpeed } from "./selectScroll.ts";
 
 interface Handle { i: number; top: number; h: number }
 
 const linesOf = (root: HTMLElement) => [...root.children] as HTMLElement[];
+
+/** The nearest box above [el] that scrolls up and down. */
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  for (let n = el.parentElement; n; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowY;
+    if ((o === "auto" || o === "scroll") && n.scrollHeight > n.clientHeight) return n;
+  }
+  return null;
+}
 
 export function ChecklistHandles({ editor, host, onChange, onHas }: {
   /** The editable element; [host] is the box the handles are placed in (positioned). */
@@ -97,7 +107,15 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const minDy = (units.length ? Math.min(top0, ...restTop) : top0) - top0 - 6;
     const maxDy = (units.length ? Math.max(top0 + h, ...units.map((u, i) => restTop[i] + u.h + h)) : top0 + h) - top0 - h + 6;
     const y0 = e.clientY;
-    let k = k0, raf = 0, dy = 0;
+    // The finger's point in the lifted lines (on the first line, where the handle is) decides where they
+    // go: a tall block (a long line) can then reach the top as easily as the bottom.
+    const grab = y0 - top0;
+    // Near the top or bottom of the note the page scrolls along, either way; [dy] counts that scrolling too.
+    const scroller = scrollParent(root);
+    const s0 = scroller?.scrollTop ?? 0;
+    let fingerY = y0;
+    const clampDy = () => Math.max(minDy, Math.min(maxDy, fingerY - y0 + ((scroller?.scrollTop ?? s0) - s0)));
+    let k = k0, raf = 0, dy = 0, scrollRaf = 0;
     dragging.current = true;
     feel("pickup");
     for (const el of dragged) el.classList.add("pn-lifted");
@@ -105,7 +123,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const draw = () => {
       raf = 0;
       for (const el of dragged) el.style.transform = `translate3d(0,${dy}px,0)`;
-      const c = top0 + dy + h / 2;
+      const c = top0 + grab + dy;
       let nk = 0;
       while (nk < units.length && restTop[nk] + units[nk].h / 2 < c) nk++;
       // Only where the line may go (never between another line and its sub-items).
@@ -116,9 +134,25 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
         for (const el of u.els) el.style.transform = shift ? `translate3d(0,${shift}px,0)` : "";
       });
     };
+    const autoScroll = (t: number, last: number) => {
+      scrollRaf = 0;
+      if (!dragging.current || !scroller) return;
+      const r = scroller.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const top = r.top, bottom = Math.min(r.bottom, vv ? vv.offsetTop + vv.height : innerHeight);
+      const speed = edgeSpeed(fingerY, top, bottom) * Math.min(3, Math.max(0.5, (t - last) / 16.7));
+      if (speed) {
+        const before = scroller.scrollTop;
+        scroller.scrollTop = before + speed;
+        if (scroller.scrollTop !== before) { const nd = clampDy(); if (nd !== dy) { dy = nd; draw(); } }
+      }
+      scrollRaf = requestAnimationFrame((n) => autoScroll(n, t));
+    };
+    scrollRaf = requestAnimationFrame((n) => autoScroll(n, n));
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== e.pointerId) return;
-      dy = Math.max(minDy, Math.min(maxDy, ev.clientY - y0));
+      fingerY = ev.clientY;
+      dy = clampDy();
       if (!raf) raf = requestAnimationFrame(draw);
     };
     const up = (ev: PointerEvent) => {
@@ -127,6 +161,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       handleEl.removeEventListener("pointerup", up);
       handleEl.removeEventListener("pointercancel", up);
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(scrollRaf);
       draw();
       const shownTop = dragged[0].getBoundingClientRect().top;
       const moved = k !== k0;
