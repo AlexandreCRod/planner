@@ -836,6 +836,8 @@ function moved(o: Occurrence, dDay: number, dMin: number): Item {
 
 function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: number; compact: boolean }) {
   const isTask = p.o.item.type === "TASK";
+  // A routine event has a tick too (ticked on Today or in its window).
+  const ticks = isTask || isRoutineItem(p.o.item);
   const c = s.colorOf(p.o.item);
   const h = Math.max(14, (p.end - p.start) * pxPerMin);
   const tiny = h < 22;
@@ -845,7 +847,7 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
         top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`, ["--c" as string]: c,
       }}>
       <b className={h >= 36 ? "two" : ""} style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>
-        {isTask && <span className={`pg-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
+        {ticks && <span className={`pg-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
         {displayTitle(p.o.item)}
       </b>
       {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}

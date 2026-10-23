@@ -51,7 +51,7 @@ object AlarmScheduler {
         repeat(500) {
             val original = originalAt(item, d, r.offsetMin, defaultTime, zone)
             val completionDay = if (item.isRecurring) d.epoch() else item.startDay
-            val skip = item.type == ItemType.TASK && isDone(completionDay)
+            val skip = item.completable && isDone(completionDay)
             val at = adjust(original)
             if (at != null && at > nowMillis && !skip) return Fire(d, at, original)
             if (!item.isRecurring) return null
@@ -75,7 +75,7 @@ object AlarmScheduler {
     fun noLongerApplies(item: Item?, r: Reminder?, day: Long, original: Long, done: Set<Long>, defaultTime: Int, zone: ZoneId = ZoneId.systemDefault()): Boolean {
         if (item == null || r == null || item.deletedAt != null || item.startDay == null) return true
         val completionDay = if (item.isRecurring) day else item.startDay
-        if (item.type == ItemType.TASK && completionDay in done) return true
+        if (item.completable && completionDay in done) return true
         if (!Recurrence.occursOn(item, day.toDate())) return true
         return original != 0L && originalAt(item, day.toDate(), r.offsetMin, defaultTime, zone) != original
     }
@@ -88,7 +88,7 @@ object AlarmScheduler {
     fun startingNow(item: Item, reminders: List<Reminder>, day: Long, done: Set<Long>): Boolean {
         if (item.type == ItemType.NOTE || item.deletedAt != null || item.allDay || item.startMin == null || item.startDay == null) return false
         val completionDay = if (item.isRecurring) day else item.startDay
-        if (item.type == ItemType.TASK && completionDay in done) return false
+        if (item.completable && completionDay in done) return false
         return reminders.none { it.itemId == item.id && it.offsetMin == 0 }
     }
 

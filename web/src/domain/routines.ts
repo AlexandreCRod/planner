@@ -1,17 +1,18 @@
-// Routines: repeating tasks done as a habit (stretch, pills, journal). On Today they have their own short
-// checklist instead of mixing with one-off tasks; a day missed doesn't pile up as overdue, it only
-// ends the streak. A task is one when its synced `routine` field is set; these are the rules.
+// Routines: repeating tasks done as a habit (stretch, pills, journal), or repeating events kept as one
+// (gym, swimming lessons). On Today they have their own short checklist instead of mixing with one-off
+// tasks; a day missed doesn't pile up as overdue, it only ends the streak. An item is one when its
+// synced `routine` field is set; these are the rules.
 import { describe, nextOnOrAfter, occursOn, previousBefore } from "./recurrence.ts";
 import { type CompletionIndex, type TaskEntry, currentEntry, streak } from "./schedule.ts";
 import { type Item, isRecurring } from "./types.ts";
 
 /**
- * Whether [item] counts as a routine: marked as one, and still a repeating task, or one day of a routine
- * changed on its own (a copy with the series as parent, which doesn't repeat itself). A mark left on a
- * task that no longer repeats (or was turned into an event, or is in the trash) is ignored.
+ * Whether [item] counts as a routine: marked as one, and still a repeating task or event, or one day of
+ * a routine changed on its own (a copy with the series as parent, which doesn't repeat itself). A mark
+ * left on one that no longer repeats (or was turned into a note, or is in the trash) is ignored.
  */
 export function isRoutineItem(item: Item): boolean {
-  return item.routine === true && item.type === "TASK" && (isRecurring(item) || item.parentId !== null) &&
+  return item.routine === true && (item.type === "TASK" || item.type === "EVENT") && (isRecurring(item) || item.parentId !== null) &&
     item.startDay !== null && item.deletedAt === null;
 }
 
@@ -25,9 +26,9 @@ export function routineSeriesOf(item: Item, byId: ReadonlyMap<number, Item>): It
   return !isRecurring(item) && item.parentId !== null ? byId.get(item.parentId) ?? item : item;
 }
 
-/** Whether a task can carry the routine mark: one that repeats, or a single changed day of one. */
+/** Whether a task or event can carry the routine mark: one that repeats, or a single changed day of one. */
 export function canBeRoutine(item: Pick<Item, "type" | "freq" | "parentId">): boolean {
-  return item.type === "TASK" && (item.freq !== "NONE" || item.parentId !== null);
+  return (item.type === "TASK" || item.type === "EVENT") && (item.freq !== "NONE" || item.parentId !== null);
 }
 
 /**

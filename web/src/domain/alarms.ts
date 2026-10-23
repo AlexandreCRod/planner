@@ -26,7 +26,7 @@ export interface AlarmSettings {
 
 /** The fields of an item the engine schedules with (its Item class). */
 const ITEM_FIELDS = ["id", "type", "title", "startDay", "startMin", "endDay", "allDay", "freq", "interval", "weekDays",
-  "monthDays", "months", "untilDay", "excludedDays", "deletedAt"] as const;
+  "monthDays", "months", "untilDay", "excludedDays", "deletedAt", "routine"] as const;
 
 /** The native accents, in order (the engine's ringing screen takes the index). */
 const ACCENTS = ["#1a73e8", "#00796b", "#b0285a", "#8b5000", "#2e7d32", "#6a3db8", "#0061a4", "#4f5b66", "#3f51b5"];

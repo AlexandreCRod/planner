@@ -62,7 +62,7 @@ export function occurrencesIn(items: Item[], done: CompletionIndex, from: number
       const startMin = item.allDay ? null : item.startMin;
       out.push({
         item, day: d, startMin, endDay: d + span, endMin: item.allDay ? null : item.endMin,
-        completed: item.type === "TASK" && done.isDone(item.id, cday),
+        completed: (item.type === "TASK" || routineMark(item)) && done.isDone(item.id, cday),
         timed: startMin !== null, multiDay: span > 0,
       });
     }
@@ -74,7 +74,7 @@ export function occurrencesIn(items: Item[], done: CompletionIndex, from: number
  * A routine, or one day of one changed on its own (see domain/routines.ts): never overdue or carried
  * over, a missed day only ends its streak.
  */
-const routineMark = (i: Item) => i.routine === true && i.type === "TASK" && (isRecurring(i) || i.parentId !== null);
+const routineMark = (i: Item) => i.routine === true && (i.type === "TASK" || i.type === "EVENT") && (isRecurring(i) || i.parentId !== null);
 
 /**
  * Occurrences for the calendar: like occurrencesIn, except that an unticked one-time task whose day has

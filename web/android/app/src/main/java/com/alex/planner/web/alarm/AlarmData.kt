@@ -33,8 +33,12 @@ data class Item(
     val untilDay: Long? = null,
     val excludedDays: String = "",
     val deletedAt: Long? = null,
+    /** A routine: a task, or an event (2.4), ticked off each day it comes round. */
+    val routine: Boolean? = null,
 ) {
     val isRecurring get() = freq != Freq.NONE
+    /** Whether its days are ticked off (a task, or an event that's a routine): a ticked day says nothing more. */
+    val completable get() = type == ItemType.TASK || (type == ItemType.EVENT && routine == true)
 }
 
 @Serializable

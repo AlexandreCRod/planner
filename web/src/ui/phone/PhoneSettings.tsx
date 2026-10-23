@@ -8,7 +8,7 @@ import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
 import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
-import { setShowStreaks, showStreaks } from "../../store/routines.ts";
+import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, setServer } from "../../platform.ts";
 import { typeLabel } from "../LinksSection.tsx";
@@ -133,7 +133,7 @@ export function PhoneSettings() {
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
   const [showDone, setShowDone] = useState(showDoneOnToday());
-  const [streaks, setStreaks] = useState(showStreaks());
+  const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
   const [dialog, setDialog] = useState<"" | "server" | "signout">("");
   const [server, setServerShown] = useState(getServer());
@@ -183,8 +183,8 @@ export function PhoneSettings() {
           onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
         <SwitchRow title="Show completed tasks on Today" supporting="Off: ticked tasks leave today's list once their moment is up" checked={showDone}
           onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
-        <SwitchRow title="Show streaks" supporting="Each routine's days-in-a-row on Today, and its history" checked={streaks}
-          onChange={(v) => { setStreaks(v); setShowStreaks(v); }} />
+        {/* Each routine's days-in-a-row on Today, the task lists and its history. */}
+        <ChoiceRow title="Streaks" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
 
         {hasAlarms && <AlarmSettingsSection />}
 

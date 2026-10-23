@@ -28,7 +28,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
-import { setRoutine, showStreaks } from "../../store/routines.ts";
+import { setRoutine, showStreaks, streakSymbol } from "../../store/routines.ts";
 
 // ---------- Shared bits ----------
 
@@ -568,7 +568,7 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
-        <span className="fire"><MIcon name="fLocalFireDepartment" size={20} color="var(--muted)" /> {rs.current} current</span>
+        <span className="fire">{streakSymbol() && <MIcon name="fLocalFireDepartment" size={20} color="var(--muted)" />} {rs.current} current</span>
         <span>Best {rs.best}</span>
         <span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
       </div>
@@ -621,7 +621,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const t = todayEpoch();
   const timed = !(item.allDay || item.startMin === null);
   // A routine is about today (or its next day); a missed day isn't something to tick any more.
-  const day = occ ?? (isEvent ? item.startDay : (routine ? routineEntry : currentEntry)(item, s.done, t).day);
+  const day = occ ?? (isEvent && !routine ? item.startDay : (routine ? routineEntry : currentEntry)(item, s.done, t).day);
+  // Tasks are ticked off, and events that are routines.
+  const completable = !isEvent || routine;
   const shownStart = day ?? item.startDay;
   const commit = (edited: Item) => saveItem(edited);
   const commitReminders = (list: Reminder[]) => saveItem(item, { reminders: list });
@@ -635,7 +637,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const done = s.done.isDone(id, completion);
   // A ticked task's alarms and notifications are off (the phone cancels them; see AlarmScheduler), so
   // they're out of sight until it's unticked; they stay saved with it all the same.
-  const alerts = isEvent || !done;
+  const alerts = !completable || !done;
   const forDay = isRecurring(item) && day !== null ? ` for ${(() => { const r = relativeDay(day); return ["Today", "Tomorrow", "Yesterday"].includes(r) ? r.toLowerCase() : r; })()}` : "";
   const alertLines = (list: Reminder[], kind: string | null) => [...list].sort((a, b) => b.offsetMin - a.offsetMin)
     .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin).toLowerCase()}`).join("\n");
@@ -677,7 +679,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           )}
         </div>
 
-        {!isEvent && (
+        {completable && (
           <div className="pe-done" role="button" onClick={() => { if (!done) feel("confirm"); toggleCompletion(id, completion, !done); }}>
             <Checkbox checked={done} color={color} onChange={(v) => { if (v) feel("confirm"); toggleCompletion(id, completion, v); }} />
             <span>{done ? "Done" : "Mark done"}{forDay}</span>

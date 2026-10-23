@@ -66,6 +66,8 @@ class AlarmSchedulerTest {
         // An event isn't ticked; a time not known isn't checked.
         val event = daily.copy(type = ItemType.EVENT)
         assertEquals(false, AlarmScheduler.noLongerApplies(event, before, day, original, setOf(day), 540, zone))
+        // An event that's a routine is ticked like a task.
+        assertEquals(true, AlarmScheduler.noLongerApplies(event.copy(routine = true), before, day, original, setOf(day), 540, zone))
         assertEquals(false, AlarmScheduler.noLongerApplies(daily.copy(startMin = 10 * 60), before, day, 0L, emptySet(), 540, zone))
     }
 
@@ -79,6 +81,7 @@ class AlarmSchedulerTest {
         assertEquals(false, AlarmScheduler.startingNow(daily.copy(startMin = null), listOf(early), day, emptySet()))
         assertEquals(false, AlarmScheduler.startingNow(daily.copy(allDay = true), listOf(early), day, emptySet()))
         assertEquals(true, AlarmScheduler.startingNow(daily.copy(type = ItemType.EVENT), listOf(early), day, setOf(day)))
+        assertEquals(false, AlarmScheduler.startingNow(daily.copy(type = ItemType.EVENT, routine = true), listOf(early), day, setOf(day)))
     }
 
     /** "10 min after": rings after the start, also for an occurrence that has already begun. */

@@ -118,7 +118,7 @@ object Notifications {
         if (type == AlertType.REMINDER) {
             b.addAction(0, "Snooze ${snoozeMinutes}m", actionIntent(context, AlarmReceiver.ACTION_SNOOZE, item.id, reminderId, day))
         }
-        if (item.type == ItemType.TASK) {
+        if (item.completable) {
             b.addAction(0, "Done", actionIntent(context, AlarmReceiver.ACTION_DONE, item.id, reminderId, day))
         }
         notify(context, smallId(reminderId), b)
@@ -176,7 +176,7 @@ object Notifications {
             .setTimeoutAfter(STARTING_SHOWN_MS)
             .setCategory(if (item.type == ItemType.EVENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
             .setPriority(if (popUp) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
-        if (item.type == ItemType.TASK) {
+        if (item.completable) {
             b.addAction(0, "Done", actionIntent(context, AlarmReceiver.ACTION_DONE, item.id, 0L, day, key = "start-${item.id}"))
         }
         val nm = NotificationManagerCompat.from(context)

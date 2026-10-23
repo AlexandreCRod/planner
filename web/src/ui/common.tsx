@@ -6,6 +6,7 @@ import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
 import { type AlertType, PRIORITIES, isRecurring, type Item, priorityColor } from "../domain/types.ts";
 import { reminderKind } from "../domain/reminders.ts";
 import { type Snapshot, toggleCompletion } from "../store/store.ts";
+import { streakSymbol } from "../store/routines.ts";
 import { feel } from "./phone/haptics.ts";
 
 // Material Symbols paths (24 px viewBox).
@@ -204,7 +205,9 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}
       {status === "DUE" && due !== null && <Pill color={due < now ? "var(--danger)" : color}>{dueCountdown(due, now)}</Pill>}
       {status === "UPCOMING" && entry.day !== null && <Pill color="var(--muted)">{relativeDay(entry.day)}</Pill>}
-      {streakInfo && streakInfo.current > 0 && <Pill color="#ff7043"><span className="fire-emoji">🔥 </span><span className="sub-icon fire"><Icon name="fire" size={12} /></span>{streakInfo.current}</Pill>}
+      {streakInfo && streakInfo.current > 0 && (streakSymbol()
+        ? <Pill color="#ff7043"><span className="fire-emoji">🔥 </span><span className="sub-icon fire"><Icon name="fire" size={12} /></span>{streakInfo.current}</Pill>
+        : <Pill color="#ff7043">{streakInfo.current} in a row</Pill>)}
       </span>
     </div>
   );
@@ -219,7 +222,7 @@ export function EventRow({ o, s, showDay, heldTime, past }: { o: Occurrence; s: 
       <div className="time">{o.timed ? <><span className="t1">{t1}</span>{o.endMin !== null && <><br /><span className="t2">{t2}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
-        <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
+        <div className="ellipsis" style={o.completed ? { textDecoration: "line-through" } : undefined}>{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
         <div className="hint ellipsis" style={{ fontSize: 12 }}>
           {[showDay ? relativeDay(o.day) : null, o.multiDay ? `until ${relativeDay(o.endDay)}` : null, isRecurring(o.item) ? describe(o.item) : null].filter(Boolean).join(" · ")}
           {!past && <ReminderIcon kind={reminderKind(s.reminders.get(o.item.id))} />}

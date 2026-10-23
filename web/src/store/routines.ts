@@ -9,8 +9,20 @@ import { changed, saveItem, snapshot } from "./store.ts";
 /** The old device-only marks: a JSON list of item ids. */
 const LEGACY_KEY = "routines";
 const STREAKS_KEY = "showStreaks";
+const STYLE_KEY = "streakStyle";
 
-let streaks = (() => { try { return localStorage.getItem(STREAKS_KEY) !== "false"; } catch { return true; } })();
+/** How streaks show (Settings > Streaks): not at all, as a count, or as a count with the flame. */
+export type StreakStyle = "off" | "streak" | "symbol";
+export const STREAK_STYLES: [StreakStyle, string][] = [["off", "Off"], ["streak", "Streak"], ["symbol", "Streak and symbol"]];
+
+let style: StreakStyle = (() => {
+  try {
+    const v = localStorage.getItem(STYLE_KEY);
+    if (v === "off" || v === "streak" || v === "symbol") return v;
+    // Before 2.4 it was on or off.
+    return localStorage.getItem(STREAKS_KEY) === "false" ? "off" : "symbol";
+  } catch { return "symbol"; }
+})();
 
 /** Marks [item] as a routine or not; saved with the item, so it syncs. */
 export function setRoutine(item: Item, on: boolean) {
@@ -39,10 +51,15 @@ export function migrateLocalRoutines(allItems: Item[] = snapshot().allItems): nu
   return marked.length;
 }
 
-/** Settings > "Show streaks": off hides them everywhere in this app. */
-export const showStreaks = () => streaks;
-export function setShowStreaks(v: boolean) {
-  streaks = v;
-  try { localStorage.setItem(STREAKS_KEY, String(v)); } catch { /* private mode */ }
+/** Settings > Streaks: Off hides them everywhere in this app. */
+export const showStreaks = () => style !== "off";
+/** Whether a streak shows the flame by its count. */
+export const streakSymbol = () => style === "symbol";
+export const streakStyle = () => style;
+export function setStreakStyle(v: StreakStyle) {
+  style = v;
+  try { localStorage.setItem(STYLE_KEY, v); localStorage.setItem(STREAKS_KEY, String(v !== "off")); } catch { /* private mode */ }
   changed(true);
 }
+/** The PC's on/off box: on keeps the flame. */
+export const setShowStreaks = (v: boolean) => setStreakStyle(v ? "symbol" : "off");

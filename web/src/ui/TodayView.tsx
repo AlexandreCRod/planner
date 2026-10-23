@@ -6,7 +6,7 @@ import { carryOver } from "../store/prefs.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
 import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
-import { showStreaks } from "../store/routines.ts";
+import { showStreaks, streakSymbol } from "../store/routines.ts";
 import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
 import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
 import { feel } from "./phone/haptics.ts";
@@ -265,7 +265,7 @@ function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: 
                 <span className="name">{r.item.title || "Untitled"}</span>
                 <span className="sub">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
               </span>
-              {streaks && r.streak.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={14} />{r.streak.current}</span>}
+              {streaks && r.streak.current > 0 && <span className="streak">{streakSymbol() ? <MIcon name="fLocalFireDepartment" size={14} /> : null}{r.streak.current}{streakSymbol() ? "" : " in a row"}</span>}
             </button>
           ))}
         </div>
@@ -292,7 +292,7 @@ function PcRoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; d
             <button className="ring" aria-pressed={ticked} title={ticked ? "Done — click to untick" : "Tick"}
               onClick={() => toggleCompletion(e.item.id, day, !ticked)}>{ticked && <Icon name="check" size={13} />}</button>
             <button className="name" title={`Open ${title}`} onClick={() => openItem(e.item, e.day)}>{title}</button>
-            {st && st.current > 1 && <span className="streak" title={`${st.current} in a row`}><MIcon name="fLocalFireDepartment" size={12} />{st.current}</span>}
+            {st && st.current > 1 && <span className="streak" title={`${st.current} in a row`}>{streakSymbol() && <MIcon name="fLocalFireDepartment" size={12} />}{st.current}{!streakSymbol() && "×"}</span>}
           </span>
         );
       })}
@@ -323,7 +323,7 @@ function PcRoutineList({ s, t, onClose }: { s: Snapshot; t: number; onClose: () 
               <span className="name ellipsis">{r.item.title || "Untitled"}</span>
               <span className="sub ellipsis">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
             </span>
-            {streaks && r.streak.current > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={14} />{r.streak.current}</span>}
+            {streaks && r.streak.current > 0 && <span className="streak">{streakSymbol() ? <MIcon name="fLocalFireDepartment" size={14} /> : null}{r.streak.current}{streakSymbol() ? "" : " in a row"}</span>}
           </button>
         ))}
       </div>
@@ -349,7 +349,7 @@ function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { titl
       onClick={() => { const h = hold.current; hold.current = null; if (!h?.fired) onToggle(); }}>
       <span className="ring">{ticked && <MIcon name="fCheck" size={14} />}</span>
       <span className="name">{title}</span>
-      {streak > 0 && <span className="streak"><MIcon name="fLocalFireDepartment" size={12} />{streak}</span>}
+      {streak > 0 && <span className="streak">{streakSymbol() && <MIcon name="fLocalFireDepartment" size={12} />}{streak}{!streakSymbol() && "×"}</span>}
     </button>
   );
 }

@@ -85,7 +85,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val settings = Mirror.settings(context)
         val original = intent.getLongExtra(EXTRA_ORIGINAL, 0L)
         val completionDay = if (item.isRecurring) day else (item.startDay ?: day)
-        fun isDone() = item.type == ItemType.TASK && completionDay in Mirror.doneDays(context, item.id)
+        fun isDone() = item.completable && completionDay in Mirror.doneDays(context, item.id)
 
         when (intent.action) {
             ACTION_UPCOMING -> {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { epochOf } from "../src/domain/dates.ts";
-import { isRoutineItem, routineEntry, routineProgress, routineStreak, routinesOnDay, withoutRoutines } from "../src/domain/routines.ts";
+import { canBeRoutine, isRoutineItem, routineEntry, routineProgress, routineStreak, routinesOnDay, withoutRoutines } from "../src/domain/routines.ts";
 import { CompletionIndex, forCalendar, tasksForDay } from "../src/domain/schedule.ts";
 import { type Completion, type Item, newItem } from "../src/domain/types.ts";
 
@@ -12,12 +12,15 @@ const daily = (id: number, extra: Partial<Item> = {}) =>
 const marked = (items: Item[], marks: Set<number>) => items.map((i) => ({ ...i, routine: marks.has(i.id) }));
 const ticks = (id: number, ...days: number[]): Completion[] => days.map((day) => ({ itemId: id, day, completedAt: 0 }));
 
-test("only marked, repeating, live tasks are routines", () => {
+test("only marked, repeating, live tasks and events are routines", () => {
   assert.equal(isRoutineItem(daily(1, { routine: true })), true);
   assert.equal(isRoutineItem(daily(5)), false);                                              // not marked
   assert.equal(isRoutineItem(daily(6, { routine: false })), false);
   assert.equal(isRoutineItem(daily(2, { routine: true, freq: "NONE" })), false);             // no longer repeats: ignored
-  assert.equal(isRoutineItem(daily(3, { routine: true, type: "EVENT" })), false);
+  assert.equal(isRoutineItem(daily(3, { routine: true, type: "EVENT" })), true);              // events can be routines (2.4)
+  assert.equal(isRoutineItem(daily(7, { routine: true, type: "NOTE" })), false);
+  assert.equal(canBeRoutine({ type: "EVENT", freq: "WEEKLY", parentId: null }), true);
+  assert.equal(canBeRoutine({ type: "EVENT", freq: "NONE", parentId: null }), false);
   assert.equal(isRoutineItem(daily(4, { routine: true, deletedAt: 1 })), false);             // in the trash
 });
 
@@ -117,4 +120,16 @@ test("routines never carry over; other tasks do unless carrying over is turned o
   assert.deepEqual(moved(false), []);
   assert.ok(forCalendar(items, none, today - 7, today + 7, today, false).some((o) => o.item.id === 9 && o.day === today - 2));
   assert.ok(forCalendar(items, none, today - 7, today + 7, today, true).some((o) => o.item.id === 8 && o.day === today - 1));
+});
+
+test("an event kept as a routine is ticked off each day, with a streak", () => {
+  const gym = daily(9, { type: "EVENT", routine: true, startMin: 1080, endMin: 1170, endDay: today - 30 });
+  const done = new CompletionIndex(ticks(9, today - 2, today - 1));
+  // On Today's checklist, by itself.
+  assert.deepEqual(routinesOnDay([gym], done, today, today).map((e) => [e.item.id, e.status]), [[9, "DUE"]]);
+  assert.deepEqual(routinesOnDay([gym], done, today - 1, today).map((e) => e.status), ["DONE"]);
+  assert.equal(routineStreak(gym, done, today).current, 2);
+  // Its ticked days show as done on the calendar; a plain event's never do.
+  const cal = forCalendar([gym, { ...gym, id: 10, routine: false }], new CompletionIndex([...ticks(9, today - 1), ...ticks(10, today - 1)]), today - 1, today - 1, today);
+  assert.deepEqual(cal.map((o) => [o.item.id, o.completed]), [[9, true], [10, false]]);
 });
