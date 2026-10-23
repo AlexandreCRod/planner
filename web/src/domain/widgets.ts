@@ -17,7 +17,24 @@ export interface WidgetFormat { time: (min: number) => string; date: (day: numbe
 const EVENT_DAYS = 14;
 const MAX_EVENTS = 20;
 
-export function buildWidgets(items: Item[], done: CompletionIndex, today: number, f: WidgetFormat, carry = true): WidgetPush {
+/** Monday to Friday, and every day, as Item.weekDays masks. */
+const WEEKDAYS_MASK = 0b0011111, EVERY_DAY_MASK = 0b1111111;
+
+/**
+ * Whether [item] repeats every day or every weekday (Monday to Friday, or all seven): the everyday
+ * things the widgets leave out, so they show what's particular to the day. One day of such a series
+ * changed on its own counts with its series ([byId] finds it).
+ */
+export function repeatsEveryDay(item: Item, byId?: ReadonlyMap<number, Item>): boolean {
+  const series = item.freq === "NONE" && item.parentId !== null ? byId?.get(item.parentId) : item;
+  if (!series || series.interval > 1) return false;
+  if (series.freq === "DAILY") return true;
+  return series.freq === "WEEKLY" && (series.weekDays === WEEKDAYS_MASK || series.weekDays === EVERY_DAY_MASK);
+}
+
+export function buildWidgets(allItems: Item[], done: CompletionIndex, today: number, f: WidgetFormat, carry = true): WidgetPush {
+  const byId = new Map(allItems.map((i) => [i.id, i]));
+  const items = allItems.filter((i) => !repeatsEveryDay(i, byId));
   const dayOf = (t: number): WidgetDay => ({
     day: t,
     tasks: tasksForDay(items, done, t, carry)
