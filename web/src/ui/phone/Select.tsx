@@ -2,7 +2,7 @@
 // each tap adds or removes one. The page's top bar gives way to a selection bar (close, how many,
 // Select all, Delete); Android's back or the close button ends it. Delete moves them all to the trash
 // at once, with Undo in the snackbar, like deleting one.
-// With a mouse (the PC's ui/PcSelect.tsx, brought over): a round box shows on the card or row under the
+// With a mouse (as the old PC screens had): a round box shows on the card or row under the
 // pointer and picks it, a right-click starts selecting like a long press, Ctrl (Cmd) adds or removes
 // one, Shift adds the run from the last one picked, Esc ends it (the back button) and Delete deletes.
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";

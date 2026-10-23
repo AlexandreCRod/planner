@@ -4,7 +4,7 @@
 // take the focus, so the keyboard stays up and the text keeps its selection.
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { formatDate, formatTime, nowMinutes, today } from "../../domain/dates.ts";
-import type { RichEditorHandle } from "../RichEditor.tsx";
+import type { RichEditorHandle } from "../shared/RichEditor.tsx";
 import { DropdownMenu, MIcon } from "./chrome.tsx";
 import { showKeyboard } from "./native.ts";
 import { ColorPickerDialog, PALETTE, TextFieldDialog } from "./m3.tsx";

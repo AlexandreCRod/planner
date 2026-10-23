@@ -14,8 +14,8 @@ import {
 import {
   type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
 } from "../../store/store.ts";
-import { go, openItem } from "../common.tsx";
-import { typeLabel } from "../LinksSection.tsx";
+import { go, openItem } from "../shared/common.tsx";
+import { typeLabel } from "../shared/kinds.ts";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";

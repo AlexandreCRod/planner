@@ -12,9 +12,9 @@ import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { isRoutineItem } from "../../domain/routines.ts";
 import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
-import { type Placed, layoutDay } from "../CalendarView.tsx";
-import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
-import { ScopeDialog } from "../ItemEditor.tsx";
+import { type Placed, layoutDay } from "../shared/dayLayout.ts";
+import { EventRow, TaskRow, go, openItem, useNow } from "../shared/common.tsx";
+import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
@@ -23,6 +23,7 @@ import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSprin
 import { TOUCH_SLOP } from "./press.ts";
 import { MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
+import { setEventEnd } from "./eventTime.ts";
 import { wheelZoom } from "./keys.ts";
 
 type Mode = "day" | "3day" | "week" | "month" | "year" | "agenda";
@@ -387,6 +388,8 @@ interface Gesture {
   snap: string; raf: number;
   /** A mouse: a block moved with the button down is picked up at once (there's no scroll to tell it from). */
   mouse: boolean;
+  /** A mouse on an event's bottom edge: dragging it changes when the event ends. */
+  resize: boolean;
 }
 
 function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, onDayHeader, onDayNote }: {
@@ -600,6 +603,25 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       g.raf = requestAnimationFrame(autoScroll);
     };
 
+    // An event's bottom edge dragged with a mouse: its end follows, snapped to 15 minutes, the outline
+    // showing the new times; letting go saves it (a repeating one on that day only, with Undo).
+    const updateResize = () => {
+      if (!g || !g.block) return;
+      const info = placed.current.get(g.key);
+      if (!info) return;
+      const { p } = info;
+      const px = pxRef.current;
+      const dy = g.dy + (el.scrollTop - g.scroll0);
+      const endMin = Math.max(p.start + 15, Math.min(DAY_MIN - 1, p.end + Math.round(dy / px / 15) * 15));
+      g.block.style.height = `${Math.max(14, (endMin - p.start) * px)}px`;
+      const snap = String(endMin);
+      if (snap !== g.snap) {
+        if (g.snap) feel("tick");
+        g.snap = snap;
+        setGhost({ key: g.key, start: p.start, dDay: 0, length: endMin - p.start, color: props.current.s.colorOf(p.o.item), isTask: false });
+      }
+    };
+
     const end = () => {
       if (!g) return;
       clearTimeout(g.timer);
@@ -617,9 +639,10 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, scroll0: el.scrollTop,
         block, key: block?.dataset.key ?? "", timer: 0, lifted: false, swiping: false, moved: false,
         dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0, mouse: isMouse(e),
+        resize: !!block && isMouse(e) && !!(e.target as HTMLElement).closest(".pg-resize"),
       };
       g.vt.add(e.timeStamp, e.clientX);
-      if (block) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
+      if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
     };
 
     const onMove = (e: PointerEvent) => {
@@ -627,6 +650,11 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       g.x = e.clientX; g.y = e.clientY;
       g.dx = e.clientX - g.x0; g.dy = e.clientY - g.y0;
       g.vt.addEvent(e, "x");
+      if (g.resize) {
+        if (!g.moved && Math.abs(g.dy) > 2) g.moved = true;
+        if (g.moved) updateResize();
+        return;
+      }
       if (g.lifted) { updateDrag(); return; }
       if (g.swiping) { swipeTo(g); return; }
       if (Math.abs(g.dx) > TOUCH_SLOP || Math.abs(g.dy) > TOUCH_SLOP) {
@@ -657,6 +685,14 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       const cur = g;
+      if (cur.resize) {
+        const info = placed.current.get(cur.key);
+        setGhost(null);
+        if (cur.block) cur.block.style.height = "";
+        if (info && cur.snap && Number(cur.snap) !== info.p.end) { feel("settle"); setEventEnd(info.p.o, Number(cur.snap)); }
+        end();
+        return;
+      }
       if (cur.lifted) {
         const info = placed.current.get(cur.key);
         const snap = cur.snap.split("|").map(Number);
@@ -709,6 +745,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       // The browser took the finger for scrolling.
       if (g.swiping) settleSwipe(g.sx, 0);
       if (g.lifted && g.block) { g.block.style.transform = ""; g.block.classList.remove("lifted"); setGhost(null); }
+      if (g.resize) { if (g.block) g.block.style.height = ""; setGhost(null); }
       end();
     };
 
@@ -949,6 +986,8 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
         {displayTitle(p.o.item)}
       </b>
       {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
+      {/* The bottom edge, for a mouse: drag it to change when the event ends (wide.css shows it to a mouse only). */}
+      {!isTask && h >= 24 && <span className="pg-resize" aria-hidden="true" />}
     </div>
   );
 }

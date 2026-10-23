@@ -13,6 +13,21 @@ export const isVideo = (m: Pick<NoteImage, "mime">) => String(m.mime ?? "").star
 /** The file that shows it small: the picture itself, or a video's poster ("" when it has none). */
 export const previewHash = (m: Pick<NoteImage, "mime" | "hash" | "poster">) => (isVideo(m) ? m.poster ?? "" : m.hash);
 
+/**
+ * The files to have here for the synced records ([key, record] pairs): each note picture's file, or a
+ * video's still, once each. After every sync the ones not stored yet are downloaded, and a picture
+ * shown as missing appears as its file arrives (store/images.ts), without reloading the page.
+ */
+export function filesToFetch(records: Iterable<[string, unknown]>): string[] {
+  const out = new Set<string>();
+  for (const [key, r] of records) {
+    if (!key.startsWith("images/") || !r || typeof r !== "object") continue;
+    const h = previewHash({ mime: "image/jpeg", ...(r as Partial<NoteImage>) } as NoteImage);
+    if (h) out.add(h);
+  }
+  return [...out];
+}
+
 /** The file that syncs through the server for it (a video's poster, never the video), or null. */
 export function syncedFile(m: Pick<NoteImage, "mime" | "hash" | "poster">): { hash: string; mime: string } | null {
   if (!isVideo(m)) return { hash: m.hash, mime: m.mime || "image/jpeg" };

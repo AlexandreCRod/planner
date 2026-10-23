@@ -1,8 +1,8 @@
 // The phone's note editor, laid out like NoteEditorScreen.kt: a top bar in the page's colour (back,
 // undo and redo while writing, pin, style, and a menu with pictures, templates, history and trash),
 // then the title, tags, pictures and the text, and the links under it. The formatting bar
-// shows only while the text has the focus, sitting on the keyboard. Saving is the same as on the
-// PC: a second after each change, and a version is kept when you leave a note you changed.
+// shows only while the text has the focus, sitting on the keyboard. Saving (shared/noteSession.ts):
+// a second after each change, and a version is kept when you leave a note you changed.
 import { useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime, formatTime } from "../../domain/dates.ts";
 import { occurrencesIn } from "../../domain/schedule.ts";
@@ -12,10 +12,10 @@ import { importImage, importVideo } from "../../store/images.ts";
 import { MAX_VIDEO_BYTES } from "../../domain/media.ts";
 import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
 import { addImage, deleteImage, trash } from "../../store/store.ts";
-import { openItem, replaceRoute } from "../common.tsx";
-import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
-import { RichEditor } from "../RichEditor.tsx";
-import { useNoteSession } from "../noteSession.ts";
+import { openItem, replaceRoute } from "../shared/common.tsx";
+import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/noteStyle.ts";
+import { RichEditor } from "../shared/RichEditor.tsx";
+import { useNoteSession } from "../shared/noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { CaretMarker } from "./CaretMarker.tsx";
 import { NoteFind, takePendingFind } from "./NoteFind.tsx";
@@ -25,6 +25,7 @@ import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndo
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
 import { useKeyboardUp } from "./native.ts";
+import { isNative } from "../../platform.ts";
 import { setNoteFind } from "./desk.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
@@ -52,6 +53,14 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const [peek, setPeek] = useState<number | null>(takePendingPeek);
   const [picking, setPicking] = useState(false);
   const pageEl = useRef<HTMLDivElement>(null);
+  const titleEl = useRef<HTMLInputElement>(null);
+  // A new note on the PC (N, or the + button): the cursor waits in its title, so typing starts it at
+  // once. A moment later, so the N that opened it isn't typed there. The phone keeps its keyboard down.
+  useEffect(() => {
+    if (isNative || id !== null || day !== null) return;
+    const t = window.setTimeout(() => titleEl.current?.focus({ preventScroll: true }), 60);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Put away into the chip: menus, sheets and the find bar close (they'd keep the back button), and the
   // text lets go of the focus (the caret is kept by the editor for when it comes back).
@@ -101,6 +110,13 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
     }
   };
   const pickPictures = () => fileInput.current?.click();
+  /** A picture or video pasted, or dropped onto the note from the computer's files, is added like a picked one. */
+  const pastedMedia = (e: React.ClipboardEvent | React.DragEvent) => {
+    const files = "clipboardData" in e ? e.clipboardData.files : e.dataTransfer.files;
+    if (![...files].some((f) => f.type.startsWith("image/") || f.type.startsWith("video/"))) return;
+    e.preventDefault(); e.stopPropagation();
+    void addPictures(files);
+  };
 
   const isDaily = base.noteDay !== null;
   const page = style.bgColor !== null ? cssColor(style.bgColor) : null;
@@ -141,7 +157,8 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
 
       {finding && <NoteFind key={finding.focus ? "f" : "s"} editor={() => rich.current?.root() ?? null} scroller={() => scrollBox.current}
         initial={finding.q} focus={finding.focus} onClose={() => setFinding(null)} />}
-      <div ref={scrollBox} className={`p-content pn-scroll ${style.bgPattern ? `pattern-${style.bgPattern}` : ""}`} style={{ fontFamily: FONTS[style.fontFamily] }}>
+      <div ref={scrollBox} className={`p-content pn-scroll ${style.bgPattern ? `pattern-${style.bgPattern}` : ""}`} style={{ fontFamily: FONTS[style.fontFamily] }}
+        onPasteCapture={pastedMedia} onDropCapture={pastedMedia} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}>
         {isDaily && dayOcc.length > 0 && (
           <div className="pn-day">
             {dayOcc.map((o) => (
@@ -152,7 +169,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
             ))}
           </div>
         )}
-        {!isDaily && <input className="pn-title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
+        {!isDaily && <input ref={titleEl} className="pn-title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); rich.current?.focusStart(); } }} enterKeyHint="next" />}
         <label className="pn-meta">
           <MIcon name="oLabel" />
@@ -161,7 +178,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
         {images.length > 0 && <MediaStrip media={images} onOpen={(i) => setViewing(images[i])} onLens={(start, pointer) => { feel("pickup"); setLens({ start, pointer }); }} />}
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
           <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
-            noToolbar placeholder="Start writing…" onFocusChange={setFocused} />
+            placeholder="Start writing…" onFocusChange={setFocused} />
           <CaretMarker editor={() => rich.current?.root() ?? null} host={() => textBox.current} show={focused && !kbUp} />
           <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks} />
         </div>

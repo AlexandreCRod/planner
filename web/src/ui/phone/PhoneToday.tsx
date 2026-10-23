@@ -1,26 +1,26 @@
+// Today: the day pager, each day's tasks, schedule and note, and the routines row.
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { epochOf, formatDate, formatDateShort, formatTime, toTimestamp, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
-import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
-import { carryOver } from "../store/prefs.ts";
-import { type NoteLine, noteLines, preview } from "../domain/text.ts";
-import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../domain/routines.ts";
-import { type Snapshot, toggleCompletion, useSnapshot } from "../store/store.ts";
-import { showStreaks, streakSymbol } from "../store/routines.ts";
-import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "./common.tsx";
-import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
-import { feel } from "./phone/haptics.ts";
-import { useSwipePager } from "./phone/pager.ts";
-import { mouseMenu } from "./phone/desk.ts";
-import { openTodoTab } from "./phone/PhoneLists.tsx";
-import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
-import { HeldTime } from "./phone/TimeWheel.tsx";
-import { BottomSheet } from "./phone/m3.tsx";
-import { DayPickerSheet } from "./phone/pickers.tsx";
-import { count } from "../domain/plural.ts";
+import { formatDate, formatDateShort, formatTime, toTimestamp, today as todayEpoch, weekday } from "../../domain/dates.ts";
+import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../../domain/schedule.ts";
+import { carryOver } from "../../store/prefs.ts";
+import { type NoteLine, noteLines } from "../../domain/text.ts";
+import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../../domain/routines.ts";
+import { type Snapshot, toggleCompletion, useSnapshot } from "../../store/store.ts";
+import { showStreaks, streakSymbol } from "../../store/routines.ts";
+import { EventRow, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "../shared/common.tsx";
+import { AppBarActions, IconButton, MIcon } from "./chrome.tsx";
+import { feel } from "./haptics.ts";
+import { useSwipePager } from "./pager.ts";
+import { mouseMenu } from "./desk.ts";
+import { openTodoTab } from "./PhoneLists.tsx";
+import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./eventTime.ts";
+import { HeldTime } from "./TimeWheel.tsx";
+import { BottomSheet } from "./m3.tsx";
+import { DayPickerSheet } from "./pickers.tsx";
+import { count } from "../../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const toInput = (e: number) => { const { y, m, d } = ymd(e); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; };
 
 /** Identifies a task row on Today: the task and the occurrence it ticks. */
 const rowKey = (e: TaskEntry) => `${e.item.id}_${e.day}`;
@@ -59,57 +59,6 @@ export function showTodayDay(day: number) {
 
 type Hold = ReturnType<typeof useCheckedHold>;
 
-export function TodayView({ phone }: { phone?: boolean }) {
-  return phone ? <PhoneToday /> : <PcToday />;
-}
-
-function PcToday() {
-  const s = useSnapshot();
-  const now = useNow();
-  const t = todayEpoch();
-  const [view, setView] = useState<number | null>(viewed);
-  const day = view ?? t;
-  const isToday = day === t;
-  const show = (d: number) => { viewed = d === t ? null : d; setView(viewed); };
-  useEffect(() => { showDayOnPhone = show; return () => { showDayOnPhone = null; }; });
-  const hold = useCheckedHold();
-
-  // ← and → change the day when nothing is being typed.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (e.altKey || e.ctrlKey || e.metaKey || el.closest("input, textarea, select, [contenteditable=true]")) return;
-      if (e.key === "ArrowLeft") show(day - 1);
-      else if (e.key === "ArrowRight") show(day + 1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
-  const weekdayName = WEEKDAYS[weekday(day) - 1];
-
-  return (
-    <div className="today-page" style={{ maxWidth: 820 }}>
-      <div className="day-head">
-        <button className="icon-btn" title="Previous day (←)" onClick={() => show(day - 1)}><Icon name="left" /></button>
-        <label className="day-title" title="Pick a day">
-          <span className="big">{word ?? weekdayName}</span>
-          <span className="hint">{word ? `${weekdayName}, ` : ""}{formatDateShort(day)}</span>
-          <input type="date" value={toInput(day)} onChange={(e) => {
-            const [y, m, d] = e.target.value.split("-").map(Number);
-            if (e.target.value) show(epochOf(y, m, d));
-          }} onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch { /* not supported */ } }} />
-        </label>
-        <button className="icon-btn" title="Next day (→)" onClick={() => show(day + 1)}><Icon name="right" /></button>
-        {!isToday && <button className="btn small" onClick={() => show(t)}><Icon name="today" size={14} /> Back to today</button>}
-      </div>
-
-      <DaySections day={day} t={t} s={s} now={now} hold={hold} />
-    </div>
-  );
-}
-
 /** On the phone, the times of events and tasks can be held to change them (a drum opens on the digits). */
 const eventTime = (o: Occurrence, which: "start" | "end") => {
   if (!canHoldEvent(o)) return null;
@@ -119,8 +68,8 @@ const eventTime = (o: Occurrence, which: "start" | "end") => {
 };
 const taskTime = (e: TaskEntry) => (e.item.startMin !== null && e.day !== null ? <HeldTime min={e.item.startMin} onChange={(t) => moveTask(e, t)} /> : null);
 
-/** One day's tasks, schedule and note: the PC page's body, and each page of the phone's day pager. */
-function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; phone?: boolean }) {
+/** One day's tasks, schedule and note: each page of the day pager. */
+function DaySections({ day, t, s, now, hold }: { day: number; t: number; s: Snapshot; now: number; hold: Hold }) {
   const isToday = day === t;
   // Routines: their own checklist, out of the task lists below, never overdue.
   const routines = routinesOnDay(s.items, s.done, day, t);
@@ -148,63 +97,43 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
   const alsoDone = hideDone ? [] : withoutRoutines(tickedDuring(s.items, s.completions, day)).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
   const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day + 7);
   const dayEvents = events.filter((o) => o.day <= day && o.endDay >= day);
-  const upcoming = isToday ? events.filter((o) => o.day > day).slice(0, 8) : [];
   const daily = s.items.find((i) => i.type === "NOTE" && i.noteDay === day);
   const doneCount = dayTasks.filter((e) => e.status === "DONE").length;
   const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
   const dayWord = word?.toLowerCase() ?? "that day";
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
-    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={phone ? taskTime : undefined}
-      past={phone && isToday && taskOver(e, now)} onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
+    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={taskTime}
+      past={isToday && taskOver(e, now)} onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
   ));
   // The phone keeps Today to about one screen: sections only when they have something, one line when
   // the day is empty, no week ahead; a glance at tomorrow instead.
   const nothing = shownOverdue.length === 0 && shownTasks.length === 0 && dayEvents.length === 0;
-  const glance = phone && isToday ? tomorrowGlance(s, day + 1, t) : null;
+  const glance = isToday ? tomorrowGlance(s, day + 1, t) : null;
 
   return <>
-      {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
-      {phone && (routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
-      {!phone && (routines.length > 0 || anyRoutine) && <PcRoutineChips list={routines} s={s} day={day} t={t} />}
-      {dayTasks.length > 0 && !phone && (
-        <div className="row progress-row" style={{ margin: "4px 0 8px" }}>
-          <div className="grow progress" style={{ height: 6, borderRadius: 3, background: "var(--surface-2)", overflow: "hidden" }}>
-            <div style={{ width: `${(doneCount / dayTasks.length) * 100}%`, height: "100%", background: "var(--strong)", transition: "width .3s" }} />
-          </div>
-          <span className="hint">{doneCount} of {dayTasks.length} done</span>
-        </div>
-      )}
+      {dayTasks.length > 0 && <PhoneProgress done={doneCount} total={dayTasks.length} />}
+      {(routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
       {shownOverdue.length > 0 && <>
         <div className="section">Overdue</div>
         {rows(shownOverdue, `o${day}`, true)}
       </>}
-      {phone && nothing && <div className="hint empty p-nothing">{isToday ? "Nothing planned today. Tap + to add something." : day < t ? `Nothing was planned ${dayWord}.` : `Nothing planned ${dayWord}.`}</div>}
-      {(!phone || shownTasks.length > 0) && <div className="section">Tasks</div>}
-      {!phone && shownTasks.length === 0 && <div className="hint empty">{isToday ? "No tasks due today. Use the bar at the top to add one." : `No tasks were due ${dayWord}.`}</div>}
+      {nothing && <div className="hint empty p-nothing">{isToday ? "Nothing planned today. Tap + to add something." : day < t ? `Nothing was planned ${dayWord}.` : `Nothing planned ${dayWord}.`}</div>}
+      {shownTasks.length > 0 && <div className="section">Tasks</div>}
       {rows(shownTasks, `t${day}`, false)}
-      {anytime > 0 && (phone
-        ? <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>
-        : <button className="hint anytime link-btn" style={{ marginTop: 6 }} onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>)}
+      {anytime > 0 && <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>}
       {alsoDone.length > 0 && <>
         <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
         {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
       </>}
-      {(!phone || dayEvents.length > 0) && <div className="section">Schedule</div>}
-      {!phone && dayEvents.length === 0 && <div className="hint empty">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
-      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={phone ? eventTime : undefined} past={phone && isToday && eventOver(o, now)} />)}
+      {dayEvents.length > 0 && <div className="section">Schedule</div>}
+      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={eventTime} past={isToday && eventOver(o, now)} />)}
       {glance && <TomorrowGlance rows={glance} s={s} day={day + 1} />}
-      {phone ? <div className="p-note-gap" /> : <div className="section">{isToday ? "Today's note" : "Note"}</div>}
+      <div className="p-note-gap" />
       <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
-        {phone && <MIcon name="oEditNote" />}
-        {phone
-          ? <PhoneNotePreview html={daily?.content ?? null} isToday={isToday} />
-          : daily ? preview(daily.content, 200) || "Empty — click to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}
+        <MIcon name="oEditNote" />
+        <PhoneNotePreview html={daily?.content ?? null} isToday={isToday} />
       </div>
-      {!phone && upcoming.length > 0 && <>
-        <div className="section">Next 7 days</div>
-        {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay heldTime={phone ? eventTime : undefined} />)}
-      </>}
   </>;
 }
 
@@ -280,63 +209,6 @@ function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: 
   );
 }
 
-/**
- * The PC's routines row: the same chips, for a mouse. A click on the ring ticks it, a click on the name
- * opens it (like a task row's box and title); the last chip lists every routine.
- */
-function PcRoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
-  const streaks = showStreaks() && day >= t;
-  const [all, setAll] = useState(false);
-  return (
-    <div className="rchips" role="list">
-      {list.map((e) => {
-        const ticked = e.status === "DONE";
-        const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
-        const title = e.item.title || "Untitled";
-        return (
-          <span key={e.item.id} role="listitem" className={`rchip ${ticked ? "done" : ""} ${e.status === "MISSED" ? "missed" : ""}`}>
-            <button className="ring" aria-pressed={ticked} title={ticked ? "Done — click to untick" : "Tick"}
-              onClick={() => toggleCompletion(e.item.id, day, !ticked)}>{ticked && <Icon name="check" size={13} />}</button>
-            <button className="name" title={`Open ${title}`} onClick={() => openItem(e.item, e.day)}>{title}</button>
-            {st && st.current > 1 && <span className="streak" title={`${st.current} in a row`}>{streakSymbol() && <MIcon name="fLocalFireDepartment" size={12} />}{st.current}{!streakSymbol() && "×"}</span>}
-          </span>
-        );
-      })}
-      <button className="rchip all" title="All routines" onClick={() => setAll(true)}><MIcon name="fFormatListBulleted" size={16} />{list.length === 0 && <span className="name">Routines</span>}</button>
-      {all && createPortal(<PcRoutineList s={s} t={t} onClose={() => setAll(false)} />, document.body)}
-    </div>
-  );
-}
-
-/** Every routine in a small dialog (the phone's sheet): name, how it repeats, today, streak. A click opens it. */
-function PcRoutineList({ s, t, onClose }: { s: Snapshot; t: number; onClose: () => void }) {
-  const rows = routineList(s.items, s.done, t);
-  const streaks = showStreaks();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div className="panel-backdrop center" onClick={onClose}>
-      <div className="card dialog rlist" role="dialog" aria-label="Routines" onClick={(e) => e.stopPropagation()}>
-        <div className="row"><b className="grow" style={{ fontSize: 16 }}>Routines</b><button className="icon-btn" title="Close (Esc)" onClick={onClose}><Icon name="close" /></button></div>
-        {rows.length === 0 && <div className="hint">No routines yet. Turn on Routine in a repeating task's editor.</div>}
-        {rows.map((r) => (
-          <button key={r.item.id} className={`rlist-row ${r.today}`} onClick={() => { onClose(); openItem(r.item, r.today === "off" ? r.next : t); }}>
-            <span className="ring">{r.today === "done" && <Icon name="check" size={13} />}</span>
-            <span className="grow">
-              <span className="name ellipsis">{r.item.title || "Untitled"}</span>
-              <span className="sub ellipsis">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
-            </span>
-            {streaks && r.streak.current > 0 && <span className="streak">{streakSymbol() ? <MIcon name="fLocalFireDepartment" size={14} /> : null}{r.streak.current}{streakSymbol() ? "" : " in a row"}</span>}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const CHIP_HOLD_MS = 450;
 function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { title: string; ticked: boolean; missed: boolean; streak: number; onToggle: () => void; onOpen: () => void }) {
   const hold = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
@@ -406,7 +278,7 @@ function PhoneProgress({ done, total }: { done: number; total: number }) {
 const DayPage = memo(function DayPage({ day, t, s, now, hold }: { day: number; t: number; s: Snapshot; now: number; hold: Hold }) {
   return (
     <div className="today-page">
-      <DaySections day={day} t={t} s={s} now={now} hold={hold} phone />
+      <DaySections day={day} t={t} s={s} now={now} hold={hold} />
       <div style={{ height: 88 }} />
     </div>
   );
@@ -418,7 +290,7 @@ const DayPage = memo(function DayPage({ day, t, s, now, hold }: { day: number; t
  * actions. Below, the days sit side by side like a ViewPager: a sideways drag moves them with the
  * finger, the day before or after sliding in beside it, and letting go settles on a day.
  */
-function PhoneToday() {
+export function PhoneToday() {
   const s = useSnapshot();
   const now = useNow();
   const t = todayEpoch();

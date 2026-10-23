@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LENS_SMALL, downloadName, isVideo, lensPlace, lensPosFor, lensStep, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
+import { LENS_SMALL, downloadName, filesToFetch, isVideo, lensPlace, lensPosFor, lensStep, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
 
 // Items 80 and 96: a note's pictures and videos.
 
@@ -62,4 +62,17 @@ test("the lens follows the finger: the big one stays under it, left brings the n
   const next = lensPlace(1, W), screen = W / 0.6;
   const visible = (screen / 2 - (next.x - (W * next.scale) / 2)) / (W * next.scale);
   assert.ok(visible > 0.7, String(visible));
+});
+
+// Item 156: a picture added on another device is fetched after the sync that brings its record.
+test("after a sync, each note picture's file (or a video's still) is fetched once", () => {
+  const records: [string, unknown][] = [
+    ["images/1", { noteId: 5, hash: "p1", mime: "image/jpeg" }],
+    ["images/2", { noteId: 6, hash: "p1" }], // the same file in two notes; an old record without a mime
+    ["images/3", { noteId: 5, hash: "v1", mime: "video/mp4", poster: "s1" }],
+    ["images/4", { noteId: 5, hash: "v2", mime: "video/mp4" }], // a video with no still: nothing to fetch
+    ["items/5", { id: 5, hash: "not-a-file" }],
+  ];
+  assert.deepEqual(filesToFetch(records), ["p1", "s1"]);
+  assert.deepEqual(filesToFetch(new Map(records)), ["p1", "s1"]);
 });

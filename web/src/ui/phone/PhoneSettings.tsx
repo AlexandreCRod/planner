@@ -12,9 +12,9 @@ import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "..
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, setServer, useWide } from "../../platform.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
-import { typeLabel } from "../LinksSection.tsx";
-import { checkedLinger, go, showDoneOnToday } from "../common.tsx";
-import { applyTheme, useSyncStatus } from "../SettingsView.tsx";
+import { typeLabel } from "../shared/kinds.ts";
+import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
+import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { BAR_REVERSED_KEY, barSwipeReversed } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";

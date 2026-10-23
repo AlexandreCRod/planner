@@ -17,7 +17,7 @@ import { act, hasAlarms, native } from "../../alarms/native.ts";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { type Item, type ItemType, type Reminder, PRIORITIES, cssColor, newItem, priorityColor } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
-import { go } from "../common.tsx";
+import { go } from "../shared/common.tsx";
 import { Dialog, FilterChip, MIcon, Segmented } from "./chrome.tsx";
 import { SWIPE_GAIN, pageTarget } from "./pager.ts";
 import { VelocityTracker } from "./motion.ts";

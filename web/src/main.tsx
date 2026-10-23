@@ -9,7 +9,7 @@ import { migrateLocalRoutines } from "./store/routines.ts";
 import { getToken, onStatus, requestSync, signOut, startAutoSync, syncNow } from "./store/sync.ts";
 import { App as CapApp } from "@capacitor/app";
 import { App } from "./ui/App.tsx";
-import { applyTheme } from "./ui/SettingsView.tsx";
+import { applyTheme } from "./ui/shared/settings.ts";
 import { startPhoneTheme } from "./ui/phone/theme.ts";
 
 applyTheme();

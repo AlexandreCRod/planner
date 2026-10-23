@@ -4,7 +4,7 @@
 import { apiUrl, deviceName } from "../platform.ts";
 import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
-import { previewHash, syncedFile } from "../domain/media.ts";
+import { filesToFetch, syncedFile } from "../domain/media.ts";
 import type { NoteImage } from "../domain/types.ts";
 import { type Kind, allRecords, applyRemote } from "./store.ts";
 import { count } from "../domain/plural.ts";
@@ -122,7 +122,7 @@ async function doSync(force: boolean): Promise<number> {
     if (outgoing.length || reply.changes.length) parts.push(`sent ${outgoing.length}, received ${reply.changes.length}`);
     if (reply.conflicts) parts.push(`${count(reply.conflicts, "conflict")} settled`);
     setStatus({ state: "idle", lastSyncAt: now, message: parts.join(" · ") });
-    await fetchMissing([...allRecords().entries()].filter(([k]) => k.startsWith("images/")).map(([, r]) => previewHash({ mime: "image/jpeg", ...r } as NoteImage)).filter(Boolean));
+    await fetchMissing(filesToFetch(allRecords()));
     return reply.changes.length;
   } catch (e) {
     if (e instanceof HttpError && e.code === 401) setStatus({ state: "signed-out", message: "Wrong password" });
@@ -140,10 +140,15 @@ export function requestSync(delayMs = 1500) {
   debounce = window.setTimeout(() => void syncNow(), delayMs);
 }
 
-/** Background schedule: every 30 s, when the window regains focus, and when the network returns. */
+/**
+ * Background schedule: every 30 s while the page is visible, when the window regains focus or the tab is
+ * shown again, and when the network returns. What another device added (a note's new picture too) shows
+ * up by itself within that time.
+ */
 export function startAutoSync() {
   window.setInterval(() => { if (document.visibilityState === "visible") void syncNow(); }, 30_000);
   window.addEventListener("focus", () => void syncNow());
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void syncNow(); });
   window.addEventListener("online", () => void syncNow());
   void syncNow();
 }

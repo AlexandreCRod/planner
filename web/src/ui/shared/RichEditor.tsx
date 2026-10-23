@@ -1,10 +1,8 @@
 // contenteditable editor that reads and writes the same HTML as the Android editor, including
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
-import { formatDateTime } from "../domain/dates.ts";
-import { editorText } from "../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead } from "../domain/checklist.ts";
-import { Icon } from "./common.tsx";
+import { editorText } from "../../domain/noteDraft.ts";
+import { backspaceTakesBox, checklistLead } from "../../domain/checklist.ts";
 
 const BOX = "☐", TICK = "☑";
 const INDENT = "⠀⠀⠀";
@@ -130,16 +128,11 @@ function placeCaretAtEnd(el: HTMLElement) {
 export const RichEditor = forwardRef<RichEditorHandle, {
   initialHtml: string; onChange: () => void; minHeight?: number;
   /** Bumped to show [initialHtml] again even when it's the same text (a note reloaded from sync). */
-  revision?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
-  /** Show the formatting bar only once the text has been clicked into. */
-  toolbarOnFocus?: boolean;
-  /** No toolbar of its own (the phone draws one through the handle). */
-  noToolbar?: boolean;
+  revision?: number; fontFamily?: string; placeholder?: string;
   /** Told when the text gains or loses the focus. */
   onFocusChange?: (focused: boolean) => void;
-}>(function RichEditor({ initialHtml, revision, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder, noToolbar, onFocusChange }, ref) {
+}>(function RichEditor({ initialHtml, revision, onChange, minHeight = 360, fontFamily, placeholder, onFocusChange }, ref) {
   const el = useRef<HTMLDivElement>(null);
-  const [toolbar, setToolbar] = useState(!toolbarOnFocus);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
   const checkEmpty = () => setEmpty(!el.current || isBlank(el.current));
 
@@ -343,50 +336,10 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
   };
 
-  const B = ({ icon, label, title, onClick: fn }: { icon?: string; label?: string; title: string; onClick: () => void }) => (
-    <button className="icon-btn" title={title} onMouseDown={(e) => e.preventDefault()} onClick={fn}>
-      {icon ? <Icon name={icon} size={18} /> : <span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>}
-    </button>
-  );
-
   return (
-    <>
-      {toolbar && !noToolbar && <div className="toolbar">
-        {!compact && <><B icon="undo" title="Undo (Ctrl+Z)" onClick={() => exec("undo")} /><B icon="redo" title="Redo (Ctrl+Y)" onClick={() => exec("redo")} /><span className="sep" /></>}
-        <B label="B" title="Bold (Ctrl+B)" onClick={() => exec("bold")} />
-        <B label="I" title="Italic (Ctrl+I)" onClick={() => exec("italic")} />
-        <B label="U" title="Underline (Ctrl+U)" onClick={() => exec("underline")} />
-        <B label="S" title="Strikethrough" onClick={() => exec("strikeThrough")} />
-        <span className="sep" />
-        <B label="☐" title="Checkbox (Enter continues the list)" onClick={toggleChecklist} />
-        <B label="•" title="Bulleted list" onClick={() => exec("insertUnorderedList")} />
-        <B label="1." title="Numbered list" onClick={() => exec("insertOrderedList")} />
-        <B label="⇥" title="Indent" onClick={() => indent(true)} />
-        <B label="⇤" title="Outdent" onClick={() => indent(false)} />
-        <span className="sep" />
-        <label className="icon-btn" title="Text colour" style={{ position: "relative" }}>
-          <span style={{ fontWeight: 700, borderBottom: "3px solid #e53935", lineHeight: 1 }}>A</span>
-          <input type="color" onChange={(e) => exec("foreColor", e.target.value)} style={{ position: "absolute", opacity: 0, inset: 0, cursor: "pointer" }} />
-        </label>
-        <label className="icon-btn" title="Highlight" style={{ position: "relative" }}>
-          <span style={{ background: "#fff59d", color: "#333", padding: "0 3px", borderRadius: 3, fontWeight: 700 }}>H</span>
-          <input type="color" defaultValue="#fff59d" onChange={(e) => exec("hiliteColor", e.target.value)} style={{ position: "absolute", opacity: 0, inset: 0, cursor: "pointer" }} />
-        </label>
-        <select className="input" style={{ padding: "3px 6px", fontSize: 12 }} value="" onChange={(e) => { const v = e.target.value; setSize(v === "n" ? null : Number(v)); }}>
-          <option value="" disabled>Size</option>
-          <option value="28">Title</option><option value="22">Heading</option><option value="18">Subheading</option><option value="n">Normal</option><option value="12">Small</option>
-        </select>
-        {!compact && <>
-          <span className="sep" />
-          <B label="🔗" title="Web link" onClick={() => { const url = prompt("Link address", "https://"); if (url) exec("createLink", url); }} />
-          <B label="🕒" title="Insert date and time" onClick={() => exec("insertText", formatDateTime(Date.now()))} />
-          <B label="⌫" title="Clear formatting" onClick={() => exec("removeFormat")} />
-        </>}
-      </div>}
-      <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onFocus={() => { setToolbar(true); onFocusChange?.(true); }} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
-        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
-    </>
+    <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
+      style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
+      data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
   );
 });
 

@@ -68,7 +68,7 @@ html.phone [data-ripple-host] { position: relative; }
 @keyframes p-ripple { from { transform: scale(.2); } }
 .phone .p-ripple.out { opacity: 0; }
 /* Touch screens: no sticky hover colours. */
-html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.phone .icon-btn:hover, html.phone .nav:hover { background: none; }
+html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { background: none; }
 
 /* ---------- Shell: pager, bottom bar, + button ---------- */
 .phone .p-root { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
@@ -312,22 +312,11 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pick { position: relative; }
 .phone .pick input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 
-/* ---------- Existing PC pieces shown full-screen on the phone ---------- */
-.phone .panel-backdrop { z-index: 40; }
-.phone .p-overlay .panel, .phone .panel-backdrop > .panel { width: 100%; height: 100%; box-shadow: none; animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
-.phone .gp-full .panel { animation: none; }
-.phone .panel header { padding: calc(var(--sat) + 8px) 12px 8px 8px; min-height: calc(var(--sat) + 56px); border-bottom: 0; }
-.phone .panel header .icon-btn { width: 40px; height: 40px; }
-.phone .panel header .btn.primary { height: 40px; padding: 0 20px; font-size: 14px; font-weight: 500; border-radius: 20px; }
-.phone .panel .body { padding: 4px 16px 48px; }
-.phone .gform .frow { min-height: 52px; gap: 16px; flex-wrap: wrap; }
-.phone .gform .title-input { font-size: 24px; }
+/* ---------- The signed-out screen ---------- */
 .phone .input { min-height: 40px; font-size: 15px; }
 .phone .login { padding-top: calc(var(--sat) + 20px); }
 .phone .login .input { min-height: 48px; font-size: 16px; }
 .phone .login .btn { min-height: 44px; justify-content: center; font-size: 15px; }
-.phone .p-content .chips-row { margin-top: 4px; }
-.phone .editor-page { padding: 8px 16px 80px; }
 
 /* The row icons drawn with the native app's glyphs (Compose material-icons: Outlined.Alarm, Outlined.Link,
    Filled.Repeat, Filled.LocalFireDepartment); the shared rows keep their own paths on the PC. */

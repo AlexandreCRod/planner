@@ -1,12 +1,12 @@
-// One open note, for both note editors (the phone's PhoneNote and the PC's NoteEditor): what it shows,
+// One open note, for the note editor (PhoneNote): what it shows,
 // and saving it. Saved a moment after each change, at once when the app is put away, and on leaving;
 // only what the user changed is written, onto the note as it's stored now (domain/noteDraft.ts), so an
 // edit that came from another device while the note was open stays. Such an edit shows in the editor
 // as it arrives, unless the user has changed that part here (then theirs is kept and saved).
 import { useEffect, useRef, useState } from "react";
-import { type NoteBaseline, type NoteDraft, afterSave, baselineOf, draftOf, localChanges, noteToSave, rebase } from "../domain/noteDraft.ts";
-import { type Item, newItem } from "../domain/types.ts";
-import { allRecords, deleteIfEmpty, isEmptyNote, onFlush, saveItem, saveVersion, type Snapshot, snapshot, useSnapshot } from "../store/store.ts";
+import { type NoteBaseline, type NoteDraft, afterSave, baselineOf, draftOf, localChanges, noteToSave, rebase } from "../../domain/noteDraft.ts";
+import { type Item, newItem } from "../../domain/types.ts";
+import { allRecords, deleteIfEmpty, isEmptyNote, onFlush, saveItem, saveVersion, type Snapshot, snapshot, useSnapshot } from "../../store/store.ts";
 import { type RichEditorHandle, useEditorHtml } from "./RichEditor.tsx";
 
 export interface NoteStyle { pinned: boolean; bgColor: number | null; bgPattern: number; fontFamily: number; categoryId: number | null; color: number | null; hidden: boolean }

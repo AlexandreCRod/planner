@@ -28,12 +28,15 @@
   html.phone .p-notecard { transition: box-shadow .15s; }
   html.phone .p-notecard:not([data-lift]):hover { box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 2px 8px rgb(0 0 0 / .08); }
   html.phone .pg-block:not(.lifted):hover { filter: brightness(.97) saturate(1.05); }
+  /* An event's bottom edge: a mouse drags it to change when the event ends (PhoneCalendar.tsx). */
+  html.phone .pg-resize { display: block; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 
   /* Picking several (Select.tsx): the round box on the card or row under the pointer, and on all of
      them while something is picked; a click on it picks that one. */
   html.phone :is(.p-notecard, .p-itemrow):hover > .p-selbox,
   html.phone :is(.p-notecard, .p-itemrow)[aria-pressed] > .p-selbox { display: block; }
 }
+.phone .pg-resize { display: none; }
 .phone .p-selbox { display: none; flex: none; width: 20px; height: 20px; padding: 0; border: 2px solid var(--p-outline); border-radius: 50%; background: var(--bg); opacity: .9; }
 .phone .p-selbox:hover { border-color: var(--p-strong); }
 .phone .p-notecard > .p-selbox { position: absolute; top: 8px; right: 8px; z-index: 1; }

@@ -8,10 +8,10 @@ import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
-import { go, useRoute } from "../common.tsx";
+import { go, useRoute } from "../shared/common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
 import { PhoneCategories, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
-import { TodayView, resetToday, showTodayDay, todayViewedDay } from "../TodayView.tsx";
+import { PhoneToday, resetToday, showTodayDay, todayViewedDay } from "./PhoneToday.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
 import { MIcon, TabGlyph, openSearch } from "./chrome.tsx";
@@ -398,7 +398,7 @@ function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
 const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; active: boolean }) {
   switch (tabKey) {
-    case "today": return <TodayView phone />;
+    case "today": return <PhoneToday />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
     case "tasks": return <PhoneTasks />;
     case "notes": return <PhoneNotes />;

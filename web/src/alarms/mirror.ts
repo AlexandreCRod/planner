@@ -7,7 +7,7 @@
 import { type MirrorPush, buildMirror } from "../domain/alarms.ts";
 import { clockFormat, dateStyle } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
-import { go } from "../ui/common.tsx";
+import { go } from "../ui/shared/common.tsx";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
 import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";

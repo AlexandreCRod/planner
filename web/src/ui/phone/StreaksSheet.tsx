@@ -7,7 +7,7 @@ import { today as todayEpoch } from "../../domain/dates.ts";
 import { streakRows } from "../../domain/routines.ts";
 import { useSnapshot } from "../../store/store.ts";
 import { streakSymbol } from "../../store/routines.ts";
-import { openItem } from "../common.tsx";
+import { openItem } from "../shared/common.tsx";
 import { MIcon } from "./chrome.tsx";
 import { BottomSheet } from "./m3.tsx";
 
