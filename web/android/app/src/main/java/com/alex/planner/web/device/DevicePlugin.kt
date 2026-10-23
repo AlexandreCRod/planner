@@ -2,6 +2,7 @@ package com.alex.planner.web.device
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Rect
 import android.location.Address
 import android.location.Geocoder
 import android.net.Uri
@@ -83,6 +84,20 @@ class DevicePlugin : Plugin() {
             runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(q)}"))) }
                 .onFailure { return call.reject("can't open") }
         }
+        call.resolve()
+    }
+
+    /**
+     * Where the page's text selection is, in the WebView's pixels ({left, top, right, bottom}), or
+     * {clear: true}: the selection toolbar is placed right above it (PlannerWebView.kt).
+     */
+    @PluginMethod
+    fun selectionRect(call: PluginCall) {
+        val r = if (call.getBoolean("clear", false) == true) null else Rect(
+            call.getInt("left") ?: 0, call.getInt("top") ?: 0, call.getInt("right") ?: 0, call.getInt("bottom") ?: 0,
+        )
+        SelectionToolbar.set(r)
+        if (r != null) activity?.runOnUiThread { runCatching { SelectionToolbar.mode.get()?.invalidateContentRect() } }
         call.resolve()
     }
 

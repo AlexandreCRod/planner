@@ -15,6 +15,7 @@ interface DevicePlugin {
   geocode(o: { query: string; max?: number }): Promise<{ places: Place[] }>;
   openMap(o: { name: string; lat?: number | null; lng?: number | null }): Promise<void>;
   feel(o: { kind: string }): Promise<void>;
+  selectionRect(o: { left: number; top: number; right: number; bottom: number } | { clear: true }): Promise<void>;
 }
 
 const plugin = isNative ? registerPlugin<DevicePlugin>("Device") : null;
@@ -24,6 +25,11 @@ export const canFeel = plugin !== null;
 /** One pulse of the touch feel, unspaced: use feel() in haptics.ts, which spaces them. */
 export function playFeel(kind: string) {
   if (plugin) void plugin.feel({ kind }).catch(() => {});
+}
+
+/** Tells the app where the page's text selection is (its toolbar goes right above it); null: none. */
+export function setSelectionRect(r: { left: number; top: number; right: number; bottom: number } | null) {
+  if (plugin) void plugin.selectionRect(r ?? { clear: true }).catch(() => {});
 }
 
 /** Reads the phone's clock format; every page is drawn again if it changed. */

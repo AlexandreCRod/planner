@@ -2,6 +2,7 @@
 import { App as CapApp } from "@capacitor/app";
 import { Keyboard } from "@capacitor/keyboard";
 import { startSelectScroll } from "./selectScroll.ts";
+import { startSelectionBar } from "./selectionBar.ts";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../../platform.ts";
 import { startPressFeedback } from "./press.ts";
@@ -38,6 +39,7 @@ export function startPhonePlumbing() {
   startPressFeedback();
   startOverscroll();
   startSelectScroll();
+  startSelectionBar();
   startDeviceClock();
   const vv = window.visualViewport;
   if (vv) {
