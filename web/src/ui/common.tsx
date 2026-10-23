@@ -3,7 +3,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
-import { PRIORITY_COLORS_MUTED, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
+import { type AlertType, PRIORITY_COLORS_MUTED, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
+import { reminderKind } from "../domain/reminders.ts";
 import { type Snapshot, toggleCompletion } from "../store/store.ts";
 import { feel } from "./phone/haptics.ts";
 
@@ -36,6 +37,7 @@ const PATHS: Record<string, string> = {
   myLocation: "M11 23v-2.05q-3.125-.35-5.363-2.587Q3.4 16.125 3.05 13H1v-2h2.05q.35-3.125 2.587-5.363Q7.875 3.4 11 3.05V1h2v2.05q3.125.35 5.363 2.587Q20.6 7.875 20.95 11H23v2h-2.05q-.35 3.125-2.587 5.363Q16.125 20.6 13 20.95V23Zm1-4q2.9 0 4.95-2.05Q19 14.9 19 12q0-2.9-2.05-4.95Q14.9 5 12 5 9.1 5 7.05 7.05 5 9.1 5 12q0 2.9 2.05 4.95Q9.1 19 12 19Zm0-3q-1.65 0-2.825-1.175Q8 13.65 8 12q0-1.65 1.175-2.825Q10.35 8 12 8q1.65 0 2.825 1.175Q16 10.35 16 12q0 1.65-1.175 2.825Q13.65 16 12 16Z",
   map: "m15 21-6-2.1-4.65 1.8q-.5.2-.925-.113Q3 20.275 3 19.75V5.75q0-.325.188-.575.187-.25.512-.375L9 3l6 2.1 4.65-1.8q.5-.2.925.112.425.313.425.838v14q0 .325-.187.575-.188.25-.513.375Zm-1-2.45V6.85l-4-1.4v11.7Z",
   schedule: "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z",
+  bellOff: "M20 18.69L7.84 6.14 5.27 3.49 4 4.76l2.8 2.8v.01c-.52.99-.8 2.16-.8 3.42v5l-2 2v1h13.73l2 2L21 19.72l-1-1.03zM12 22c1.11 0 2-.89 2-2h-4c0 1.11.89 2 2 2zm6-7.32V11c0-3.08-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68c-.15.03-.29.08-.42.12-.1.03-.2.07-.3.11h-.01c-.01 0-.01 0-.02.01-.23.09-.46.2-.68.31 0 0-.01 0-.01.01L18 14.68z",
   bell: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z",
   palette: "M12 22C6.49 22 2 17.51 2 12S6.49 2 12 2s10 4.04 10 9c0 3.31-2.69 6-6 6h-1.77c-.28 0-.5.22-.5.5 0 .12.05.23.13.33.41.47.64 1.06.64 1.67 0 1.38-1.12 2.5-2.5 2.5zm0-18c-4.41 0-8 3.59-8 8s3.59 8 8 8c.28 0 .5-.22.5-.5 0-.16-.08-.28-.14-.35-.41-.46-.63-1.05-.63-1.65 0-1.38 1.12-2.5 2.5-2.5H16c2.21 0 4-1.79 4-4 0-3.86-3.59-7-8-7zM5 11.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0zM8 7.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0zM13 7.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0zM16 11.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0z",
   update: "M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1-2.73 2.71-2.73 7.08 0 9.79s7.15 2.71 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.53-9.11-.02-12.58s9.14-3.47 12.65 0L21 3v7.12zM12.5 8v4.25l3.5 2.08-.72 1.21L11 13V8h1.5z",
@@ -139,8 +141,18 @@ export function RepeatBadge({ color }: { color: string }) {
   return <span className="rep" title="Repeats" style={{ color, background: `color-mix(in srgb, ${color} 20%, transparent)` }}><Icon name="repeat" size={12} /></span>;
 }
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime }: {
+/** The icon by an item's time for the reminders it has: an alarm clock, a bell, or a silent bell. */
+function ReminderIcon({ kind }: { kind: AlertType | null }) {
+  if (!kind) return null;
+  const [cls, icon, label] = kind === "ALARM" ? ["alarm", "alarm", "Alarm"] : kind === "REMINDER" ? ["bell", "bell", "Notification"] : ["bell-off", "bellOff", "Silent notification"];
+  return <span className={`sub-icon ${cls}`} role="img" aria-label={label}><Icon name={icon} size={14} /></span>;
+}
+const REMINDER_EMOJI: Record<AlertType, string> = { ALARM: "⏰", REMINDER: "🔔", NOTIFICATION: "🔕" };
+
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** Today's page: behind us now (shown very slightly faded). */
+  past?: boolean;
   /** The phone's time, which can be held to change it (the PC passes none). */
   heldTime?: (entry: TaskEntry) => ReactNode;
   /** The phone's task lists: priority as a coloured "High" tag at the end instead of the small flag. */
@@ -152,7 +164,8 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   const done = status === "DONE";
   const color = s.colorOf(item);
   const due = dueAt(entry);
-  const hasReminders = (s.reminders.get(item.id)?.length ?? 0) > 0;
+  // A ticked task's reminders are off (kept for un-ticking), so it shows none.
+  const kind = done ? null : reminderKind(s.reminders.get(item.id));
   const linked = s.neighbours(item.id).size > 0;
   const subParts: ReactNode[] = [
     showDay && entry.day !== null ? relativeDay(entry.day) : null,
@@ -161,7 +174,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   ].filter(Boolean);
   const sub = subParts.length > 0;
   return (
-    <div className="task" style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
+    <div className={`task ${past ? "past" : ""}`} style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
       <span className="bar" style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
@@ -172,9 +185,9 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
           {item.title || "Untitled"}
         </div>
         {sub && <div className="sub ellipsis">
-          <span className="sub-text">{subParts.map((p, i) => <Fragment key={i}>{i > 0 && " · "}{p}</Fragment>)}</span>{hasReminders && <span className="rem-emoji"> · ⏰</span>}
+          <span className="sub-text">{subParts.map((p, i) => <Fragment key={i}>{i > 0 && " · "}{p}</Fragment>)}</span>{kind && <span className="rem-emoji"> · {REMINDER_EMOJI[kind]}</span>}
           {/* The phone shows these as small icons after the line, like the native row (hidden on the PC). */}
-          {hasReminders && <span className="sub-icon alarm"><Icon name="alarm" size={14} /></span>}
+          <ReminderIcon kind={kind} />
           {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
         </div>}
       </div>
@@ -193,17 +206,18 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
 }
 
 /** [heldTime]: the phone's start and end times, which can be held to change them (the PC passes none). */
-export function EventRow({ o, s, showDay, heldTime }: { o: Occurrence; s: Snapshot; showDay?: boolean; heldTime?: (o: Occurrence, which: "start" | "end") => ReactNode }) {
+export function EventRow({ o, s, showDay, heldTime, past }: { o: Occurrence; s: Snapshot; showDay?: boolean; heldTime?: (o: Occurrence, which: "start" | "end") => ReactNode; past?: boolean }) {
   const t1 = (o.timed && heldTime?.(o, "start")) || (o.startMin !== null ? formatTime(o.startMin) : "");
   const t2 = (o.timed && o.endMin !== null && heldTime?.(o, "end")) || (o.endMin !== null ? formatTime(o.endMin) : "");
   return (
-    <div className="event" onClick={() => openItem(o.item, o.day)}>
+    <div className={`event ${past ? "past" : ""}`} onClick={() => openItem(o.item, o.day)}>
       <div className="time">{o.timed ? <><span className="t1">{t1}</span>{o.endMin !== null && <><br /><span className="t2">{t2}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
         <div className="ellipsis">{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
         <div className="hint ellipsis" style={{ fontSize: 12 }}>
           {[showDay ? relativeDay(o.day) : null, o.multiDay ? `until ${relativeDay(o.endDay)}` : null, isRecurring(o.item) ? describe(o.item) : null].filter(Boolean).join(" · ")}
+          {!past && <ReminderIcon kind={reminderKind(s.reminders.get(o.item.id))} />}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { epochOf, formatDate, formatDateShort, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
+import { epochOf, formatDate, formatDateShort, formatTime, toTimestamp, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../domain/schedule.ts";
 import { carryOver } from "../store/prefs.ts";
 import { type NoteLine, noteLines, preview } from "../domain/text.ts";
@@ -26,6 +26,26 @@ const rowKey = (e: TaskEntry) => `${e.item.id}_${e.day}`;
 
 // The day being looked at, kept while moving around the app; null follows the real today.
 let viewed: number | null = null;
+/** Turns the phone's Today to a day (set while it's shown; the Tomorrow glance's "+3 more" uses it). */
+let showDayOnPhone: ((day: number) => void) | null = null;
+
+/** On today's page, what's behind us: an event that has ended, a timed task ticked once its time came. */
+const eventOver = (o: Occurrence, now: number) => o.timed && toTimestamp(o.endDay, o.endMin ?? o.startMin ?? 0) <= now;
+const taskOver = (e: TaskEntry, now: number) => e.status === "DONE" && e.day !== null && e.item.startMin !== null && toTimestamp(e.day, e.item.startMin) <= now;
+
+/** Tomorrow at a glance on the phone's Today: its first few items in time order, and how many more. */
+const GLANCE_ROWS = 3;
+interface GlanceRow { key: string; item: Occurrence["item"]; min: number | null; allDay: boolean }
+function tomorrowGlance(s: Snapshot, day: number, today: number): GlanceRow[] {
+  const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day)
+    .filter((o) => o.day <= day && o.endDay >= day)
+    .map((o): GlanceRow => ({ key: `e${o.item.id}`, item: o.item, min: o.timed && o.day === day ? o.startMin : null, allDay: !o.timed || o.day !== day }));
+  const tasks = skipRoutines(tasksOnDay(s.items, s.done, day, today)).filter((e) => e.status !== "DONE")
+    .map((e): GlanceRow => ({ key: `t${e.item.id}`, item: e.item, min: e.item.startMin, allDay: false }));
+  // All-day events first, then by time, then untimed tasks.
+  const rank = (g: GlanceRow) => (g.allDay ? -1 : g.min ?? 1e4);
+  return [...events, ...tasks].sort((a, b) => rank(a) - rank(b) || a.item.title.localeCompare(b.item.title));
+}
 /** The day Today shows (the phone's + button adds to it). */
 export const todayViewedDay = () => viewed ?? todayEpoch();
 /** Back to the real today (a double tap on the phone's Today tab). */
@@ -45,6 +65,7 @@ function PcToday() {
   const day = view ?? t;
   const isToday = day === t;
   const show = (d: number) => { viewed = d === t ? null : d; setView(viewed); };
+  useEffect(() => { showDayOnPhone = show; return () => { showDayOnPhone = null; }; });
   const hold = useCheckedHold();
 
   // ← and → change the day when nothing is being typed.
@@ -129,8 +150,12 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
 
   const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
     <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={phone ? taskTime : undefined}
-      onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
+      past={phone && isToday && taskOver(e, now)} onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} />
   ));
+  // The phone keeps Today to about one screen: sections only when they have something, one line when
+  // the day is empty, no week ahead; a glance at tomorrow instead.
+  const nothing = shownOverdue.length === 0 && shownTasks.length === 0 && dayEvents.length === 0;
+  const glance = phone && isToday ? tomorrowGlance(s, day + 1, t) : null;
 
   return <>
       {dayTasks.length > 0 && phone && <PhoneProgress done={doneCount} total={dayTasks.length} />}
@@ -148,8 +173,9 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
         <div className="section">Overdue</div>
         {rows(shownOverdue, `o${day}`, true)}
       </>}
-      <div className="section">Tasks</div>
-      {shownTasks.length === 0 && <div className="hint empty">{isToday ? (phone ? "No tasks due today. Tap + to add one." : "No tasks due today. Use the bar at the top to add one.") : `No tasks were due ${dayWord}.`}</div>}
+      {phone && nothing && <div className="hint empty p-nothing">{isToday ? "Nothing planned today. Tap + to add something." : day < t ? `Nothing was planned ${dayWord}.` : `Nothing planned ${dayWord}.`}</div>}
+      {(!phone || shownTasks.length > 0) && <div className="section">Tasks</div>}
+      {!phone && shownTasks.length === 0 && <div className="hint empty">{isToday ? "No tasks due today. Use the bar at the top to add one." : `No tasks were due ${dayWord}.`}</div>}
       {rows(shownTasks, `t${day}`, false)}
       {anytime > 0 && (phone
         ? <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>
@@ -158,20 +184,39 @@ function DaySections({ day, t, s, now, hold, phone }: { day: number; t: number; 
         <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
         {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
       </>}
-      <div className="section">Schedule</div>
-      {dayEvents.length === 0 && <div className="hint empty">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
-      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={phone ? eventTime : undefined} />)}
-      <div className="section">{isToday ? "Today's note" : "Note"}</div>
+      {(!phone || dayEvents.length > 0) && <div className="section">Schedule</div>}
+      {!phone && dayEvents.length === 0 && <div className="hint empty">{isToday ? "Nothing scheduled today." : `Nothing scheduled ${dayWord}.`}</div>}
+      {dayEvents.map((o) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={phone ? eventTime : undefined} past={phone && isToday && eventOver(o, now)} />)}
+      {glance && <TomorrowGlance rows={glance} s={s} day={day + 1} />}
+      {phone ? <div className="p-note-gap" /> : <div className="section">{isToday ? "Today's note" : "Note"}</div>}
       <div className="card note-preview" onClick={() => go(daily ? `note/${daily.id}` : `note/new?day=${day}`)}>
         {phone && <MIcon name="oEditNote" />}
         {phone
           ? <PhoneNotePreview html={daily?.content ?? null} isToday={isToday} />
           : daily ? preview(daily.content, 200) || "Empty — click to write" : isToday ? "Start today's journal or notes" : "Write a note for this day"}
       </div>
-      {upcoming.length > 0 && <>
+      {!phone && upcoming.length > 0 && <>
         <div className="section">Next 7 days</div>
         {upcoming.map((o) => <EventRow key={`u${o.item.id}-${o.day}`} o={o} s={s} showDay heldTime={phone ? eventTime : undefined} />)}
       </>}
+  </>;
+}
+
+/** Tomorrow's first few items (time, colour, title) and "+3 more", which turns the page to tomorrow. */
+function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day: number }) {
+  const more = rows.length - GLANCE_ROWS;
+  const toTomorrow = () => showDayOnPhone?.(day);
+  return <>
+    <button className="section p-glance-head" onClick={toTomorrow}>Tomorrow</button>
+    {rows.length === 0 && <div className="hint empty">Nothing planned yet.</div>}
+    {rows.slice(0, GLANCE_ROWS).map((g) => (
+      <button key={g.key} className="p-glance-row" onClick={() => openItem(g.item, day)}>
+        <span className="p-glance-time">{g.allDay ? "All day" : g.min !== null ? formatTime(g.min) : ""}</span>
+        <span className="p-glance-dot" style={{ background: s.colorOf(g.item) }} />
+        <span className="p-glance-title">{g.item.title || "Untitled"}</span>
+      </button>
+    ))}
+    {more > 0 && <button className="p-glance-more" onClick={toTomorrow}>+{more} more</button>}
   </>;
 }
 

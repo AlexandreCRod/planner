@@ -177,6 +177,21 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone :is(.today-list, .p-rows) .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone :is(.today-list, .p-rows) .event .grow .hint { font-size: 12px !important; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone :is(.today-list, .p-rows) .event .grow .hint:empty { display: none; }
+.phone :is(.today-list, .p-rows) .event .grow .hint .sub-icon { display: inline-flex; vertical-align: -3px; margin-left: 6px; }
+.phone :is(.today-list, .p-rows) .event .grow .hint .sub-icon:first-child { margin-left: 0; }
+/* Today: what's behind us (an event that has ended, a timed task done once its time came) very slightly faded. */
+.phone .today-list :is(.task, .event).past { opacity: .72; }
+
+/* Today: one line when the day is empty, and tomorrow at a glance (its first few items, "+3 more"). */
+.phone .today-list .hint.empty.p-nothing { padding: 16px 16px 4px; }
+.phone .today-list .p-glance-head { display: block; width: 100%; border: 0; background: none; text-align: left; font-family: inherit; }
+.phone .today-list .p-glance-head::after { content: " A"; }
+.phone .today-list .p-glance-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 16px; border: 0; background: none; text-align: left; font: inherit; color: var(--text); }
+.phone .today-list .p-glance-time { flex: none; width: 50px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
+.phone .today-list .p-glance-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.phone .today-list .p-glance-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; letter-spacing: .25px; }
+.phone .today-list .p-glance-more { display: block; padding: 4px 16px 0 76px; border: 0; background: none; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
+.phone .today-list .p-note-gap { height: 16px; }
 
 .phone .today-list .note-preview {
   margin: 2px 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 0; border-radius: 12px;
