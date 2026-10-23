@@ -1,0 +1,112 @@
+/* The phone's screens with a mouse, and in a wide window (the PC). Two layers over phone.css:
+   - Hover states, for any pointer that can hover (a mouse, a trackpad), never touch: Material's 8% state
+     layer on what can be clicked, the pointer cursor, and the round select box on cards and rows.
+   - html.wide (platform.ts: a browser window 900 px or wider, never the phone build): the bottom bar
+     becomes a side rail with the + button at its top, the open note sits beside the Notes list, Today,
+     Tasks and full-screen pages keep a comfortable width, and sheets open as dialogs in the middle.
+   Tuned for a 1440 x 800 window. */
+
+/* ---------- Hover (mouse and trackpad only) ---------- */
+@media (hover: hover) {
+  html.phone :is(button, [role=button], label.pick, a[href]):not(:disabled) { cursor: pointer; }
+  html.phone :is(.pn-handle, .pn-peek-head) { cursor: grab; }
+  html.phone .pg-block { cursor: pointer; }
+  html.phone .pg-layer { cursor: cell; }
+
+  /* The state layer: the content's own colour at 8%, laid over the background (a picked chip keeps its colour). */
+  html.phone :is(.p-text-btn, .p-outlined-btn, .p-assist, .p-chip, .p-li[role=button], button.p-section, .p-menu button,
+    .p-itemrow, .p-rlist-row, .p-streak-row, .p-glance-row, .p-glance-more, .p-glance-head, .p-anytime, .p-dayswitch, .p-rchip, .pg-dh,
+    .gp-catrow, .p-snack-action, .pa-zone, .p-segmented button, .p-filter, .p-seg button):not(:disabled):hover {
+    background-image: linear-gradient(color-mix(in srgb, currentColor 8%, transparent), color-mix(in srgb, currentColor 8%, transparent));
+  }
+  /* An icon button's layer is its 40 dp circle, inside the 48 dp target. */
+  html.phone .p-icon:not(:disabled):hover { background-image: radial-gradient(circle, color-mix(in srgb, currentColor 8%, transparent) 19.5px, transparent 20px); }
+  html.wide .p-tab:not(.on):hover .p-tab-icon { background-color: color-mix(in srgb, currentColor 8%, transparent); }
+  html.phone :is(.today-list, .p-rows) :is(.task, .event):hover,
+  html.phone .p-mcell:not(.sel):hover { background-image: linear-gradient(color-mix(in srgb, var(--text) 4%, transparent), color-mix(in srgb, var(--text) 4%, transparent)); }
+  html.phone :is(.p-fab, .p-xfab, .p-filled-btn:not(:disabled)):hover { filter: brightness(.96); }
+  html.phone .p-notecard { transition: box-shadow .15s; }
+  html.phone .p-notecard:not([data-lift]):hover { box-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 2px 8px rgb(0 0 0 / .08); }
+  html.phone .pg-block:not(.lifted):hover { filter: brightness(.97) saturate(1.05); }
+
+  /* Picking several (Select.tsx): the round box on the card or row under the pointer, and on all of
+     them while something is picked; a click on it picks that one. */
+  html.phone :is(.p-notecard, .p-itemrow):hover > .p-selbox,
+  html.phone :is(.p-notecard, .p-itemrow)[aria-pressed] > .p-selbox { display: block; }
+}
+.phone .p-selbox { display: none; flex: none; width: 20px; height: 20px; padding: 0; border: 2px solid var(--p-outline); border-radius: 50%; background: var(--bg); opacity: .9; }
+.phone .p-selbox:hover { border-color: var(--p-strong); }
+.phone .p-notecard > .p-selbox { position: absolute; top: 8px; right: 8px; z-index: 1; }
+
+/* ---------- The wide window ---------- */
+html.wide {
+  --rail-w: 88px;
+  /* The Notes list beside the open note: two columns of cards. */
+  --notes-list-w: 432px;
+  /* Today, Tasks, Settings and the other full-screen pages. */
+  --page-w: 800px;
+}
+
+/* The side rail (M3 navigation rail): the + button on top, then the tabs with their labels always shown. */
+.wide .p-bar {
+  top: 0; bottom: 0; right: auto; width: var(--rail-w); height: auto; padding: 88px 0 0;
+  flex-direction: column; background: var(--bg); box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent);
+  touch-action: auto;
+}
+.wide .p-tab { flex: none; height: 68px; }
+.wide .p-tab-icon { margin-top: 6px; width: 56px; height: 32px; border-radius: 16px; transition: color .2s, background-color .15s; }
+.wide .p-tab-label { margin-top: 4px; }
+.wide .p-tab:not(.on) .p-tab-icon { transform: none; }
+.wide .p-tab:not(.on) .p-tab-label { opacity: 1; transform: none; }
+.wide .p-pill-track { top: 88px; width: var(--rail-w); height: 68px; }
+.wide .p-pill { top: 6px; height: 32px; border-radius: 16px; }
+.wide .p-root > .p-fab { left: calc((var(--rail-w) - 56px) / 2); right: auto; top: 16px; bottom: auto; transform: none !important; }
+
+/* Pages and full-screen pages beside the rail, all the way down. */
+.wide .p-pager { left: var(--rail-w); bottom: 0; }
+.wide .p-overlay { left: var(--rail-w); }
+.wide .p-notelayer { bottom: 0; }
+
+/* Today, Tasks and the full-screen pages (an item, Search, Settings) keep a comfortable width, centred.
+   The calendar and the links graph use it all; Notes is a list with the open note beside it. */
+.wide .p-page:is([data-tab=today], [data-tab=tasks], [data-tab=alarms]) > .p-scaffold,
+.wide .p-overlay:not(.p-notelayer):not(.graph) > .p-scaffold { max-width: var(--page-w); margin: 0 auto; position: relative; }
+
+/* Notes: the list on the left; the note opens in the rest (PhoneApp's notes-split), a word there until then. */
+.wide .p-page[data-tab=notes] > .p-scaffold { width: var(--notes-list-w); box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.wide .p-notes-pane {
+  position: absolute; top: 0; bottom: 0; left: var(--notes-list-w); right: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  color: var(--muted); font-size: 16px; line-height: 24px; pointer-events: none;
+}
+.wide .p-notes-pane > svg { opacity: .45; margin-bottom: 4px; }
+.wide .p-notes-pane .small { font-size: 13px; line-height: 18px; opacity: .8; }
+.wide .p-root.notes-split .p-notelayer:not(.away) { left: calc(var(--rail-w) + var(--notes-list-w)); animation-name: p-fade; }
+/* The note's text at a readable width, in the pane or the whole window. */
+.wide .p-notelayer .pn-scroll > * { max-width: 760px; margin-left: auto; margin-right: auto; }
+.wide .p-notelayer .pn-find, .wide .p-notelayer .pn-peek { max-width: 760px; width: calc(100% - 16px); margin-left: auto; margin-right: auto; }
+/* The chip of a note put away: bottom left, beside the rail. */
+.wide .p-notechip-place { left: calc(var(--rail-w) + 16px); right: auto; width: 360px; bottom: 24px; }
+.wide .p-root:has(> .p-snackbar:not(.raised)) > .p-notechip-place { transform: none; }
+
+/* The snackbar: bottom left, beside the rail, Material's desktop size. */
+.wide .p-snackbar, .wide .p-snackbar.raised { left: calc(var(--rail-w) + 24px); right: auto; bottom: 24px; min-width: 344px; max-width: 600px; }
+.wide .p-root:has(> .p-notechip-place) > .p-snackbar:not(.raised) { bottom: 84px; }
+
+/* Bottom sheets open as dialogs in the middle (m3.tsx: they fade out, and have no drag handle). */
+.wide .p-sheet {
+  inset: 0; margin: auto; width: min(560px, calc(100% - 48px)); height: fit-content; max-height: min(86vh, 820px);
+  padding-bottom: 8px; border-radius: 28px; box-shadow: 0 8px 28px rgb(0 0 0 / .22), 0 2px 6px rgb(0 0 0 / .12);
+  animation: p-dialog-in .2s cubic-bezier(.2, 0, 0, 1);
+}
+.wide .p-sheet-top { height: 20px; }
+.wide .p-sheet-handle { display: none; }
+
+/* The add panel: a column in the middle rising from the bottom, not the window's whole width. */
+.wide .gp-panel { left: 50%; right: auto; width: 640px; margin-left: -320px; }
+.wide .gp-bg { border-radius: 28px 28px 0 0; box-shadow: 0 -2px 16px rgb(0 0 0 / .14); }
+.wide .gp-full { border-radius: 28px 28px 0 0; }
+
+/* The item page's Edit button stays with the page's column. */
+.wide .p-overlay > .p-scaffold .p-xfab { right: 24px; bottom: 24px; }
+/* The media lens and the picture viewer: a little more room for pictures on a big screen. */
+.wide .pn-lens-bar { padding-left: calc(var(--rail-w) + 24px); }

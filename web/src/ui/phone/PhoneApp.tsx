@@ -1,6 +1,8 @@
 // The phone shell: pages side by side like a ViewPager, a Material bottom bar that drags them (a finger
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
+// In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
+// top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
 import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
@@ -9,21 +11,23 @@ import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
 import { PhoneCategories, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
-import { TodayView, resetToday, todayViewedDay } from "../TodayView.tsx";
+import { TodayView, resetToday, showTodayDay, todayViewedDay } from "../TodayView.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
-import { MIcon, TabGlyph } from "./chrome.tsx";
+import { MIcon, TabGlyph, openSearch } from "./chrome.tsx";
 import { SnackbarHost } from "./m3.tsx";
 import { DrumHost } from "./TimeWheel.tsx";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
-import { PhoneCalendar, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
+import { PhoneCalendar, calendarGoToday, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
 import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.tsx";
 import "./phone.css";
+import "./wide.css";
 import { App as CapApp } from "@capacitor/app";
-import { isNative } from "../../platform.ts";
+import { isNative, useWide } from "../../platform.ts";
+import { setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
 import { BAR_GAIN, barSwipeReversed, barTarget, spring } from "./pager.ts";
@@ -45,13 +49,16 @@ const LAST = TABS.length - 1;
 const DOUBLE_TAP_MS = 350;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 /**
- * The pager's offset. While it moves it's a 3D translate (its own GPU layer, cheap to slide); at rest it's
- * a plain 2D one, or none, so the page is painted straight onto the screen at whole pixels. (A layer
- * left in place gets resampled at fractional offsets, which is what made text look soft.)
+ * The pager's offset (down the side rail, [axis] Y, for its indicator). While it moves it's a 3D
+ * translate (its own GPU layer, cheap to slide); at rest it's a plain 2D one, or none, so the page is
+ * painted straight onto the screen at whole pixels. (A layer left in place gets resampled at
+ * fractional offsets, which is what made text look soft.) Moving means the whole drag or settle, not
+ * just a fractional offset: a fast slide reaching the first or last page mustn't drop the layer and
+ * build it again mid-gesture, which repainted the pages with a flicker.
  */
-const slide = (p: number, sign: number) => Number.isInteger(p)
-  ? (p ? `translateX(${sign * p * 100}%)` : "none")
-  : `translate3d(${sign * p * 100}%,0,0)`;
+const slide = (p: number, sign: number, moving: boolean, axis: "X" | "Y" = "X") => !moving
+  ? (p ? `translate${axis}(${sign * p * 100}%)` : "none")
+  : axis === "X" ? `translate3d(${sign * p * 100}%,0,0)` : `translate3d(0,${sign * p * 100}%,0)`;
 
 /**
  * Where the pages are (in pages, fractional while moving), written straight to the track and the bar's
@@ -61,28 +68,46 @@ const slide = (p: number, sign: number) => Number.isInteger(p)
  */
 class ShellPos {
   p: number;
+  /** Where the last settle or jump is taking the pages. */
+  target: number;
+  /** The side rail of a wide window: its indicator moves down the rail. */
+  rail = false;
+  private moving = false;
   private anim: Animation | null = null;
   private chase: { target: number; v: number; raf: number; last: number } | null = null;
   track: HTMLElement | null = null;
   pill: HTMLElement | null = null;
   private shown: number;
-  constructor(p: number, private width: () => number, private onShown: (i: number) => void) { this.p = p; this.shown = p; }
+  constructor(p: number, private width: () => number, private onShown: (i: number) => void) { this.p = p; this.shown = p; this.target = p; }
   draw(p: number) {
     this.p = p;
-    if (this.track) this.track.style.transform = slide(p, -1);
-    if (this.pill) this.pill.style.transform = slide(p, 1);
+    this.paint();
     const r = clamp(Math.round(p), 0, LAST);
-    if (r !== this.shown) { this.shown = r; this.onShown(r); }
+    // While moving, the chosen tab changes only once the pages are well past halfway, so a finger
+    // wavering about the middle of a fast slide doesn't flick the tabs back and forth.
+    if (r !== this.shown && (!this.moving || Math.abs(p - this.shown) > 0.6)) { this.shown = r; this.onShown(r); }
   }
+  /** Writes the track's and the indicator's offsets for where the pages are. */
+  paint() {
+    if (this.track) this.track.style.transform = slide(this.p, -1, this.moving);
+    if (this.pill) this.pill.style.transform = slide(this.p, 1, this.moving, this.rail ? "Y" : "X");
+  }
+  get resting() { return !this.moving; }
   stop() {
     this.anim?.stop(); this.anim = null;
     if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
   }
+  /**
+   * A finger landing on the bar while the pages still move: they stop where they are, under it, so a
+   * slide starting now carries on from there instead of jumping back to where the last one began.
+   */
+  grab() { if (this.anim || this.chase) this.stop(); }
   /** At once (a tap on a tab). */
-  jump(i: number) { this.stop(); this.draw(i); }
+  jump(i: number) { this.stop(); this.moving = false; this.target = i; this.draw(i); }
   /** Follows a finger: [target] in pages. */
   follow(target: number) {
     this.anim?.stop(); this.anim = null;
+    this.moving = true;
     if (this.chase) { this.chase.target = target; return; }
     const c = this.chase = { target, v: 0, raf: 0, last: performance.now() };
     const W = 65; // ω of the chase: lags about 2/ω (30 ms) behind a steady finger, catches up within ~60 ms
@@ -104,8 +129,10 @@ class ShellPos {
   settle(i: number, v: number) {
     if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
     this.anim?.stop();
+    this.moving = true;
+    this.target = i;
     const w = Math.max(1, this.width());
-    this.anim = animateSpring(this.p * w, i * w, v * w, (x) => this.draw(x / w), () => { this.anim = null; this.draw(i); }, PAGE_SPRING);
+    this.anim = animateSpring(this.p * w, i * w, v * w, (x) => this.draw(x / w), () => { this.anim = null; this.moving = false; this.draw(i); }, PAGE_SPRING);
   }
 }
 
@@ -126,6 +153,9 @@ export function PhoneApp() {
   const lastTap = useRef({ i: -1, at: 0 });
   const pagerEl = useRef<HTMLDivElement>(null);
   const [pos] = useState(() => new ShellPos(tab, () => pagerEl.current?.clientWidth ?? window.innerWidth, (r) => selectListeners.current.forEach((l) => l(r))));
+  const wide = useWide();
+  pos.rail = wide;
+  useLayoutEffect(() => pos.paint(), [wide, pos]);
   const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
   // The outline the calendar draws where a new event from a slot will go (it follows the panel).
@@ -196,13 +226,28 @@ export function PhoneApp() {
    * second tap on the same tab within 350 ms puts it back to its base view.
    */
   const onTabTap = (i: number) => {
+    const key = TABS[i].key;
     // A tab tapped while a note is open: the note shrinks into its chip and that page shows.
     if (route === "note" && dock) {
+      // Wide, the note sits beside the Notes list: Notes again leaves it there.
+      if (wide && key === "notes" && tabRef.current === i) return;
       minimizing.current = true;
       lastTap.current = { i: -1, at: 0 };
       history.replaceState(null, "", `#/${TABS[i].key}`);
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       if (i === tabRef.current) popBar.current?.();
+      return;
+    }
+    // Wide, the rail stays beside full-screen pages: a tab puts the page away and shows that tab.
+    if (overlay && wide) {
+      history.replaceState(null, "", `#/${key}`);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      return;
+    }
+    // Wide, a note put away comes back beside the Notes list.
+    if (wide && key === "notes" && dock && minimized) {
+      settle(i, 0, true);
+      location.hash = dock.hash;
       return;
     }
     const now = performance.now();
@@ -259,6 +304,8 @@ export function PhoneApp() {
     return () => { void h.then((x) => x.remove()); };
   }, []);
 
+  /** The + button: on Alarms it asks what to add; elsewhere what the page adds. */
+  const fabTap = () => { if (TABS[tabRef.current].key === "alarms") openAlarmAddMenu(); else openAdd(); };
   const openAdd = () => {
     const key = TABS[tabRef.current].key;
     if (key === "notes") { go("note/new"); return; }
@@ -267,21 +314,51 @@ export function PhoneApp() {
     setAdding({ mode: "quick", type, day, min: null });
   };
 
+  // The keys (desk.ts): Esc closes a full-screen page (after anything open over it), N is the + button,
+  // T the page's "today", Ctrl+F the search (a note's own find bar is the note's).
+  useEffect(() => {
+    setDeskHandlers({
+      back: () => { if (!overlay) return false; history.back(); return true; },
+      add: () => { if (!adding && (!overlay || wide)) fabTap(); },
+      today: () => {
+        if (overlay) return;
+        if (TABS[tabRef.current].key === "calendar") { calendarGoToday(); return; }
+        const home = TABS.findIndex((x) => x.key === "today");
+        if (tabRef.current !== home) settle(home, 0, true);
+        showTodayDay(todayEpoch());
+      },
+      find: () => {
+        const field = route === "browse" ? document.querySelector<HTMLInputElement>(".p-searchfield input") : null;
+        if (field) field.focus(); else openSearch();
+      },
+    });
+  });
+  useEffect(() => () => setDeskHandlers(null), []);
+
   return (
-    <div className={`p-root ${noteKb ? "note-kb" : ""}`}>
+    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[tab].key === "notes" ? "notes-split" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
-        <div className="p-track" ref={(el) => { pos.track = el; if (el) el.style.transform = slide(pos.p, -1); }}>
+        <div className="p-track" ref={(el) => { pos.track = el; if (el) pos.paint(); }}>
           {TABS.map((t, i) => (
-            <div key={t.key} className="p-page" ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
+            <div key={t.key} className="p-page" data-tab={t.key} ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
               {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay} />}
+              {/* Wide, the open note shows beside the list; with none open, a word on where it goes. */}
+              {wide && t.key === "notes" && (
+                <div className="p-notes-pane" aria-hidden="true">
+                  <MIcon name="oLightbulb" size={40} />
+                  <span>Open a note to read and write it here</span>
+                  <span className="small">N writes a new one</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
       <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
-      {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what to add. */}
-      {!overlay && (
-        <button className="p-fab" aria-label="Add" onClick={() => { if (TABS[tabRef.current].key === "alarms") openAlarmAddMenu(); else openAdd(); }}>
+      {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what
+          to add. Wide, it heads the rail, which stays beside full-screen pages. */}
+      {(!overlay || wide) && (
+        <button className="p-fab" aria-label="Add" onClick={fabTap}>
           <MIcon name="fAdd" />
         </button>
       )}
@@ -345,7 +422,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "settings") {
     body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : <PhoneSettings />;
   }
-  return <div className="p-overlay">{body}<div className="p-navstrip" aria-hidden="true" /></div>;
+  return <div className={`p-overlay ${route === "graph" ? "graph" : ""}`}>{body}<div className="p-navstrip" aria-hidden="true" /></div>;
 }
 
 /**
@@ -393,7 +470,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       g = null;
     };
     const onMove = (e: PointerEvent) => {
-      if (!g || e.pointerId !== g.id) return;
+      if (!g || e.pointerId !== g.id || pos.rail) return; // the side rail is only tapped
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
@@ -411,15 +488,18 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
         const vx = g.dir * g.vt.velocity(e.timeStamp);
         // A flick turns a page whatever the distance; otherwise the nearest one.
         settleRef.current(barTarget(g.from, at, vx, LAST), (BAR_GAIN * vx) / tabW());
-      } else if (e.type === "pointerup") {
+      } else {
         // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
-        const tabEl = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab");
+        const tabEl = e.type === "pointerup" ? document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab") : null;
         if (tabEl && el.contains(tabEl)) tapRef.current(Number(tabEl.dataset.i));
+        // Pages caught mid-settle by the finger and not sent anywhere by the tap go on where they were going.
+        if (!pos.resting) settleRef.current(pos.target);
       }
       stop();
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      pos.grab();
       g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / TABS.length, dir: barSwipeReversed() ? -1 : 1 };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
@@ -433,7 +513,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   return (
     <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
-      <span className="p-pill-track" style={{ width: `${100 / TABS.length}%` }} ref={(el) => { pos.pill = el; if (el) el.style.transform = slide(pos.p, 1); }}>
+      <span className="p-pill-track" style={{ ["--tabs" as string]: TABS.length }} ref={(el) => { pos.pill = el; if (el) pos.paint(); }}>
         <span className="p-pill" ref={pill} />
       </span>
       {TABS.map((t, i) => (

@@ -8,6 +8,7 @@
 import { animated, easings, to, useSpring } from "@react-spring/web";
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { describe } from "../../domain/recurrence.ts";
+import { isNative } from "../../platform.ts";
 import { formatDate, formatDateShort, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
 import { type ClockCommand, parseClockCommand, parseQuickAdd } from "../../domain/quickadd.ts";
 import { type Frequent, frequentItems, suggestFrequent, titleKey } from "../../domain/frequent.ts";
@@ -251,7 +252,9 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     // The panel comes up on its own: the keyboard only when the title field is tapped.
     api.start({ hidden: 0, config: { duration: 150, easing: easings.easeOutCubic } });
     const t = window.setTimeout(() => setEditorReady(true), 250);
-    return () => clearTimeout(t);
+    // On the PC (no keyboard to bring up) the title takes the typing straight away.
+    const f = !isNative && matchMedia("(pointer: fine)").matches ? window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 160) : 0;
+    return () => { clearTimeout(t); clearTimeout(f); };
   }, [api]);
   useEffect(() => () => { (document.activeElement as HTMLElement | null)?.blur?.(); hideKeyboard(); }, []);
 

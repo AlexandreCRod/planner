@@ -82,7 +82,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
   height: calc(var(--bar-h) + var(--sab)); padding-bottom: var(--sab);
   background: var(--p-sc); touch-action: none; user-select: none; -webkit-user-select: none;
 }
-.phone .p-pill-track { position: absolute; left: 0; top: 0; height: var(--bar-h); pointer-events: none; }
+.phone .p-pill-track { position: absolute; left: 0; top: 0; width: calc(100% / var(--tabs, 4)); height: var(--bar-h); pointer-events: none; }
 .phone .p-pill { position: absolute; left: 50%; margin-left: -28px; top: 7px; width: 56px; height: 30px; border-radius: 15px; background: var(--p-sec-container); }
 .phone .p-tab { flex: 1; min-width: 0; height: var(--bar-h); position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); }
 /* The label shows under the selected tab only: unselected icons sit centred, and the chosen tab's icon

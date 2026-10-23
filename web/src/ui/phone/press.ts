@@ -66,6 +66,7 @@ function cancel(p: Press) {
 // ---------- Long-press labels ----------
 // Holding an icon-only button shows its name (its aria-label) in a small tooltip by it, as Android does,
 // for a second and a half; the button itself then does nothing. One handler for the whole phone layout.
+// A mouse resting on one shows the same tooltip, until it moves away.
 
 const LONG_PRESS = 450;
 const TIP_SHOWN = 1500;
@@ -83,6 +84,22 @@ function iconButton(t: Element): HTMLElement | null {
   if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar")) return null;
   const label = b.getAttribute("aria-label")?.trim();
   return label && !(b.textContent ?? "").trim() ? b : null;
+}
+
+/** A mouse resting this long (ms) on an icon-only button shows its name, until it moves off. */
+const HOVER_TIP = 600;
+let hoverHost: HTMLElement | null = null;
+let hoverTimer = 0;
+
+/** The mouse moved onto something: an icon-only button gets its name shown after a moment. */
+function hover(e: PointerEvent) {
+  if (e.pointerType !== "mouse" || !document.documentElement.classList.contains("phone")) return;
+  const host = e.target instanceof Element ? iconButton(e.target) : null;
+  if (host === hoverHost) return;
+  clearTimeout(hoverTimer);
+  if (hoverHost && tip) hideTip();
+  hoverHost = host;
+  if (host) hoverTimer = window.setTimeout(() => { if (hoverHost === host && host.isConnected) { showTip(host); clearTimeout(tipTimer); } }, HOVER_TIP);
 }
 
 function showTip(host: HTMLElement) {
@@ -180,6 +197,7 @@ export function startPressFeedback() {
   document.addEventListener("pointermove", (e) => endHold(e, true), { capture: true, passive: true });
   document.addEventListener("pointerup", (e) => endHold(e, false), { capture: true, passive: true });
   document.addEventListener("pointercancel", (e) => endHold(e, false), { capture: true, passive: true });
+  document.addEventListener("pointerover", hover, { capture: true, passive: true });
   // No long-press menu or text selection outside the fields one types in (an icon button shows its
   // label instead; a note card starts selecting notes).
   document.addEventListener("contextmenu", (e) => {
@@ -187,6 +205,7 @@ export function startPressFeedback() {
   }, { capture: true });
   document.addEventListener("pointerdown", (e) => {
     if (tip) hideTip();
+    clearTimeout(hoverTimer);
     if (document.documentElement.classList.contains("phone") && e.target instanceof Element && (e.pointerType !== "mouse" || e.button === 0)) startHold(e, e.target);
     if (press) { release(press); press = null; }
     if (e.pointerType === "mouse" && e.button !== 0) return;

@@ -11,7 +11,8 @@ import { notePreview, preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { KINDS, subtitle } from "../BrowseView.tsx";
-import { TaskRow, go, openItem, useCheckedHold, useNow } from "../common.tsx";
+import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../common.tsx";
+import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../GraphView.tsx";
 import { typeLabel } from "../LinksSection.tsx";
 import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
@@ -24,7 +25,7 @@ import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
-import { type Selection, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
+import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 import { count } from "../../domain/plural.ts";
@@ -291,6 +292,15 @@ export const PhoneNotes = memo(function PhoneNotes() {
   );
 });
 
+/**
+ * Opens a note. Wide, the note shows beside the list, and one already open there gives way to it (so
+ * one step back still closes the pane, however many notes were looked at).
+ */
+function openNote(n: Item) {
+  if (isWide() && location.hash.replace(/^#\/?/, "").startsWith("note/")) replaceRoute(`note/${n.id}`);
+  else openItem(n);
+}
+
 function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Selection; onDragDown?: (id: number, e: React.PointerEvent<HTMLElement>) => void }) {
   const picked = sel.ids.has(n.id);
   const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
@@ -305,9 +315,9 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
   const press = onDragDown ? { ...sp, onPointerDown: (e: React.PointerEvent<HTMLElement>) => { sp.onPointerDown(e); onDragDown(n.id, e); } } : sp;
   return (
     <div className={`p-notecard ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined} data-note={n.id} {...press}
-      onClick={() => sel.tap(n.id, () => openItem(n))} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
+      onClick={(e) => sel.tap(n.id, () => openNote(n), e)} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
       {accentArgb !== null && <div className="accent" style={{ background: cssColor(accentArgb) }} />}
-      {picked && <SelectedMark />}
+      {picked ? <SelectedMark /> : <SelectBox onPick={() => sel.toggle(n.id)} />}
       <div className="in">
         <div className="head">
           <span className="title">{n.noteDay !== null ? formatDate(n.noteDay) : n.title || "Untitled"}</span>
@@ -634,13 +644,13 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
             const picked = sel.ids.has(i.id);
             return (
               <div key={i.id} className={`p-itemrow ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined}
-                {...sel.pressProps(i.id)} onClick={() => sel.tap(i.id, () => { if (i.type === "NOTE") findInNextNote(q); openItem(i); })}>
+                {...sel.pressProps(i.id)} onClick={(e) => sel.tap(i.id, () => { if (i.type === "NOTE") findInNextNote(q); openItem(i); }, e)}>
                 <MIcon name={TYPE_ICON[i.type]} size={20} color={s.colorOf(i)} />
                 <div className="grow">
                   <div className="title">{displayTitle(i)}</div>
                   <div className="sub">{subtitle(i, s)}{pv && <><br />{pv}</>}</div>
                 </div>
-                {picked && <SelectedMark />}
+                {picked ? <SelectedMark /> : <SelectBox onPick={() => sel.toggle(i.id)} />}
               </div>
             );
           })}

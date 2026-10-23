@@ -1,18 +1,20 @@
 // Where the app runs: a desktop browser (the PC app), a phone-width browser, or the Capacitor phone
-// build. Everything phone-specific is switched on from here, so the PC layout never changes.
+// build. Every screen is the phone's; a wide browser window lays them out for its width (html.wide).
 import { Capacitor } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 
 /** Running inside the Capacitor Android app. */
 export const isNative = Capacitor.isNativePlatform();
 
-const narrow = typeof matchMedia === "function" ? matchMedia("(max-width: 600px)") : null;
+/** The PC's wide layout starts here; a window snapped to half the screen keeps the phone's. */
+export const WIDE_MIN = 900;
+const wideQuery = !isNative && typeof matchMedia === "function" ? matchMedia(`(min-width: ${WIDE_MIN}px)`) : null;
 
-/** Phone layout: the native app, or a browser window about as narrow as a phone. */
-export const isPhone = () => isNative || !!narrow?.matches;
+/** A browser window wide enough for the side rail and side-by-side panes (never the phone build). */
+export const isWide = () => !!wideQuery?.matches;
 
-export function usePhone(): boolean {
-  return useSyncExternalStore((l) => { narrow?.addEventListener("change", l); return () => narrow?.removeEventListener("change", l); }, isPhone);
+export function useWide(): boolean {
+  return useSyncExternalStore((l) => { wideQuery?.addEventListener("change", l); return () => wideQuery?.removeEventListener("change", l); }, isWide);
 }
 
 // ---------- Server address ----------

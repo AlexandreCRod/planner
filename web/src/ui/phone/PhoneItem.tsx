@@ -20,6 +20,7 @@ import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionH
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
+import { mouseMenu } from "./desk.ts";
 import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { NO_PLACE, type Place, mapsQuery, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
@@ -812,7 +813,8 @@ function useHold(onLong?: () => void) {
     onPointerMove: (e: React.PointerEvent) => { const h = st.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > TOUCH_SLOP) clear(); },
     onPointerUp: clear,
     onPointerCancel: clear,
-    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    // A right-click is the mouse's long press.
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { clear(); onLong(); } },
   };
 }
 

@@ -16,6 +16,7 @@ import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { TOUCH_SLOP } from "./press.ts";
+import { mouseMenu } from "./desk.ts";
 import { joinTime, nearestSlot, splitTime, wheelHours, wheelMinutes, wrapIndex } from "./wheelMath.ts";
 
 export interface WheelOptions {
@@ -286,6 +287,26 @@ function Drum({ anchor, values, index, wrap, label, pointerId, onPick, onClose }
     return () => { d.stop(); bloom.current?.stop(); anchor.style.visibility = ""; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => pushBack(fold), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A mouse wheel turns it a number per notch (a trackpad's smooth scroll, a number per row's height).
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    // Opened by a right-click: the arrow keys turn it too.
+    if (pointerId === undefined) el.focus({ preventScroll: true });
+    let acc = 0;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (closing.current) return;
+      if (e.deltaMode !== 0 || Math.abs(e.deltaY) >= 50) { drive.current?.step(Math.sign(e.deltaY)); acc = 0; return; }
+      acc += e.deltaY;
+      const n = Math.trunc(acc / g.rowH);
+      if (!n) return;
+      acc -= n * g.rowH;
+      drive.current?.step(n);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handing = useHandoff(pointerId, drive, (turned) => { if (turned) foldOnRest.current = true; });
 
@@ -349,9 +370,10 @@ let swallowClick = false;
 /**
  * Props for something that opens a drum when held (450 ms, with the soft pick-up feel): [onHold] gets the
  * finger's pointer id, so the same finger can go on to turn it. The click after a hold is swallowed,
- * so the row or button under it doesn't open too.
+ * so the row or button under it doesn't open too. A right-click opens it as well (with no pointer to
+ * hand on: the mouse wheel, clicks and the arrow keys turn it then).
  */
-export function holdProps(onHold: (pointerId: number) => void): HTMLAttributes<HTMLElement> {
+export function holdProps(onHold: (pointerId?: number) => void): HTMLAttributes<HTMLElement> {
   return {
     onPointerDown: (e) => {
       if (e.button !== 0 || !e.isPrimary) return;
@@ -369,7 +391,13 @@ export function holdProps(onHold: (pointerId: number) => void): HTMLAttributes<H
     onPointerUp: () => { if (hold && !hold.fired) clearTimeout(hold.timer); hold = null; },
     onPointerCancel: () => { if (hold && !hold.fired) clearTimeout(hold.timer); hold = null; },
     onClickCapture: (e) => { if (swallowClick) { swallowClick = false; e.stopPropagation(); e.preventDefault(); } },
-    onContextMenu: (e) => e.preventDefault(),
+    onContextMenu: (e) => {
+      e.preventDefault();
+      if (!mouseMenu(e)) return;
+      if (hold) { clearTimeout(hold.timer); hold = null; }
+      e.stopPropagation();
+      onHold();
+    },
   };
 }
 

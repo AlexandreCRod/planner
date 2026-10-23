@@ -21,7 +21,9 @@ import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
-import { openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
+import { MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
+import { deskPager, isMouse, mouseMenu } from "./desk.ts";
+import { wheelZoom } from "./keys.ts";
 
 type Mode = "day" | "3day" | "week" | "month" | "year" | "agenda";
 const MODES: [Mode, string][] = [["day", "Day"], ["3day", "3 days"], ["week", "Week"], ["month", "Month"], ["year", "Year"], ["agenda", "Agenda"]];
@@ -50,6 +52,10 @@ export function resetCalendar() {
   savedHour = null;
   localStorage.removeItem(ZOOM_KEY);
 }
+
+let goToday: (() => void) | null = null;
+/** The calendar's own Today button (the T key). */
+export const calendarGoToday = () => goToday?.();
 
 /** Text on a solid colour, as Compose's contentColor(): dark on light colours, white on the rest. */
 export function onColor(c: string): string {
@@ -80,6 +86,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const setFilters = (n: typeof filters) => { filters = n; setF(n); };
   /** Picked in the menu: remembered, like the native calendarView setting. */
   const pickMode = (m: Mode) => { localStorage.setItem("calModePhone", m); setMode(m); };
+  useEffect(() => { goToday = () => setAnchor(todayEpoch()); return () => { goToday = null; }; });
 
   const step = (dir: number) => setAnchor(
     mode === "day" ? anchor + dir : mode === "3day" ? anchor + 3 * dir : mode === "week" || mode === "agenda" ? anchor + 7 * dir
@@ -283,7 +290,8 @@ function useLongPress(onLong: (d: number) => void, onTap: (d: number) => void) {
     onPointerUp: () => { const p = st.current; if (p) clearTimeout(p.timer); },
     onPointerCancel: () => { const p = st.current; if (p) clearTimeout(p.timer); st.current = null; },
     onClick: () => { const p = st.current; st.current = null; if (!p?.fired) cb.current.onTap(d); },
-    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    // A right-click is the mouse's long press.
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { const p = st.current; if (p) clearTimeout(p.timer); st.current = null; cb.current.onLong(d); } },
   });
 }
 
@@ -377,6 +385,8 @@ interface Gesture {
   dx: number; dy: number; x: number; y: number;
   vt: VelocityTracker; sx: number;
   snap: string; raf: number;
+  /** A mouse: a block moved with the button down is picked up at once (there's no scroll to tell it from). */
+  mouse: boolean;
 }
 
 function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, onDayHeader, onDayNote }: {
@@ -606,7 +616,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       g = {
         id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, scroll0: el.scrollTop,
         block, key: block?.dataset.key ?? "", timer: 0, lifted: false, swiping: false, moved: false,
-        dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0,
+        dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0, mouse: isMouse(e),
       };
       g.vt.add(e.timeStamp, e.clientX);
       if (block) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
@@ -622,15 +632,16 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       if (Math.abs(g.dx) > TOUCH_SLOP || Math.abs(g.dy) > TOUCH_SLOP) {
         g.moved = true;
         clearTimeout(g.timer);
+        if (g.mouse && g.block) { lift(); return; }
         if (Math.abs(g.dx) > Math.abs(g.dy) * 1.2) { g.swiping = true; g.x0 += Math.sign(g.dx) * TOUCH_SLOP; g.dx = e.clientX - g.x0; swipeTo(g); }
       }
     };
 
-    /** Lets the days go: on to the next range, or back, on the pager's spring (no buzz, as native). */
-    const settleSwipe = (dx: number, vx: number) => {
+    /** Lets the days go: on to the next range, or back, on the pager's spring (no buzz, as native). [to]: a key's or trackpad's turn. */
+    const settleSwipe = (dx: number, vx: number, to?: 1 | -1) => {
       writeLayers.cancel();
       const w = layer.current?.clientWidth ?? 300;
-      const dir = pageTarget(dx, vx, w);
+      const dir = to ?? pageTarget(dx, vx, w);
       let done = false;
       const finish = () => {
         if (done) return;
@@ -738,6 +749,37 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     };
     const noMenu = (e: Event) => e.preventDefault();
 
+    // ----- Mouse and keyboard: ← → and a sideways trackpad swipe turn the days, as a flick would;
+    // Ctrl+wheel (a trackpad's pinch) zooms like two fingers, about the pointer.
+    const undoDesk = deskPager(el, (dir) => {
+      if (g || pinch) return;
+      if (settling) { settling.stop(); settling.end(); }
+      settleSwipe(0, 0, dir);
+    });
+    let zoomTarget = 0, zoomY = 0, saveTimer = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey || g?.lifted || pinch) return;
+      e.preventDefault(); // not the browser's own zoom
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
+      zoomTarget = wheelZoom(zoomTarget || hourRef.current, e.deltaY * unit, el.clientHeight / 24, MAX_HOUR_HEIGHT);
+      zoomY = e.clientY - el.getBoundingClientRect().top;
+      cancelAnimationFrame(zoomRaf);
+      zoomRaf = requestAnimationFrame(() => {
+        const oldH = hourRef.current, newH = zoomTarget;
+        zoomTarget = 0;
+        if (Math.abs(newH - oldH) < 0.05) return;
+        pendingScroll.current = zoomScrollTop(el.scrollTop, zoomY, oldH, newH);
+        hourRef.current = newH;
+        setHourH(newH);
+      });
+      clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        savedHour = hourRef.current;
+        localStorage.setItem(ZOOM_KEY, String(Math.round(savedHour * 10) / 10));
+      }, 400);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+
     el.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -751,6 +793,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       end();
       settling?.stop();
       cancelAnimationFrame(zoomRaf);
+      clearTimeout(saveTimer);
+      undoDesk();
+      el.removeEventListener("wheel", onWheel);
       el.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);

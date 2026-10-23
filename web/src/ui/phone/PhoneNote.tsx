@@ -25,6 +25,7 @@ import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndo
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
 import { NOTE_DAYS } from "../../domain/retention.ts";
 import { useKeyboardUp } from "./native.ts";
+import { setNoteFind } from "./desk.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
 
@@ -62,6 +63,12 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
     const a = document.activeElement as HTMLElement | null;
     if (a && pageEl.current?.contains(a)) a.blur();
   }, [shown]);
+
+  // Ctrl+F while the note is shown: its own find bar, not the app's search.
+  useEffect(() => (shown ? setNoteFind(() => {
+    const field = pageEl.current?.querySelector<HTMLInputElement>(".pn-find input");
+    if (field) { field.focus(); field.select(); } else setFinding((f) => ({ q: f?.q ?? "", focus: true }));
+  }) : undefined), [shown]);
 
   /** Swap: the panel's note becomes the one written in, and this one goes to the panel. */
   const swap = () => {

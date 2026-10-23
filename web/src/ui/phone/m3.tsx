@@ -9,6 +9,7 @@ import { spring } from "./pager.ts";
 import { sheetCloses } from "./sheet.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { frameWriter } from "./motion.ts";
+import { isWide } from "../../platform.ts";
 
 /** Material 3 switch: a 52×32 track; the thumb grows from 16 to 24 dp and slides across when on. */
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
@@ -149,6 +150,7 @@ export function contentColor(c: string): string {
  * Material 3 modal bottom sheet: slides up over a scrim, 28 dp top corners, a drag handle. Dragged
  * by its top it follows the finger and closes when let go far enough down (or flung); back, a tap on
  * the scrim and the content's own buttons (through the `close` it is given) close it with the slide.
+ * In a wide window it's a dialog in the middle instead (wide.css): it fades out, and has no drag.
  */
 export function BottomSheet({ onClose, children, className = "" }: { onClose: () => void; children: (close: () => void) => ReactNode; className?: string }) {
   const sheet = useRef<HTMLDivElement>(null);
@@ -162,10 +164,17 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
     (document.activeElement as HTMLElement | null)?.blur?.();
     const el = sheet.current;
     if (!el) { onCloseRef.current(); return; }
-    el.style.transition = "transform .2s cubic-bezier(.3, 0, .8, .15)";
-    el.style.transform = `translate3d(0,${el.offsetHeight + 24}px,0)`;
-    if (scrim.current) { scrim.current.style.transition = "opacity .2s linear"; scrim.current.style.opacity = "0"; }
-    window.setTimeout(() => onCloseRef.current(), 200);
+    const wide = isWide();
+    if (wide) {
+      el.style.transition = "opacity .15s linear, transform .15s cubic-bezier(.3, 0, .8, .15)";
+      el.style.opacity = "0";
+      el.style.transform = "scale(.96)";
+    } else {
+      el.style.transition = "transform .2s cubic-bezier(.3, 0, .8, .15)";
+      el.style.transform = `translate3d(0,${el.offsetHeight + 24}px,0)`;
+    }
+    if (scrim.current) { scrim.current.style.transition = `opacity ${wide ? ".15s" : ".2s"} linear`; scrim.current.style.opacity = "0"; }
+    window.setTimeout(() => onCloseRef.current(), wide ? 150 : 200);
   }).current;
   useEffect(() => pushBack(close), [close]);
 
@@ -185,7 +194,7 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
     // Moves come faster than frames: the sheet is moved once a frame, to the latest.
     const write = frameWriter(place);
     const onDown = (e: PointerEvent) => {
-      if (closing.current || g || !(e.target as Element).closest(".p-sheet-top")) return;
+      if (closing.current || g || isWide() || !(e.target as Element).closest(".p-sheet-top")) return;
       stop?.(); stop = null;
       el.style.transition = "";
       g = { id: e.pointerId, y0: e.clientY, dy: 0, v: 0, lastY: e.clientY, lastT: e.timeStamp, moving: false };

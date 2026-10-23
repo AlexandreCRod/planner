@@ -10,7 +10,8 @@ import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCatego
 import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
 import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
-import { getServer, isNative, setServer } from "../../platform.ts";
+import { getServer, isNative, setServer, useWide } from "../../platform.ts";
+import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../LinksSection.tsx";
 import { checkedLinger, go, showDoneOnToday } from "../common.tsx";
 import { applyTheme, useSyncStatus } from "../SettingsView.tsx";
@@ -140,6 +141,9 @@ export function PhoneSettings() {
   const [dialog, setDialog] = useState<"" | "server" | "signout">("");
   const [server, setServerShown] = useState(getServer());
   const [busy, setBusy] = useState(false);
+  // The PC: reminders pop up from the page (notify.ts) once the browser may show notifications.
+  const [notify, setNotify] = useState(notificationsEnabled);
+  const wide = useWide();
 
   useEffect(() => { store("theme", theme); store("accent", accent); applyTheme(); }, [theme, accent]);
   useEffect(() => { store("pureBlack", String(pureBlack)); applyPureBlack(); }, [pureBlack]);
@@ -167,9 +171,9 @@ export function PhoneSettings() {
           </div>
         </div>
         <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
-        <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
+        {!wide && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
           : "Sliding right along the bar goes to the page on the right, the indicator under the finger"} checked={barReversed}
-          onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />
+          onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
 
         <div className="p-hr" />
         <SectionHeader>Calendar</SectionHeader>
@@ -190,10 +194,17 @@ export function PhoneSettings() {
         <ListItem headline="Streaks" supporting="Each routine's current and best streak, and its last 14 days" onClick={() => setStreaksOpen(true)} />
 
         {hasAlarms && <AlarmSettingsSection />}
+        {!isNative && <>
+          <div className="p-hr" />
+          <SectionHeader>Reminders</SectionHeader>
+          <SwitchRow title="Show reminders on this computer" supporting="As desktop notifications, while Planner is open in a tab. The phone rings them as alarms"
+            checked={notify} onChange={(v) => void setNotificationsEnabled(v).then(setNotify)} />
+        </>}
 
         <div className="p-hr" />
         <SectionHeader>Cloud sync</SectionHeader>
-        <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />
+        {/* The PC is served by the server itself; only the phone build is told where it is. */}
+        {isNative && <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />}
         <ListItem headline="Status" supporting={<span className="ps-pre">{status}</span>} />
         <div className="ps-buttons">
           <OutlinedButton disabled={busy || sync.state === "signed-out"} onClick={async () => { setBusy(true); await syncNow(); setBusy(false); }}>Sync now</OutlinedButton>
@@ -217,7 +228,7 @@ export function PhoneSettings() {
         <Dialog title="Sign out?" onClose={() => setDialog("")} actions={<>
           <TextButton onClick={() => setDialog("")}>Cancel</TextButton>
           <TextButton onClick={async () => { await resetLocal(); signOut(); location.reload(); }}>Sign out</TextButton>
-        </>}>This removes this phone's copy. Your data stays on the server and your other devices.</Dialog>
+        </>}>{isNative ? "This removes this phone's copy." : "This removes this browser's copy."} Your data stays on the server and your other devices.</Dialog>
       )}
     </Scaffold>
   );

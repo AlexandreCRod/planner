@@ -10,6 +10,7 @@ import { flushSync } from "react-dom";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { FLICK, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
+import { deskPager } from "./desk.ts";
 
 /** A flick turns the page whatever the distance (motion.ts FLICK; Compose's own is 400 dp/s). */
 export const SNAP_VELOCITY = FLICK;
@@ -82,10 +83,11 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       o.current.onMove?.(x, width());
     };
     const write = frameWriter(place);
-    const settle = (dx: number, vx: number) => {
+    /** Lets the pages go from [dx] at [vx]; [to] turns a page whatever the drag (a key or a trackpad swipe). */
+    const settle = (dx: number, vx: number, to?: 1 | -1) => {
       write.cancel();
       const w = width();
-      let dir = pageTarget(dx, vx, w);
+      let dir = to ?? pageTarget(dx, vx, w);
       if (dir && o.current.canStep && !o.current.canStep(dir)) dir = 0;
       const end = () => {
         stopAnim = null; finishAnim = null;
@@ -152,8 +154,17 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       window.addEventListener("pointercancel", onCancel, { passive: true });
     };
     el.addEventListener("pointerdown", onDown, { passive: true });
+    // The mouse and keyboard: ← → (while this is the pager in view) and a sideways trackpad swipe turn
+    // one page, on the same spring, as if flicked.
+    const undoDesk = deskPager(el, (dir) => {
+      if (g?.dragging) return;
+      if (stopAnim) { stopAnim(); finishAnim?.(); }
+      if (o.current.canStep && !o.current.canStep(dir)) return;
+      cw = 0;
+      settle(0, 0, dir);
+    }, (t) => !o.current.allow || o.current.allow(t));
     return () => {
-      stop(); stopAnim?.(); write.cancel();
+      stop(); stopAnim?.(); write.cancel(); undoDesk();
       el.removeEventListener("pointerdown", onDown);
     };
   }, []);

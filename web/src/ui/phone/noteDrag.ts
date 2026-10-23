@@ -7,7 +7,8 @@
 // stays exactly under the finger, the other cards slide out of its way to their new places, the list
 // scrolls near the top or bottom edge, and letting go settles it into its slot (one settle pulse).
 // Pinned notes move among the pinned ones, the others among the others; the new order is saved by
-// [onDrop] (pinOrder or listOrder, domain/noteOrder.ts).
+// [onDrop] (pinOrder or listOrder, domain/noteOrder.ts). With a mouse there's no long press first: a
+// card moved with the button down is dragged straight away.
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { type Slot, inSlot, moveId, noteSlots } from "../../domain/noteOrder.ts";
 import { feel } from "./haptics.ts";
@@ -215,7 +216,15 @@ export function useNoteGrid(opts: {
     if (!d || e.pointerId !== d.pointer) return;
     d.fx = e.clientX; d.fy = e.clientY;
     const far = Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > TOUCH_SLOP;
-    if (!d.held) { if (far) end(false); return; } // a scroll
+    if (!d.held) {
+      if (!far) return;
+      // A finger moving first is a scroll; a mouse has no scroll to tell apart, so a card moved with
+      // the button down is lifted at once and dragged.
+      if (e.pointerType !== "mouse") { end(false); return; }
+      clearTimeout(d.timer);
+      lift(d);
+      if (!d.held) { end(false); return; }
+    }
     if (!d.dragging) {
       if (!far) return;
       d.dragging = true;

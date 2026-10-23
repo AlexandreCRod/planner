@@ -11,6 +11,7 @@ import { EventRow, Icon, TaskRow, go, openItem, showDoneOnToday, useCheckedHold,
 import { AppBarActions, IconButton, MIcon } from "./phone/chrome.tsx";
 import { feel } from "./phone/haptics.ts";
 import { useSwipePager } from "./phone/pager.ts";
+import { mouseMenu } from "./phone/desk.ts";
 import { openTodoTab } from "./phone/PhoneLists.tsx";
 import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
 import { HeldTime } from "./phone/TimeWheel.tsx";
@@ -50,6 +51,11 @@ function tomorrowGlance(s: Snapshot, day: number, today: number): GlanceRow[] {
 export const todayViewedDay = () => viewed ?? todayEpoch();
 /** Back to the real today (a double tap on the phone's Today tab). */
 export const resetToday = () => { viewed = null; };
+/** Turns Today to [day] (the T key), at once, like its own "Back to today" button. */
+export function showTodayDay(day: number) {
+  if (showDayOnPhone) showDayOnPhone(day);
+  else viewed = day === todayEpoch() ? null : day;
+}
 
 type Hold = ReturnType<typeof useCheckedHold>;
 
@@ -346,6 +352,7 @@ function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { titl
       }}
       onPointerMove={(e) => { const h = hold.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 8) { clear(); hold.current = null; } }}
       onPointerUp={clear} onPointerCancel={() => { clear(); hold.current = null; }}
+      onContextMenu={(e) => { e.preventDefault(); if (mouseMenu(e)) { clear(); hold.current = null; onOpen(); } }}
       onClick={() => { const h = hold.current; hold.current = null; if (!h?.fired) onToggle(); }}>
       <span className="ring">{ticked && <MIcon name="fCheck" size={14} />}</span>
       <span className="name">{title}</span>
@@ -421,6 +428,7 @@ function PhoneToday() {
   dayRef.current = day;
   const isToday = day === t;
   const show = (d: number) => { viewed = d === t ? null : d; setView(viewed); };
+  useEffect(() => { showDayOnPhone = show; return () => { showDayOnPhone = null; }; });
   const hold = useCheckedHold();
   const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
   // The neighbours are drawn a moment after the day changes, so turning a day (by swipe or arrow)

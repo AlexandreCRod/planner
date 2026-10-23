@@ -15,6 +15,7 @@ import { TextButton, showSnackbar } from "./m3.tsx";
 import { GLIDE_SPRING, type Animation, VelocityTracker, animateSpring } from "./motion.ts";
 import { pushBack } from "./native.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { deskPager, mouseMenu } from "./desk.ts";
 
 const LONG_PRESS = 450;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -58,9 +59,9 @@ function VideoMark({ m }: { m: NoteImage }) {
   return <span className="pn-media-video"><MIcon name="fPlayArrow" size={16} />{d}</span>;
 }
 
-/** The row of previews. A tap opens one ([onOpen]); a long press opens the lens on it ([onLens]). */
+/** The row of previews. A tap opens one ([onOpen]); a long press (or a right-click) opens the lens on it ([onLens]). */
 export function MediaStrip({ media, onOpen, onLens }: {
-  media: NoteImage[]; onOpen: (i: number) => void; onLens: (i: number, pointer: { id: number; x: number }) => void;
+  media: NoteImage[]; onOpen: (i: number) => void; onLens: (i: number, pointer: { id: number; x: number } | null) => void;
 }) {
   const press = useRef<{ id: number; x: number; y: number; i: number; timer: number } | null>(null);
   const cancel = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null; } };
@@ -72,7 +73,7 @@ export function MediaStrip({ media, onOpen, onLens }: {
     }} onPointerUp={cancel} onPointerCancel={cancel}>
       {media.map((m, i) => (
         <button key={m.id} className="pn-media-item" style={{ aspectRatio: String(clamp(aspect(m), 0.6, 1.8)) }} aria-label={isVideo(m) ? "Open video" : "Open picture"}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={(e) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); onLens(i, null); } }}
           onPointerDown={(e) => {
             if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
             cancel();
@@ -195,6 +196,8 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
     };
     const noScroll = (e: TouchEvent) => { if (g && e.cancelable) e.preventDefault(); };
     const el = root.current!;
+    // ← → and a sideways trackpad swipe bring the next or previous one to the middle.
+    const undoDesk = deskPager(el, (dir) => { if (!g && !closing.current) settle(clamp(curRef.current + dir, 0, n - 1)); });
     el.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("pointerup", onUp);
@@ -208,6 +211,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
       document.removeEventListener("touchmove", noScroll);
       cancelAnimationFrame(raf.current);
       anim.current?.stop();
+      undoDesk();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

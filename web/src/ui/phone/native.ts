@@ -9,6 +9,7 @@ import { startPressFeedback } from "./press.ts";
 import { startPhoneTheme } from "./theme.ts";
 import { startDeviceClock } from "./device.ts";
 import { startOverscroll } from "./overscroll.ts";
+import { startDesk } from "./desk.ts";
 
 // ---------- Keyboard ----------
 // How much of the bottom of the page the keyboard covers, in CSS px. In the app, Capacitor's
@@ -41,6 +42,7 @@ export function startPhonePlumbing() {
   startSelectScroll();
   startSelectionBar();
   startDeviceClock();
+  startDesk({ pending: backPending, closeTop }, isNative);
   const vv = window.visualViewport;
   if (vv) {
     const measure = () => { viewportCover = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)); update(); };
@@ -66,6 +68,15 @@ export function setShellBack(fn: () => void) { shellBack = fn; }
 function onBack() {
   const top = backStack[backStack.length - 1];
   if (top) top(); else shellBack();
+}
+/** Something open (a sheet, dialog, menu, a selection...) takes the next back press. */
+export const backPending = () => backStack.length > 0;
+/** Esc on the PC: the newest open thing closes, as the back button would close it. False when none is open. */
+export function closeTop(): boolean {
+  const top = backStack[backStack.length - 1];
+  if (!top) return false;
+  top();
+  return true;
 }
 export const minimizeApp = () => { if (isNative) void CapApp.minimizeApp().catch(() => {}); };
 export const showKeyboard = () => { if (isNative) void Keyboard.show().catch(() => {}); };
