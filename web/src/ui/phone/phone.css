@@ -126,10 +126,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
    M3 insets 16 dp; the arrows sit in the title slot, so they take the title's colour, onSurface). */
 .phone .p-dayrow { display: flex; align-items: center; min-width: 0; margin-left: 12px; }
 .phone .p-icon.title-icon { color: var(--text); }
-.phone .p-dayswitch { position: relative; display: flex; flex-direction: column; padding: 0 6px; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone .p-dayswitch { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; padding: 0 6px; border: 0; background: none; font: inherit; text-align: left; border-radius: 8px; min-width: 0; color: var(--text); }
 .phone .p-dayswitch .big { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; color: var(--text); white-space: nowrap; }
 .phone .p-dayswitch .small { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
-.phone .p-dayswitch input { position: absolute; inset: 0; opacity: 0; width: 100%; }
 .phone .p-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 16px 104px; }
 .phone .p-content.flush { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .phone .p-content.note-host { overflow-y: auto; display: block; }
@@ -1230,6 +1229,8 @@ html.phone[data-theme="dark"] {
 .phone .p-mdp-days button.sel:not(.joinl):not(.joinr) span { width: 40px; justify-self: center; margin: 0; }
 .phone .p-mdp .p-dp-actions .grow { flex: 1; }
 .phone .p-dp-month.static { pointer-events: none; }
+.phone .p-daysheet .p-dp-nav { padding: 0 12px 0 16px; }
+.phone .p-daysheet .p-dp-month { font-size: 16px; color: var(--text); }
 
 /* The weather when an alarm next rings, beside its switch. */
 .phone .pa-cardwx { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; }

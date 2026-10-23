@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addMonths, daysInMonth, epochOf, formatDate, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
 import { IconButton, MIcon, ModalLayer } from "./chrome.tsx";
-import { TextButton } from "./m3.tsx";
+import { BottomSheet, TextButton } from "./m3.tsx";
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
@@ -146,6 +146,40 @@ export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
         <TextButton onClick={() => { onPick([...sel].sort((a, b) => a - b)); onClose(); }}>OK</TextButton>
       </div>
     </PickerShell>
+  );
+}
+
+/**
+ * Going to a day (Today's title): the app's bottom sheet with a month that swipes or turns with the
+ * arrows; a tap on a day goes there and closes it.
+ */
+export function DayPickerSheet({ value, onPick, onClose }: { value: number; onPick: (day: number) => void; onClose: () => void }) {
+  const t = todayEpoch();
+  const [month, setMonth] = useState(() => { const { y, m } = ymd(value); return epochOf(y, m, 1); });
+  const strip = useRef<HTMLDivElement>(null);
+  const pager = useSwipePager<HTMLDivElement>({ layers: () => [strip.current], onStep: (dir) => setMonth((m) => addMonths(m, dir)) });
+  const { y, m } = ymd(month);
+  const thisMonth = (() => { const n = ymd(t); return epochOf(n.y, n.m, 1); })();
+  return (
+    <BottomSheet onClose={onClose} className="p-daysheet">{(close) => <>
+      <div className="p-dp-nav">
+        <span className="p-dp-month static">{monthLong(m)} {y}</span>
+        <span className="grow" />
+        {month !== thisMonth && <TextButton onClick={() => { onPick(t); close(); }}>Today</TextButton>}
+        <IconButton icon="fKeyboardArrowLeft" label="Previous month" onClick={() => setMonth(addMonths(month, -1))} />
+        <IconButton icon="fKeyboardArrowRight" label="Next month" onClick={() => setMonth(addMonths(month, 1))} />
+      </div>
+      <div className="p-dp-week">{weekLabels().map((l, i) => <span key={i}>{l}</span>)}</div>
+      <div className="p-hpager p-dp-pager" ref={pager}>
+        <div className="p-hstrip" ref={strip}>
+          {[addMonths(month, -1), month, addMonths(month, 1)].map((first, i) => (
+            <div key={first} className={`p-hpanel ${i === 1 ? "cur" : ""}`} style={{ left: `${(i - 1) * 100}%` }} aria-hidden={i !== 1}>
+              <MonthDays first={first} sel={value} today={t} onPick={(d) => { onPick(d); close(); }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </>}</BottomSheet>
   );
 }
 

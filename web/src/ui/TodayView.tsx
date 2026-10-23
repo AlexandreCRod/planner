@@ -14,6 +14,7 @@ import { openTodoTab } from "./phone/PhoneLists.tsx";
 import { canHoldEvent, moveEvent, moveTask, setEventEnd } from "./phone/eventTime.ts";
 import { HeldTime } from "./phone/TimeWheel.tsx";
 import { BottomSheet } from "./phone/m3.tsx";
+import { DayPickerSheet } from "./phone/pickers.tsx";
 import { count } from "../domain/plural.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -378,6 +379,7 @@ function PhoneToday() {
   const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
   // The neighbours are drawn a moment after the day changes, so turning a day (by swipe or arrow)
   // only has to move pages that are already there; the new neighbour follows in the background.
+  const [picking, setPicking] = useState(false);
   const near = useDeferredValue(day);
   const days = [...new Set([near - 1, near, near + 1, day])].sort((a, b) => a - b);
   const track = useRef<HTMLDivElement>(null);
@@ -393,20 +395,17 @@ function PhoneToday() {
       <header className="p-appbar tall">
         <div className="p-dayrow">
           <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => show(day - 1)} />
-          <label className="p-dayswitch">
+          <button className="p-dayswitch" aria-label="Go to a day" onClick={() => setPicking(true)}>
             <span className="big">{word ?? WEEKDAYS[weekday(day) - 1]}</span>
             <span className="small">{word ? formatDate(day) : formatDateShort(day)}</span>
-            <input type="date" value={toInput(day)} onChange={(e) => {
-              const [y, m, d] = e.target.value.split("-").map(Number);
-              if (e.target.value) show(epochOf(y, m, d));
-            }} />
-          </label>
+          </button>
           <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => show(day + 1)} />
         </div>
         <span className="grow" />
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         <AppBarActions />
       </header>
+      {picking && <DayPickerSheet value={day} onPick={show} onClose={() => setPicking(false)} />}
       <div className="p-daypager" ref={pager}>
         <div className="p-daytrack" ref={track}>
           {days.map((d) => (
