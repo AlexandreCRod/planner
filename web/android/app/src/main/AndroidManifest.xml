@@ -118,6 +118,14 @@
         </provider>
     </application>
 
+    <!-- Directions (device/DevicePlugin.kt): the apps that open place links, to offer them in a chooser. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

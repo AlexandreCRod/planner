@@ -46,9 +46,15 @@ export interface Item {
   priority: number;
   /** Place name or address (missing on records made before places existed). */
   location?: string;
-  /** Coordinates when the place came from the device's position. */
+  /** The place's coordinates, when it was picked from the suggestions. */
   lat?: number | null;
   lng?: number | null;
+  /** A picked place's own name ("Decathlon"; [location] is the label shown, the same unless renamed), its
+   *  address, and a short area to tell places apart ("Alfragide"). Missing on records from before places
+   *  had names, which show their location text as it is. */
+  placeName?: string;
+  address?: string;
+  area?: string;
   /** A repeating task done as a habit: on Today's own checklist, a missed day only ends its streak
    *  (domain/routines.ts). Missing on records made before routines synced. */
   routine?: boolean;

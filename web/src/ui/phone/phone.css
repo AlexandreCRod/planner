@@ -956,6 +956,8 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-place > svg { flex: none; color: var(--muted); }
 .phone .pe-place .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; line-height: 20px; }
 .phone .pe-place-sub { font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pe-placefield { display: flex; flex-direction: column; min-width: 0; }
+.phone .pe-info-sub { display: block; font-size: 13px; line-height: 18px; color: var(--muted); text-decoration: none; }
 .phone .pe-pick { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 24px; font-size: 15px; line-height: 20px; color: var(--text); }
 .phone .pe-pick .grow { flex: 1; min-width: 0; }
 .phone .pe-pick .pe-dot { width: 8px; height: 8px; margin: 0; }

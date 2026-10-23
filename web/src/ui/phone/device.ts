@@ -1,21 +1,23 @@
 // The phone app's door to the small "Device" plugin (android/.../device/DevicePlugin.kt): the phone's
-// 24-hour setting, place search with Android's own geocoder, a place shown in the maps app, and the
+// 24-hour setting, a place shown in Google Maps or the chooser of navigation apps for directions, the
 // touch feel's pulses (played through haptics.ts, never directly), and saving a note's picture or video.
-// In a browser none of it exists: times follow the in-app choice, places come from OpenStreetMap, and a
-// saved picture or video is an ordinary download.
+// Place suggestions come from Photon (domain/places.ts) everywhere. In a browser the plugin doesn't
+// exist: times follow the in-app choice, maps open as web pages, a saved picture is a download.
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin } from "@capacitor/core";
 import { setDeviceClock24, use24h } from "../../domain/dates.ts";
 import { isNative } from "../../platform.ts";
 import { pieces } from "../../domain/media.ts";
 import { changed } from "../../store/store.ts";
+import { type Place, photonUrl, placesFromPhoton } from "../../domain/places.ts";
 
-export interface Place { name: string; lat: number; lng: number }
+export type { Place };
 
 interface DevicePlugin {
   clock(): Promise<{ is24: boolean }>;
-  geocode(o: { query: string; max?: number }): Promise<{ places: Place[] }>;
   openMap(o: { name: string; lat?: number | null; lng?: number | null }): Promise<void>;
+  openGoogleMaps(o: { url: string }): Promise<void>;
+  directions(o: { name: string; address: string; lat: number | null | undefined; lng: number | null | undefined }): Promise<void>;
   feel(o: { kind: string }): Promise<void>;
   selectionRect(o: { left: number; top: number; right: number; bottom: number } | { clear: true }): Promise<void>;
   saveMediaStart(o: { name: string; mime: string }): Promise<{ id: string }>;
@@ -89,42 +91,52 @@ export function startDeviceClock() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void readClock(); });
 }
 
-/** Places matching [query]: Android's geocoder in the app, OpenStreetMap's search in a browser. */
-export async function searchPlaces(query: string, max = 5): Promise<Place[]> {
-  const q = query.trim();
-  if (q.length < 3) return [];
-  if (plugin) {
-    try { return (await plugin.geocode({ query: q, max })).places; } catch { return []; }
-  }
-  return searchNominatim(q, max);
+/** Where the phone is, roughly, when the person has already let this app know (never asked for here). */
+async function knownPosition(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    if (!navigator.geolocation || !navigator.permissions) return null;
+    const st = await navigator.permissions.query({ name: "geolocation" as PermissionName });
+    if (st.state !== "granted") return null;
+    return await new Promise((resolve) => navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), () => resolve(null),
+      { enableHighAccuracy: false, maximumAge: 30 * 60_000, timeout: 3000 }));
+  } catch { return null; }
 }
 
-/** OpenStreetMap's place search (the PC and browsers). */
-export async function searchNominatim(q: string, max = 5): Promise<Place[]> {
+/**
+ * Places matching [query] from Photon (komoot's OpenStreetMap search), in the app and in a browser alike.
+ * Places near the person come first: near where the phone is when that's already allowed, otherwise
+ * near the places of their own recent items ([near]). Only the typed text and a rounded point are sent.
+ */
+export async function searchPlaces(query: string, near: { lat: number; lng: number } | null, signal?: AbortSignal, max = 6): Promise<Place[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
   try {
-    // Nominatim matches whole words only, so a half-typed last word is searched as typed and without it.
-    const url = (text: string) => `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=${max}&q=${encodeURIComponent(text)}`;
-    const get = async (text: string) => {
-      const r = await fetch(url(text), { headers: { Accept: "application/json" }, referrerPolicy: "strict-origin-when-cross-origin" });
-      if (!r.ok) return [];
-      const list = (await r.json()) as { display_name: string; lat: string; lon: string }[];
-      return list.map((p) => ({ name: p.display_name, lat: Number(p.lat), lng: Number(p.lon) }));
-    };
-    let found = await get(q);
-    const head = q.replace(/\s+\S*$/, "");
-    if (!found.length && head && head !== q) found = await get(head);
-    return found;
+    const bias = (await knownPosition()) ?? near;
+    const r = await fetch(photonUrl(q, bias, max), { headers: { Accept: "application/json" }, referrerPolicy: "no-referrer", signal });
+    if (!r.ok) return [];
+    return placesFromPhoton(await r.json());
   } catch {
     return [];
   }
 }
 
+/** Opens the place in Google Maps (the app when it's there, else the website): [query] is what to find. */
+export function openInGoogleMaps(query: string) {
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  if (plugin) { void plugin.openGoogleMaps({ url }).catch(() => window.open(url, "_blank", "noopener")); return; }
+  window.open(url, "_blank", "noopener");
+}
+
 /**
- * Shows a place in the maps app (Google Maps or whichever the phone uses) without starting directions;
- * in a browser, Google Maps' search page in a new tab.
+ * Directions to a place: in the app, Android's chooser of the installed navigation apps (Google Maps,
+ * Waze...); in a browser, Google Maps' directions page.
  */
-export function openPlace(name: string, lat: number | null | undefined, lng: number | null | undefined) {
-  const point = lat != null && lng != null;
-  if (plugin) { void plugin.openMap({ name, lat: point ? lat : null, lng: point ? lng : null }).catch(() => {}); return; }
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(point ? `${lat},${lng}` : name)}`, "_blank", "noopener");
+export function openDirections(to: { name: string; address: string; lat: number | null | undefined; lng: number | null | undefined }) {
+  const point = to.lat != null && to.lng != null;
+  const dest = point ? `${to.lat},${to.lng}` : (to.address || to.name);
+  if (!dest.trim()) return;
+  const web = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`;
+  if (plugin) { void plugin.directions({ name: to.name, address: to.address, lat: point ? to.lat : null, lng: point ? to.lng : null }).catch(() => window.open(web, "_blank", "noopener")); return; }
+  window.open(web, "_blank", "noopener");
 }

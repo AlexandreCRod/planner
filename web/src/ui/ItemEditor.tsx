@@ -1,6 +1,7 @@
 // Side panel for tasks and events: a simple view when opened, the full editor after Edit (same fields as the phone's).
 import { useEffect, useRef, useState } from "react";
-import { searchNominatim } from "./phone/device.ts";
+import { searchPlaces } from "./phone/device.ts";
+import { type Place, placeFields } from "../domain/places.ts";
 import { epochOf, formatDate, formatTime, offsetText, today as todayEpoch, weekday, ymd } from "../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../domain/recurrence.ts";
 import { currentEntry, streak } from "../domain/schedule.ts";
@@ -87,12 +88,12 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
   const [added, setAdded] = useState<Set<string>>(new Set());
   // What's being typed as a location (null once a suggestion is picked), and the addresses it matches.
   const [placeQuery, setPlaceQuery] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<{ name: string; lat: number; lng: number }[]>([]);
+  const [suggestions, setSuggestions] = useState<Place[]>([]);
   useEffect(() => {
     const q = placeQuery?.trim() ?? "";
     if (q.length < 3) { setSuggestions([]); return; }
     let stop = false;
-    const t = setTimeout(() => { void searchPlaces(q).then((r) => { if (!stop) setSuggestions(r); }); }, 500);
+    const t = setTimeout(() => { void searchPlaces(q, null, undefined, 5).then((r) => { if (!stop) setSuggestions(r); }); }, 500);
     return () => { stop = true; clearTimeout(t); };
   }, [placeQuery]);
 
@@ -358,13 +359,13 @@ export function ItemEditor({ id, occurrence, isNewPlaceholder, onClose, draft, o
 
           <div className="frow"><Icon name="place" size={20} />
             {/* A typed place has no coordinates; only "my location" sets them. */}
-            <input className="plain grow" placeholder="Add location" value={d.location ?? ""} onChange={(e) => { set({ location: e.target.value, lat: null, lng: null }); setPlaceQuery(e.target.value); }} />
+            <input className="plain grow" placeholder="Add location" value={d.location ?? ""} onChange={(e) => { set({ location: e.target.value, placeName: "", address: "", area: "", lat: null, lng: null }); setPlaceQuery(e.target.value); }} />
             <button className="icon-btn" title="Use this computer's location" onClick={locate}><Icon name="myLocation" size={18} /></button>
             {(d.location ?? "").trim() && <a className="icon-btn" title="Directions in Google Maps" href={directionsUrl(d, "google")} target="_blank" rel="noreferrer"><Icon name="directions" size={18} /></a>}
           </div>
           {/* Addresses matching what's typed (OpenStreetMap search); picking one fills in its coordinates. */}
           {suggestions.map((p) => (
-            <div key={p.name} className="frow clickable suggestion" onClick={() => { set({ location: p.name, lat: p.lat, lng: p.lng }); setSuggestions([]); setPlaceQuery(null); }}>
+            <div key={`${p.name}|${p.lat}|${p.lng}`} className="frow clickable suggestion" onClick={() => { set(placeFields(p)); setSuggestions([]); setPlaceQuery(null); }}>
               <span /><Icon name="place" size={16} /><span className="grow">{p.name}</span>
             </div>
           ))}
@@ -462,8 +463,6 @@ const directionsUrl = (i: Item, app: "google" | "waze") => {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hasPoint ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
 };
 
-/** Address suggestions from OpenStreetMap's search (Nominatim), at most 5 (see phone/device.ts). */
-const searchPlaces = (q: string) => searchNominatim(q, 5);
 
 const mapsUrl = (i: Item) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(i.lat !== null && i.lng !== null ? `${i.lat},${i.lng}` : (i.location ?? "").trim())}`;
 

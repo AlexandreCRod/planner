@@ -4,30 +4,25 @@ import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Rect
-import android.location.Address
-import android.location.Geocoder
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import android.text.format.DateFormat
-import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.io.OutputStream
-import java.util.Locale
 import java.util.UUID
 
 /**
  * Small things only Android knows, for the page (web/src/ui/phone/device.ts): whether the phone shows
- * 24-hour time, places matching a typed location (Android's own geocoder, as the original app's
- * Places.search), a place opened in the maps app (Places.openMap: shown, no directions started), and
- * the touch feel (Feel.kt, from web/src/ui/phone/haptics.ts), and a note's picture or video saved to the
- * phone's gallery.
+ * 24-hour time, a place opened in Google Maps or in the maps app, directions offered in a chooser of the
+ * installed navigation apps, the touch feel (Feel.kt, from web/src/ui/phone/haptics.ts), and a note's
+ * picture or video saved to the phone's gallery. (Place suggestions come from Photon, on the page.)
  */
 @CapacitorPlugin(name = "Device")
 class DevicePlugin : Plugin() {
@@ -35,40 +30,6 @@ class DevicePlugin : Plugin() {
     @PluginMethod
     fun clock(call: PluginCall) {
         call.resolve(JSObject().put("is24", DateFormat.is24HourFormat(context)))
-    }
-
-    /** Up to [max] places matching [query]: {places: [{name, lat, lng}]}, empty when nothing (or no geocoder). */
-    @PluginMethod
-    fun geocode(call: PluginCall) {
-        val query = call.getString("query")?.trim().orEmpty()
-        val max = (call.getInt("max") ?: 5).coerceIn(1, 10)
-        if (query.isEmpty() || !Geocoder.isPresent()) return call.resolve(places(emptyList(), query))
-        val geocoder = Geocoder(context, Locale.getDefault())
-        if (Build.VERSION.SDK_INT >= 33) {
-            // Answered on a background thread by the system; the call is resolved from there.
-            geocoder.getFromLocationName(query, max, object : Geocoder.GeocodeListener {
-                override fun onGeocode(addresses: MutableList<Address>) { call.resolve(places(addresses, query)) }
-                override fun onError(errorMessage: String?) { call.resolve(places(emptyList(), query)) }
-            })
-        } else {
-            Thread {
-                val found = runCatching { @Suppress("DEPRECATION") geocoder.getFromLocationName(query, max) }.getOrNull()
-                call.resolve(places(found.orEmpty(), query))
-            }.start()
-        }
-    }
-
-    private fun places(list: List<Address>, query: String): JSObject {
-        val out = JSArray()
-        val seen = HashSet<String>()
-        for (a in list) {
-            if (!a.hasLatitude() || !a.hasLongitude()) continue
-            val line = a.getAddressLine(0) ?: query
-            if (!seen.add(line)) continue
-            // The whole address line is what the item keeps as its location (as the original app does).
-            out.put(JSObject().put("name", line).put("lat", a.latitude).put("lng", a.longitude))
-        }
-        return JSObject().put("places", out)
     }
 
     /**
@@ -91,6 +52,58 @@ class DevicePlugin : Plugin() {
             runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(q)}"))) }
                 .onFailure { return call.reject("can't open") }
         }
+        call.resolve()
+    }
+
+    /** Opens a Google Maps link ({url}) in the Google Maps app, or in the browser when it isn't installed. */
+    @PluginMethod
+    fun openGoogleMaps(call: PluginCall) {
+        val url = call.getString("url") ?: return call.reject("no url")
+        val activity = activity ?: return call.reject("no activity")
+        val view = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val inMaps = runCatching { activity.startActivity(Intent(view).setPackage(GOOGLE_MAPS)) }.isSuccess
+        if (!inMaps) runCatching { activity.startActivity(view) }.onFailure { return call.reject("can't open") }
+        call.resolve()
+    }
+
+    /**
+     * Directions to a place ({name, address, lat, lng}): Android's chooser lists every installed app that
+     * shows places, each asked in its own way (Google Maps' directions page, Waze's navigate link, a geo:
+     * link for the rest); with one such app it opens straight away, with none the browser's Google Maps.
+     */
+    @PluginMethod
+    fun directions(call: PluginCall) {
+        val activity = activity ?: return call.reject("no activity")
+        val name = call.getString("name")?.trim().orEmpty()
+        val address = call.getString("address")?.trim().orEmpty()
+        val lat = call.getDouble("lat")
+        val lng = call.getDouble("lng")
+        val point = lat != null && lng != null
+        val dest = if (point) "$lat,$lng" else address.ifEmpty { name }
+        if (dest.isEmpty()) return call.reject("nowhere to go")
+        val googleDir = "https://www.google.com/maps/dir/?api=1&destination=${Uri.encode(dest)}"
+        val geo = Intent(Intent.ACTION_VIEW, Uri.parse(if (point) "geo:$lat,$lng?q=$lat,$lng(${Uri.encode(name.ifEmpty { address })})" else "geo:0,0?q=${Uri.encode(dest)}"))
+        val apps = activity.packageManager.queryIntentActivities(geo, 0).map { it.activityInfo.packageName }.distinct()
+        val intents = apps.map { pkg ->
+            when (pkg) {
+                GOOGLE_MAPS -> Intent(Intent.ACTION_VIEW, Uri.parse(googleDir)).setPackage(pkg)
+                WAZE -> Intent(Intent.ACTION_VIEW, Uri.parse(
+                    if (point) "https://waze.com/ul?ll=$lat,$lng&navigate=yes" else "https://waze.com/ul?q=${Uri.encode(dest)}&navigate=yes",
+                )).setPackage(pkg)
+                else -> Intent(geo).setPackage(pkg)
+            }
+        }.sortedBy { if (it.`package` == GOOGLE_MAPS) 0 else if (it.`package` == WAZE) 1 else 2 }
+        val result = runCatching {
+            when (intents.size) {
+                0 -> activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(googleDir)))
+                1 -> activity.startActivity(intents[0])
+                else -> activity.startActivity(
+                    Intent.createChooser(intents[0], "Directions with")
+                        .putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.drop(1).toTypedArray()),
+                )
+            }
+        }
+        if (result.isFailure) return call.reject("can't open")
         call.resolve()
     }
 
@@ -166,5 +179,10 @@ class DevicePlugin : Plugin() {
         runCatching { resolver.update(s.uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) }
             .onSuccess { call.resolve() }
             .onFailure { call.reject("Couldn't finish the file") }
+    }
+
+    private companion object {
+        const val GOOGLE_MAPS = "com.google.android.apps.maps"
+        const val WAZE = "com.waze"
     }
 }

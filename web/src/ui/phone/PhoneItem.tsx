@@ -18,9 +18,10 @@ import { go, openItem } from "../common.tsx";
 import { typeLabel } from "../LinksSection.tsx";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
-import { openExternal } from "./native.ts";
 import { feel } from "./haptics.ts";
-import { type Place, openPlace, searchPlaces } from "./device.ts";
+import { TOUCH_SLOP } from "./press.ts";
+import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
+import { NO_PLACE, type Place, mapsQuery, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
@@ -72,9 +73,6 @@ export function whenText(item: Item, day: number | null): string {
 
 const overdueText = (p: OverduePolicy) => p === "SHOW_OVERDUE" ? "If missed: stays overdue" : p === "CARRY_OVER" ? "If missed: moves to the next day" : "If missed: skip it";
 
-/** Directions to the place (Google Maps, or whatever handles map links). Only a link is opened. */
-const place = (i: Item) => (i.lat != null && i.lng != null ? `${i.lat},${i.lng}` : (i.location ?? "").trim());
-export const directionsUrl = (i: Item) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place(i))}`;
 
 /** Moves an item to the trash at once; the snackbar can bring it back (vm.trashWithUndo). */
 export function trashWithUndo(item: Item) {
@@ -438,43 +436,64 @@ function EarlyAlarmControls({ itemId, reminders }: { itemId: number; reminders: 
 
 // ---------- Location ----------
 
+/**
+ * The place: typed, it searches Photon as the typing pauses (places near the person first) and lists
+ * what it finds under the field. A picked suggestion brings its name (the label shown, which can then be
+ * changed), address, area and coordinates; the grey line under the field says which place it is. The list
+ * only grows or shrinks at its end as more is typed, and never changes while a finger is on it.
+ */
 function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<Item>) => void; autoFocus?: boolean }) {
   const loc = d.location ?? "";
   const ref = useRef<HTMLInputElement>(null);
   // What's being typed (null once a place is picked or the field is left), and the places it matches.
   const [query, setQuery] = useState<string | null>(null);
   const [found, setFound] = useState<Place[]>([]);
+  const touching = useRef(false);
+  const waiting = useRef<Place[] | null>(null);
+  const show = (next: Place[]) => {
+    if (touching.current) { waiting.current = next; return; }
+    setFound((shown) => stableMerge(shown, next));
+  };
   useEffect(() => { if (autoFocus) { const t = window.setTimeout(() => ref.current?.focus(), 80); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const q = query?.trim() ?? "";
-    if (q.length < 3) { setFound([]); return; }
-    let live = true;
-    const t = window.setTimeout(() => { void searchPlaces(q).then((r) => { if (live) setFound(r); }); }, 300);
-    return () => { live = false; clearTimeout(t); };
-  }, [query]);
-  const pick = (p: Place) => { set({ location: p.name, lat: p.lat, lng: p.lng }); setQuery(null); setFound([]); ref.current?.blur(); };
+    if (q.length < 2) { if (!touching.current) setFound([]); return; }
+    const ctl = new AbortController();
+    const t = window.setTimeout(() => {
+      void searchPlaces(q, usualArea(snapshot().items), ctl.signal).then((r) => { if (!ctl.signal.aborted) show(r); });
+    }, 250);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (p: Place) => { set(placeFields(p)); setQuery(null); setFound([]); ref.current?.blur(); };
+  const { sub } = placeLines(d);
+  const release = () => {
+    if (!touching.current) return;
+    touching.current = false;
+    const w = waiting.current;
+    waiting.current = null;
+    if (w) setFound((shown) => stableMerge(shown, w));
+  };
   return <>
     <FieldRow icon="oLocationOn">
-      {/* A typed place has no coordinates; a picked suggestion brings its own. */}
-      <input ref={ref} className="pe-input grow" placeholder="Add location" value={loc} enterKeyHint="done" autoCapitalize="words"
-        onChange={(e) => { set({ location: e.target.value, lat: null, lng: null }); setQuery(e.target.value); }}
-        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-      {loc && <IconButton icon="fClose" label="Clear location" onClick={() => { set({ location: "", lat: null, lng: null }); setQuery(null); }} />}
+      <span className="grow pe-placefield">
+        <input ref={ref} className="pe-input" placeholder="Add location" value={loc} enterKeyHint="done" autoCapitalize="words"
+          onChange={(e) => { const v = e.target.value; set(v.trim() ? { location: v } : NO_PLACE); setQuery(v); }}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+        {sub && <span className="pe-place-sub ellipsis">{sub}</span>}
+      </span>
+      {loc && <IconButton icon="fClose" label="Clear location" onClick={() => { set(NO_PLACE); setQuery(null); setFound([]); }} />}
     </FieldRow>
     {query !== null && found.length > 0 && (
-      <div className="pe-places" role="listbox">
-        {found.map((p) => {
-          const comma = p.name.indexOf(",");
-          return (
-            <button key={`${p.name}${p.lat}`} className="pe-place" role="option" onPointerDown={(e) => e.preventDefault()} onClick={() => pick(p)}>
-              <MIcon name="oLocationOn" size={18} />
-              <span className="grow">
-                <span className="ellipsis">{comma > 0 ? p.name.slice(0, comma) : p.name}</span>
-                {comma > 0 && <span className="pe-place-sub ellipsis">{p.name.slice(comma + 1).trim()}</span>}
-              </span>
-            </button>
-          );
-        })}
+      <div className="pe-places" role="listbox" onPointerDown={() => { touching.current = true; }} onPointerUp={release} onPointerCancel={release} onPointerLeave={release}>
+        {found.map((p) => (
+          <button key={placeKey(p)} className="pe-place" role="option" onPointerDown={(e) => e.preventDefault()} onClick={() => pick(p)}>
+            <MIcon name="oLocationOn" size={18} />
+            <span className="grow">
+              <span className="ellipsis">{p.name}</span>
+              {p.address && <span className="pe-place-sub ellipsis">{p.address}</span>}
+            </span>
+          </button>
+        ))}
       </div>
     )}
   </>;
@@ -666,11 +685,13 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
 
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
+        {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a long press changes it. */}
         {(item.location ?? "").trim() && (
-          <InfoRow icon="oLocationOn" text={item.location!} link onClick={() => openPlace(item.location!.trim(), item.lat, item.lng)} trailing={<>
-            <IconButton icon="oDirections" label="Directions" className="primary" onClick={() => openExternal(directionsUrl(item))} />
-            <IconButton icon="oEdit" label="Change location" onClick={() => setEditing("location")} />
-          </>} />
+          <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => openInGoogleMaps(mapsQuery(item))}
+            onLongPress={() => setEditing("location")} trailing={
+              <IconButton icon="oDirections" label="Directions" className="primary"
+                onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
+            } />
         )}
         {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
@@ -746,16 +767,45 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   );
 }
 
-function InfoRow({ icon, text, tint, placeholder, onClick, trailing, link }: {
-  icon: string; text: string; tint?: string; placeholder?: boolean; onClick?: () => void; trailing?: ReactNode; link?: boolean;
+function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, trailing, link }: {
+  icon: string; text: string; sub?: string; tint?: string; placeholder?: boolean; onClick?: () => void; onLongPress?: () => void; trailing?: ReactNode; link?: boolean;
 }) {
+  const { fired, ...hold } = useHold(onLongPress);
   return (
-    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} onClick={onClick}>
+    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} {...hold}
+      onClick={() => { if (!fired()) onClick?.(); }}>
       <MIcon name={icon} size={22} color={tint} />
-      <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""}`}>{text}</span>
+      <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""}`}>
+        {text}
+        {sub && <span className="pe-info-sub">{sub}</span>}
+      </span>
       {trailing && <span className="pe-trail" onClick={(e) => e.stopPropagation()}>{trailing}</span>}
     </div>
   );
+}
+
+/** A long press (450 ms, the finger kept within the touch slop): a pick-up pulse, then [onLong]; the tap after it is dropped. */
+function useHold(onLong?: () => void) {
+  const st = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const firedRef = useRef(false);
+  const clear = () => { if (st.current) clearTimeout(st.current.timer); st.current = null; };
+  useEffect(() => clear, []);
+  const fired = () => { const f = firedRef.current; firedRef.current = false; return f; };
+  if (!onLong) return { fired };
+  return {
+    fired,
+    onPointerDown: (e: React.PointerEvent) => {
+      clear();
+      firedRef.current = false;
+      const h = { timer: 0, x: e.clientX, y: e.clientY };
+      h.timer = window.setTimeout(() => { firedRef.current = true; st.current = null; feel("pickup"); onLong(); }, 450);
+      st.current = h;
+    },
+    onPointerMove: (e: React.PointerEvent) => { const h = st.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > TOUCH_SLOP) clear(); },
+    onPointerUp: clear,
+    onPointerCancel: clear,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  };
 }
 
 function WhenSheet({ item, shownStart, onClose, onSave }: { item: Item; shownStart: number | null; onClose: () => void; onSave: (i: Item) => void }) {
@@ -785,7 +835,7 @@ function LocationSheet({ item, onClose, onSave }: { item: Item; onClose: () => v
   return (
     <BottomSheet onClose={onClose}>{(close) => <>
       <LocationField d={d} set={(p) => setD({ ...d, ...p })} autoFocus />
-      <SheetButtons onCancel={close} onSave={() => { onSave({ ...d, location: (d.location ?? "").trim() }); close(); }} />
+      <SheetButtons onCancel={close} onSave={() => { onSave((d.location ?? "").trim() ? { ...d, location: (d.location ?? "").trim() } : { ...d, ...NO_PLACE }); close(); }} />
     </>}</BottomSheet>
   );
 }
