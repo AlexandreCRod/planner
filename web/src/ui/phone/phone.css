@@ -209,7 +209,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .pg-gutter { width: 44px; flex: none; }
 .phone .pg-head { flex: none; display: flex; padding: 4px 0; overflow: hidden; }
 .phone .pg-head-days { flex: 1; min-width: 0; overflow: hidden; }
-.phone .pg-strip { display: flex; width: 300%; margin-left: -100%; }
+.phone .pg-strip { display: flex; width: 300%; margin-left: -100%; position: relative; }
 .phone .pg-strip > * { flex: 1 1 0; min-width: 0; }
 .phone .pg-dh { flex: 1; min-width: 0; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--text); }
 .phone .pg-dh .wd { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
@@ -454,7 +454,12 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 .phone .p-mgrid { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; background: var(--bg); }
 .phone .p-mweek { display: flex; padding: 4px 0; }
 .phone .p-mweek span { flex: 1; text-align: center; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
-.phone .p-mrow { display: flex; }
+.phone .p-mrow { display: flex; position: relative; }
+/* Items over several days: one bar across the days (month weeks, the all-day row), in lanes. */
+.phone .p-spanbars { position: absolute; inset: 0; pointer-events: none; }
+.phone .p-mspace, .phone .pg-adspace { display: block; }
+.phone .p-mbar { position: absolute; top: calc(25px + var(--lane) * 11px); margin: 0; box-sizing: border-box; }
+.phone .pg-bar { position: absolute; top: calc(1px + var(--lane) * 17px); margin: 0; box-sizing: border-box; pointer-events: auto; }
 .phone .p-mcell { flex: 1; min-width: 0; padding: 2px; box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--line) 50%, transparent); overflow: hidden; }
 .phone .p-mcell.sel { background: color-mix(in srgb, var(--p-primary-container) 45%, transparent); }
 .phone .p-mnum-row { display: flex; align-items: center; color: var(--muted); }

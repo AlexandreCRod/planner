@@ -10,6 +10,7 @@ import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/sched
 import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { isRoutineItem } from "../../domain/routines.ts";
+import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { type Placed, layoutDay } from "../CalendarView.tsx";
 import { EventRow, TaskRow, go, openItem, useNow } from "../common.tsx";
@@ -218,34 +219,48 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
   const rows = ymd(days[35]).m !== month ? 5 : 6;
   const maxShown = rows === 5 ? 3 : 2;
   const press = useLongPress(onLong, onPick);
+  // Items over several days: one bar across each week they touch, in lanes at the top of the cells.
+  const multi = useMemo(() => occ.filter((o) => o.endDay > o.day), [occ]);
+  const keyOf = (o: Occurrence) => `${o.item.id}_${o.day}`;
+  const byKey = useMemo(() => new Map(multi.map((o) => [keyOf(o), o])), [multi]);
   return (
     <div className="p-mgrid">
       <div className="p-mweek">{days.slice(0, 7).map((d) => <span key={d}>{NARROW[weekday(d) - 1]}</span>)}</div>
-      {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className="p-mrow" style={{ height: rows === 5 ? 78 : 66 }}>
-          {days.slice(r * 7, r * 7 + 7).map((d) => {
-            const list = byDay.get(d) ?? [];
-            return (
-              <div key={d} className={`p-mcell ${d === selected ? "sel" : ""}`} role="button" {...press(d)}>
-                <div className="p-mnum-row">
-                  <span className={`p-mnum ${d === t ? "today" : ""} ${ymd(d).m !== month ? "out" : ""}`}>{ymd(d).d}</span>
-                  {noteDays.has(d) && <MIcon name="oEditNote" size={11} />}
+      {Array.from({ length: rows }, (_, r) => {
+        const week = days.slice(r * 7, r * 7 + 7);
+        const lanes = spanLanes(multi.map((o) => ({ key: keyOf(o), from: o.day, to: o.endDay })), week[0], week[6]);
+        return (
+          <div key={r} className="p-mrow" style={{ height: rows === 5 ? 78 : 66 }}>
+            {week.map((d, col) => {
+              const list = byDay.get(d) ?? [];
+              // Room for the bars over this day first, then its own items.
+              const room = Math.min(maxShown, lanesOver(lanes, col));
+              const own = list.filter((o) => o.endDay === o.day).slice(0, maxShown - room);
+              const more = list.length - own.length - barsShownOver(lanes, col, maxShown);
+              return (
+                <div key={d} className={`p-mcell ${d === selected ? "sel" : ""}`} role="button" {...press(d)}>
+                  <div className="p-mnum-row">
+                    <span className={`p-mnum ${d === t ? "today" : ""} ${ymd(d).m !== month ? "out" : ""}`}>{ymd(d).d}</span>
+                    {noteDays.has(d) && <MIcon name="oEditNote" size={11} />}
+                  </div>
+                  {room > 0 && <span className="p-mspace" style={{ height: room * 11 }} />}
+                  {own.map((o) => {
+                    const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
+                    const isTask = o.item.type === "TASK";
+                    return (
+                      <span key={keyOf(o)} className={`p-mchip ${isTask ? "task" : ""}`} style={{
+                        ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined,
+                      }}>{displayTitle(o.item)}</span>
+                    );
+                  })}
+                  {more > 0 && <span className="p-mmore">+{more}</span>}
                 </div>
-                {list.slice(0, maxShown).map((o) => {
-                  const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
-                  const isTask = o.item.type === "TASK";
-                  return (
-                    <span key={`${o.item.id}_${o.day}`} className={`p-mchip ${isTask ? "task" : ""}`} style={{
-                      ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined,
-                    }}>{displayTitle(o.item)}</span>
-                  );
-                })}
-                {list.length > maxShown && <span className="p-mmore">+{list.length - maxShown}</span>}
-              </div>
-            );
-          })}
-        </div>
-      ))}
+              );
+            })}
+            <SpanBars lanes={lanes} cap={maxShown} cols={7} byKey={byKey} s={s} className="p-mchip p-mbar" />
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -393,6 +408,11 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   const all = useMemo(() => Array.from({ length: count * 3 }, (_, i) => first - count + i), [first, count]);
   const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t, carryOver()), [items, s, all, t]);
   const allDay = all.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
+  // Items over several days: one bar across them in the all-day row (lanes at its top).
+  const spanKey = (o: Occurrence) => `${o.item.id}_${o.day}`;
+  const spanning = occ.filter((o) => o.endDay > o.day);
+  const spanByKey = new Map(spanning.map((o) => [spanKey(o), o]));
+  const adLanes = spanLanes(spanning.map((o) => ({ key: spanKey(o), from: o.day, to: o.endDay })), all[0], all[all.length - 1]);
   const timed = useMemo(() => all.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d))), [occ, all]);
   const placed = useRef(new Map<string, { p: Placed; di: number }>());
   placed.current = new Map();
@@ -769,12 +789,19 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         <div className="pg-allday">
           <div className="pg-gutter">all-day</div>
           <div className="pg-allday-days"><div className="pg-strip" ref={allDayDays}>
-            {allDay.map((list, i) => (
-              <div key={i} className={`pg-adcol ${i % count === 0 ? "range" : ""}`}>
-                {list.slice(0, 3).map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
-                {list.length > 3 && <span className="more">+{list.length - 3}</span>}
-              </div>
-            ))}
+            {allDay.map((list, i) => {
+              const room = Math.min(3, lanesOver(adLanes, i));
+              const own = list.filter((o) => o.endDay === o.day).slice(0, 3 - room);
+              const more = list.length - own.length - barsShownOver(adLanes, i, 3);
+              return (
+                <div key={i} className={`pg-adcol ${i % count === 0 ? "range" : ""}`}>
+                  {room > 0 && <span className="pg-adspace" style={{ height: room * 17 }} />}
+                  {own.map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
+                  {more > 0 && <span className="more">+{more}</span>}
+                </div>
+              );
+            })}
+            <SpanBars lanes={adLanes} cap={3} cols={all.length} byKey={spanByKey} s={s} className="pg-chip pg-bar" open />
           </div></div>
         </div>
       )}
@@ -866,6 +893,33 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
         {displayTitle(p.o.item)}
       </b>
       {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
+    </div>
+  );
+}
+
+/**
+ * The bars of items over several days, over a row of [cols] day columns: each from its first day to its
+ * last in the row, in its lane (the first [cap] lanes are drawn). [open]: a tap opens the item.
+ */
+function SpanBars({ lanes, cap, cols, byKey, s, className, open }: {
+  lanes: Lane[]; cap: number; cols: number; byKey: Map<string, Occurrence>; s: Snapshot; className: string; open?: boolean;
+}) {
+  return (
+    <div className="p-spanbars" aria-hidden={!open}>
+      {lanes.filter((l) => l.lane < cap).map((l) => {
+        const o = byKey.get(l.key);
+        if (!o) return null;
+        const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
+        const isTask = o.item.type === "TASK";
+        return (
+          <span key={l.key} className={`${className} ${isTask ? "task" : ""}`} role={open ? "button" : undefined}
+            onClick={open ? () => openItem(o.item, o.day) : undefined}
+            style={{
+              ["--lane" as string]: l.lane, left: `calc(${(l.first / cols) * 100}% + 2px)`, width: `calc(${((l.last - l.first + 1) / cols) * 100}% - 4px)`,
+              ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined,
+            }}>{displayTitle(o.item)}</span>
+        );
+      })}
     </div>
   );
 }
