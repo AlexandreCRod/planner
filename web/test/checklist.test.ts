@@ -29,3 +29,15 @@ test("a line moves with its sub-items, only within its own run", () => {
   // A sub-item stays among its parent's lines, so it can go before Eggs's other lines, not outside the run.
   assert.ok(checklistSlots(note, 3).every((i) => i >= 1 && i <= 4));
 });
+
+test("Backspace at the start of a checkbox line takes the box away first", async () => {
+  const { backspaceTakesBox, checklistLead } = await import("../src/domain/checklist.ts");
+  assert.equal(checklistLead("☐ milk"), 2);
+  assert.equal(checklistLead("⠀⠀⠀☑ done"), 5);
+  assert.equal(checklistLead("plain"), -1);
+  assert.equal(backspaceTakesBox("☐ milk", 2), true); // right after the box
+  assert.equal(backspaceTakesBox("☐ ", 2), true); // an empty box line
+  assert.equal(backspaceTakesBox("⠀⠀⠀☐ milk", 0), true);
+  assert.equal(backspaceTakesBox("☐ milk", 3), false); // inside the text: an ordinary Backspace
+  assert.equal(backspaceTakesBox("milk", 0), false); // a plain line joins the one above as usual
+});

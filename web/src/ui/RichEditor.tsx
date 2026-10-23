@@ -3,6 +3,7 @@
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { formatDateTime } from "../domain/dates.ts";
 import { editorText } from "../domain/noteDraft.ts";
+import { backspaceTakesBox, checklistLead } from "../domain/checklist.ts";
 import { Icon } from "./common.tsx";
 
 const BOX = "☐", TICK = "☑";
@@ -148,6 +149,44 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     return () => mo.disconnect();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);
+  // the next one joins it to the line above. Android's keyboards send it as a beforeinput, a PC as a key.
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    const onBefore = (e: InputEvent) => { if (e.inputType === "deleteContentBackward" && e.cancelable && takeBoxAtCaret()) e.preventDefault(); };
+    root.addEventListener("beforeinput", onBefore);
+    return () => root.removeEventListener("beforeinput", onBefore);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** At the start of a checkbox line (caret only): removes its indent and box. True if it did. */
+  const takeBoxAtCaret = (): boolean => {
+    const root = el.current;
+    const sel = getSelection();
+    if (!root || !sel || !sel.isCollapsed || !sel.rangeCount) return false;
+    const block = currentBlock(root);
+    if (!block || block.tagName === "LI") return false;
+    const r = document.createRange();
+    r.setStart(block, 0);
+    r.setEnd(sel.anchorNode!, sel.anchorOffset);
+    const text = block.textContent ?? "";
+    if (!backspaceTakesBox(text, r.toString().length)) return false;
+    const t = firstText(block);
+    const lead = checklistLead(text);
+    if (!t || checklistLead(t.data) !== lead) return false;
+    const checked = boxInfo(block).checked;
+    t.deleteData(0, lead);
+    if (checked) setDone(block, t, 0, false);
+    if (!(block.textContent ?? "")) block.replaceChildren(document.createElement("br"));
+    const c = document.createRange();
+    c.setStart(block.firstChild ?? block, 0);
+    c.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(c);
+    onChange();
+    return true;
+  };
+
   useImperativeHandle(ref, () => ({
     html: () => (el.current ? normalize(el.current) : ""),
     focus: () => el.current?.focus(),
@@ -228,6 +267,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   // Enter on a checklist line starts the next box at the same indent, even after an empty box: boxes keep
   // coming until the line's box is removed (the ☐ button, or deleting the box while typing).
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
     if (e.key !== "Enter" || e.shiftKey) return;
     const root = el.current!;
     const block = currentBlock(root);

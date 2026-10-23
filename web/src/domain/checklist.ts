@@ -54,3 +54,20 @@ export function moveChecklistBlock<T>(lines: T[], texts: string[], from: number,
   const rest = [...lines.slice(0, s), ...lines.slice(e + 1)];
   return [...rest.slice(0, to), ...block, ...rest.slice(to)];
 }
+
+/** How long a checklist line's lead is (its indent, the box and the space after it), or -1 when it isn't one. */
+export function checklistLead(text: string): number {
+  const d = checklistDepth(text);
+  if (d < 0) return -1;
+  const i = d + 1;
+  return text[i] === " " || text[i] === " " ? i + 1 : i;
+}
+
+/**
+ * Backspace with the caret [caret] characters into line [text]: true when it takes the line's box away
+ * (with its indent), leaving the text as a plain line. The next Backspace then joins it to the line above.
+ */
+export function backspaceTakesBox(text: string, caret: number): boolean {
+  const lead = checklistLead(text);
+  return lead >= 0 && caret <= lead;
+}
