@@ -86,6 +86,11 @@ export const PRIORITIES = ["None", "Low", "Medium", "High", "Urgent"] as const;
 export const PRIORITY_COLORS = ["#9e9e9e", "#42a5f5", "#ffb300", "#ff7043", "#e53935"];
 /** The phone's calmer priority colours: the same order, greyed and softened so they sit with the neutral palette. */
 export const PRIORITY_COLORS_MUTED = ["#8e9094", "#7d93a8", "#a8915e", "#b07a62", "#b0605c"];
+/**
+ * A priority's colour on screen: the phone's theme colours (--prio-1 to --prio-4: blue, yellow, orange
+ * and red, clearly apart in light and in dark), else the calm ones above.
+ */
+export const priorityColor = (p: number) => (p > 0 ? `var(--prio-${p}, ${PRIORITY_COLORS_MUTED[p]})` : PRIORITY_COLORS_MUTED[0]);
 
 export function newItem(fields: Partial<Item> & { type: ItemType }): Item {
   const now = Date.now();

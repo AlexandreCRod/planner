@@ -3,7 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import { describe } from "../domain/recurrence.ts";
 import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../domain/schedule.ts";
 import { dueCountdown, formatTime, relativeDay } from "../domain/dates.ts";
-import { type AlertType, PRIORITY_COLORS_MUTED, PRIORITIES, isRecurring, type Item } from "../domain/types.ts";
+import { type AlertType, PRIORITIES, isRecurring, type Item, priorityColor } from "../domain/types.ts";
 import { reminderKind } from "../domain/reminders.ts";
 import { type Snapshot, toggleCompletion } from "../store/store.ts";
 import { feel } from "./phone/haptics.ts";
@@ -52,8 +52,8 @@ const PATHS: Record<string, string> = {
 
 export function Icon({ name, size = 20, color }: { name: string; size?: number; color?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: "none" }}>
-      <path d={PATHS[name] ?? ""} fill={color ?? "currentColor"} />
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={color ? { flex: "none", color } : { flex: "none" }}>
+      <path d={PATHS[name] ?? ""} fill="currentColor" />
     </svg>
   );
 }
@@ -186,7 +186,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
           {isRecurring(item) && <RepeatBadge color={color} />}
-          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={PRIORITY_COLORS_MUTED[item.priority]} /></span>}
+          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={priorityColor(item.priority)} /></span>}
           {item.title || "Untitled"}
         </div>
         {sub && <div className="sub ellipsis">
@@ -198,7 +198,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
       </div>
       <span className="pills">
       {/* The flag alone, never the level's name (held, the phone shows it as a tooltip). */}
-      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={PRIORITY_COLORS_MUTED[item.priority]} label={`${PRIORITIES[item.priority]} priority`}><span className="sub-icon flag"><Icon name="flag" size={12} /></span></Pill>}
+      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={priorityColor(item.priority)} label={`${PRIORITIES[item.priority]} priority`}><span className="sub-icon flag"><Icon name="flag" size={16} /></span></Pill>}
       {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}

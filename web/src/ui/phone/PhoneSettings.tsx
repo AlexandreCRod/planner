@@ -230,7 +230,7 @@ export function PhoneCategories() {
         ))}
         <div className="p-endspace" />
       </div>
-      <button className="p-fab ps-fab" aria-label="Add category" onClick={() => setEditing({ id: 0, name: "", color: PALETTE[5], defaultAlert: "REMINDER" })}><MIcon name="fAdd" /></button>
+      <button className="p-fab ps-fab" aria-label="Add category" onClick={() => setEditing({ id: 0, name: "", color: PALETTE[7], defaultAlert: "REMINDER" })}><MIcon name="fAdd" /></button>
       {editing && <CategoryDialog c={editing} onClose={() => setEditing(null)} />}
     </Scaffold>
   );

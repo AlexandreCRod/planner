@@ -519,6 +519,10 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover, html.pho
 /* ---------- M3 pieces (m3.tsx) ---------- */
 /* Inverse roles for the snackbar (Theme.kt leaves them at Material's defaults). */
 html.phone { --p-inverse-surface: #322f35; --p-inverse-on-surface: #f5eff7; --p-inverse-primary: #a8c7fa; }
+/* Priorities (low, medium, high, urgent): blue, yellow, orange and red, each clear on its own background. */
+html.phone { --prio-1: #1e88e5; --prio-2: #c79100; --prio-3: #ef6c00; --prio-4: #d32f2f; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --prio-1: #8ab4f8; --prio-2: #fdd663; --prio-3: #ffab70; --prio-4: #f28b82; } }
+html.phone[data-theme="dark"] { --prio-1: #8ab4f8; --prio-2: #fdd663; --prio-3: #ffab70; --prio-4: #f28b82; }
 @media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; } }
 html.phone[data-theme="dark"] { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; }
 /* Pure black dark mode (Theme.kt with pureBlack): black background and darker containers. */
@@ -845,7 +849,9 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-swipe.armed > .p-swipe-bg { background: color-mix(in srgb, var(--danger) 45%, var(--bg)); }
 .phone .p-swipe.armed > .p-swipe-bg svg { transform: scale(1.2); }
 .phone .p-swipe-front { position: relative; background: var(--bg); }
-.phone :is(.today-list, .p-rows) .pill .sub-icon.flag { display: inline-flex; margin-right: 3px; }
+.phone :is(.today-list, .p-rows) .pill .sub-icon.flag { display: inline-flex; }
+/* The priority flag on the task lists: a bigger flag in its own colour on a tint of it. */
+.phone :is(.today-list, .p-rows) .pill.prio { padding: 2px 6px; }
 
 /* ---------- Alarms tab (AlarmsScreen.kt, ClockToolsPanes.kt) ---------- */
 .phone .pa-page { position: relative; }
@@ -1084,7 +1090,7 @@ html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), 
 .phone .today-list .p-anytime { display: block; width: 100%; margin-top: 6px !important; border: 0; background: none; text-align: left; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-anytime::after { content: " ›"; }
 /* Priority tags keep a hint of their colour, muted (PRIORITY_COLORS_MUTED), not the neutral grey of other tags. */
-.phone :is(.today-list, .p-rows) .pill.prio { color: color-mix(in srgb, var(--pc) 80%, var(--text)) !important; background: color-mix(in srgb, var(--pc) 16%, transparent) !important; }
+.phone :is(.today-list, .p-rows) .pill.prio { color: var(--pc) !important; background: color-mix(in srgb, var(--pc) 16%, transparent) !important; }
 
 /* ---------- Darker highlights ----------
    Filled highlights (today's date, a picked day or weekday, switches, filled buttons, ticks, the

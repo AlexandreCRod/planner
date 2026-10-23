@@ -95,10 +95,15 @@ export function TextFieldDialog({ title, label, initial, onSave, onClose, saveLa
 }
 
 /** The native palette (Common.kt `palette`), as signed ARGB ints. */
+/**
+ * The colours to pick from (categories, notes, text): 24 mid tones a step apart in hue or lightness, so
+ * no two look alike, and each reads on the light and the dark background.
+ */
 export const PALETTE = [
-  0xffef5350, 0xffec407a, 0xffab47bc, 0xff7e57c2, 0xff5c6bc0, 0xff42a5f5,
-  0xff29b6f6, 0xff26c6da, 0xff26a69a, 0xff66bb6a, 0xff9ccc65, 0xffd4e157,
-  0xffffee58, 0xffffca28, 0xffffa726, 0xffff7043, 0xff8d6e63, 0xff78909c,
+  0xffe53935, 0xffd81b60, 0xfff48fb1, 0xff8e24aa, 0xff7e57c2, 0xffb39ddb,
+  0xff3f51b5, 0xff1e88e5, 0xff4fc3f7, 0xff00acc1, 0xff00897b, 0xff81c784,
+  0xff43a047, 0xff9ccc65, 0xffc0ca33, 0xfffdd835, 0xffffb300, 0xfffb8c00,
+  0xfff4511e, 0xffff8a65, 0xff8d6e63, 0xffbcaaa4, 0xff78909c, 0xff757575,
 ].map((c) => c | 0);
 
 /** Colour circles (36 dp, 8 apart), "none" first when allowed, a tick on the chosen one (ColorGrid). */
@@ -106,7 +111,8 @@ export function ColorGrid({ colors, selected, allowNone = true, onPick }: { colo
   return (
     <div className="p-colorgrid">
       {allowNone && <button className="none" aria-label="None" onClick={() => onPick(null)}><MIcon name="fFormatColorReset" size={18} /></button>}
-      {colors.map((c) => {
+      {/* A colour chosen before the palette changed stays offered (first), ticked. */}
+      {(selected !== null && !colors.includes(selected) ? [selected, ...colors] : colors).map((c) => {
         const css = cssColor(c);
         return (
           <button key={c} aria-label={css} className={c === selected ? "on" : ""} style={{ background: css }} onClick={() => onPick(c)}>

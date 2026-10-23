@@ -9,7 +9,7 @@ import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
   type Freq, type Item, type ItemType, type OverduePolicy, type Reminder,
-  NO_DAY, PRIORITIES, PRIORITY_COLORS_MUTED, cssColor, isRecurring, newItem,
+  NO_DAY, PRIORITIES, priorityColor, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
   type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
@@ -138,7 +138,7 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
 /** A priority's name, for its flag's label (held, it shows as a tooltip): "High priority". */
 export const priorityLabel = (p: number) => `${PRIORITIES[p]} priority`;
 const priorityItems = (pick: (p: number) => void): MenuItem[] =>
-  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? PRIORITY_COLORS_MUTED[i] : undefined, onClick: () => pick(i) }));
+  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? priorityColor(i) : undefined, onClick: () => pick(i) }));
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));
 const categoryItems = (s: Snapshot, pick: (id: number | null) => void, leave?: () => void): MenuItem[] => [
@@ -671,7 +671,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           {/* Priority is its flag alone (hold it for its name); a tap changes it. */}
           {!isEvent && item.priority > 0 && (
             <span className="p-menu-anchor">
-              <IconButton label={priorityLabel(item.priority)} onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={PRIORITY_COLORS_MUTED[item.priority]} /></IconButton>
+              <IconButton label={priorityLabel(item.priority)} onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
               <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
             </span>
           )}
@@ -1040,7 +1040,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         </FieldRow>
         {!isEvent && <>
           <FieldRow icon="oFlag">
-            <MenuText text={d.priority === 0 ? "No priority" : <MIcon name="fFlag" color={PRIORITY_COLORS_MUTED[d.priority]} />}
+            <MenuText text={d.priority === 0 ? "No priority" : <MIcon name="fFlag" color={priorityColor(d.priority)} />}
               label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
