@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime, formatTime, ymd } from "../domain/dates.ts";
 import { occurrencesIn } from "../domain/schedule.ts";
 import { preview, stripHtml } from "../domain/text.ts";
-import { type Item, type NoteImage, argbOf, cssColor, newItem } from "../domain/types.ts";
+import { type NoteImage, argbOf, cssColor } from "../domain/types.ts";
 import { importImage, useImageUrl } from "../store/images.ts";
-import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, onFlush, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../store/store.ts";
+import { addImage, deleteImage, trash, useSnapshot } from "../store/store.ts";
 import { Icon, go, openItem } from "./common.tsx";
 import { LinksSection } from "./LinksSection.tsx";
-import { RichEditor, type RichEditorHandle, useEditorHtml } from "./RichEditor.tsx";
+import { RichEditor } from "./RichEditor.tsx";
+import { useNoteSession } from "./noteSession.ts";
 import { SelectBox, SelectionBar, usePcSelection } from "./PcSelect.tsx";
 
 export const FONTS = ["system-ui, sans-serif", "Georgia, 'Times New Roman', serif", "Consolas, 'Courier New', monospace", "'Segoe Print', 'Comic Sans MS', cursive"];
@@ -69,61 +70,19 @@ export function NotesView() {
 }
 
 export function NoteEditor({ id, day }: { id: number | null; day: number | null }) {
-  const s = useSnapshot();
-  const existing = id !== null ? s.byId.get(id) ?? null : null;
-  const [noteId, setNoteId] = useState<number>(existing?.id ?? 0);
-  const [base] = useState<Item>(() => existing ?? newItem({ type: "NOTE", noteDay: day, title: day !== null ? isoOf(day) : "" }));
-  const [title, setTitle] = useState(base.title);
-  const [tags, setTags] = useState(() => (s.tagsByItem.get(base.id) ?? []).map((t) => t.name).join(" "));
-  const [style, setStyle] = useState({ pinned: base.pinned, bgColor: base.bgColor, bgPattern: base.bgPattern, fontFamily: base.fontFamily, categoryId: base.categoryId });
-  const [place, setPlace] = useState({ location: base.location ?? "", lat: base.lat ?? null, lng: base.lng ?? null });
+  const note = useNoteSession({ id, day, newTitle: isoOf });
+  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle, place, setPlace } = note;
   const [viewing, setViewing] = useState<NoteImage | null>(null);
   const [locating, setLocating] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<"" | "style" | "templates" | "versions">("");
-  const [initialHtml, setInitialHtml] = useState(base.content);
-  const rich = useRef<RichEditorHandle>(null);
-  const opened = useRef(base.content);
-  const timer = useRef<number>();
-  const latest = useRef({ noteId, title, tags, style, place });
-  latest.current = { noteId, title, tags, style, place };
-  const deleted = useRef(false);
-
-  // The text as it is now, also from the cleanup that saves on leaving (see useEditorHtml).
-  const html = useEditorHtml(rich, () => base.content);
-  const current = (): Item => ({
-    ...base, id: latest.current.noteId, title: latest.current.title.trim(), content: html(), ...latest.current.style,
-    location: latest.current.place.location.trim(), lat: latest.current.place.lat, lng: latest.current.place.lng,
-  });
-  const tagList = () => latest.current.tags.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
-
-  const save = () => {
-    const item = current();
-    if (item.id === 0 && isEmptyNote(item)) return 0;
-    const saved = saveItem(item, { tags: tagList() });
-    if (saved !== latest.current.noteId) { setNoteId(saved); latest.current.noteId = saved; history.replaceState(null, "", `#/note/${saved}`); }
-    return saved;
-  };
-  // Saved shortly after each change, and at once if the app is put away before that (store.onFlush).
-  const pending = useRef(false);
-  const flush = () => { clearTimeout(timer.current); if (pending.current && !deleted.current) { pending.current = false; save(); } };
-  const scheduleSave = () => { pending.current = true; clearTimeout(timer.current); timer.current = window.setTimeout(flush, 600); };
-  // Put away: also catches text that changed without an input event (some keyboards' corrections).
-  useEffect(() => onFlush(() => {
-    if (!pending.current && latest.current.noteId && snapshot().byId.get(latest.current.noteId)?.content !== html()) pending.current = true;
-    flush();
-  }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { scheduleSave(); }, [title, tags, style, place]);
 
   /** Attaches picture files; a new note is saved first, even if nothing is typed yet. */
   const addPictures = async (files: Iterable<File>) => {
     const pics = [...files].filter((f) => f.type.startsWith("image/"));
     if (!pics.length) return;
-    let id = latest.current.noteId;
-    if (!id) {
-      id = saveItem(current(), { tags: tagList() });
-      setNoteId(id); latest.current.noteId = id; history.replaceState(null, "", `#/note/${id}`);
-    }
+    const id = note.save(true);
+    if (!id) return;
     for (const f of pics) {
       try { addImage(id, await importImage(f)); } catch (e) { alert(`Couldn't add ${f.name || "the picture"}: ${e instanceof Error ? e.message : e}`); }
     }
@@ -146,18 +105,6 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.lat !== null && place.lng !== null ? `${place.lat},${place.lng}` : place.location.trim())}`;
   const images = s.images.get(noteId) ?? [];
 
-  // On leaving: keep a version if the text changed; drop the note if it ended up empty.
-  useEffect(() => () => {
-    clearTimeout(timer.current);
-    if (deleted.current) return;
-    const item = current();
-    if (item.id === 0 && isEmptyNote(item)) return;
-    const savedId = save();
-    if (!savedId) return;
-    if (isEmptyNote(item)) { deleteIfEmpty(savedId); return; }
-    if (item.content !== opened.current) { const fresh = snapshot().byId.get(savedId); if (fresh) saveVersion(fresh); }
-  }, []);
-
   const isDaily = base.noteDay !== null;
   const bg = style.bgColor !== null ? cssColor(style.bgColor) : undefined;
   const fg = bg ? (isDark(bg) ? "#eee" : "#222") : undefined;
@@ -175,7 +122,7 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
         <button className={`btn small ${panel === "style" ? "primary" : ""}`} title="Page colour, pattern, font and category" onClick={() => setPanel(panel === "style" ? "" : "style")}>Page style</button>
         <button className={`btn small ${panel === "templates" ? "primary" : ""}`} title="Insert a ready-made layout" onClick={() => setPanel(panel === "templates" ? "" : "templates")}>Templates</button>
         <button className={`btn small ${panel === "versions" ? "primary" : ""}`} title="Earlier versions of this note" disabled={!noteId} onClick={() => setPanel(panel === "versions" ? "" : "versions")}>History</button>
-        <button className="icon-btn" title="Move to trash" disabled={!noteId} onClick={() => { if (confirm("Move this note to the trash?")) { deleted.current = true; trash(noteId); history.back(); } }}><Icon name="trash" size={18} /></button>
+        <button className="icon-btn" title="Move to trash" disabled={!noteId} onClick={() => { if (confirm("Move this note to the trash?")) { note.markDeleted(); trash(noteId); history.back(); } }}><Icon name="trash" size={18} /></button>
       </div>
       {panel === "style" && (
         <div className="card" style={{ margin: "10px auto", maxWidth: 820, padding: 14, display: "grid", gap: 10, color: "var(--text)" }}>
@@ -194,9 +141,9 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
           {TEMPLATES.map(([name, html]) => (
             <button key={name} className="btn" onClick={() => {
               const now = rich.current?.html() ?? "";
-              setInitialHtml(stripHtml(now).trim() ? now + html : html);
+              note.setContent(stripHtml(now).trim() ? now + html : html);
               if (!title && !isDaily) setTitle(name);
-              setPanel(""); scheduleSave();
+              setPanel("");
             }}>{name}</button>
           ))}
         </div>
@@ -205,7 +152,7 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
         <div className="card" style={{ margin: "10px auto", maxWidth: 820, padding: 8, color: "var(--text)", maxHeight: 300, overflow: "auto" }}>
           {versions.length === 0 && <div className="hint" style={{ padding: 8 }}>A version is saved each time you leave a note after changing it.</div>}
           {versions.map((v) => (
-            <div key={v.id} className="task" onClick={() => { setInitialHtml(v.content); if (!isDaily) setTitle(v.title); setPanel(""); scheduleSave(); }}>
+            <div key={v.id} className="task" onClick={() => { note.setContent(v.content); if (!isDaily) setTitle(v.title); setPanel(""); }}>
               <div className="grow"><div>{formatDateTime(v.savedAt)}</div><div className="sub ellipsis">{preview(v.content, 100)}</div></div>
             </div>
           ))}
@@ -234,10 +181,10 @@ export function NoteEditor({ id, day }: { id: number | null; day: number | null 
           </div>
         )}
         <div className="card" style={{ background: "transparent", border: 0 }}>
-          <RichEditor ref={rich} initialHtml={initialHtml} onChange={scheduleSave} fontFamily={FONTS[style.fontFamily]} />
+          <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} />
         </div>
         <div style={{ marginTop: 24, borderTop: "1px solid rgb(128 128 128 / .25)", color: "var(--text)" }}>
-          <LinksSection id={noteId} s={s} ensureSaved={() => save()} />
+          <LinksSection id={noteId} s={s} ensureSaved={() => note.save()} />
         </div>
       </div>
       {viewing && <Lightbox img={viewing} onClose={() => setViewing(null)} onRemove={() => { if (confirm("Remove this picture from the note? It's removed on all your devices.")) { deleteImage(viewing); setViewing(null); } }} />}

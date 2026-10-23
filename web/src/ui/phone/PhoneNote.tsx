@@ -7,12 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { formatDate, formatDateTime, formatTime } from "../../domain/dates.ts";
 import { occurrencesIn } from "../../domain/schedule.ts";
 import { preview, stripHtml } from "../../domain/text.ts";
-import { type Item, type NoteImage, cssColor, newItem } from "../../domain/types.ts";
+import { type NoteImage, cssColor } from "../../domain/types.ts";
 import { importImage, useImageUrl } from "../../store/images.ts";
-import { addImage, deleteIfEmpty, deleteImage, isEmptyNote, onFlush, saveItem, saveVersion, snapshot, trash, useSnapshot } from "../../store/store.ts";
+import { addImage, deleteImage, trash } from "../../store/store.ts";
 import { openItem } from "../common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../NotesView.tsx";
-import { RichEditor, type RichEditorHandle, useEditorHtml } from "../RichEditor.tsx";
+import { RichEditor } from "../RichEditor.tsx";
+import { useNoteSession } from "../noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
@@ -26,72 +27,16 @@ const PASTELS = PAGE_COLORS.map((c) => (parseInt(c.slice(1), 16) | 0xff000000) |
 const PATTERNS = ["Plain", "Lines", "Grid", "Dots"];
 
 export function PhoneNote({ id, day }: { id: number | null; day: number | null }) {
-  const s = useSnapshot();
-  const existing = id !== null ? s.byId.get(id) ?? null : null;
-  const [noteId, setNoteId] = useState<number>(existing?.id ?? 0);
-  const [base] = useState<Item>(() => existing ?? newItem({ type: "NOTE", noteDay: day, title: day !== null ? isoOf(day) : "" }));
-  const [title, setTitle] = useState(base.title);
-  const [tags, setTags] = useState(() => (s.tagsByItem.get(base.id) ?? []).map((t) => t.name).join(" "));
-  const [style, setStyle] = useState({ pinned: base.pinned, bgColor: base.bgColor, bgPattern: base.bgPattern, fontFamily: base.fontFamily, categoryId: base.categoryId, color: base.color });
-  const [place, setPlace] = useState({ location: base.location ?? "", lat: base.lat ?? null, lng: base.lng ?? null });
-  const [initialHtml, setInitialHtml] = useState(base.content);
+  const note = useNoteSession({ id, day, newTitle: isoOf });
+  const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle, place, setPlace } = note;
   const [focused, setFocused] = useState(false);
   const [held, setHeld] = useState(false);
   const [menu, setMenu] = useState(false);
   const [open, setOpen] = useState<"" | "style" | "templates" | "versions" | "trash">("");
   const [viewing, setViewing] = useState<NoteImage | null>(null);
-  const rich = useRef<RichEditorHandle>(null);
   const textBox = useRef<HTMLDivElement>(null);
   const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const opened = useRef(base.content);
-  const timer = useRef<number>();
-  const latest = useRef({ noteId, title, tags, style, place });
-  latest.current = { noteId, title, tags, style, place };
-  const deleted = useRef(false);
-
-  // The text as it is now, also from the cleanup that saves on leaving (see useEditorHtml).
-  const html = useEditorHtml(rich, () => base.content);
-  const current = (): Item => ({
-    ...base, id: latest.current.noteId, title: latest.current.title.trim(), content: html(), ...latest.current.style,
-    location: latest.current.place.location.trim(), lat: latest.current.place.lat, lng: latest.current.place.lng,
-  });
-  const tagList = () => latest.current.tags.split(/[\s,]+/).map((t) => t.replace(/^#/, "")).filter(Boolean);
-  const adopt = (saved: number) => {
-    if (saved === latest.current.noteId) return;
-    setNoteId(saved); latest.current.noteId = saved;
-    history.replaceState(null, "", `#/note/${saved}`);
-  };
-  const save = () => {
-    const item = current();
-    if (item.id === 0 && isEmptyNote(item)) return 0;
-    const saved = saveItem(item, { tags: tagList() });
-    adopt(saved);
-    return saved;
-  };
-  // Saved shortly after each change, and at once if the app is put away before that (store.onFlush).
-  const pending = useRef(false);
-  const flush = () => { clearTimeout(timer.current); if (pending.current && !deleted.current) { pending.current = false; save(); } };
-  const scheduleSave = () => { pending.current = true; clearTimeout(timer.current); timer.current = window.setTimeout(flush, 600); };
-  // Put away: also catches text that changed without an input event (some keyboards' corrections).
-  useEffect(() => onFlush(() => {
-    if (!pending.current && latest.current.noteId && snapshot().byId.get(latest.current.noteId)?.content !== html()) pending.current = true;
-    flush();
-  }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const first = useRef(true);
-  useEffect(() => { if (first.current) { first.current = false; return; } scheduleSave(); }, [title, tags, style, place]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // On leaving: keep a version if the text changed; drop the note if it ended up empty.
-  useEffect(() => () => {
-    clearTimeout(timer.current);
-    if (deleted.current) return;
-    const item = current();
-    if (item.id === 0 && isEmptyNote(item)) return;
-    const savedId = save();
-    if (!savedId) return;
-    if (isEmptyNote(item)) { deleteIfEmpty(savedId); return; }
-    if (item.content !== opened.current) { const fresh = snapshot().byId.get(savedId); if (fresh) saveVersion(fresh); }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The bar goes with the keyboard: putting the keyboard away ends the writing.
   useEffect(() => onKeyboardHide(() => {
@@ -103,8 +48,8 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
   const addPictures = async (files: Iterable<File>) => {
     const pics = [...files].filter((f) => f.type.startsWith("image/"));
     if (!pics.length) return;
-    let to = latest.current.noteId;
-    if (!to) { to = saveItem(current(), { tags: tagList() }); adopt(to); }
+    const to = note.save(true);
+    if (!to) return;
     for (const f of pics) {
       try { addImage(to, await importImage(f)); } catch { showSnackbar(`Couldn't add ${f.name || "the picture"}`); }
     }
@@ -170,12 +115,12 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           </div>
         )}
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
-          <RichEditor ref={rich} initialHtml={initialHtml} onChange={scheduleSave} fontFamily={FONTS[style.fontFamily]} minHeight={320}
+          <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
             noToolbar placeholder="Start writing…" onFocusChange={setFocused} />
-          <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={scheduleSave} onHas={setHasChecks} />
+          <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks} />
         </div>
         <div className="pn-links">
-          <PhoneLinks id={noteId} s={s} ensureSaved={save} />
+          <PhoneLinks id={noteId} s={s} ensureSaved={() => note.save()} />
         </div>
       </div>
 
@@ -207,9 +152,9 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
             {TEMPLATES.map(([name, html]) => (
               <button key={name} onClick={() => {
                 const now = rich.current?.html() ?? "";
-                setInitialHtml(stripHtml(now).trim() ? now + html : html);
+                note.setContent(stripHtml(now).trim() ? now + html : html);
                 if (!title.trim() && !isDaily) setTitle(name);
-                setOpen(""); scheduleSave();
+                setOpen("");
               }}>{name}</button>
             ))}
           </div>
@@ -221,7 +166,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
           {versions.length === 0 && <p>Versions are saved each time you leave a note after changing it.</p>}
           <div className="pn-versions">
             {versions.map((v) => (
-              <div key={v.id} className="p-li two" role="button" onClick={() => { setInitialHtml(v.content); if (!isDaily) setTitle(v.title); setOpen(""); scheduleSave(); }}>
+              <div key={v.id} className="p-li two" role="button" onClick={() => { note.setContent(v.content); if (!isDaily) setTitle(v.title); setOpen(""); }}>
                 <span className="text"><span className="headline">{formatDateTime(v.savedAt)}</span><span className="supporting">{preview(v.content, 80)}</span></span>
               </div>
             ))}
@@ -232,7 +177,7 @@ export function PhoneNote({ id, day }: { id: number | null; day: number | null }
       {open === "trash" && (
         <Dialog title="Move note to trash?" onClose={() => setOpen("")} actions={<>
           <TextButton onClick={() => setOpen("")}>Cancel</TextButton>
-          <TextButton onClick={() => { setOpen(""); deleted.current = true; clearTimeout(timer.current); if (noteId) trash(noteId); history.back(); }}>Move to trash</TextButton>
+          <TextButton onClick={() => { setOpen(""); note.markDeleted(); if (noteId) trash(noteId); history.back(); }}>Move to trash</TextButton>
         </>}>
           You can restore it from Settings → Trash for {NOTE_DAYS} days.
         </Dialog>

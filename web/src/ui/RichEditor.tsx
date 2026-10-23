@@ -2,6 +2,7 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { formatDateTime } from "../domain/dates.ts";
+import { editorText } from "../domain/noteDraft.ts";
 import { Icon } from "./common.tsx";
 
 const BOX = "☐", TICK = "☑";
@@ -70,11 +71,12 @@ function normalize(root: HTMLElement): string {
  * element refs) before the parent's useEffect cleanups run, so `rich.current?.html()` there is always
  * undefined; a save on leaving that fell back to the text as it was when opened reverted every edit.
  * This keeps hold of the editable element itself, which still holds the text once it's off the page.
+ * Null when neither can be read (the note then counts as unchanged).
  */
-export function useEditorHtml(rich: RefObject<RichEditorHandle>, fallback: () => string): () => string {
+export function useEditorHtml(rich: RefObject<RichEditorHandle>): () => string | null {
   const node = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => { const r = rich.current?.root(); if (r) node.current = r; });
-  return () => rich.current?.html() ?? (node.current ? normalize(node.current) : fallback());
+  return () => editorText(rich.current ? rich.current.html : undefined, node.current ? () => normalize(node.current!) : undefined);
 }
 
 /** Nothing at all in the editor: no text, no list item (even an empty one), no picture or line. */
@@ -116,14 +118,16 @@ function placeCaretAtEnd(el: HTMLElement) {
 }
 
 export const RichEditor = forwardRef<RichEditorHandle, {
-  initialHtml: string; onChange: () => void; minHeight?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
+  initialHtml: string; onChange: () => void; minHeight?: number;
+  /** Bumped to show [initialHtml] again even when it's the same text (a note reloaded from sync). */
+  revision?: number; fontFamily?: string; placeholder?: string; compact?: boolean;
   /** Show the formatting bar only once the text has been clicked into. */
   toolbarOnFocus?: boolean;
   /** No toolbar of its own (the phone draws one through the handle). */
   noToolbar?: boolean;
   /** Told when the text gains or loses the focus. */
   onFocusChange?: (focused: boolean) => void;
-}>(function RichEditor({ initialHtml, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder, noToolbar, onFocusChange }, ref) {
+}>(function RichEditor({ initialHtml, revision, onChange, minHeight = 360, fontFamily, compact, toolbarOnFocus, placeholder, noToolbar, onFocusChange }, ref) {
   const el = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState(!toolbarOnFocus);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
@@ -132,7 +136,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   useEffect(() => {
     if (el.current) el.current.innerHTML = sanitize(initialHtml);
     document.execCommand("defaultParagraphSeparator", false, "p");
-  }, [initialHtml]);
+  }, [initialHtml, revision]);
   // The "Start writing" hint goes as soon as anything is there: typing, but also a box, a bullet or a
   // number added from the bar (which don't fire an input event).
   useEffect(() => {
