@@ -451,7 +451,8 @@ function PhoneToday() {
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         <AppBarActions />
       </header>
-      {picking && <DayPickerSheet value={day} onPick={show} onClose={() => setPicking(false)} />}
+      {/* On the page root, so it covers the + button like the other sheets. */}
+      {picking && createPortal(<DayPickerSheet value={day} onPick={show} onClose={() => setPicking(false)} />, document.body)}
       <div className="p-daypager" ref={pager}>
         <div className="p-daytrack" ref={track}>
           {days.map((d) => (
