@@ -804,17 +804,20 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
               })()}
               {/* The slot tapped once (tap it again to add there): springs in, and glides to the next one tapped. */}
               {armed && !pending && all.includes(armed.day) && (
-                <div className={`pg-slot armed ${60 * pxPerMin < 34 ? "short" : ""}`} ref={slotEl} style={{ width: `calc(${colPct}% - 2px)`, height: Math.max(22, 60 * pxPerMin) }}>
-                  <span className="pg-slot-time">{formatTime(armed.min)} – {formatTime(Math.min(DAY_MIN - 1, armed.min + 60))}</span>
+                <div className={`pg-slot armed ${60 * pxPerMin < 34 ? "short" : ""}`} ref={slotEl} aria-label={`Add at ${formatTime(armed.min)}`}
+                  style={{ width: `calc(${colPct}% - 2px)`, height: Math.max(22, 60 * pxPerMin) }}>
                   <MIcon name="fAdd" size={18} />
                 </div>
               )}
-              {/* Where the new event goes: only its outline, in its colour, while the panel is open. */}
+              {/* Where the new event goes: only its outline, in its colour, while the panel is open. Its top
+                  and bottom handles drag to change the times (AddPanel takes the finger, over its scrim). */}
               {pending && all.includes(pending.day) && (
-                <div className="pg-slot" style={{
+                <div className="pg-slot pending" data-ppm={pxPerMin} style={{
                   left: `calc(${(all.indexOf(pending.day) - count) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: pending.min * pxPerMin,
-                  height: Math.max(22, (pending.end - pending.min) * pxPerMin), borderColor: pending.color,
-                }} />
+                  height: Math.max(22, (pending.end - pending.min) * pxPerMin), borderColor: pending.color, color: pending.color,
+                }}>
+                  {pending.resizable && <><span className="edge top" /><span className="edge bottom" /></>}
+                </div>
               )}
             </div>
           </div>

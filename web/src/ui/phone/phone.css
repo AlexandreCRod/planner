@@ -1179,6 +1179,18 @@ html.phone[data-theme="dark"] {
 .phone .pg-slot.armed svg { color: var(--p-primary); flex: none; }
 .phone .pg-slot.armed.short { flex-direction: row; gap: 4px; }
 .phone .pg-slot.armed.short svg { width: 14px; height: 14px; }
+/* The new event's outline while the panel is open: round handles on its top and bottom edges. */
+.phone .pg-slot.pending { z-index: 8; border-radius: 6px; overflow: visible; }
+.phone .pg-slot.pending .edge { position: absolute; left: 50%; width: 12px; height: 12px; margin-left: -6px; box-sizing: border-box; border-radius: 50%; border: 2px solid currentColor; background: var(--bg); }
+.phone .pg-slot.pending .edge.top { top: -7px; }
+.phone .pg-slot.pending .edge.bottom { bottom: -7px; }
+/* The add panel's category dialog. */
+.phone .gp-catlist { display: flex; flex-direction: column; margin: 0 -12px; max-height: 50vh; overflow-y: auto; }
+.phone .gp-catrow { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: none; font-size: 15px; line-height: 20px; color: var(--text); text-align: left; }
+.phone .gp-catrow > svg { flex: none; color: var(--muted); }
+.phone .gp-catrow.on { color: var(--p-primary); font-weight: 500; }
+.phone .gp-catrow.on > svg:last-child { color: var(--p-primary); }
+.phone .gp-catrow .gp-colordot { margin: 0 1px; }
 
 /* ---------- Routines on Today: one row of small chips under the progress bar ----------
    A ring (a tick once done) and a short name; a ticked one fades and is struck through. The row

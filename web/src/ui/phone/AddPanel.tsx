@@ -15,17 +15,17 @@ import { type Frequent, frequentItems, suggestFrequent, titleKey } from "../../d
 import { daysText, formatDuration } from "../../domain/alarms.ts";
 import { act, hasAlarms, native } from "../../alarms/native.ts";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
-import { type Item, type ItemType, type Reminder, PRIORITIES, newItem, priorityColor } from "../../domain/types.ts";
+import { type Item, type ItemType, type Reminder, PRIORITIES, cssColor, newItem, priorityColor } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
 import { go } from "../common.tsx";
-import { FilterChip, MIcon, Segmented } from "./chrome.tsx";
+import { Dialog, FilterChip, MIcon, Segmented } from "./chrome.tsx";
 import { SWIPE_GAIN, pageTarget } from "./pager.ts";
 import { VelocityTracker } from "./motion.ts";
 import { TOUCH_SLOP, selectingText } from "./press.ts";
 import { swallowNextClick } from "./gesture.ts";
 import { panelTarget } from "./sheet.ts";
 import { feel } from "./haptics.ts";
-import { AssistChip, ColorPickerDialog, TextButton, showSnackbar } from "./m3.tsx";
+import { AssistChip, TextButton, showSnackbar } from "./m3.tsx";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
 const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
@@ -60,7 +60,7 @@ const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRati
 
 export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
 /** Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box). */
-export interface SlotPreview { day: number; min: number; end: number; color: string }
+export interface SlotPreview { day: number; min: number; end: number; color: string; resizable?: boolean }
 
 /** Native: spring(stiffness = 600), critically damped. */
 const SETTLE = { tension: 600, friction: 49 };
@@ -174,7 +174,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (!onPreview || req.mode !== "slot") return;
     if (d.startDay === null || d.allDay || d.startMin === null) { onPreview(null); return; }
     const end = d.type === "EVENT" && d.endMin !== null && d.endMin > d.startMin ? d.endMin : Math.min(d.startMin + (d.type === "EVENT" ? 60 : 30), DAY_END);
-    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d) });
+    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d), resizable: d.type === "EVENT" });
   }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
@@ -433,6 +433,45 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     else setItem(v ? { allDay: true, startMin: null, endMin: null } : { allDay: false, startMin: d.startMin ?? req.min ?? 540, endMin: d.endMin ?? Math.min((d.startMin ?? req.min ?? 540) + 60, DAY_END) });
   };
   const color = snapshot().colorOf(d);
+
+  // ---------- The new event's edges on the calendar (Google Calendar's box) ----------
+  // While the slot panel is small, a finger landing on the outline's top or bottom edge (over the
+  // scrim) drags that edge, in quarter hours, with a tick for each; the panel's times follow.
+  const edgeDrag = useRef<{ id: number; edge: "top" | "bottom"; y0: number; start: number; end: number; ppm: number; at: string } | null>(null);
+  const draggedAt = useRef(0);
+  const onScrimDown = (e: React.PointerEvent) => {
+    if (req.mode !== "slot" || grownRef.current || d.type !== "EVENT" || d.allDay || d.startMin === null) return;
+    const box = document.querySelector<HTMLElement>(".pg-slot.pending");
+    if (!box) return;
+    const r = box.getBoundingClientRect(), ppm = Number(box.dataset.ppm) || 0;
+    if (!ppm || e.clientX < r.left - 16 || e.clientX > r.right + 16) return;
+    const reach = Math.min(22, r.height / 3 + 6);
+    const edge = Math.abs(e.clientY - r.top) < reach ? "top" : Math.abs(e.clientY - r.bottom) < reach ? "bottom" : null;
+    if (!edge) return;
+    const start = d.startMin, end = d.endMin !== null && d.endMin > start ? d.endMin : Math.min(start + 60, DAY_END);
+    edgeDrag.current = { id: e.pointerId, edge, y0: e.clientY, start, end, ppm, at: `${start}|${end}` };
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* gone */ }
+    feel("pickup");
+  };
+  const onScrimMove = (e: React.PointerEvent) => {
+    const g = edgeDrag.current;
+    if (!g || e.pointerId !== g.id) return;
+    const dm = Math.round((e.clientY - g.y0) / g.ppm / 15) * 15;
+    const s = g.edge === "top" ? Math.max(0, Math.min(g.end - 15, g.start + dm)) : g.start;
+    const en = g.edge === "bottom" ? Math.max(g.start + 15, Math.min(DAY_END, g.end + dm)) : g.end;
+    const at = `${s}|${en}`;
+    if (at === g.at) return;
+    g.at = at;
+    feel("tick");
+    setItem({ startMin: s, endMin: en });
+  };
+  const onScrimUp = (e: React.PointerEvent) => {
+    const g = edgeDrag.current;
+    if (!g || e.pointerId !== g.id) return;
+    edgeDrag.current = null;
+    draggedAt.current = performance.now();
+    if (e.type === "pointerup") feel("settle");
+  };
   const slotFrequent = useMemo(() => (quick ? [] : frequentItems(snapshot().items, snapshot().reminders, d.type)), [quick, d.type]);
   /** Keeps the keyboard up through taps on the panel's own controls. */
   const keepFocus = (e: React.MouseEvent) => { if (!(e.target as Element).closest("input")) e.preventDefault(); };
@@ -472,7 +511,20 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   );
   const isEvent = d.type === "EVENT";
 
-  /** Date, time, all day and colour: the settings the small panel can change. */
+  /** The category (its colour on the dot): picked in a dialog, next to the title. */
+  const categoryName = d.categoryId !== null ? snapshot().categoryById.get(d.categoryId)?.name ?? null : null;
+  const categoryButton = (
+    <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
+      <span className="gp-colordot" style={{ background: color }} /><span>{categoryName ?? "Category"}</span>
+    </button>
+  );
+  const pickCategory = (id: number | null) => {
+    // The category's colour shows; a colour picked by hand before goes.
+    if (lineMode) setOv((o) => ({ ...o, categoryId: id, color: null }));
+    else setItem({ categoryId: id, color: null });
+  };
+
+  /** Date, time, all day and category: the settings the small panel can change. */
   const settings = (
     <div className="gp-chips edit">
       {(isEvent || d.startDay !== null || lineMode) && (
@@ -484,9 +536,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           onClick={() => openPick({ kind: "start" })} />
       )}
       {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
-      <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
-        <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
-      </button>
+      {categoryButton}
     </div>
   );
 
@@ -495,7 +545,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       <div ref={probe} className="gp-probe" />
       <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
         onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
-        onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350) dismiss(); }} />
+        onPointerDown={onScrimDown} onPointerMove={onScrimMove} onPointerUp={onScrimUp} onPointerCancel={onScrimUp}
+        onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350 && performance.now() - draggedAt.current > 350) dismiss(); }} />
       <animated.div className="gp-panel" ref={panelRef} style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
         {editorReady && canGrow && (
@@ -540,9 +591,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
             {frequentRow}
             <div className="gp-row">
               {isEvent && <FilterChip selected={d.allDay} check onClick={() => setAllDay(!d.allDay)}>All day</FilterChip>}
-              <button className="p-assist" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setColorOpen(true); }}>
-                <span className="gp-colordot" style={{ background: color }} /><span>Colour</span>
-              </button>
+              {categoryButton}
             </div>
             <div className="gp-row when">
               <MIcon name="oSchedule" />
@@ -564,8 +613,29 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       {pick?.kind === "date" && <DatePickerDialog value={d.startDay ?? req.day} onClose={closePick} onPick={pickDay} />}
       {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} />}
       {pick?.kind === "end" && <TimePickerDialog value={d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END)} onClose={closePick} onPick={pickEnd} />}
-      {colorOpen && <ColorPickerDialog title="Colour" selected={d.color} onClose={closePick}
-        onPick={(c) => { if (lineMode) setOv((o) => ({ ...o, color: c })); else setItem({ color: c }); }} />}
+      {colorOpen && <CategoryDialog selected={d.categoryId} onClose={closePick} onPick={pickCategory} />}
     </div>
+  );
+}
+
+/** The categories to pick from, each with its colour, and none. */
+function CategoryDialog({ selected, onPick, onClose }: { selected: number | null; onPick: (id: number | null) => void; onClose: () => void }) {
+  const cats = snapshot().categories;
+  const row = (id: number | null, name: string, dot: string | null) => (
+    <button key={id ?? "none"} className={`gp-catrow ${selected === id ? "on" : ""}`} role="menuitemradio" aria-checked={selected === id}
+      onClick={() => { onPick(id); onClose(); }}>
+      {dot ? <span className="gp-colordot" style={{ background: dot }} /> : <MIcon name="fFormatColorReset" size={18} />}
+      <span className="grow ellipsis">{name}</span>
+      {selected === id && <MIcon name="fCheck" size={18} />}
+    </button>
+  );
+  return (
+    <Dialog title="Category" onClose={onClose} actions={<TextButton onClick={onClose}>Close</TextButton>}>
+      <div className="gp-catlist" role="menu">
+        {row(null, "No category", null)}
+        {cats.map((c) => row(c.id, c.name, cssColor(c.color)))}
+        {cats.length === 0 && <div className="gp-tip">Categories are made in Settings › Categories.</div>}
+      </div>
+    </Dialog>
   );
 }
