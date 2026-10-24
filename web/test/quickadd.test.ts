@@ -89,6 +89,17 @@ test("category, priority and place", () => {
   assert.equal(p("Write to ana@example.com").place, null);
 });
 
+test("with an alarm typed, \"Remind me\" adds no extra notification at the start", () => {
+  assert.deepEqual(p("Remind me to call mom 3pm alarm").alerts, [[0, "ALARM"]]);
+  assert.equal(p("Remind me to call mom 3pm alarm").title, "Call mom");
+  assert.deepEqual(p("Remind me to stretch 7am alarm 10m before").alerts, [[10, "ALARM"]]);
+  assert.deepEqual(p("Call mom 3pm remind me !alarm").alerts, [[0, "ALARM"]]);
+  // A reminder with its own lead time is still asked for.
+  assert.deepEqual(p("Dentist 3pm remind 1h before !alarm").alerts, [[60, "REMINDER"], [0, "ALARM"]]);
+  // No alarm: the reminder at the time stays.
+  assert.deepEqual(p("Remind me to call mom 3pm").alerts, [[0, "REMINDER"]]);
+});
+
 test("a title starting with Remind me is cleaned too", () => {
   const r = p("Remind me to call mom tomorrow");
   assert.deepEqual([r.title, r.day, r.alerts], ["Call mom", thu + 1, [[0, "REMINDER"]]]);

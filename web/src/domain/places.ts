@@ -59,16 +59,40 @@ export function placesFromPhoton(json: unknown): Place[] {
 
 export const placeKey = (p: Place) => `${p.name}|${p.lat.toFixed(5)}|${p.lng.toFixed(5)}`;
 
+/** Lower case without accents, so "Amadora" finds "amadora" and "cafe" finds "Café". */
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const wordsOf = (s: string) => fold(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/**
+ * How well [p] matches what was typed: each typed word (a word of the place starting with it counts)
+ * scores most in the place's name, then in its area (the line that tells places apart), then anywhere
+ * in its address. So "Decathlon Amadora" puts the Decathlon whose area is Amadora above the one in
+ * Alfragide, even when that one is nearer (Photon puts places near the person first).
+ */
+export function matchScore(p: Place, query: string): number {
+  const name = wordsOf(p.name), area = wordsOf(p.area), address = wordsOf(p.address);
+  const has = (words: string[], w: string) => words.some((x) => x.startsWith(w));
+  let score = 0;
+  for (const w of new Set(wordsOf(query))) score += has(name, w) ? 4 : has(area, w) ? 3 : has(address, w) ? 1 : 0;
+  return score;
+}
+
 /**
  * The suggestions to show once [next] has come in while [shown] is on screen: those still found keep
  * their places, newly found ones come after them, and ones no longer found go. So a result never jumps
- * about under the finger as more is typed.
+ * about under the finger as more is typed. With [query], a better match for the words typed (the town
+ * or area typed after the name) still comes first: the order only holds among equal matches.
  */
-export function stableMerge(shown: Place[], next: Place[], max = 6): Place[] {
+export function stableMerge(shown: Place[], next: Place[], max = 6, query?: string): Place[] {
   const nextKeys = new Map(next.map((p) => [placeKey(p), p]));
   const kept = shown.filter((p) => nextKeys.has(placeKey(p))).map((p) => nextKeys.get(placeKey(p))!);
   const keptKeys = new Set(kept.map(placeKey));
-  return [...kept, ...next.filter((p) => !keptKeys.has(placeKey(p)))].slice(0, max);
+  const merged = [...kept, ...next.filter((p) => !keptKeys.has(placeKey(p)))];
+  if (query?.trim()) {
+    const score = new Map(merged.map((p) => [p, matchScore(p, query)]));
+    merged.sort((a, b) => score.get(b)! - score.get(a)!); // stable: equal matches keep their order
+  }
+  return merged.slice(0, max);
 }
 
 /**

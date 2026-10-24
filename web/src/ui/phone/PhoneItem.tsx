@@ -456,9 +456,11 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
   const [found, setFound] = useState<Place[]>([]);
   const touching = useRef(false);
   const waiting = useRef<Place[] | null>(null);
+  // What the shown suggestions were found for: the typed town or area lifts its place to the top.
+  const asked = useRef("");
   const show = (next: Place[]) => {
     if (touching.current) { waiting.current = next; return; }
-    setFound((shown) => stableMerge(shown, next));
+    setFound((shown) => stableMerge(shown, next, 6, asked.current));
   };
   useEffect(() => { if (autoFocus) { const t = window.setTimeout(() => ref.current?.focus(), 80); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -466,7 +468,7 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
     if (q.length < 2) { if (!touching.current) setFound([]); return; }
     const ctl = new AbortController();
     const t = window.setTimeout(() => {
-      void searchPlaces(q, usualArea(snapshot().items), ctl.signal).then((r) => { if (!ctl.signal.aborted) show(r); });
+      void searchPlaces(q, usualArea(snapshot().items), ctl.signal).then((r) => { if (!ctl.signal.aborted) { asked.current = q; show(r); } });
     }, 250);
     return () => { clearTimeout(t); ctl.abort(); };
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -477,11 +479,11 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
     touching.current = false;
     const w = waiting.current;
     waiting.current = null;
-    if (w) setFound((shown) => stableMerge(shown, w));
+    if (w) setFound((shown) => stableMerge(shown, w, 6, asked.current));
   };
   return <>
     <FieldRow icon="oLocationOn">
-      <span className="grow pe-placefield">
+      <span className={`grow pe-placefield ${sub ? "two" : ""}`}>
         <input ref={ref} className="pe-input" placeholder="Add location" value={loc} enterKeyHint="done" autoCapitalize="words"
           onChange={(e) => { const v = e.target.value; set(v.trim() ? { location: v } : NO_PLACE); setQuery(v); }}
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
@@ -784,7 +786,7 @@ function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, tra
     <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} {...hold}
       onClick={() => { if (!fired()) onClick?.(); }}>
       <MIcon name={icon} size={22} color={tint} />
-      <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""}`}>
+      <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""} ${sub ? "two" : ""}`}>
         {text}
         {sub && <span className="pe-info-sub">{sub}</span>}
       </span>

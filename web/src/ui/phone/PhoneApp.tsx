@@ -143,9 +143,45 @@ export function PhoneApp() {
   const [tab, setTab] = useState(routeTab >= 0 ? routeTab : 0);
   const tabRef = useRef(tab);
   // Pages already shown stay mounted, so sliding back to them is instant. The rest arrive once the
-  // app has settled, so a first slide across them doesn't build them mid-gesture.
+  // app has settled, so a first slide across them doesn't build them mid-gesture: one page at a time,
+  // when the phone is idle and no finger (or mouse button) is down or has just lifted. Building them
+  // all at once, on a timer, was one long stall that landed on the first swipes after opening the app.
   const [mounted, setMounted] = useState(() => new Set([tab, 0, 1]));
-  useEffect(() => { const t = window.setTimeout(() => startTransition(() => setMounted(new Set(TABS.map((_, i) => i)))), 1200); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    let down = 0, lastUp = 0, timer = 0, idle = 0, alive = true;
+    let left = TABS.length - new Set([tab, 0, 1]).size;
+    const onDown = () => { down++; };
+    const onUp = () => { down = Math.max(0, down - 1); lastUp = performance.now(); };
+    window.addEventListener("pointerdown", onDown, { capture: true, passive: true });
+    window.addEventListener("pointerup", onUp, { capture: true, passive: true });
+    window.addEventListener("pointercancel", onUp, { capture: true, passive: true });
+    const next = (wait: number) => { timer = window.setTimeout(ask, wait); };
+    const ask = () => {
+      if (typeof requestIdleCallback === "function") idle = requestIdleCallback(step, { timeout: 4000 });
+      else step();
+    };
+    const step = () => {
+      if (!alive) return;
+      // Busy with a gesture (or its glide after the finger lifts): later.
+      if (down > 0 || performance.now() - lastUp < 700) { next(500); return; }
+      if (left <= 0) return;
+      left--;
+      startTransition(() => setMounted((m) => {
+        const i = TABS.findIndex((_, k) => !m.has(k));
+        return i < 0 ? m : new Set([...m, i]);
+      }));
+      if (left > 0) next(400);
+    };
+    next(1500);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      if (idle && typeof cancelIdleCallback === "function") cancelIdleCallback(idle);
+      window.removeEventListener("pointerdown", onDown, { capture: true });
+      window.removeEventListener("pointerup", onUp, { capture: true });
+      window.removeEventListener("pointercancel", onUp, { capture: true });
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Bumped by a double tap on a tab: that page is built afresh (scroll, filters, search all reset).
   const [resets, setResets] = useState<Record<string, number>>({});
   const selectListeners = useRef(new Set<(i: number) => void>());

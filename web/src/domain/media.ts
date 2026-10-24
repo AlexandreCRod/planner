@@ -54,36 +54,39 @@ export function pieces(size: number, piece = 3 * 256 * 1024): [number, number][]
   return out;
 }
 
-/** The lens's small ones beside the big one, as a part of its size, and the space between them (px). */
-export const LENS_SMALL = 0.36;
-const LENS_GAP = 12;
+/** The lens's miniatures beside the big one: their longer side (px), and the gaps (px). */
+export const LENS_MINI = 56;
+const LENS_GAP = 14;
+const MINI_GAP = 8;
+
+/** The scale that makes an item of [w] x [h] px a miniature. */
+export const miniScale = (w: number, h: number) => Math.min(1, LENS_MINI / Math.max(1, w, h));
 
 /**
- * The lens, a carousel: the media in a row, the one at [offset] 0 big in the middle and the others much
- * smaller beside it (the previous and next still in sight at the sides), by how far each is from the
- * middle ([offset] is fractional while the row slides). [w] is the big one's width. Returns where its
- * centre goes (px from the middle), its scale, and how visible it is.
+ * The lens, a carousel: the media in a row, the one at [offset] 0 big in the middle and the others as
+ * miniatures beside it, by how far each is from the middle ([offset] is fractional while the row
+ * slides). [w] is the big one's width, [mini] the item's own scale as a miniature (miniScale). Returns
+ * where its centre goes (px from the middle), its scale, and how visible it is.
  */
-export function lensPlace(offset: number, w: number): { x: number; scale: number; opacity: number } {
+export function lensPlace(offset: number, w: number, mini = miniScale(w, w)): { x: number; scale: number; opacity: number } {
   const a = Math.abs(offset), s = Math.sign(offset);
-  // Next to the big one: half of it, a gap, half of a small one; then one small one after another.
-  const near = lensStep(w);
-  const x = a <= 1 ? s * a * near : s * (near + (a - 1) * (w * LENS_SMALL + LENS_GAP));
-  const scale = 1 - (1 - LENS_SMALL) * Math.min(1, a);
-  const opacity = a <= 2.5 ? 1 : Math.max(0, 1 - (a - 2.5) / 0.75);
+  // Next to the big one: half of it, a gap, half a miniature; then one miniature after another.
+  const near = w / 2 + LENS_GAP + LENS_MINI / 2;
+  const x = a <= 1 ? s * a * near : s * (near + (a - 1) * (LENS_MINI + MINI_GAP));
+  const scale = 1 - (1 - mini) * Math.min(1, a);
+  const opacity = a <= 3.5 ? 1 : Math.max(0, 1 - (a - 3.5) / 0.75);
   return { x, scale, opacity };
 }
 
-/**
- * How far a finger slides the lens for one item: the distance from the middle to the next one, so the
- * big one stays exactly under the finger (finger to the left brings the next one in, to the right the
- * previous one).
- */
-export function lensStep(w: number): number {
-  return w / 2 + LENS_GAP + (w * LENS_SMALL) / 2;
+/** How far a finger slides the lens for one item: one miniature along. */
+export function lensStep(): number {
+  return LENS_MINI + MINI_GAP;
 }
 
-/** Where the lens's row is for a finger [dx] px from where it started at [p0] (an item index). */
-export function lensPosFor(p0: number, dx: number, w: number): number {
-  return p0 - dx / lensStep(w);
+/**
+ * Where the lens's row is for a finger [dx] px from where it started at [p0] (an item index): the finger
+ * moving right brings the ones on the right to the middle, as if running along the miniatures.
+ */
+export function lensPosFor(p0: number, dx: number): number {
+  return p0 + dx / lensStep();
 }

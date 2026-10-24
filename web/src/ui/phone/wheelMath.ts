@@ -46,3 +46,14 @@ export function nearestSlot(cur: number, index: number, n: number): number {
   const base = cur - wrapIndex(cur, n) + index;
   return [base - n, base, base + n].reduce((a, b) => (Math.abs(b - cur) < Math.abs(a - cur) ? b : a));
 }
+
+/**
+ * A new event's box with one edge dragged [dMin] minutes (AddPanel.tsx): the start ("top") or the end
+ * ("bottom") lands on the nearest [step] minutes of the clock, and the box never gets shorter than one
+ * step or goes past either end of the day.
+ */
+export function dragEdgeTimes(edge: "top" | "bottom", start: number, end: number, dMin: number, step = 15): { start: number; end: number } {
+  const snap = (m: number) => Math.round(m / step) * step;
+  if (edge === "top") return { start: Math.max(0, Math.min(end - step, snap(start + dMin))), end };
+  return { start, end: Math.max(start + step, Math.min(24 * 60 - 1, snap(end + dMin))) };
+}

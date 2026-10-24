@@ -286,7 +286,9 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
   }
   if (start !== null && end === null) end = Math.min((start as number) + 60, 1439);
 
-  if (atTime || (silent && offsets.length === 0)) offsets.push(0);
+  // A bare "remind me" asks for a reminder at the time; with an alarm typed, the alarm is that reminder
+  // ("Remind me to call mom 3pm alarm" rings once, with no extra notification at 3pm).
+  if ((atTime && !alarm) || (silent && offsets.length === 0)) offsets.push(0);
   const remindType: AlertType = silent ? "NOTIFICATION" : "REMINDER";
   const alerts: [number, AlertType][] = [...new Set(offsets)].map((o) => [o, remindType]);
   for (const o of new Set(alarmOffsets)) alerts.push([o, "ALARM"]);

@@ -309,6 +309,8 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
   const text = notePreview(n.content);
   const tags = (s.tagsByItem.get(n.id) ?? []).map((t) => `#${t.name}`).join(" ");
   const links = s.neighbours(n.id).size;
+  // Pictures or videos in the note: a small mark with how many.
+  const files = s.images.get(n.id)?.length ?? 0;
   const updated = Math.floor((n.updatedAt - new Date(n.updatedAt).getTimezoneOffset() * 60000) / 86400000);
   // A card can also be dragged into another place, after a long press (noteDrag.ts).
   const sp = sel.pressProps(n.id);
@@ -326,6 +328,7 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
         {text && <div className="text">{text}</div>}
         <div className="foot">
           <span className="grow">{tags || formatDate(updated)}</span>
+          {files > 0 && <span className="files" role="img" aria-label={files === 1 ? "1 file" : `${files} files`}><MIcon name="oImage" size={12} /><span>{files}</span></span>}
           {links > 0 && <><MIcon name="oLink" size={12} /><span>{links}</span></>}
         </div>
       </div>

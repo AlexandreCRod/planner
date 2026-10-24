@@ -1,11 +1,11 @@
 // A note's pictures and videos on the phone: a row of previews that a sideways swipe glides through,
 // one to the next; a tap opens one full screen; a long press opens the lens, a carousel: the one pressed
-// shown big with the previous and next much smaller at the sides, and the finger, still down, slides the
-// row (the big one stays under it, as with any swipe there). Everything in the
+// shown big with the others as miniatures at its sides, and the finger, still down, runs along them
+// (moving right brings the ones on the right to the middle). Everything in the
 // lens moves by transforms written straight to the elements each frame (no React render while it moves).
 // Any of them can be saved to the phone. Videos stay on the phone that added them (domain/media.ts).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, previewHash } from "../../domain/media.ts";
+import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, miniScale, previewHash } from "../../domain/media.ts";
 import type { NoteImage } from "../../domain/types.ts";
 import { getBlob, useImageUrl } from "../../store/images.ts";
 import { Dialog, IconButton, MIcon } from "./chrome.tsx";
@@ -96,9 +96,10 @@ export function MediaStrip({ media, onOpen, onLens }: {
 }
 
 /**
- * The lens. [pointer]: the finger that opened it, still down, which slides the row; after that, swipes
- * move it. Either way the row follows the finger one to one (the big one stays under it), a tap on the big one opens it full screen, a tap on a
- * small one brings it to the middle, and a tap beside them closes the lens.
+ * The lens. [pointer]: the finger that opened it, still down, which runs along the row; after that,
+ * swipes do. Either way the finger moving right brings the ones on the right to the middle, one per
+ * miniature's width; a tap on the big one opens it full screen, a tap on a miniature brings it to the
+ * middle, and a tap beside them closes the lens.
  */
 export function MediaLens({ media, start, pointer, onClose, onOpen }: {
   media: NoteImage[]; start: number; pointer: { id: number; x: number } | null; onClose: () => void; onOpen: (i: number) => void;
@@ -121,7 +122,8 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
     pos.current = p;
     els.current.forEach((el, i) => {
       if (!el) return;
-      const { x, scale, opacity } = lensPlace(i - p, W);
+      const { w, h } = sizeOf(media[i]);
+      const { x, scale, opacity } = lensPlace(i - p, W, miniScale(w, h));
       el.style.transform = `translate3d(${x}px,0,0) scale(${scale})`;
       el.style.opacity = String(opacity);
       el.style.zIndex = String(100 - Math.round(Math.abs(i - p) * 10));
@@ -144,9 +146,9 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
   useLayoutEffect(() => { draw(start); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => pushBack(close), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // One finger at a time moves the row, one to one: the finger to the left brings the next one in.
+  // One finger at a time moves the row: the finger to the right brings the next one in.
   useEffect(() => {
-    const step = lensStep(W);
+    const step = lensStep();
     let g: { id: number; x0: number; y0: number; p0: number; moved: boolean; vt: VelocityTracker; x: number } | null = null;
     const begin = (id: number, x: number, y: number, moved: boolean) => {
       anim.current?.stop(); anim.current = null;
@@ -156,7 +158,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
     if (pointer) begin(pointer.id, pointer.x, 0, true);
     /** Where the row is for the finger now. Past either end it gives a little, then stops. */
     const placeFor = (d: NonNullable<typeof g>) => {
-      const raw = lensPosFor(d.p0, d.x - d.x0, W);
+      const raw = lensPosFor(d.p0, d.x - d.x0);
       return raw < 0 ? -0.3 * (1 - Math.exp(raw / 0.6)) : raw > n - 1 ? n - 1 + 0.3 * (1 - Math.exp(-(raw - n + 1) / 0.6)) : raw;
     };
     const frame = () => {
@@ -181,9 +183,9 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
       cancelAnimationFrame(raf.current); raf.current = 0;
       if (d.moved) {
         draw(placeFor(d));
-        const v = d.vt.velocity(e.timeStamp) / step; // items per ms, finger right is negative
-        const to = clamp(Math.round(pos.current - v * 140), 0, n - 1);
-        settle(to, -v);
+        const v = d.vt.velocity(e.timeStamp) / step; // items per ms: the finger to the right goes on
+        const to = clamp(Math.round(pos.current + v * 140), 0, n - 1);
+        settle(to, v);
         return;
       }
       if (e.type !== "pointerup") { settle(clamp(Math.round(pos.current), 0, n - 1)); return; }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mapsQuery, NO_PLACE, photonUrl, placeFields, placeLines, placesFromPhoton, stableMerge, usualArea, type Place } from "../src/domain/places.ts";
+import { mapsQuery, matchScore, NO_PLACE, photonUrl, placeFields, placeLines, placesFromPhoton, stableMerge, usualArea, type Place } from "../src/domain/places.ts";
 import type { Item } from "../src/domain/types.ts";
 
 const feature = (props: Record<string, string>, lng: number, lat: number) => ({ geometry: { coordinates: [lng, lat] }, properties: props });
@@ -43,6 +43,18 @@ test("suggestions never jump about as more is typed", () => {
   assert.equal(stableMerge([], Array.from({ length: 9 }, (_, i) => pl(`P${i}`, i))).length, 6);
   // Same name in another town is another place.
   assert.equal(stableMerge([pl("Decathlon", 1)], [pl("Decathlon", 2)])[0].lat, 2);
+});
+
+test("the town or area typed after the name wins over a nearer place of the same name", () => {
+  // Photon lists the nearer one first (Alfragide, a part of Amadora), as it did on screen before.
+  const alfragide: Place = { name: "Decathlon", address: "Rua da Quinta 3, Alfragide, 2610-999 Amadora, Portugal", area: "Alfragide", lat: 38.73, lng: -9.22 };
+  const amadora: Place = { name: "Decathlon", address: "Avenida Cruzeiro Seixas 5, 2650-505 Amadora, Portugal", area: "Amadora", lat: 38.76, lng: -9.23 };
+  assert.ok(matchScore(amadora, "Decathlon Amadora") > matchScore(alfragide, "Decathlon Amadora"));
+  assert.deepEqual(stableMerge([alfragide], [alfragide, amadora], 6, "Decathlon Amadora").map((p) => p.area), ["Amadora", "Alfragide"]);
+  assert.deepEqual(stableMerge([alfragide], [alfragide, amadora], 6, "decathlon alfrag").map((p) => p.area), ["Alfragide", "Amadora"]);
+  // No accents or capitals needed; equal matches keep their order.
+  assert.equal(matchScore({ ...amadora, name: "Café Luso" }, "cafe luso"), 8);
+  assert.deepEqual(stableMerge([pl("A"), pl("B")], [pl("B"), pl("A")], 6, "x").map((p) => p.name), ["A", "B"]);
 });
 
 const item = (over: Partial<Item>): Item => ({ id: "x", updatedAt: 0, ...over } as Item);

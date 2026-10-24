@@ -228,7 +228,7 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
     {rows.slice(0, GLANCE_ROWS).map((g) => (
       <button key={g.key} className="p-glance-row" onClick={() => openItem(g.item, day)}>
         <span className="p-glance-time">{g.allDay ? "All day" : g.min !== null ? formatTime(g.min) : ""}</span>
-        <span className="p-glance-dot" style={{ background: s.colorOf(g.item) }} />
+        <span className="p-glance-bar" style={{ background: s.colorOf(g.item) }} />
         <span className="p-glance-title">{g.item.title || "Untitled"}</span>
       </button>
     ))}

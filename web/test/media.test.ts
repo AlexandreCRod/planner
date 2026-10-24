@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LENS_SMALL, downloadName, filesToFetch, isVideo, lensPlace, lensPosFor, lensStep, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
+import { LENS_MINI, downloadName, filesToFetch, isVideo, lensPlace, lensPosFor, lensStep, miniScale, pieces, previewHash, syncedFile } from "../src/domain/media.ts";
 
 // Items 80 and 96: a note's pictures and videos.
 
@@ -35,33 +35,30 @@ test("a file is sent in whole base64 pieces, covering it exactly", () => {
   for (const [a, b] of pieces(5_000_000)) assert.equal((b - a) % 3 === 0 || b === 5_000_000, true);
 });
 
-test("the lens: the middle one big, the others smaller beside it, moving smoothly between", () => {
-  const W = 300;
-  assert.deepEqual(lensPlace(0, W), { x: 0, scale: 1, opacity: 1 });
-  const right = lensPlace(1, W), left = lensPlace(-1, W);
-  assert.ok(Math.abs(right.scale - LENS_SMALL) < 1e-9);
-  assert.ok(LENS_SMALL < 0.4); // much smaller than the big one
+test("the lens: the middle one big, the others true miniatures beside it, moving smoothly between", () => {
+  const W = 246; // a 411 px wide phone
+  assert.deepEqual(lensPlace(0, W, miniScale(W, 400)), { x: 0, scale: 1, opacity: 1 });
+  // A portrait picture as big as the big one: shrunk to a miniature, its longer side LENS_MINI px.
+  const mini = miniScale(W, 400);
+  const right = lensPlace(1, W, mini), left = lensPlace(-1, W, mini);
+  assert.ok(Math.abs(400 * right.scale - LENS_MINI) < 1e-9);
+  assert.ok(LENS_MINI <= 64); // a miniature, not a smaller picture
   assert.equal(left.x, -right.x);
-  // The small one beside the big one doesn't overlap it.
+  // The miniature beside the big one doesn't overlap it, and is in sight on the screen.
   assert.ok(right.x - (W * right.scale) / 2 >= W / 2);
+  assert.ok(right.x + LENS_MINI / 2 <= W / 0.6 / 2);
   // Continuous: a little past 1 is a little further on.
-  const a = lensPlace(0.999, W).x, b = lensPlace(1.001, W).x;
+  const a = lensPlace(0.999, W, mini).x, b = lensPlace(1.001, W, mini).x;
   assert.ok(Math.abs(a - b) < 1);
-  assert.ok(lensPlace(4, W).opacity === 0);
+  assert.ok(lensPlace(5, W, mini).opacity === 0);
 });
 
-test("the lens follows the finger: the big one stays under it, left brings the next one in", () => {
-  const W = 246; // a 411 px wide phone
-  // Finger 30 px to the right: the big one moves 30 px to the right, toward the previous one.
-  const p = lensPosFor(2, 30, W);
-  assert.ok(p < 2);
-  assert.ok(Math.abs(lensPlace(2 - p, W).x - 30) < 1e-9);
-  // A whole step to the left: the next one is in the middle.
-  assert.ok(Math.abs(lensPosFor(2, -lensStep(W), W) - 3) < 1e-9);
-  // The previous and next ones are mostly in sight at the sides of the screen.
-  const next = lensPlace(1, W), screen = W / 0.6;
-  const visible = (screen / 2 - (next.x - (W * next.scale) / 2)) / (W * next.scale);
-  assert.ok(visible > 0.7, String(visible));
+test("the lens: the finger moving right brings the ones on the right to the middle", () => {
+  const p = lensPosFor(2, 30);
+  assert.ok(p > 2);
+  // One miniature's width to the right: the next one is in the middle; to the left, the previous one.
+  assert.ok(Math.abs(lensPosFor(2, lensStep()) - 3) < 1e-9);
+  assert.ok(Math.abs(lensPosFor(2, -lensStep()) - 1) < 1e-9);
 });
 
 // Item 156: a picture added on another device is fetched after the sync that brings its record.

@@ -26,3 +26,15 @@ export function rangeRole(r: Pick<RangePick, "start" | "end">, day: number): "si
   if (day === r.end) return "end";
   return day > r.start && day < r.end ? "inside" : null;
 }
+
+/**
+ * Sliding across days ticks lightly, and far less than once per day crossed: only when the day under
+ * the finger changes, and never sooner than this after the last tick (a quick slide down a column
+ * crosses seven days a row and is felt as one or two ticks, not a buzz).
+ */
+export const RANGE_TICK_GAP_MS = 120;
+
+/** Whether the slide's move to [day] (from [last]) at [now] ticks, given the last tick at [tickAt]. */
+export function slideTicks(last: number, day: number, now: number, tickAt: number): boolean {
+  return day !== last && now - tickAt >= RANGE_TICK_GAP_MS;
+}

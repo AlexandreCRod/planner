@@ -189,6 +189,8 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .today-list .p-glance-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 16px; border: 0; background: none; text-align: left; font: inherit; color: var(--text); }
 .phone .today-list .p-glance-time { flex: none; width: 50px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-glance-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+/* Tomorrow's rows: the item's colour as the same upright line as today's rows, scaled to the smaller row. */
+.phone .today-list .p-glance-bar { flex: none; width: 3px; height: 20px; border-radius: 1.5px; }
 .phone .today-list .p-glance-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; letter-spacing: .25px; }
 .phone .today-list .p-glance-more { display: block; padding: 4px 16px 0 76px; border: 0; background: none; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-note-gap { height: 16px; }
@@ -279,7 +281,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
    view while the keyboard was coming up, leaving a gap under the panel. A clipped box can't scroll. */
 .phone .gp-root { position: fixed; inset: 0; z-index: 50; overflow: clip; }
 .phone .gp-probe { position: fixed; bottom: 0; left: 0; width: 0; height: var(--sab); visibility: hidden; pointer-events: none; }
-.phone .gp-scrim { position: absolute; inset: 0; background: #000; opacity: 0; }
+.phone .gp-scrim { position: absolute; inset: 0; background: #000; opacity: 0; touch-action: none; }
 .phone .gp-panel { position: absolute; left: 0; right: 0; top: 0; will-change: transform; touch-action: none; }
 .phone .gp-bg { position: absolute; inset: 0; background: var(--p-sc-low); box-shadow: 0 -1px 6px rgb(0 0 0 / .1); }
 .phone .gp-full { position: absolute; left: 0; right: 0; top: 0; overflow: clip; pointer-events: none; touch-action: auto; will-change: opacity; }
@@ -290,6 +292,17 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .gp-compact.slot { padding: 0 16px 12px 24px; display: flex; flex-direction: column; gap: 12px; }
 .phone .gp-handle { width: 32px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 40%, transparent); margin: 0 auto 10px; }
 .phone .gp-compact.slot .gp-handle { margin: 10px auto 0; }
+/* The small panel's and the editor's own handles only keep their room: the panel's one handle (below)
+   is drawn over both, so it never fades out or leaves the top while the panel grows. */
+.phone .gp-compact > .gp-handle, .phone .gp-drag .gp-handle { visibility: hidden; }
+.phone .gp-tophandle { position: absolute; top: 10px; left: 50%; z-index: 3; margin: 0 0 0 -16px; pointer-events: none; will-change: transform; }
+.phone .gp-probe.top { bottom: auto; top: 0; height: var(--sat); }
+/* While the new event's box is resized: the panel is a bar with the title under its handle. */
+.phone .gp-peek {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 2; height: 60px; box-sizing: border-box; padding: 18px 24px 0;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 24px; letter-spacing: .15px;
+  color: var(--text); pointer-events: none;
+}
 .phone .p-seg { display: flex; height: 40px; border: 1px solid var(--p-outline); border-radius: 20px; overflow: hidden; }
 .phone .p-seg button { flex: 1; border: 0; background: none; font-size: 14px; font-weight: 500; letter-spacing: .1px; color: var(--text); display: flex; align-items: center; justify-content: center; gap: 6px; }
 .phone .p-seg button + button { border-left: 1px solid var(--p-outline); }
@@ -504,6 +517,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-notecard .text { margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; opacity: .85; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
 .phone .p-notecard .foot { display: flex; align-items: center; gap: 2px; margin-top: 6px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; opacity: .6; }
 .phone .p-notecard .foot .grow { min-width: 0; overflow: hidden; white-space: nowrap; }
+.phone .p-notecard .foot .files { display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; }
 
 /* ---------- Links: the graph canvas ---------- */
 .phone .p-graph { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -766,7 +780,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 /* Where one range of days meets the next, a stronger line through the header, the all-day strip and
    the grid: shown while the days slide, fading in as they leave their place and out as they reach the
    next, so nothing jumps when they settle (TimeGrid sets the opacity with the transform). */
-.phone .pg-rangeline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--p-outline); opacity: 0; pointer-events: none; z-index: 3; }
+.phone .pg-rangeline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--p-outline); opacity: 0; pointer-events: none; z-index: 3; will-change: opacity; }
 /* The sliding layers are the compositor's own, so a swipe only moves them (no repaint). */
 .phone .pg-layer, .phone .pg-strip { will-change: transform; }
 /* The slot tapped for a new event: just its outline, in the event's colour. */
@@ -783,7 +797,7 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-assist.on svg { color: inherit; }
 .phone .gp-frequent .p-assist { max-width: 100%; }
 .phone .gp-frequent .p-assist .ellipsis { min-width: 0; }
-.phone .gp-drag { flex: none; height: calc(var(--sat) + 22px); padding-top: var(--sat); display: grid; place-items: center; touch-action: none; }
+.phone .gp-drag { flex: none; height: calc(var(--sat) + 24px); padding-top: var(--sat); display: grid; place-items: center; touch-action: none; }
 .phone .gp-drag .gp-handle { margin: 0; }
 .phone .gp-row { flex-wrap: wrap; }
 
@@ -982,7 +996,17 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pe-place .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; line-height: 20px; }
 .phone .pe-place-sub { font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .pe-placefield { display: flex; flex-direction: column; min-width: 0; }
-.phone .pe-info-sub { display: block; font-size: 13px; line-height: 18px; color: var(--muted); text-decoration: none; }
+/* With its area line: the two lines sit together, centred in the row, instead of the field's full height above the area. */
+.phone .pe-placefield.two { justify-content: center; padding: 6px 0; }
+.phone .pe-placefield.two .pe-input { height: 24px; }
+.phone .pe-placefield.two .pe-place-sub { margin-top: 0; }
+.phone .pe-info-sub { display: block; font-size: 12px; line-height: 16px; letter-spacing: .25px; color: var(--muted); text-decoration: none; }
+/* A place: its name and the small area line under it, close together and centred as one block on the
+   pin and the Directions button. */
+.phone .pe-info.trailing { min-height: 56px; box-sizing: border-box; }
+.phone .pe-info.trailing > svg { margin-top: 0; }
+.phone .pe-info > .grow.two { display: flex; flex-direction: column; justify-content: center; line-height: 22px; white-space: normal; }
+.phone .pe-info > .grow.two > .pe-info-sub { margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .pe-pick { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 24px; font-size: 15px; line-height: 20px; color: var(--text); }
 .phone .pe-pick .grow { flex: 1; min-width: 0; }
 .phone .pe-pick .pe-dot { width: 8px; height: 8px; margin: 0; }
@@ -1187,10 +1211,19 @@ html.phone[data-theme="dark"] {
 .phone .pg-slot.armed.short { flex-direction: row; gap: 4px; }
 .phone .pg-slot.armed.short svg { width: 14px; height: 14px; }
 /* The new event's outline while the panel is open: round handles on its top and bottom edges. */
-.phone .pg-slot.pending { z-index: 8; border-radius: 6px; overflow: visible; }
-.phone .pg-slot.pending .edge { position: absolute; left: 50%; width: 12px; height: 12px; margin-left: -6px; box-sizing: border-box; border-radius: 50%; border: 2px solid currentColor; background: var(--bg); }
-.phone .pg-slot.pending .edge.top { top: -7px; }
-.phone .pg-slot.pending .edge.bottom { bottom: -7px; }
+/* The new event's box (Google Calendar's): a clear outline in its colour, faintly filled, with round
+   handles at its top-left and bottom-right corners to drag its start and end (AddPanel.tsx). */
+.phone .pg-slot.pending { z-index: 8; border-radius: 8px; overflow: visible; border-width: 2px; background: color-mix(in srgb, currentColor 10%, transparent); }
+.phone .pg-slot.pending .edge {
+  position: absolute; width: 12px; height: 12px; box-sizing: content-box; border-radius: 50%; background: currentColor;
+  border: 2px solid var(--bg); transition: transform .12s cubic-bezier(.2, 0, 0, 1);
+}
+.phone .pg-slot.pending .edge.top { top: -9px; left: 6px; }
+.phone .pg-slot.pending .edge.bottom { bottom: -9px; right: 6px; }
+.phone .pg-slot.pending.drag-top .edge.top, .phone .pg-slot.pending.drag-bottom .edge.bottom { transform: scale(1.3); }
+/* The time of the edge being dragged, on its line beside the hours. */
+.phone .pg-labels { position: relative; }
+.phone .pg-labels .pg-edgetime { z-index: 1; margin-top: -7px; padding: 0 1px; background: var(--bg); font-weight: 700; font-size: 10px; line-height: 14px; }
 /* The add panel's category dialog. */
 .phone .gp-catlist { display: flex; flex-direction: column; margin: 0 -12px; max-height: 50vh; overflow-y: auto; }
 .phone .gp-catrow { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: none; font-size: 15px; line-height: 20px; color: var(--text); text-align: left; }
@@ -1230,7 +1263,8 @@ html.phone[data-theme="dark"] {
    page's own background, its title after a small ring that fills (with a tick) once it's done. */
 .phone .pg-block.task { background: color-mix(in srgb, var(--c) 5%, var(--bg)); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: color-mix(in srgb, var(--text) 85%, transparent); padding-left: 19px; }
 .phone .pg-block.task::before { display: none; }
-.phone .pg-block.task.done { border-style: dashed; opacity: .7; }
+/* Done: the same outline as before it was ticked, only fainter (and its title struck through). */
+.phone .pg-block.task.done { opacity: .7; }
 .phone .pg-block.task.tiny { padding-left: 15px; }
 .phone .pg-tick {
   position: absolute; left: 5px; top: 3px; width: 10px; height: 10px; box-sizing: border-box; display: grid; place-items: center;
@@ -1241,6 +1275,9 @@ html.phone[data-theme="dark"] {
 .phone .pg-block.tiny .pg-tick { left: 4px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-width: 1.1px; }
 .phone .pg-block.tiny .pg-tick svg { width: 6px; height: 6px; }
 .phone .pg-chip.task, .phone .p-mchip.task { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
+/* A bar over several days: a thicker left edge at the start of each piece (each week, each run of days). */
+.phone .pg-bar, .phone .p-mbar { box-shadow: inset 3px 0 0 var(--c); padding-left: 5px; }
+.phone .pg-bar.task, .phone .p-mbar.task { box-shadow: inset 3px 0 0 var(--c), inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
 
 /* ---------- Time drum (TimeWheel.tsx): a small 3D drum blooming out of held digits ----------
    Rows are placed round the drum by the script (rotateX about its radius, with perspective), fading as
@@ -1298,15 +1335,22 @@ html.phone[data-theme="dark"] {
 /* The range picker: the start and end days filled, a band across the days between. */
 .phone .p-rdp-head { display: flex; align-items: baseline; gap: 10px; }
 .phone .p-rdp-head > span:not(.sep) { color: var(--muted); }
-.phone .p-rdp-head > span.on { color: var(--text); text-decoration: underline; text-decoration-color: var(--p-primary); text-decoration-thickness: 2px; text-underline-offset: 6px; }
-.phone .p-rdp-days button.band::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 0; right: 0; background: var(--p-sec-container); }
+.phone .p-rdp-head > span.on { color: var(--text); text-decoration: underline; text-decoration-color: var(--p-strong); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+/* The range: the start and end as filled circles in the strong tone, the days between on a band of the
+   same tone (lighter), joined to the ends, rounded where a week or the month starts or ends. */
+.phone .p-rdp-days button.band::before {
+  content: ""; position: absolute; top: 4px; bottom: 4px; left: 0; right: 0;
+  background: color-mix(in oklab, var(--p-strong) 20%, transparent);
+}
 .phone .p-rdp-days button.band.one::before { display: none; }
 .phone .p-rdp-days button.band.rs::before { left: 50%; }
 .phone .p-rdp-days button.band.re::before { right: 50%; }
-.phone .p-rdp-days button.band.c0:not(.rs)::before { left: 4px; border-radius: 20px 0 0 20px; }
-.phone .p-rdp-days button.band.c6:not(.re)::before { right: 4px; border-radius: 0 20px 20px 0; }
-.phone .p-rdp-days button span { position: relative; z-index: 1; }
-.phone .p-rdp-days button.sel span { width: 40px; justify-self: center; margin: 0; border-radius: 50%; }
+.phone .p-rdp-days button.band:is(.c0, .m0):not(.rs)::before { left: 4px; border-radius: 20px 0 0 20px; }
+.phone .p-rdp-days button.band:is(.c6, .m1):not(.re)::before { right: 4px; border-radius: 0 20px 20px 0; }
+.phone .p-rdp-days button.band.rs:is(.c6, .m1)::before, .phone .p-rdp-days button.band.re:is(.c0, .m0)::before { display: none; }
+.phone .p-rdp-days button span { position: relative; z-index: 1; transition: background-color .12s linear, color .12s linear; }
+.phone .p-rdp-days button.band:not(.sel) span { color: var(--text); font-weight: 500; }
+.phone .p-rdp-days button.sel span { width: 40px; justify-self: center; margin: 0; border-radius: 50%; font-weight: 500; box-shadow: none; }
 .phone .p-dp-month.static { pointer-events: none; }
 .phone .p-daysheet .p-dp-nav { padding: 0 12px 0 16px; }
 .phone .p-daysheet .p-dp-month { font-size: 16px; color: var(--text); }

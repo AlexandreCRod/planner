@@ -10,6 +10,7 @@ import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/sched
 import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { isRoutineItem } from "../../domain/routines.ts";
+import { parseDays } from "../../domain/recurrence.ts";
 import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
 import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { type Placed, layoutDay } from "../shared/dayLayout.ts";
@@ -221,7 +222,10 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
   const occ = useMemo(() => forCalendar(items, s.done, days[0], days[41], t, carryOver()), [items, s, first, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const byDay = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
-    for (const o of occ) for (let d = Math.max(o.day, days[0]); d <= Math.min(o.endDay, days[41]); d++) { const l = map.get(d); if (l) l.push(o); else map.set(d, [o]); }
+    for (const o of occ) for (let d = Math.max(o.day, days[0]); d <= Math.min(o.endDay, days[41]); d++) {
+      if (!covers(o, d)) continue;
+      const l = map.get(d); if (l) l.push(o); else map.set(d, [o]);
+    }
     return map;
   }, [occ]); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = ymd(days[35]).m !== month ? 5 : 6;
@@ -236,7 +240,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
       <div className="p-mweek">{days.slice(0, 7).map((d) => <span key={d}>{NARROW[weekday(d) - 1]}</span>)}</div>
       {Array.from({ length: rows }, (_, r) => {
         const week = days.slice(r * 7, r * 7 + 7);
-        const lanes = spanLanes(multi.map((o) => ({ key: keyOf(o), from: o.day, to: o.endDay })), week[0], week[6]);
+        const lanes = spanLanes(multi.map((o) => ({ key: keyOf(o), from: o.day, to: o.endDay, skip: skippedDays(o) })), week[0], week[6]);
         return (
           <div key={r} className="p-mrow" style={{ height: rows === 5 ? 78 : 66 }}>
             {week.map((d, col) => {
@@ -419,14 +423,45 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
   // (like a pager) instead of empty space. Index `count` is the first day in view.
   const all = useMemo(() => Array.from({ length: count * 3 }, (_, i) => first - count + i), [first, count]);
-  const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t, carryOver()), [items, s, all, t]);
-  const allDay = all.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && o.day <= d && o.endDay >= d));
-  // Items over several days: one bar across them in the all-day row (lanes at its top).
+  const carry = carryOver();
+  const occ = useMemo(() => forCalendar(items, s.done, all[0], all[all.length - 1], t, carry), [items, s, all, t, carry]);
+  const allDay = all.map((d) => occ.filter((o) => (!o.timed || o.multiDay) && covers(o, d)));
+  // Items over several days: a bar across them in the all-day row (lanes at its top), one in each range
+  // a swipe turns (so the next week's piece has its own title and edge), broken where days were taken out.
   const spanKey = (o: Occurrence) => `${o.item.id}_${o.day}`;
   const spanning = occ.filter((o) => o.endDay > o.day);
   const spanByKey = new Map(spanning.map((o) => [spanKey(o), o]));
-  const adLanes = spanLanes(spanning.map((o) => ({ key: spanKey(o), from: o.day, to: o.endDay })), all[0], all[all.length - 1]);
-  const timed = useMemo(() => all.map((d) => layoutDay(occ.filter((o) => o.timed && !o.multiDay && o.day === d))), [occ, all]);
+  const adLanes = spanLanes(spanning.map((o) => ({ key: spanKey(o), from: o.day, to: o.endDay, skip: skippedDays(o) })), all[0], all[all.length - 1], count);
+  // Each day's blocks are laid out once and kept (the same array) while nothing changes: a swipe to the
+  // next range only lays out the days new to it, and the columns already drawn aren't drawn again.
+  const dayCache = useRef<{ key: unknown[]; map: Map<number, Placed[]> }>({ key: [], map: new Map() });
+  const cacheKey = [items, s, t, carry];
+  if (cacheKey.some((v, i) => v !== dayCache.current.key[i])) dayCache.current = { key: cacheKey, map: new Map() };
+  const layouts = (list: number[]): Placed[][] => {
+    const { map } = dayCache.current;
+    const missing = list.filter((d) => !map.has(d));
+    if (missing.length) {
+      const lo = Math.min(...missing), hi = Math.max(...missing);
+      const byDay = new Map<number, Occurrence[]>();
+      for (const o of forCalendar(items, s.done, lo, hi, t, carry)) {
+        if (!o.timed || o.multiDay) continue;
+        const l = byDay.get(o.day); if (l) l.push(o); else byDay.set(o.day, [o]);
+      }
+      for (const d of missing) map.set(d, layoutDay(byDay.get(d) ?? []));
+      // Only the days near the ones shown are kept.
+      if (map.size > count * 12) for (const d of [...map.keys()]) if (Math.abs(d - first) > count * 4) map.delete(d);
+    }
+    return list.map((d) => map.get(d)!);
+  };
+  const timed = layouts(all);
+  const layoutsRef = useRef(layouts);
+  layoutsRef.current = layouts;
+  // The ranges after the next and before the previous are laid out while the phone is idle, so the
+  // first swipe after opening doesn't wait for that work (or for the code doing it to warm up).
+  useEffect(() => {
+    const ahead = [...Array.from({ length: count }, (_, i) => first - 2 * count + i), ...Array.from({ length: count }, (_, i) => first + 2 * count + i)];
+    return whenIdle(() => layoutsRef.current(ahead));
+  }, [first, count, items, s, t, carry]);
   const placed = useRef(new Map<string, { p: Placed; di: number }>());
   placed.current = new Map();
   // Only blocks of the days in view can be picked up.
@@ -435,6 +470,17 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   const pxPerMin = hourH / 60;
   const pxRef = useRef(pxPerMin);
   pxRef.current = pxPerMin;
+  // The hours' layer places each day at a spot that stays while the ranges are swiped through ([base]:
+  // the day at its left edge), and the layer itself is moved to show the range in view. So after a swipe
+  // the days already there keep their place and aren't painted again; only the new range is.
+  const baseRef = useRef<{ base: number; count: number } | null>(null);
+  const b0 = baseRef.current;
+  if (!b0 || b0.count !== count || (first - b0.base) % count !== 0 || Math.abs(first - b0.base) > count * 40) baseRef.current = { base: first, count };
+  const base = baseRef.current!.base;
+  const shift = (first - base) / count;
+  /** The layer's offset at rest (whole device pixels, so its text stays sharp), and while swiping. */
+  const layerRest = useRef(0);
+  const swipeX = useRef(0);
   const daysRef = useRef(days);
   daysRef.current = days;
   const props = useRef({ onStep, onNewAt, s });
@@ -468,11 +514,30 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     if (el && hourH > 0 && pendingScroll.current !== null) { el.scrollTop = pendingScroll.current; pendingScroll.current = null; }
   }, [hourH]);
 
-  // After a swipe the layers sit one range over; the new days now render there, so the offset goes.
+  // After a swipe the layers sit one range over; the new days now render there, so the offset goes (the
+  // hours' layer goes to its resting place for the range in view). Kept right when the width changes.
+  const placeLayer = () => {
+    const el = layer.current;
+    if (!el) return;
+    const dpr = devicePixelRatio || 1;
+    layerRest.current = -Math.round(shift * el.clientWidth * dpr) / dpr;
+    const x = layerRest.current + swipeX.current;
+    el.style.transform = x ? `translate3d(${x}px,0,0)` : "";
+  };
+  const placeLayerRef = useRef(placeLayer);
+  placeLayerRef.current = placeLayer;
   useLayoutEffect(() => {
-    for (const el of [layer.current, headDays.current, allDayDays.current]) if (el) el.style.transform = "";
-    scroller.current?.parentElement?.classList.remove("swiping");
-  }, [first]);
+    swipeX.current = 0;
+    for (const el of [headDays.current, allDayDays.current]) if (el) el.style.transform = "";
+    placeLayer();
+  }, [first, count, base]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = layer.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => placeLayerRef.current());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // The marked slot's block: placed with a transform, popping in on a spring the first time and gliding
   // (carrying its speed) when another slot is tapped. Positions are sub-pixel; nothing re-renders as it moves.
   const slotEl = useRef<HTMLDivElement>(null);
@@ -481,7 +546,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const el = slotEl.current;
     if (!el || !armed || !layer.current) { if (!armed) { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); slotAnim.current = null; } return; }
     const colW = layer.current.clientWidth / count;
-    const tx = (all.indexOf(armed.day) - count) * colW + 1, ty = armed.min * pxPerMin;
+    const tx = (armed.day - base) * colW + 1, ty = armed.min * pxPerMin;
     const draw = () => { const p = slotAnim.current!.pos; el.style.transform = `translate3d(${p.x}px,${p.y}px,0) scale(${p.s})`; };
     const key = `${armed.day}|${armed.min}`;
     let a = slotAnim.current;
@@ -503,7 +568,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       a.pos.x = tx; a.pos.y = ty;
     }
     draw();
-  }, [armed, pxPerMin, count, first]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [armed, pxPerMin, count, first, base]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); }, []);
 
   // A marked slot is forgotten once the panel has opened (or another range is shown).
@@ -541,8 +606,12 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const root = el.parentElement;
     let lines: HTMLElement[] | null = null;
     const moveLayers = (x: number) => {
-      for (const l of layers()) if (l) l.style.transform = x ? `translate3d(${x}px,0,0)` : "";
-      root?.classList.toggle("swiping", x !== 0);
+      swipeX.current = x;
+      for (const l of layers()) {
+        if (!l) continue;
+        const at = l === layer.current ? layerRest.current + x : x;
+        l.style.transform = at ? `translate3d(${at}px,0,0)` : "";
+      }
       // The lines between ranges: strongest midway, gone at rest (where the days started or end up).
       const w = layer.current?.clientWidth ?? 0;
       if (!lines) lines = root ? [...root.querySelectorAll<HTMLElement>(".pg-rangeline")] : [];
@@ -727,7 +796,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           if (info) openItem(info.p.o.item, info.p.o.day);
         } else if (layer.current && (e.target as HTMLElement).closest(".pg-layer")) {
           // An empty slot: the add panel opens there (rounded down to the half hour, like the native grid).
-          const r = layer.current.getBoundingClientRect();
+          // (Measured on the grid: the layer itself is moved to show the range in view.)
+          const r = (layer.current.parentElement ?? layer.current).getBoundingClientRect();
           const di = Math.max(0, Math.min(daysRef.current.length - 1, Math.floor((e.clientX - r.left) / colW())));
           const min = Math.max(0, Math.min(DAY_MIN - 30, Math.floor((e.clientY - r.top) / pxRef.current / 30) * 30));
           const day = daysRef.current[di], a = armedRef.current;
@@ -901,15 +971,18 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         <div className="pg-body" style={{ height: hourH * 24, ["--hour" as string]: `${hourH}px` }}>
           <div className="pg-labels">
             {Array.from({ length: 24 }, (_, h) => <div key={h} style={{ height: hourH }}>{h ? <span>{formatTime(h * 60)}</span> : null}</div>)}
+            {/* The new event's edge being dragged: its time on its line (Google Calendar's). */}
+            {pending?.edge && days.includes(pending.day) && (() => {
+              const m = pending.edge === "top" ? pending.min : pending.end;
+              return <span className="pg-edgetime" style={{ top: m * pxPerMin, color: pending.color }}>{formatTime(m)}</span>;
+            })()}
           </div>
           <div className="pg-grid">
             <div className="pg-layer" ref={layer}>
-              {[-1, 0, 1].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${k * 100}%` }} />)}
+              {[-1, 0, 1].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${(shift + k) * 100}%` }} />)}
               {all.map((d, j) => (
-                <div key={d} className={`pg-col ${j === count ? "first" : ""} ${j % count === 0 ? "range" : ""}`} style={{ left: `${(j - count) * colPct}%`, width: `${colPct}%` }}>
-                  {timed[j].map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}
-                  {d === t && <div className="pg-now" style={{ transform: `translate3d(0,${now * pxPerMin}px,0)` }} />}
-                </div>
+                <DayColumn key={d} left={`${(d - base) * colPct}%`} width={`${colPct}%`} blocks={timed[j]} s={s} pxPerMin={pxPerMin} compact={compact}
+                  now={d === t ? now : null} />
               ))}
               {ghost && (() => {
                 const info = placed.current.get(ghost.key);
@@ -917,7 +990,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                 const di = info.di + ghost.dDay;
                 return (
                   <div className="pg-ghost" style={{
-                    left: `${di * colPct}%`, width: `${colPct}%`, top: ghost.start * pxPerMin, height: Math.max(18, ghost.length * pxPerMin),
+                    left: `${(first - base + di) * colPct}%`, width: `${colPct}%`, top: ghost.start * pxPerMin, height: Math.max(18, ghost.length * pxPerMin),
                     ["--c" as string]: ghost.color,
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
@@ -932,8 +1005,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
               {/* Where the new event goes: only its outline, in its colour, while the panel is open. Its top
                   and bottom handles drag to change the times (AddPanel takes the finger, over its scrim). */}
               {pending && all.includes(pending.day) && (
-                <div className="pg-slot pending" data-ppm={pxPerMin} style={{
-                  left: `calc(${(all.indexOf(pending.day) - count) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: pending.min * pxPerMin,
+                <div className={`pg-slot pending ${pending.edge ? `drag-${pending.edge}` : ""}`} data-ppm={pxPerMin} style={{
+                  left: `calc(${(pending.day - base) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: pending.min * pxPerMin,
                   height: Math.max(22, (pending.end - pending.min) * pxPerMin), borderColor: pending.color, color: pending.color,
                 }}>
                   {pending.resizable && <><span className="edge top" /><span className="edge bottom" /></>}
@@ -968,6 +1041,39 @@ function moved(o: Occurrence, dDay: number, dMin: number): Item {
   const dur = Math.max(15, (o.endMin ?? start + 60) - start);
   return { ...o.item, startDay: newDay, endDay: newDay, startMin: newStart, endMin: Math.min(DAY_MIN - 1, newStart + dur) };
 }
+
+/**
+ * One day's column of blocks over the hours. Memoized: a day already drawn isn't drawn again while its
+ * blocks, the zoom and the data stay the same (as when the ranges are swiped through).
+ */
+const DayColumn = memo(function DayColumn({ left, width, blocks, s, pxPerMin, compact, now }: {
+  left: string; width: string; blocks: Placed[]; s: Snapshot; pxPerMin: number; compact: boolean; now: number | null;
+}) {
+  return (
+    <div className="pg-col" style={{ left, width }}>
+      {blocks.map((p) => <Block key={`${p.o.item.id}-${p.o.day}`} p={p} s={s} pxPerMin={pxPerMin} compact={compact} />)}
+      {now !== null && <div className="pg-now" style={{ transform: `translate3d(0,${now * pxPerMin}px,0)` }} />}
+    </div>
+  );
+});
+
+/** Runs [fn] once the phone is idle (soon in any case); returns how to call it off. */
+function whenIdle(fn: () => void): () => void {
+  if (typeof requestIdleCallback === "function") { const h = requestIdleCallback(fn, { timeout: 1500 }); return () => cancelIdleCallback(h); }
+  const h = window.setTimeout(fn, 300);
+  return () => clearTimeout(h);
+}
+
+/** Days taken out of an item over several days (excluded days inside its run): its bar breaks there. */
+const skipCache = new WeakMap<Item, number[]>();
+function skippedDays(o: Occurrence): number[] {
+  if (o.endDay <= o.day || !o.item.excludedDays) return [];
+  let days = skipCache.get(o.item);
+  if (!days) { days = [...parseDays(o.item.excludedDays)]; skipCache.set(o.item, days); }
+  return days.filter((d) => d > o.day && d <= o.endDay);
+}
+/** Whether [o] is on day [d] (a day taken out of a run of days isn't). */
+const covers = (o: Occurrence, d: number) => o.day <= d && d <= o.endDay && (o.endDay === o.day || !skippedDays(o).includes(d));
 
 function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: number; compact: boolean }) {
   const isTask = p.o.item.type === "TASK";
@@ -1007,7 +1113,7 @@ function SpanBars({ lanes, cap, cols, byKey, s, className, open }: {
         const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
         const isTask = o.item.type === "TASK";
         return (
-          <span key={l.key} className={`${className} ${isTask ? "task" : ""}`} role={open ? "button" : undefined}
+          <span key={`${l.key}@${l.first}`} className={`${className} ${isTask ? "task" : ""}`} role={open ? "button" : undefined}
             onClick={open ? () => openItem(o.item, o.day) : undefined}
             style={{
               ["--lane" as string]: l.lane, left: `calc(${(l.first / cols) * 100}% + 2px)`, width: `calc(${((l.last - l.first + 1) / cols) * 100}% - 4px)`,

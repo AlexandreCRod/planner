@@ -9,7 +9,7 @@ import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { magnetMinute } from "./dial.ts";
-import { type RangePick, rangeRole, slideRange, tapRange } from "./range.ts";
+import { type RangePick, rangeRole, slideRange, slideTicks, tapRange } from "./range.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const WD = ["M", "T", "W", "T", "F", "S", "S"];
@@ -155,7 +155,8 @@ export function MultiDatePickerDialog({ title, value, from, onPick, onClose }: {
  * A run of days (a multi-day event's dates), in one calendar like the skip-days picker: tap the start
  * day, then the end day; or press the start day and slide across the days (down, across, or both), the
  * range following the finger and ending where it lifts; off the calendar, the last day it was on
- * counts. The ends are filled circles, the days between a band; a light tick for each day crossed.
+ * counts. The ends are filled circles, the days between a band in the same tone; a light tick when the
+ * finger moves on to another day, spaced well apart (range.ts), and one for a tap.
  * [next] is the end a first tap sets (the end, when opened from the end date).
  */
 export function RangeDatePickerDialog({ title = "Select dates", start, end, next = "start", onPick, onClose }: {
@@ -165,6 +166,7 @@ export function RangeDatePickerDialog({ title = "Select dates", start, end, next
   const [r, setR] = useState<RangePick>(() => ({ start, end: Math.max(start, end), next }));
   const [month, setMonth] = useState(() => { const { y, m } = ymd(next === "end" ? Math.max(start, end) : start); return epochOf(y, m, 1); });
   const drag = useRef<{ id: number; anchor: number; last: number; moved: boolean; base: RangePick } | null>(null);
+  const tickAt = useRef(-Infinity);
   const dayAt = (x: number, y: number) => {
     const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-day]");
     const d = el ? Number(el.dataset.day) : NaN;
@@ -206,16 +208,17 @@ export function RangeDatePickerDialog({ title = "Select dates", start, end, next
           // Off the calendar: the last day the finger was on stays.
           const d = dayAt(e.clientX, e.clientY);
           if (d === null || d === g.last) return;
+          const now = performance.now();
+          if (slideTicks(g.last, d, now, tickAt.current)) { tickAt.current = now; feel("tick"); }
           g.moved = true;
           g.last = d;
           setR(slideRange(g.anchor, d));
-          feel("tick");
         }}
         onPointerUp={(e) => {
           const g = drag.current;
           if (!g || g.id !== e.pointerId) return;
           drag.current = null;
-          if (!g.moved) { setR(tapRange(g.base, g.anchor)); feel("tick"); }
+          if (!g.moved) { setR(tapRange(g.base, g.anchor)); tickAt.current = performance.now(); feel("tick"); }
           else setR(slideRange(g.anchor, g.last));
         }}
         onPointerCancel={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}>
@@ -224,7 +227,7 @@ export function RangeDatePickerDialog({ title = "Select dates", start, end, next
           const role = end1 ? (d === r.start ? "single" : null) : rangeRole(r, d), col = i % 7;
           const cls = [
             role && role !== "inside" ? "sel" : "", role ? "band" : "", role === "single" ? "one" : "", role === "start" ? "rs" : "", role === "end" ? "re" : "",
-            col === 0 ? "c0" : "", col === 6 ? "c6" : "", d === t ? "today" : "",
+            col === 0 ? "c0" : "", col === 6 ? "c6" : "", d === month ? "m0" : "", d === month + n - 1 ? "m1" : "", d === t ? "today" : "",
           ].join(" ");
           return <button key={i} data-day={d} className={cls} aria-pressed={!!role}><span>{ymd(d).d}</span></button>;
         })}

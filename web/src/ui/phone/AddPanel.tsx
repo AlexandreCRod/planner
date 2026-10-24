@@ -4,7 +4,12 @@
 // panel grows); it follows the finger exactly (the transform is written straight from the pointer, no
 // redraw) and settles when let go: a short pull or a flick is enough (sheet.ts). Dragged down, it
 // closes. Once open, the editor's own handle drags it back down the same way. A sideways swipe on the
-// small panel switches between Task and Event, the switch's indicator following the finger.
+// small panel switches between Task and Event, the switch's indicator following the finger. One drag
+// handle stays at the top the whole way (pushed below the status bar as the panel reaches the top).
+// Flicked or dragged closed, the panel keeps what was typed and gives it back the next time it opens
+// (addDraft.ts). On a calendar slot, the new event's box has round handles at its top-left and
+// bottom-right corners: dragging one changes the start or the end in quarter hours, the time showing
+// beside the hours, while the panel shrinks to a small bar with the title so the calendar shows.
 import { animated, easings, to, useSpring } from "@react-spring/web";
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { describe } from "../../domain/recurrence.ts";
@@ -24,6 +29,8 @@ import { VelocityTracker } from "./motion.ts";
 import { TOUCH_SLOP, selectingText } from "./press.ts";
 import { swallowNextClick } from "./gesture.ts";
 import { panelTarget } from "./sheet.ts";
+import { type KeptAdd, onSlot, takeKept, worthKeeping } from "./addDraft.ts";
+import { dragEdgeTimes } from "./wheelMath.ts";
 import { feel } from "./haptics.ts";
 import { AssistChip, TextButton, showSnackbar } from "./m3.tsx";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
@@ -59,8 +66,11 @@ async function runClock(c: ClockCommand) {
 const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRatio;
 
 export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
-/** Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box). */
-export interface SlotPreview { day: number; min: number; end: number; color: string; resizable?: boolean }
+/**
+ * Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box).
+ * [edge]: the handle being dragged (its time shows beside the hours).
+ */
+export interface SlotPreview { day: number; min: number; end: number; color: string; resizable?: boolean; edge?: "top" | "bottom" }
 
 /** Native: spring(stiffness = 600), critically damped. */
 const SETTLE = { tension: 600, friction: 49 };
@@ -73,7 +83,15 @@ const imeCurve = (t: number) => 1 - Math.pow(1 - t, 3.2);
 interface Overrides { startDay?: number | null; endDay?: number | null; startMin?: number | null; endMin?: number | null; allDay?: boolean; color?: number | null; categoryId?: number | null }
 type Pick = { kind: "date" | "start" | "end" } | null;
 
+/** What a panel flicked or dragged closed leaves for the next one (addDraft.ts): taken back as it opens. */
+interface PanelState { type: ItemType; text: string; ov: Overrides; everGrown: boolean; draft: Draft; tpl: Frequent | null }
+let kept: KeptAdd<PanelState> | null = null;
+/** How tall the panel stays while the new event's box is being resized: the handle and the title. */
+const PEEK_H = 60;
+
 export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose: () => void; onPreview?: (p: SlotPreview | null) => void }) {
+  // A draft kept from the last panel of this kind, flicked away (taken once).
+  const [restored] = useState(() => { const r = takeKept(kept, req.mode); kept = r.rest; return r.state; });
   const kb = useKeyboardHeight();
   const [winH, setWinH] = useState(window.innerHeight);
   const [nav, setNav] = useState(0);
@@ -84,7 +102,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const [editorReady, setEditorReady] = useState(false);
   const [grown, setGrown] = useState(false);
   // Once it has been the full editor, the small panel shows the editor's draft (title, type, when).
-  const [everGrown, setEverGrown] = useState(false);
+  const [everGrown, setEverGrown] = useState(restored?.everGrown ?? false);
   const closing = useRef(false);
   // The tap that opened the panel (on a calendar slot) ends with a click that lands on the new scrim.
   const openedAt = useRef(performance.now());
@@ -93,16 +111,16 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const [colorOpen, setColorOpen] = useState(false);
 
   // ---------- What's being added ----------
-  const [type, setType] = useState<ItemType>(req.type);
-  const [text, setText] = useState("");
-  const [ov, setOv] = useState<Overrides>({});
+  const [type, setType] = useState<ItemType>(restored?.type ?? req.type);
+  const [text, setText] = useState(restored?.text ?? "");
+  const [ov, setOv] = useState<Overrides>(restored?.ov ?? {});
   const categories = snapshot().categories;
   const parsed = useMemo(() => parseQuickAdd(text, undefined, categories.map((c) => c.name)), [text, categories]);
   const quick = req.mode === "quick";
   // Frequent items: what's typed offers the tasks or events added often under that title; a picked one
   // fills in what it usually has, for as long as the title still is its title.
   const frequent = useMemo(() => (type === "NOTE" ? [] : frequentItems(snapshot().items, snapshot().reminders, type)), [type]);
-  const [tpl, setTpl] = useState<Frequent | null>(null);
+  const [tpl, setTpl] = useState<Frequent | null>(restored?.tpl ?? null);
   const applied = tpl && tpl.type === type && titleKey(parsed.title || text) === titleKey(tpl.title) ? tpl : null;
   const buildQuick = (): Draft => {
     const ev = type === "EVENT";
@@ -154,6 +172,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     return { item, reminders, tags: parsed.tags.join(" ") };
   };
   const [draft, setDraft] = useState<Draft>(() => {
+    // A kept slot draft comes back on the slot tapped now.
+    if (restored) return quick ? restored.draft : { ...restored.draft, item: onSlot(restored.draft.item, req.day, req.min ?? 540) };
     if (quick) return { item: newItem({ type: req.type, startDay: req.type === "EVENT" ? req.day : null, allDay: req.type === "EVENT" }), reminders: [], tags: "" };
     const min = req.min ?? 540;
     const item = newItem({ type: "EVENT", startDay: req.day, endDay: req.day, startMin: min, endMin: Math.min(min + 60, DAY_END) });
@@ -170,12 +190,13 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const clock = useMemo(() => (hasAlarms && lineMode && type !== "NOTE" ? parseClockCommand(text, new Date()) : null), [text, lineMode, type]);
 
   // The outline on the calendar follows the slot panel's day, time and colour.
+  const [dragEdge, setDragEdge] = useState<"top" | "bottom" | null>(null);
   useEffect(() => {
     if (!onPreview || req.mode !== "slot") return;
     if (d.startDay === null || d.allDay || d.startMin === null) { onPreview(null); return; }
     const end = d.type === "EVENT" && d.endMin !== null && d.endMin > d.startMin ? d.endMin : Math.min(d.startMin + (d.type === "EVENT" ? 60 : 30), DAY_END);
-    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d), resizable: d.type === "EVENT" });
-  }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
+    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d), resizable: d.type === "EVENT", edge: dragEdge ?? undefined });
+  }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId, dragEdge]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
     if (clock) { onClose(); void runClock(clock); return; }
@@ -196,11 +217,15 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   };
 
   // ---------- Geometry ----------
-  const [sp, api] = useSpring(() => ({ p: 0, down: 0, hidden: 1, kb: 0, ch: 0, h: window.innerHeight, nav: 0, lag: 0 }));
+  const [sp, api] = useSpring(() => ({ p: 0, down: 0, hidden: 1, kb: 0, ch: 0, h: window.innerHeight, nav: 0, lag: 0, pk: 0 }));
+  // The status bar's height: the drag handle never goes under it.
+  const satProbe = useRef<HTMLDivElement>(null);
+  const satRef = useRef(0);
   useLayoutEffect(() => {
     const n = probe.current?.offsetHeight ?? 0;
     setNav(n);
     api.start({ nav: n, immediate: true });
+    satRef.current = satProbe.current?.offsetHeight ?? 0;
     // In the app the page shrinks at once when the keyboard starts to rise (and grows at once when it
     // starts to fall), while the keyboard itself takes ~300 ms. The jump is taken back and eased away
     // with the keyboard's own curve, so the panel rides on top of it instead of leaping ahead.
@@ -239,12 +264,16 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
 
   const bottomOf = (k: number, n: number) => Math.max(k, n);
   const range = () => Math.max(1, sp.h.get() - bottomOf(sp.kb.get(), sp.nav.get()) - sp.ch.get());
-  const y = to([sp.p, sp.down, sp.hidden, sp.kb, sp.ch, sp.h, sp.nav, sp.lag], (p, down, hidden, k, ch, h, n, lag) => {
+  // [pk]: shrunk to its peek bar (the title only) while the new event's box is resized.
+  const y = to([sp.p, sp.down, sp.hidden, sp.kb, sp.ch, sp.h, sp.nav, sp.lag, sp.pk], (p, down, hidden, k, ch, h, n, lag, pk) => {
     const b = bottomOf(k, n);
     const avail = h - b;
     const visible = ch + p * Math.max(0, avail - ch);
-    return avail - visible + down + hidden * (ch + b) + lag;
+    return avail - visible + down + hidden * (ch + b) + lag + pk * Math.max(0, ch - PEEK_H);
   });
+  /** The handle's offset in the panel: none, until the panel's top reaches the status bar. */
+  const handleY = (top: number) => `translate3d(0,${snapPx(Math.max(0, satRef.current - top))}px,0)`;
+  const handleRef = useRef<HTMLSpanElement>(null);
   const availH = winH - bottomOf(kb, nav);
 
   // ---------- Opening, closing ----------
@@ -258,9 +287,15 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   }, [api]);
   useEffect(() => () => { (document.activeElement as HTMLElement | null)?.blur?.(); hideKeyboard(); }, []);
 
-  const dismiss = () => {
+  // Flicked or dragged closed: what was typed is kept for next time (other ways of closing let it go).
+  const keepDraft = useRef(() => {});
+  keepDraft.current = () => {
+    if (worthKeeping(text, lineMode, d.title, d.id)) kept = { mode: req.mode, state: { type, text, ov, everGrown, draft, tpl } };
+  };
+  const dismiss = (keep = false) => {
     if (closing.current) return;
     closing.current = true;
+    if (keep) keepDraft.current();
     (document.activeElement as HTMLElement | null)?.blur?.();
     onPreview?.(null);
     api.start({ down: sp.ch.get() + bottomOf(sp.kb.get(), sp.nav.get()) + 40, config: { duration: 150, easing: easings.easeInCubic }, onRest: () => onClose() });
@@ -307,7 +342,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     const panelY = () => {
       const b = bottomOf(sp.kb.get(), sp.nav.get());
       const avail = sp.h.get() - b, ch = sp.ch.get();
-      return avail - (ch + sp.p.get() * Math.max(0, avail - ch)) + sp.down.get() + sp.hidden.get() * (ch + b) + sp.lag.get();
+      return avail - (ch + sp.p.get() * Math.max(0, avail - ch)) + sp.down.get() + sp.hidden.get() * (ch + b) + sp.lag.get() + sp.pk.get() * Math.max(0, ch - PEEK_H);
     };
     const onDown = (e: PointerEvent) => {
       if (g || closing.current || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
@@ -370,7 +405,9 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       }
       sp.p.set(p);
       sp.down.set(down);
-      el.style.transform = `translate3d(0,${snapPx(panelY())}px,0)`;
+      const top = panelY();
+      el.style.transform = `translate3d(0,${snapPx(top)}px,0)`;
+      if (handleRef.current) handleRef.current.style.transform = handleY(top);
     };
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
@@ -392,7 +429,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       }
       const v = cancelled ? 0 : cur.vy;
       const target = panelTarget(cur.from, sp.p.get(), sp.down.get(), range(), v);
-      if (target === "close") { dismiss(); return; }
+      if (target === "close") { dismiss(true); return; }
       if (sp.down.get() > 0) api.start({ down: 0, config: { ...SETTLE, velocity: v } });
       if (sp.p.get() > 0 || target === "full") settleTo(target === "full" ? 1 : 0, -v / range());
     };
@@ -445,43 +482,99 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const color = snapshot().colorOf(d);
 
   // ---------- The new event's edges on the calendar (Google Calendar's box) ----------
-  // While the slot panel is small, a finger landing on the outline's top or bottom edge (over the
-  // scrim) drags that edge, in quarter hours, with a tick for each; the panel's times follow.
-  const edgeDrag = useRef<{ id: number; edge: "top" | "bottom"; y0: number; start: number; end: number; ppm: number; at: string } | null>(null);
-  const draggedAt = useRef(0);
-  const onScrimDown = (e: React.PointerEvent) => {
-    if (req.mode !== "slot" || grownRef.current || d.type !== "EVENT" || d.allDay || d.startMin === null) return;
-    const box = document.querySelector<HTMLElement>(".pg-slot.pending");
-    if (!box) return;
-    const r = box.getBoundingClientRect(), ppm = Number(box.dataset.ppm) || 0;
-    if (!ppm || e.clientX < r.left - 16 || e.clientX > r.right + 16) return;
-    const reach = Math.min(22, r.height / 3 + 6);
-    const edge = Math.abs(e.clientY - r.top) < reach ? "top" : Math.abs(e.clientY - r.bottom) < reach ? "bottom" : null;
-    if (!edge) return;
-    const start = d.startMin, end = d.endMin !== null && d.endMin > start ? d.endMin : Math.min(start + 60, DAY_END);
-    edgeDrag.current = { id: e.pointerId, edge, y0: e.clientY, start, end, ppm, at: `${start}|${end}` };
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* gone */ }
-    feel("pickup");
+  // While the slot panel is small, a finger (or the mouse) on the box's top or bottom edge, or on its
+  // round handle at the top-left or bottom-right corner, drags that edge over the scrim: the start or
+  // the end lands on the clock's quarter hours, a light tick for each, the time showing beside the
+  // hours. Meanwhile the panel shrinks to a bar with the title, so the calendar shows; near the grid's
+  // top or bottom the hours scroll by themselves.
+  type EdgeDrag = {
+    id: number; edge: "top" | "bottom"; start: number; end: number; m0: number; y: number; at: string;
+    layer: HTMLElement; scroller: HTMLElement | null; ppm: number; raf: number;
   };
-  const onScrimMove = (e: React.PointerEvent) => {
-    const g = edgeDrag.current;
-    if (!g || e.pointerId !== g.id) return;
-    const dm = Math.round((e.clientY - g.y0) / g.ppm / 15) * 15;
-    const s = g.edge === "top" ? Math.max(0, Math.min(g.end - 15, g.start + dm)) : g.start;
-    const en = g.edge === "bottom" ? Math.max(g.start + 15, Math.min(DAY_END, g.end + dm)) : g.end;
-    const at = `${s}|${en}`;
+  const edgeDrag = useRef<EdgeDrag | null>(null);
+  const draggedAt = useRef(0);
+  const canResize = req.mode === "slot" && d.type === "EVENT" && !d.allDay && d.startMin !== null;
+  /** The edge under ([x], [y]), with what the drag needs, or null. A mouse must be right on it; a finger has room. */
+  const edgeAt = (x: number, y: number, mouse: boolean) => {
+    if (!canResize || grownRef.current) return null;
+    const box = document.querySelector<HTMLElement>(".pg-slot.pending");
+    const layer = box?.offsetParent as HTMLElement | null;
+    const ppm = Number(box?.dataset.ppm) || 0;
+    if (!box || !layer || !ppm) return null;
+    const r = box.getBoundingClientRect();
+    const reach = mouse ? 9 : 24, side = mouse ? 4 : 16;
+    if (x < r.left - side || x > r.right + side) return null;
+    const dt = Math.abs(y - r.top), db = Math.abs(y - r.bottom);
+    if (dt > reach && db > reach) return null;
+    // A short box: the nearer edge, or when that's unclear, the side's handle (top-left, bottom-right).
+    const edge: "top" | "bottom" = dt > reach ? "bottom" : db > reach ? "top" : Math.abs(dt - db) > 8 ? (dt < db ? "top" : "bottom") : x < r.left + r.width / 2 ? "top" : "bottom";
+    return { edge, layer, ppm };
+  };
+  const minuteAt = (g: { layer: HTMLElement; ppm: number }, y: number) => (y - g.layer.getBoundingClientRect().top) / g.ppm;
+  const followEdge = (g: EdgeDrag) => {
+    const t = dragEdgeTimes(g.edge, g.start, g.end, minuteAt(g, g.y) - g.m0);
+    const at = `${t.start}|${t.end}`;
     if (at === g.at) return;
     g.at = at;
     feel("tick");
-    setItem({ startMin: s, endMin: en });
+    setItem({ startMin: t.start, endMin: t.end });
+  };
+  /** Near the top of the hours, or the panel's bar at the bottom, the hours scroll (faster the closer). */
+  const edgeScroll = () => {
+    const g = edgeDrag.current;
+    if (!g) return;
+    g.raf = requestAnimationFrame(edgeScroll);
+    const sc = g.scroller;
+    if (!sc) return;
+    const r = sc.getBoundingClientRect();
+    const bottom = Math.min(r.bottom, panelRef.current?.getBoundingClientRect().top ?? r.bottom);
+    const zone = 44;
+    const v = g.y < r.top + zone ? -Math.ceil((r.top + zone - g.y) / 4) : g.y > bottom - zone ? Math.ceil((g.y - bottom + zone) / 4) : 0;
+    if (!v) return;
+    const before = sc.scrollTop;
+    sc.scrollTop = before + Math.max(-14, Math.min(14, v));
+    if (sc.scrollTop !== before) followEdge(g);
+  };
+  const onScrimDown = (e: React.PointerEvent) => {
+    if (edgeDrag.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const hit = edgeAt(e.clientX, e.clientY, e.pointerType === "mouse");
+    if (!hit || d.startMin === null) return;
+    const start = d.startMin, end = d.endMin !== null && d.endMin > start ? d.endMin : Math.min(start + 60, DAY_END);
+    const g: EdgeDrag = {
+      id: e.pointerId, edge: hit.edge, start, end, m0: 0, y: e.clientY, at: `${start}|${end}`,
+      layer: hit.layer, scroller: hit.layer.closest<HTMLElement>(".pg-scroll"), ppm: hit.ppm, raf: 0,
+    };
+    g.m0 = minuteAt(g, e.clientY);
+    edgeDrag.current = g;
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* gone */ }
+    feel("pickup");
+    setDragEdge(hit.edge);
+    // The panel steps down to its title bar (its keyboard, if up, stays as it is).
+    api.start({ pk: 1, config: { duration: 200, easing: easings.easeOutCubic } });
+    g.raf = requestAnimationFrame(edgeScroll);
+  };
+  const onScrimMove = (e: React.PointerEvent) => {
+    const g = edgeDrag.current;
+    if (!g) {
+      // A mouse over an edge: the resize cursor.
+      if (e.pointerType === "mouse") (e.currentTarget as HTMLElement).style.cursor = edgeAt(e.clientX, e.clientY, true) ? "ns-resize" : "";
+      return;
+    }
+    if (e.pointerId !== g.id) return;
+    g.y = e.clientY;
+    followEdge(g);
   };
   const onScrimUp = (e: React.PointerEvent) => {
     const g = edgeDrag.current;
     if (!g || e.pointerId !== g.id) return;
     edgeDrag.current = null;
+    cancelAnimationFrame(g.raf);
     draggedAt.current = performance.now();
-    if (e.type === "pointerup") feel("settle");
+    setDragEdge(null);
+    api.start({ pk: 0, config: { duration: 240, easing: easings.easeOutCubic } });
+    if (e.type === "pointerup" && g.at !== `${g.start}|${g.end}`) feel("settle");
   };
+  useEffect(() => () => { const g = edgeDrag.current; if (g) cancelAnimationFrame(g.raf); }, []);
   const slotFrequent = useMemo(() => (quick ? [] : frequentItems(snapshot().items, snapshot().reminders, d.type)), [quick, d.type]);
   /** Keeps the keyboard up through taps on the panel's own controls. */
   const keepFocus = (e: React.MouseEvent) => { if (!(e.target as Element).closest("input")) e.preventDefault(); };
@@ -553,19 +646,29 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   return (
     <div className="gp-root">
       <div ref={probe} className="gp-probe" />
-      <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch], (h, down, ch) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80)))) }}
+      <div ref={satProbe} className="gp-probe top" />
+      <animated.div className="gp-scrim" style={{ opacity: to([sp.hidden, sp.down, sp.ch, sp.pk], (h, down, ch, pk) => 0.32 * (1 - h) * (1 - clamp01(down / Math.max(1, ch + 80))) * (1 - pk)) }}
         onMouseDown={(e) => e.preventDefault() /* the compatibility mousedown after a tap would take the focus (and keyboard) away */}
         onPointerDown={onScrimDown} onPointerMove={onScrimMove} onPointerUp={onScrimUp} onPointerCancel={onScrimUp}
         onClick={() => { if (!grownRef.current && performance.now() - openedAt.current > 350 && performance.now() - draggedAt.current > 350) dismiss(); }} />
       <animated.div className="gp-panel" ref={panelRef} style={{ height: winH, transform: y.to((v) => `translate3d(0,${snapPx(v)}px,0)`) }}>
         <animated.div className="gp-bg" style={{ borderRadius: sp.p.to((p) => `${28 * (1 - p)}px ${28 * (1 - p)}px 0 0`) }} />
+        {/* The one drag handle, at the top all the way from the small panel to the full editor. */}
+        <animated.span ref={handleRef} className="gp-handle gp-tophandle" style={{ transform: y.to(handleY) }} />
+        {/* Resizing the new event's box: the panel is only this bar, with the title. */}
+        {canResize && (
+          <animated.div className="gp-peek" aria-hidden={!dragEdge} style={{ opacity: sp.pk, visibility: sp.pk.to((v) => (v > 0.01 ? "visible" : "hidden")) }}>
+            <span className="ellipsis">{d.title.trim() || "(No title)"}</span>
+          </animated.div>
+        )}
         {editorReady && canGrow && (
           <animated.div className={`gp-full ${grown ? "live" : ""}`} style={{ height: availH, opacity: sp.p.to((p) => clamp01(p * 12 - 0.6)) }}>
             <PhoneItemEditor id={0} occ={null} draft={draft} onDraft={setDraft} saveRef={saveRef} onClose={dismiss}
               header={<div className="gp-drag" aria-label="Drag down for the small panel"><span className="gp-handle" /></div>} />
           </animated.div>
         )}
-        <animated.div ref={compactRef} className={`gp-compact ${lineMode ? "quick" : "slot"} ${grown ? "off" : ""}`} style={{ opacity: sp.p.to((p) => 1 - clamp01(p * 12)) }}
+        <animated.div ref={compactRef} className={`gp-compact ${lineMode ? "quick" : "slot"} ${grown ? "off" : ""}`}
+          style={{ opacity: to([sp.p, sp.pk], (p, pk) => (1 - clamp01(p * 12)) * (1 - clamp01(pk * 1.5))) }}
           onMouseDown={keepFocus}>
           <div className="gp-handle" />
           <Segmented<ItemType> value={lineMode ? type : d.type} options={TYPES} onChange={(t) => live.current.setType(t)} track={typeTrack} />
