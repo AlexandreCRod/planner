@@ -71,3 +71,18 @@ export function backspaceTakesBox(text: string, caret: number): boolean {
   const lead = checklistLead(text);
   return lead >= 0 && caret <= lead;
 }
+
+/**
+ * Enter with the caret [caret] characters into checklist line [text]: where the line splits, the text
+ * from there going onto the new (unticked) box below. Never inside the lead (a caret before the box
+ * splits after it), and past the blanks right after the caret (they stay behind, out of sight, so the
+ * moved text starts right after its box). Null when nothing follows the caret but blanks: the new box
+ * starts empty.
+ */
+export function enterSplitsAt(text: string, caret: number): number | null {
+  const lead = checklistLead(text);
+  if (lead < 0) return null;
+  let at = Math.max(caret, lead);
+  while (at < text.length && /\s/.test(text[at])) at++;
+  return at < text.length ? at : null;
+}

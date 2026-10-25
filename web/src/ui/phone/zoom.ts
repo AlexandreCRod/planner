@@ -27,8 +27,14 @@ export function openingScrollTop(hourH: number): number {
   return Math.max(0, hourH * 6 - OPENING_ROOM);
 }
 
-/** The opening zoom: 06:00 to 24:00 fills [viewH], within the limits; or the zoom chosen before. */
+/** Room below the 24:00 line (the end of the scroll), so the line shows clear of the bottom edge. */
+export const END_ROOM = 4;
+
+/**
+ * The opening zoom: 06:00 to 24:00 fills [viewH] with the room above 06:00 and below 24:00, so the
+ * whole evening and the 24:00 line show; within the limits. Or the zoom chosen before.
+ */
 export function openingHourHeight(viewH: number, saved: number | null): number {
   const minH = viewH / 24;
-  return Math.min(MAX_HOUR_HEIGHT, Math.max(minH, saved ?? viewH / 18));
+  return Math.min(MAX_HOUR_HEIGHT, Math.max(minH, saved ?? (viewH - OPENING_ROOM - END_ROOM) / 18));
 }

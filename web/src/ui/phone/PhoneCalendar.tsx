@@ -22,7 +22,7 @@ import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 import { TOUCH_SLOP } from "./press.ts";
-import { MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
+import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
 import { setEventEnd } from "./eventTime.ts";
 import { wheelZoom } from "./keys.ts";
@@ -487,7 +487,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   props.current = { onStep, onNewAt, s };
 
   // Opening: 06:00 to 24:00 fills the grid, scrolled to 06:00 (as the native app does; a few pixels
-  // above, so the 06:00 label isn't cut), unless a zoom was pinched before. (Measured once it has a
+  // above, so the 06:00 label isn't cut, and the 24:00 line shows at the foot), unless a zoom was pinched before. (Measured once it has a
   // real height; later size changes keep the zoom.)
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -1015,6 +1015,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
             </div>
           </div>
         </div>
+        {/* A little room under the 24:00 line, so it shows clear of the bottom edge. */}
+        <div style={{ height: END_ROOM }} />
       </div>
       {pendingMove && (
         <ScopeDialog title="Move repeating item" onCancel={() => setPendingMove(null)} onPick={(scope: EditScope) => {

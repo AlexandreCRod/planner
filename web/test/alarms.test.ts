@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  EVERY_DAY, WEEKDAYS, buildMirror, bundle, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
+  EVERY_DAY, WEEKDAYS, buildMirror, calendarAlarms, bundle, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
   stopwatchParts, untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
 } from "../src/domain/alarms.ts";
-import { epochOf } from "../src/domain/dates.ts";
+import { epochOf, toTimestamp } from "../src/domain/dates.ts";
 import { parseClockCommand, parseQuickAdd } from "../src/domain/quickadd.ts";
 import { type Reminder, newItem } from "../src/domain/types.ts";
 
@@ -199,4 +199,29 @@ test("an alarm's weather is the forecast for the hour it rings", async () => {
   assert.equal(forecastAt(fc, new Date(2026, 9, 17, 9, 0)), null); // past the forecast
   assert.equal(forecastAt(null, new Date()), null);
   assert.equal(forecastAt(fc, null), null);
+});
+
+test("task and event alarms for the Alarms page: the next 7 days, skips and early snoozes from the engine", () => {
+  const t = epochOf(2026, 10, 26);
+  const now = toTimestamp(t, 8 * 60);
+  const rem = (id: number, itemId: number, offsetMin: number, type: Reminder["type"] = "ALARM"): Reminder => ({ id, itemId, offsetMin, type, soundUri: null });
+  // Daily at 09:00, alarm 10 min before; a task with no time (rings at the default 07:30, before now today).
+  const daily = newItem({ type: "EVENT", id: 1, title: "Stand-up", startDay: t - 3, startMin: 9 * 60, freq: "DAILY" });
+  const task = newItem({ type: "TASK", id: 2, title: "Bins", startDay: t, allDay: true });
+  const task2 = newItem({ type: "TASK", id: 3, title: "Call", startDay: t + 1, startMin: 12 * 60 });
+  const notif = newItem({ type: "EVENT", id: 4, title: "Quiet", startDay: t, startMin: 10 * 60 });
+  const reminders = new Map([[1, [rem(11, 1, 10)]], [2, [rem(12, 2, 0)]], [3, [rem(13, 3, 0)]], [4, [rem(14, 4, 0, "NOTIFICATION")]]]);
+  const due = (d: number, m: number) => toTimestamp(d, m);
+  const skips = new Map<string, number | null>([[`11:${due(t + 1, 8 * 60 + 50)}`, null], [`11:${due(t + 2, 8 * 60 + 50)}`, due(t + 2, 9 * 60)]]);
+  const done = (itemId: number, day: number) => itemId === 3 && day === t + 1;
+  const list = calendarAlarms([daily, task, task2, notif], reminders, done, now, 7 * 60 + 30, skips, 7);
+  // Stand-up: today to 6 days on (7 days from today end at midnight before day 7).
+  assert.deepEqual(list.map((a) => a.day), [t, t + 1, t + 2, t + 3, t + 4, t + 5, t + 6]);
+  assert.ok(list.every((a) => a.itemId === 1)); // the task's alarm passed, the ticked one and the notification don't ring
+  assert.equal(list[1].skipped, true);
+  assert.equal(list[1].at, list[1].original);
+  assert.equal(list[2].at, due(t + 2, 9 * 60)); // snoozed early: rings at its new time
+  assert.equal(list[0].at, due(t, 8 * 60 + 50));
+  // The page's own range: today and tomorrow.
+  assert.deepEqual(calendarAlarms([daily, task, task2, notif], reminders, done, now, 7 * 60 + 30, skips).map((a) => a.day), [t, t + 1]);
 });

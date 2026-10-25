@@ -23,6 +23,8 @@ export interface AlarmState {
   /** Missing from engines before 2.2. */
   ringing?: Ringing | null;
 }
+/** A task or event alarm occurrence skipped (at: null or missing) or snoozed ahead of time (AlarmOverrides.kt). */
+export interface AlarmOverride { reminderId: number; original: number; at?: number | null }
 /** One line of an item's early alarm controls (native EarlyAlarmControls). */
 export interface Control { kind: "soon" | "skipped" | "rang"; reminderId: number; at: number; original: number; canSnooze: boolean }
 
@@ -35,6 +37,7 @@ interface Plugin {
   takeWidgetUndone(): Promise<{ json: string }>;
   state(): Promise<{ json: string }>;
   controls(o: { itemId: number }): Promise<{ json: string }>;
+  overrides(): Promise<{ json: string }>;
   earlySnooze(o: { reminderId: number; original: number }): Promise<void>;
   earlyStop(o: { reminderId: number; original: number }): Promise<void>;
   resetAlarm(o: { reminderId: number; original: number | null }): Promise<void>;
@@ -73,6 +76,8 @@ export const native = {
   widgets: (payload: unknown) => call((p) => p.widgets({ json: JSON.stringify(payload) }), undefined),
   takeWidgetUndone: async () => JSON.parse((await call((p) => p.takeWidgetUndone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   controls: async (itemId: number) => JSON.parse((await call((p) => p.controls({ itemId }), { json: "[]" })).json) as Control[],
+  /** Every task and event alarm occurrence skipped or snoozed ahead of time; none on the PC (or an engine before 2.6). */
+  overrides: async () => JSON.parse((await call((p) => p.overrides(), { json: "[]" })).json) as AlarmOverride[],
   earlySnooze: (reminderId: number, original: number) => call((p) => p.earlySnooze({ reminderId, original }), undefined),
   earlyStop: (reminderId: number, original: number) => call((p) => p.earlyStop({ reminderId, original }), undefined),
   resetAlarm: (reminderId: number, original: number | null) => call((p) => p.resetAlarm({ reminderId, original }), undefined),

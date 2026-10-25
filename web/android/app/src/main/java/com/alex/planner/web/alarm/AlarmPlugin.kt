@@ -255,6 +255,17 @@ class AlarmPlugin : Plugin() {
         ok(call)
     }
 
+    /** One occurrence changed ahead of time, for the Alarms page's "From calendar" group. */
+    @Serializable
+    data class Override(val reminderId: Long, val original: Long, /** When it rings now; null: skipped. */ val at: Long?)
+
+    /** Every task and event alarm occurrence skipped or snoozed ahead of time (kept on this phone, see [AlarmOverrides]). */
+    @PluginMethod
+    fun overrides(call: PluginCall) {
+        val out = AlarmOverrides.ahead(context).map { (r, o, at) -> Override(r, o, at) }
+        ok(call, json.encodeToString(ListSerializer(Override.serializer()), out))
+    }
+
     /** Undoes an early snooze or "don't ring", and a snooze from the ringing screen: back to the original time. */
     @PluginMethod
     fun resetAlarm(call: PluginCall) {

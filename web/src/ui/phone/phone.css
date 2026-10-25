@@ -934,6 +934,16 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .pa-bundle-body.open > div { padding-bottom: 8px; }
 .phone .pa-bundle-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
 .phone .pa-bundle-row::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 1px; background: var(--line); }
+/* Task and event alarms ("From calendar"): bundle-style rows under a small heading. */
+.phone .pa-cal-line { display: inline-flex; align-self: flex-start; width: fit-content; align-items: center; gap: 6px; max-width: 100%; margin: 2px 0 10px; padding: 6px 12px; border: 1px solid var(--p-outline); border-radius: 16px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.phone .pa-cal-line > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .pa-cal-row { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text); cursor: pointer; }
+.phone .pa-cal-row.off { color: var(--muted); }
+.phone .pa-cal-time { flex: none; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.phone .pa-cal-day { flex: none; font-size: 12px; color: var(--muted); }
+.phone .pa-cal-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.phone .pa-cal-skip { flex: none; }
+.phone .pa-cal-skipped { text-decoration: line-through; }
 /* The editor sheet. */
 .phone .pa-editor-head { display: flex; align-items: center; min-height: 40px; padding: 0 16px 0 24px; }
 .phone .pa-editor-head .p-text-btn { gap: 4px; }

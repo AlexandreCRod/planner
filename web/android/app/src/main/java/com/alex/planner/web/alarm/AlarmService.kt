@@ -2,8 +2,10 @@ package com.alex.planner.web.alarm
 
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -18,12 +20,14 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.alex.planner.web.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,8 +36,8 @@ import kotlinx.coroutines.launch
 /**
  * Rings an alarm on the alarm audio stream (audible in silent and vibrate mode) until stopped or snoozed,
  * showing [AlarmActivity] full screen. It can always be stopped: Stop on the screen and in the
- * notification, a volume button (on the screen, and through a media session while only the notification
- * shows), swiping the notification away, or the item's own window ([ringing], AlarmPlugin.stopRinging).
+ * notification, a volume button (on the screen, and while only the notification shows: see
+ * [listenToVolumeKeys]), swiping the notification away, or the item's own window ([ringing], AlarmPlugin.stopRinging).
  * Gives up after the minutes set in Settings ([AlarmSettings.alarmRingMinutes] for events and tasks,
  * [AlarmSettings.clockRingMinutes] for clock alarms and timers) and leaves a missed-alarm notice.
  * (Copied from the native app's AlarmService.)
@@ -67,6 +71,12 @@ class AlarmService : Service() {
     private var player: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var session: MediaSession? = null
+    /** The fallback session on the media stream, and what [listenToVolumeKeys] did to that stream. */
+    private var localSession: MediaSession? = null
+    private var volumeReceiver: BroadcastReceiver? = null
+    private var musicWas = -1
+    private var musicSet = -1
+    private var listeningSince = 0L
     private var focus: AudioFocusRequest? = null
     private val handler = Handler(Looper.getMainLooper())
     private var itemId = 0L
@@ -140,10 +150,57 @@ class AlarmService : Service() {
     }
 
     /**
-     * A volume button stops it while only the notification shows (the full screen handles its own keys):
-     * an active media session with its own volume control takes the presses.
+     * A volume button stops it while only the notification shows, screen on or off (the full screen
+     * handles its own keys). Three layers, as phones route the buttons differently:
+     * - A media session with its own (remote) volume control takes the presses where Android lets it.
+     *   Pixels (Android 13+) don't: a remote session without a cast route gets no volume keys at all,
+     *   which is how both buttons stopped working there (103's regression).
+     * - Under it, a session playing on the media stream: the buttons then move the media volume.
+     * - Any volume change while it rings stops it (VOLUME_CHANGED_ACTION). A button at the end of its
+     *   range changes nothing and sends nothing (volume-down at 0, the usual media volume), so the media
+     *   stream is put one step off its ends while it rings (other sound is paused by the audio focus)
+     *   and set back when it stops.
      */
     private fun listenToVolumeKeys() {
+        listeningSince = SystemClock.uptimeMillis()
+        val audio = getSystemService(AudioManager::class.java)
+        if (audio != null && !audio.isVolumeFixed) runCatching {
+            val stream = AudioManager.STREAM_MUSIC
+            val now = audio.getStreamVolume(stream)
+            val min = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) audio.getStreamMinVolume(stream) else 0
+            val max = audio.getStreamMaxVolume(stream)
+            val target = when { now <= min -> min + 1; now >= max -> max - 1; else -> now }
+            musicWas = now
+            if (target != now && target in min..max) {
+                audio.setStreamVolume(stream, target, 0)
+                musicSet = target
+            }
+        }
+        volumeReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val stream = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
+                val value = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", -1)
+                val prev = intent.getIntExtra("android.media.EXTRA_PREV_VOLUME_STREAM_VALUE", -1)
+                // Not our own nudge of the media stream (its broadcast can arrive after this is registered).
+                if (stream == AudioManager.STREAM_MUSIC && musicSet >= 0 && value == musicSet && prev == musicWas) return
+                if (value == prev) return
+                // A late broadcast from the previous alarm setting the media volume back, when a new alarm
+                // took over while one was ringing, must not stop the new one.
+                if (SystemClock.uptimeMillis() - listeningSince < 700) return
+                handler.post { finishAlarm() }
+            }
+        }.also {
+            ContextCompat.registerReceiver(this, it, IntentFilter("android.media.VOLUME_CHANGED_ACTION"), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+        // The fallback first: the session made last is the one Android asks first.
+        localSession = runCatching {
+            MediaSession(this, "PlannerAlarmKeys").apply {
+                setCallback(object : MediaSession.Callback() {}, handler)
+                setPlaybackToLocal(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
+                isActive = true
+            }
+        }.getOrNull()
         session = runCatching {
             MediaSession(this, "PlannerAlarm").apply {
                 // Volume adjustments reach the provider through the session's callback handler,
@@ -161,6 +218,22 @@ class AlarmService : Service() {
                 isActive = true
             }
         }.getOrNull()
+    }
+
+    /** Undoes [listenToVolumeKeys]: the sessions and the receiver go, and the media volume is set back. */
+    private fun stopListeningToVolumeKeys() {
+        session?.runCatching { isActive = false; release() }
+        session = null
+        localSession?.runCatching { isActive = false; release() }
+        localSession = null
+        volumeReceiver?.let { runCatching { unregisterReceiver(it) } }
+        volumeReceiver = null
+        // Also undoes the step a button press made to stop it.
+        if (musicWas >= 0) getSystemService(AudioManager::class.java)?.runCatching {
+            if (getStreamVolume(AudioManager.STREAM_MUSIC) != musicWas) setStreamVolume(AudioManager.STREAM_MUSIC, musicWas, 0)
+        }
+        musicSet = -1
+        musicWas = -1
     }
 
     private fun startRinging(sound: String?) {
@@ -210,8 +283,7 @@ class AlarmService : Service() {
         player?.runCatching { stop(); release() }
         player = null
         vibrator?.cancel()
-        session?.runCatching { isActive = false; release() }
-        session = null
+        stopListeningToVolumeKeys()
         focus?.let { f -> getSystemService(AudioManager::class.java)?.runCatching { abandonAudioFocusRequest(f) } }
         focus = null
     }

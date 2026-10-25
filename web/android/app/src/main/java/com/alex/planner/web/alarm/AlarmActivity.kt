@@ -108,13 +108,18 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
-    /** A volume button stops it. */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
-            if (event?.repeatCount == 0) send(AlarmService.ACTION_DISMISS)
-            return true
+    /**
+     * A volume button stops it, either one. Caught before the views see the key (a focused button could
+     * keep it from onKeyDown), and on the release too, in case the press itself went elsewhere.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE -> {
+                if (!isFinishing && event.repeatCount == 0) send(AlarmService.ACTION_DISMISS)
+                return true
+            }
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun send(action: String) {

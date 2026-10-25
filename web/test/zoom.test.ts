@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { MAX_HOUR_HEIGHT, openingHourHeight, pinchHourHeight, zoomScrollTop } from "../src/ui/phone/zoom.ts";
 import { noteLines } from "../src/domain/text.ts";
 import { barTarget, pageTarget } from "../src/ui/phone/pager.ts";
-import { OPENING_ROOM, openingScrollTop } from "../src/ui/phone/zoom.ts";
+import { END_ROOM, OPENING_ROOM, openingScrollTop } from "../src/ui/phone/zoom.ts";
 import { panelTarget, sheetCloses } from "../src/ui/phone/sheet.ts";
 
 test("pinch scales the hour height with the fingers' spread", () => {
@@ -25,7 +25,7 @@ test("the spot between the fingers stays in place", () => {
 });
 
 test("opening zoom fits 06:00 to 24:00, or keeps the chosen one within limits", () => {
-  assert.equal(openingHourHeight(720, null), 40);
+  assert.equal(openingHourHeight(720 + OPENING_ROOM + END_ROOM, null), 40);
   assert.equal(openingHourHeight(720, 90), 90);
   assert.equal(openingHourHeight(720, 5), 30);
   assert.equal(openingHourHeight(720, 900), MAX_HOUR_HEIGHT);
@@ -97,4 +97,16 @@ test("the grid opens at 06:00 with room above for its label", () => {
   assert.equal(openingScrollTop(40), 240 - OPENING_ROOM);
   assert.ok(OPENING_ROOM >= 7); // the label reaches 7 px above its line
   assert.equal(openingScrollTop(1), 0);
+});
+
+test("the opening view reaches 24:00: from just above 06:00 down past the 24:00 line", () => {
+  for (const viewH of [520, 643, 700, 913]) {
+    const h = openingHourHeight(viewH, null);
+    const top = openingScrollTop(h);
+    // The scroll's content: 24 hours and the room under the last line.
+    const maxTop = 24 * h + END_ROOM - viewH;
+    assert.ok(top <= maxTop + 1e-9, "opens where it can scroll to");
+    assert.ok(top + viewH >= 24 * h + END_ROOM - 1e-9, "the 24:00 line shows");
+    assert.ok(6 * h - top >= 7, "the 06:00 label reads whole");
+  }
 });

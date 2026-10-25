@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checklistBlock, checklistDepth, checklistRun, checklistSlots, moveChecklistBlock } from "../src/domain/checklist.ts";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, enterSplitsAt, moveChecklistBlock } from "../src/domain/checklist.ts";
 
 const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
 
@@ -40,4 +40,22 @@ test("Backspace at the start of a checkbox line takes the box away first", async
   assert.equal(backspaceTakesBox("⠀⠀⠀☐ milk", 0), true);
   assert.equal(backspaceTakesBox("☐ milk", 3), false); // inside the text: an ordinary Backspace
   assert.equal(backspaceTakesBox("milk", 0), false); // a plain line joins the one above as usual
+});
+
+test("Enter in a checkbox line moves the text after the caret onto the new box", () => {
+  // "☐ Milk and eggs", caret after "Milk": "and eggs" goes down (the space between stays behind).
+  assert.equal(enterSplitsAt("☐ Milk and eggs", 6), 7);
+  assert.equal(enterSplitsAt("☐ Milk and eggs", 8), 8);
+  // At the end, or with only blanks after it: a new empty box.
+  assert.equal(enterSplitsAt("☐ Milk", 6), null);
+  assert.equal(enterSplitsAt("☐ Milk  ", 6), null);
+  // An empty box keeps making new ones.
+  assert.equal(enterSplitsAt("☐ ", 2), null);
+  // Right after the box: the whole text goes down, the empty box stays.
+  assert.equal(enterSplitsAt("☑ Eggs", 2), 2);
+  // Before the box (or in its indent) splits after it, never through the lead.
+  assert.equal(enterSplitsAt("⠀⠀⠀☐ Free range", 1), 5);
+  assert.equal(enterSplitsAt("⠀⠀⠀☐ Free range", 9), 10);
+  // Not a checklist line.
+  assert.equal(enterSplitsAt("Shopping", 3), null);
 });

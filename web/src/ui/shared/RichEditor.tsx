@@ -2,7 +2,7 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead } from "../../domain/checklist.ts";
+import { backspaceTakesBox, checklistLead, enterSplitsAt } from "../../domain/checklist.ts";
 
 const BOX = "☐", TICK = "☑";
 const INDENT = "⠀⠀⠀";
@@ -156,7 +156,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   useEffect(() => {
     const root = el.current;
     if (!root) return;
-    const onBefore = (e: InputEvent) => { if (e.inputType === "deleteContentBackward" && e.cancelable && takeBoxAtCaret()) e.preventDefault(); };
+    // Enter too, from a keyboard that sends no Enter key (only the paragraph it inserts).
+    const onBefore = (e: InputEvent) => {
+      if (!e.cancelable) return;
+      if (e.inputType === "deleteContentBackward" && takeBoxAtCaret()) e.preventDefault();
+      else if (e.inputType === "insertParagraph" && enterOnBox()) e.preventDefault();
+    };
     root.addEventListener("beforeinput", onBefore);
     return () => root.removeEventListener("beforeinput", onBefore);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -314,21 +319,55 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   };
 
   // Enter on a checklist line starts the next box at the same indent, even after an empty box: boxes keep
-  // coming until the line's box is removed (the ☐ button, or deleting the box while typing).
+  // coming until the line's box is removed (the ☐ button, or deleting the box while typing). The text
+  // after the caret goes onto the new box, unticked, with its formatting.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
-    if (e.key !== "Enter" || e.shiftKey) return;
-    const root = el.current!;
+    if (e.key === "Enter" && !e.shiftKey && enterOnBox()) e.preventDefault();
+  };
+
+  /** Enter on a checklist line (see above). True if it did it (false: not a checklist line). */
+  const enterOnBox = (): boolean => {
+    const root = el.current;
+    if (!root) return false;
     const block = currentBlock(root);
-    if (!block || block.tagName === "LI") return;
+    if (!block || block.tagName === "LI") return false;
     const info = boxInfo(block);
-    if (!info.hasBox) return;
-    e.preventDefault();
+    if (!info.hasBox) return false;
+    const sel = getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) sel.getRangeAt(0).deleteContents();
+    let caret = (block.textContent ?? "").length;
+    if (sel && sel.rangeCount && block.contains(sel.anchorNode)) {
+      const before = document.createRange();
+      before.setStart(block, 0);
+      before.setEnd(sel.anchorNode!, sel.anchorOffset);
+      caret = before.toString().length;
+    }
+    const at = enterSplitsAt(block.textContent ?? "", caret);
     const p = document.createElement("p");
     p.textContent = INDENT.slice(0, info.indent) + BOX + " ";
+    if (at !== null) {
+      const rest = document.createRange();
+      rest.setStart(...pointAt(block, at));
+      rest.setEnd(block, block.childNodes.length);
+      const moved = rest.extractContents();
+      // The new box is unticked: no strike-through on the text it takes.
+      moved.querySelectorAll("span").forEach((s) => { if (s.style.textDecoration.includes("line-through")) s.replaceWith(...s.childNodes); });
+      p.appendChild(moved);
+    }
+    p.normalize();
     block.after(p);
-    placeCaretAtEnd(p);
+    if (at === null) placeCaretAtEnd(p);
+    else {
+      // At the start of the moved text, just after the new box.
+      const c = document.createRange();
+      c.setStart(...pointAt(p, info.indent + 2));
+      c.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(c);
+    }
     onChange();
+    return true;
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -342,6 +381,17 @@ export const RichEditor = forwardRef<RichEditorHandle, {
       data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
   );
 });
+
+/** The text position [offset] characters into [block], as a range point. */
+function pointAt(block: HTMLElement, offset: number): [Node, number] {
+  const w = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  let left = offset;
+  for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+    if (left <= t.length) return [t, left];
+    left -= t.length;
+  }
+  return [block, block.childNodes.length];
+}
 
 function currentBlockOf(n: Node, root: HTMLElement): HTMLElement | null {
   let x: Node | null = n;

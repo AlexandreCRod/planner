@@ -56,6 +56,19 @@ object AlarmOverrides {
             if (v == STOPPED && original > now) original else null
         }.sorted()
 
+    /**
+     * Every occurrence changed ahead of [now], for the Alarms page: reminder, original time, and when it
+     * rings now (null: set not to ring).
+     */
+    fun ahead(context: Context, now: Long = System.currentTimeMillis()): List<Triple<Long, Long, Long?>> =
+        prefs(context).all.mapNotNull { (k, v) ->
+            if (k.startsWith(NOTICED) || k.startsWith(RANG)) return@mapNotNull null
+            val reminderId = k.substringBefore(':').toLongOrNull() ?: return@mapNotNull null
+            val original = k.substringAfter(':').toLongOrNull() ?: return@mapNotNull null
+            val at = (v as? Long) ?: return@mapNotNull null
+            if (original <= now && at <= now) null else Triple(reminderId, original, at.takeIf { it != STOPPED })
+        }
+
     /** A snooze from the ringing screen: when it rings again. */
     fun setRingSnooze(context: Context, reminderId: Long, until: Long) {
         prefs(context).edit().putLong(RANG + reminderId, until).commit()

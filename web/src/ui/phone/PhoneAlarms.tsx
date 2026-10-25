@@ -1,21 +1,24 @@
 // The Alarms tab, drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
-// one, a filter, close ones bundled), a timer, a stopwatch and a world clock, under Material 3 primary
+// one, a filter, close ones bundled, and the next week's task and event alarms), a timer, a stopwatch and a world clock, under Material 3 primary
 // tabs. The four sections also turn with a finger swiped sideways, live like a pager, with the tab
 // indicator riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
 // in a browser the tab isn't shown.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type AlarmFilter, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type AlarmFilter, type CalendarAlarm, NARROW_DAYS, calendarAlarms, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
-import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
+import { type AlarmOverride, type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
+import { useAlarmSettings } from "../../alarms/settings.ts";
+import { useSnapshot } from "../../store/store.ts";
+import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
-import { BottomSheet, Switch, TextButton } from "./m3.tsx";
+import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { HeldTime } from "./TimeWheel.tsx";
@@ -301,36 +304,115 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   const list = alarms.filter((a) => alarmShown(a, show, now));
   const groups = bundle(list);
   const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
+  // Task and event alarms only where they ring: on this phone, while they're turned on.
+  const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
+  const [calOpen, setCalOpen] = useState(false);
   return (
     <div className="pa-scroll">
       <PermissionCards />
       {!rings.rings && (
         <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
       )}
-      <NextAlarm alarms={alarms} now={now} />
+      <NextAlarm alarms={alarms} calendar={cal} now={now} />
+      {cal.length > 0 && (
+        <button className="pa-cal-line" onClick={() => setCalOpen(true)}>
+          <MIcon name="oCalendarToday" size={18} />
+          <span>{cal.length === 1 ? "1 calendar alarm" : `${cal.length} calendar alarms`} today and tomorrow</span>
+          <MIcon name="fKeyboardArrowRight" size={18} />
+        </button>
+      )}
       {alarms.length > 0 && (
         <div className="pa-filter pa-noswipe">
           {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
         </div>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? "No alarms" : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
+      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />
         : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
+      {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
     </div>
   );
 }
 
-function NextAlarm({ alarms, now }: { alarms: ClockAlarm[]; now: Date }) {
-  const rings = alarms.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null);
+function NextAlarm({ alarms, calendar, now }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date }) {
+  const rings: { at: Date; title?: string }[] = alarms.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null).map((at) => ({ at }));
+  // The calendar's next one too (the list is soonest first; a skipped one doesn't ring).
+  const c = calendar.find((x) => !x.skipped);
+  if (c) rings.push({ at: new Date(c.at), title: c.title.trim() || "Untitled" });
   if (!rings.length) return null;
-  const at = rings.reduce((x, y) => (y < x ? y : x));
+  const { at, title } = rings.reduce((x, y) => (y.at < x.at ? y : x));
   return (
     <div className="pa-next">
       <div className="t-title-large">Alarm in {untilText(at, now)}</div>
-      <div className="t-body-medium muted">{relative(at)} at {formatTime(at.getHours() * 60 + at.getMinutes())}</div>
+      <div className="t-body-medium muted pa-line">{relative(at)} at {formatTime(at.getHours() * 60 + at.getMinutes())}{title ? ` · ${title}` : ""}</div>
     </div>
+  );
+}
+
+// ---------- Task and event alarms ("From calendar") ----------
+
+/**
+ * The next week's task and event alarms, with the engine's skips and early snoozes (kept on this phone:
+ * AlarmOverrides.kt), read again whenever the engine says they changed. Empty when [on] is false.
+ */
+function useCalendarAlarms(now: number, on: boolean): CalendarAlarm[] {
+  const snap = useSnapshot();
+  const { defaultTaskTime } = useAlarmSettings();
+  const [overrides, setOverrides] = useState<AlarmOverride[]>([]);
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    const load = () => void native.overrides().then((o) => { if (live) setOverrides(o); });
+    load();
+    const off = onNative("changed", (what) => { if (what === "overrides" || what === "resume") load(); });
+    return () => { live = false; off(); };
+  }, [on]);
+  // Minute by minute is plenty: the list moves on as alarms pass.
+  const minute = Math.floor(now / 60_000);
+  return useMemo(() => {
+    if (!on) return [];
+    const map = new Map(overrides.map((o) => [`${o.reminderId}:${o.original}`, o.at ?? null]));
+    return calendarAlarms(snap.items, snap.reminders, (id, d) => snap.done.isDone(id, d), minute * 60_000, defaultTaskTime, map);
+  }, [snap, overrides, defaultTaskTime, minute, on]);
+}
+
+/** How many show before "more": the group stays compact. */
+/**
+ * Today's and tomorrow's task and event alarms in a small window, opened from the line under the next
+ * alarm: time, day and title; tapping one opens its item. Skip keeps that one occurrence from ringing (as
+ * Stop on the upcoming-alarm notice does), with Undo; a skipped one stays listed, greyed, until it's put
+ * back or its time passes.
+ */
+function CalendarAlarmsDialog({ list, onClose }: { list: CalendarAlarm[]; onClose: () => void }) {
+  const snap = useSnapshot();
+  const minOf = (d: Date) => d.getHours() * 60 + d.getMinutes();
+  const skip = (a: CalendarAlarm) => {
+    const d = new Date(a.at);
+    const day = relative(d);
+    void act(native.earlyStop(a.reminderId, a.original));
+    showSnackbar(`It won't ring ${day === "Today" || day === "Tomorrow" ? day.toLowerCase() : day} at ${formatTime(minOf(d))}`, "Undo",
+      () => void act(native.resetAlarm(a.reminderId, a.original)));
+  };
+  const unskip = (a: CalendarAlarm) => void act(native.resetAlarm(a.reminderId, a.original));
+  return (
+    <Dialog title="From calendar" onClose={onClose} actions={<TextButton onClick={onClose}>Close</TextButton>}>
+      {list.length === 0 && <div className="t-body-medium">No calendar alarms today or tomorrow.</div>}
+      {list.map((a) => {
+        const item = snap.byId.get(a.itemId);
+        const d = new Date(a.at);
+        return (
+          <div key={`${a.reminderId}:${a.original}`} className={`pa-cal-row ${a.skipped ? "off" : ""}`} role="button"
+            onClick={() => { if (item) { onClose(); openItem(item, a.day); } }}>
+            <span className={`pa-cal-time ${a.skipped ? "pa-cal-skipped" : ""}`}>{formatTime(minOf(d))}</span>
+            <span className="pa-cal-day">{a.skipped ? `Skipped · ${relative(d)}` : relative(d)}</span>
+            <span className="pa-cal-title">{a.title.trim() || "Untitled"}</span>
+            <button className="p-text-btn pa-cal-skip" onClick={(e) => { e.stopPropagation(); if (a.skipped) unskip(a); else skip(a); }}>{a.skipped ? "Undo" : "Skip"}</button>
+          </div>
+        );
+      })}
+    </Dialog>
   );
 }
 
