@@ -19,6 +19,12 @@ test("fileChanges: deletes this plan's unlisted files, not another plan's", () =
   assert.deepEqual(ch, [{ kind: "trainingFiles", id: "p:a.md", data: null }]);
 });
 
+test("fileChanges: the shared files stay on the server when taken out of the folder", () => {
+  const base = { "trainingFiles/shared:runs.json": rec("shared", "runs.json", "t") };
+  assert.deepEqual(fileChanges("shared", new Map(), base, 1, true), []);
+  assert.equal(fileChanges("shared", new Map([["runs.json", "u"]]), base, 1, true).length, 1);
+});
+
 test("applyChanges: sets and deletes", () => {
   const out = applyChanges({ "k/a": { v: 1 }, "k/b": { v: 2 } }, [{ kind: "k", id: "a", data: null }], [{ kind: "k", id: "c", data: { v: 3 } }]);
   assert.deepEqual(Object.keys(out), ["k/b", "k/c"]);

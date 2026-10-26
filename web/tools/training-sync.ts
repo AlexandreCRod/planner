@@ -4,7 +4,8 @@
 //   node --experimental-strip-types web/tools/training-sync.ts pull  <folder>
 // check: planner.json and its documents agree (same rules as the app), and so do runs.json and meals.json
 // when the folder has them. push: sends the files that changed: the plan's, and runs.json and meals.json
-// under the plan id "shared" (one taken out of the folder is removed from the server). pull: writes the
+// under the plan id "shared" (one taken out of the folder stays on the server: runs.json is history pushed
+// once, and meals.json may come from another session). pull: writes the
 // training CSVs from what the phone logged, and bodyweight.csv from the weigh-ins. Node built-ins only.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -28,10 +29,10 @@ const BODYWEIGHT_FILE = "bodyweight.csv";
 
 /**
  * The changes that bring the server's copy of one plan's files in line with [files] (file name → text):
- * a record for each file whose text differs from the last pushed one, and a delete for each earlier
- * record of this plan whose file is no longer listed. Files that haven't changed give nothing.
+ * a record for each file whose text differs from the last pushed one, and (unless [keepMissing]) a delete
+ * for each earlier record of this plan whose file is no longer listed. Files that haven't changed give nothing.
  */
-export function fileChanges(planId: string, files: ReadonlyMap<string, string>, base: Record<string, Rec>, now: number): Change[] {
+export function fileChanges(planId: string, files: ReadonlyMap<string, string>, base: Record<string, Rec>, now: number, keepMissing = false): Change[] {
   const out: Change[] = [];
   for (const [file, text] of files) {
     const id = planFileId(planId, file);
@@ -39,7 +40,7 @@ export function fileChanges(planId: string, files: ReadonlyMap<string, string>, 
     const data: PlanFile = { id, planId, file, text, updatedAt: now };
     out.push({ kind: KIND, id, data: data as unknown as Rec });
   }
-  for (const [key, r] of Object.entries(base)) {
+  if (!keepMissing) for (const [key, r] of Object.entries(base)) {
     if (!key.startsWith(`${KIND}/`) || r.planId !== planId || files.has(String(r.file))) continue;
     out.push({ kind: KIND, id: key.slice(KIND.length + 1), data: null });
   }
@@ -195,7 +196,7 @@ async function push(folder: string) {
   if (!r) throw new Stop("Not pushing: fix the problems above first.");
   const files = new Map<string, string>([[PLAN_FILE, r.planText], ...r.texts]);
   const base = loadState().records, now = Date.now();
-  const changes = [...fileChanges(r.plan.id, files, base, now), ...fileChanges(SHARED_PLAN, r.shared, base, now)];
+  const changes = [...fileChanges(r.plan.id, files, base, now), ...fileChanges(SHARED_PLAN, r.shared, base, now, true)];
   const { received } = await sync(changes);
   // Plan ids never hold a ":", so a record id splits into plan and file at the first one.
   const name = (planId: string, file: string) => (planId === SHARED_PLAN ? `shared/${file}` : file);
