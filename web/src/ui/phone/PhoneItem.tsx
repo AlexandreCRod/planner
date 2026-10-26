@@ -42,9 +42,8 @@ import { setRoutine, streakSymbol } from "../../store/routines.ts";
 /** An unsaved item with its alerts and tags: what the editor (and the add panel it grows from) holds. */
 export interface Draft { item: Item; reminders: Reminder[]; tags: string }
 
-const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 180, 1440, 2880, 10080];
-/** Reminders after the start ("10 minutes after"), listed after the ones before it. */
-const AFTER_OFFSETS = [-5, -10, -15, -30, -60];
+/** The reminder menu's choices; anything else (after the start, 3 hours before…) is Custom…. */
+const OFFSETS = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080];
 const DAY_END = 24 * 60 - 1;
 
 export { defaultAlert };
@@ -339,8 +338,8 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
       <FieldRow key={i} icon={n === 0 ? icon : null}>
         <span className="grow">
           <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={[
-            ...[...OFFSETS, ...AFTER_OFFSETS].map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, divider: o === AFTER_OFFSETS[0], onClick: () => set(i, { ...r, offsetMin: o }) })),
-            { label: "Custom…", divider: true, checked: !OFFSETS.includes(r.offsetMin) && !AFTER_OFFSETS.includes(r.offsetMin), onClick: () => setCustom(i) },
+            ...OFFSETS.map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, onClick: () => set(i, { ...r, offsetMin: o }) })),
+            { label: "Custom…", divider: true, checked: !OFFSETS.includes(r.offsetMin), onClick: () => setCustom(i) },
           ]} />
         </span>
         {alarms && hasAlarms && (
