@@ -53,6 +53,16 @@ function list<T>(kind: Kind): T[] {
   return out;
 }
 
+/** Every record of [kind], for stores of their own built on this one (store/training.ts). */
+export const listOf = <T>(kind: Kind): T[] => list<T>(kind);
+/** Counts every change, local or from sync: a store built on this one rebuilds when it moves. */
+export const storeVersion = () => version;
+/** Saves records of [kind] (each by its id), then saves, redraws and syncs as for any change. */
+export function putRecords(kind: Kind, rs: object[]) {
+  for (const r of rs) put(kind, r);
+  changed();
+}
+
 let saveTimer: number | undefined;
 let unsaved = false;
 /** A save that failed (the device's storage full...): kept in the problem log and shown, never swallowed. */

@@ -202,6 +202,21 @@ export function activePlan<P extends Pick<Plan, "start">>(plans: P[], today: num
   return [...plans].sort((a, b) => a.start - b.start)[0] ?? null;
 }
 
+/**
+ * A file of a plan as the plan session's script pushes it ("trainingFiles"): planner.json or one of its
+ * documents, whole. Only the script writes these; the app reads them.
+ */
+export interface PlanFile {
+  /** "<plan id>:<file name>". */
+  id: string;
+  planId: string;
+  file: string;
+  text: string;
+  updatedAt: number;
+}
+export const planFileId = (planId: string, file: string) => `${planId}:${file}`;
+export const PLAN_FILE = "planner.json";
+
 // ---------- The user's own records ----------
 
 /** One session's state, a futsal game, or a record the user added. */
@@ -255,6 +270,9 @@ export interface SeenPlan {
   id: string; // the plan id
   sessions: Record<string, { title: string; defaultDay: number | null }>;
   seenAt: number;
+  /** Changes already shown and dismissed ([changeKey]), so a day left outside its phase isn't raised again. */
+  dismissed?: string[];
+  updatedAt?: number;
 }
 
 export const entryId = (planId: string, sessionId: string) => `${planId}:${sessionId}`;
@@ -297,7 +315,14 @@ export function phaseView(plan: Plan, phase: number, entries: ReadonlyMap<string
   for (const s of ph.sessions) {
     const e = entryFor(plan, s, entries);
     const day = dayOfSession(s, entries.get(e.id));
-    if (day === null) { if (e.status === "planned") toPlace.push(s); else byDay.get(e.doneDay ?? ph.end)?.push({ session: s, entry: e }); continue; }
+    if (day === null) {
+      // Done without being placed: on the day it was done. Skipped: stays with To place, shown as skipped.
+      if (e.status === "done" && e.doneDay !== null) {
+        if (!byDay.has(e.doneDay)) byDay.set(e.doneDay, []);
+        byDay.get(e.doneDay)!.push({ session: s, entry: e });
+      } else toPlace.push(s);
+      continue;
+    }
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day)!.push({ session: s, entry: e });
   }
@@ -348,6 +373,9 @@ export interface PlanChange {
   /** The plan's new day (moved). */
   newDay?: number | null;
 }
+
+/** One change, as remembered once dismissed. */
+export const changeKey = (c: PlanChange) => `${c.kind}:${c.sessionId}:${c.day ?? ""}:${c.newDay ?? ""}`;
 
 /** A copy of what matters for the warning, saved when the user has seen the plan. */
 export function seenOf(plan: Plan, now = Date.now()): SeenPlan {
