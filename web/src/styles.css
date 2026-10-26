@@ -45,6 +45,8 @@ body { background: var(--bg); color: var(--text); }
 button { font: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--acc); }
+/* Web links in the note editor, drawn over its text (linkHit's paintLinks): a tap opens them. */
+::highlight(rich-link) { color: var(--acc); text-decoration: underline; }
 
 /* Base rules under phone.css (which hangs off html.phone): the shared task and event rows, the note text,
    the signed-out screen. */

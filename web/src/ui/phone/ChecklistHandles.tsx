@@ -51,8 +51,11 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       lines.forEach((el, i) => {
         if (!isCheck(el) || el.classList.contains("pn-folded")) return; // lines folded into "completed" have no handle
         const r = el.getBoundingClientRect();
-        const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
-        out.push({ i, top: r.top - base, h: Math.min(r.height, lh) });
+        const cs = getComputedStyle(el);
+        const lh = parseFloat(cs.lineHeight) || 24;
+        // Where the line rests, not where it is mid-glide (a ticked line moving to "completed").
+        const glide = cs.transform && cs.transform !== "none" ? new DOMMatrixReadOnly(cs.transform).m42 : 0;
+        out.push({ i, top: r.top - glide - base, h: Math.min(r.height, lh) });
       });
       const k = out.map((x) => `${x.i}:${Math.round(x.top)}:${Math.round(x.h)}`).join(",");
       if (k !== key.current) { key.current = k; setHandles(out); cb.current.onHas(out.length > 0); }

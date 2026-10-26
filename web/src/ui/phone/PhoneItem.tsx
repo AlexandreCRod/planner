@@ -17,6 +17,7 @@ import {
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
+import { findLinks } from "../../domain/links.ts";
 import { linkAtCaretOf, linkInTextarea } from "../shared/linkHit.ts";
 import { useLinkGesture } from "../shared/linkGesture.ts";
 import { useWebLinks } from "./WebLinks.tsx";
@@ -890,12 +891,19 @@ function DescriptionField({ value, onChange, onBlur }: { value: string; onChange
   const webLinks = useWebLinks();
   const { onLinkClick, onLinkKey, ...linkHandlers } = useLinkGesture(
     (x, y) => (ref.current ? linkInTextarea(ref.current, x, y) : null), () => (ref.current ? linkAtCaretOf(ref.current) : null), webLinks.act);
+  // A field can't colour part of its text, so the links are underlined from a copy laid out behind it.
+  const links = findLinks(value);
+  let at = 0;
+  const under = links.flatMap((l) => { const out = [value.slice(at, l.start), <span key={l.start} className="lnk">{l.text}</span>]; at = l.end; return out; });
   return <>
-    <textarea ref={ref} className="grow pe-desc" rows={1} placeholder="Add description" value={value} autoCapitalize="sentences"
-      onFocus={() => { toEnd.current = true; end(); window.setTimeout(() => { toEnd.current = false; }, 500); }}
-      onClick={(e) => { if (onLinkClick(e)) { toEnd.current = false; return; } if (toEnd.current) { toEnd.current = false; end(); } }}
-      onKeyDown={(e) => { onLinkKey(e); }} {...linkHandlers}
-      onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+    <div className="grow pe-desc-box">
+      {links.length > 0 && <div className="pe-desc-under" aria-hidden="true">{under}{value.slice(at)}</div>}
+      <textarea ref={ref} className="grow pe-desc" rows={1} placeholder="Add description" value={value} autoCapitalize="sentences"
+        onFocus={() => { toEnd.current = true; end(); window.setTimeout(() => { toEnd.current = false; }, 500); }}
+        onClick={(e) => { if (onLinkClick(e)) { toEnd.current = false; return; } if (toEnd.current) { toEnd.current = false; end(); } }}
+        onKeyDown={(e) => { onLinkKey(e); }} {...linkHandlers}
+        onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
+    </div>
     {webLinks.card}
   </>;
 }

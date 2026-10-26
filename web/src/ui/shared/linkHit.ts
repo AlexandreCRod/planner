@@ -25,6 +25,37 @@ export function linkInEditable(root: HTMLElement, x: number, y: number): WebLink
   return inRects(r, x, y) ? hit : null;
 }
 
+type HighlightRegistry = { set(name: string, h: unknown): void; delete(name: string): void };
+const registry = (): HighlightRegistry | null => (globalThis.CSS as unknown as { highlights?: HighlightRegistry })?.highlights ?? null;
+const HighlightCtor = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight;
+/** Each editor's link ranges: drawn together as the "rich-link" highlight (the text itself never changes). */
+const painted = new Map<HTMLElement, Range[]>();
+const repaint = () => registry()?.set("rich-link", new HighlightCtor!(...[...painted.values()].flat()));
+
+/** Draws the web links in a contenteditable [root] as links (again after each change to its text). */
+export function paintLinks(root: HTMLElement) {
+  if (!registry() || !HighlightCtor) return;
+  const out: Range[] = [];
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+    for (const l of findLinks(t.data)) {
+      const r = document.createRange();
+      r.setStart(t, l.start);
+      r.setEnd(t, l.end);
+      out.push(r);
+    }
+  }
+  const before = painted.get(root);
+  if (!out.length && !before?.length) return;
+  painted.set(root, out);
+  repaint();
+}
+
+/** Stops drawing [root]'s links (it's gone). */
+export function unpaintLinks(root: HTMLElement) {
+  if (painted.delete(root) && registry() && HighlightCtor) repaint();
+}
+
 /** The link at the caret of a contenteditable [root] (for the keyboard), if any. */
 export function linkAtCaretIn(root: HTMLElement): WebLink | null {
   const sel = getSelection();

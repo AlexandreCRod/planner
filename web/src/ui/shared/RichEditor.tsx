@@ -4,7 +4,7 @@ import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef
 import { editorText } from "../../domain/noteDraft.ts";
 import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickMoveOrder } from "../../domain/checklist.ts";
 import { feel } from "../phone/haptics.ts";
-import { linkAtCaretIn, linkInEditable } from "./linkHit.ts";
+import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
@@ -149,6 +149,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const el = useRef<HTMLDivElement>(null);
   const { onLinkClick, onLinkKey, ...linkHandlers } = useLinkGesture(
     (x, y) => (el.current ? linkInEditable(el.current, x, y) : null), () => (el.current ? linkAtCaretIn(el.current) : null), links);
+  const linksOn = useRef(false);
+  linksOn.current = !!links;
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
   const checkEmpty = () => setEmpty(!el.current || isBlank(el.current));
   const wrap = useRef<HTMLDivElement>(null);
@@ -191,8 +193,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
         if (p) placeCaretAtEnd(p);
       }
     }
-    const base = box.getBoundingClientRect().top;
-    secs.forEach((sec, k) => { out[k].top = Math.round(lines[sec.first].getBoundingClientRect().top - base - HEAD_H); });
+    // Layout offsets, not screen rects: a line still gliding to its place (tickLine) mustn't move the bar with it.
+    const topIn = (l: HTMLElement) => (l.offsetParent === box ? l.offsetTop : l.offsetTop + root.offsetTop);
+    secs.forEach((sec, k) => { out[k].top = Math.round(topIn(lines[sec.first]) - HEAD_H); });
     const k = out.map((h) => `${h.key}|${h.top}|${h.count}|${h.folded}`).join("\n");
     if (k !== headsKey.current) { headsKey.current = k; setHeads(out); }
   };
@@ -212,7 +215,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     const root = el.current;
     if (!root) return;
     let raf = 0;
-    const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; layoutDone(); }); };
+    // Web links are drawn as links where a tap opens them (the editors without link actions leave them as text).
+    const paint = () => { if (linksOn.current) paintLinks(root); };
+    const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; layoutDone(); paint(); }); };
     const mo = new MutationObserver(() => { checkEmpty(); later(); });
     mo.observe(root, { childList: true, subtree: true, characterData: true });
     // The bars move with the lines when the text re-wraps (a resize, a rotated phone).
@@ -220,7 +225,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     ro.observe(root);
     checkEmpty();
     layoutDone();
-    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); };
+    paint();
+    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); unpaintLinks(root); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);

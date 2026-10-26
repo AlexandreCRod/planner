@@ -767,7 +767,14 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
   user-select: text; -webkit-user-select: text;
 }
 .phone textarea.pe-desc::placeholder { color: var(--muted); opacity: 1; }
-.phone .pe-row.top > textarea.pe-desc { flex: 1; }
+.phone .pe-desc-box { position: relative; min-width: 0; }
+.phone .pe-desc-box > textarea.pe-desc { position: relative; }
+/* The same text laid out behind the field, see-through but for its links' underlines. */
+.phone .pe-desc-under {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: transparent;
+  font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.phone .pe-desc-under .lnk { text-decoration: underline; text-decoration-color: var(--acc); text-underline-offset: 2px; }
 .phone .pe-notes-edit { min-width: 0; padding-top: 1px; }
 .phone .pe-notes-edit .rich { font-size: 16px; line-height: 22px; color: var(--text); outline: none; user-select: text; -webkit-user-select: text; }
 .phone .p-sheet .pe-notes-edit { margin-top: 4px; }
