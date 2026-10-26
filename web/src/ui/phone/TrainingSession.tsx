@@ -14,6 +14,7 @@ import { type LoadedPlan, type Training, saveEntry, saveLift, training } from ".
 import { go } from "../shared/common.tsx";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
+import { SlideStepper } from "./SlideStepper.tsx";
 import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
 import { MarkdownView, allExercises, docRoute } from "./TrainingDocs.tsx";
 import { KIND_LABEL, Scale, fmtKg, kindIcon, phaseNames, setsText } from "./trainingParts.tsx";
@@ -319,31 +320,23 @@ function ExerciseSheet({ lp, id, name, onClose }: { lp: LoadedPlan; id: string; 
   );
 }
 
-/** A set's weight or reps: − and + in steps (2.5 kg, 1 rep), or typed. */
+/** A set's weight or reps: slid in steps (2.5 kg, 1 rep), − and +, or typed after a tap on the number. */
 function NumberDialog({ what, set, value, canRemove, onSave, onRemove, onClose }: {
   what: "kg" | "reps"; set: number; value: number | null; canRemove: boolean;
   onSave: (v: number | null) => void; onRemove: () => void; onClose: () => void;
 }) {
-  const step = what === "kg" ? 2.5 : 1;
-  const [text, setText] = useState(value === null ? "" : fmtKg(value));
-  const num = text.trim() === "" ? null : Number(text.replace(",", "."));
-  const valid = num === null || (Number.isFinite(num) && num >= 0 && num < 1000);
-  const bump = (d: number) => { feel("tick"); setText(fmtKg(Math.max(0, Math.round(((num ?? 0) + d) / step) * step))); };
-  const save = () => { if (!valid) return; onSave(num); onClose(); };
+  const kg = what === "kg";
+  const [num, setNum] = useState(value);
+  const save = () => { onSave(num); onClose(); };
   return (
-    <Dialog title={`Set ${set}: ${what === "kg" ? "weight" : "reps"}`} onClose={onClose} actions={<>
+    <Dialog title={`Set ${set}: ${kg ? "weight" : "reps"}`} onClose={onClose} actions={<>
       {canRemove && <TextButton onClick={() => { onRemove(); onClose(); }}>Remove set</TextButton>}
       <span className="grow" />
       <TextButton onClick={onClose}>Cancel</TextButton>
-      <TextButton disabled={!valid} onClick={save}>Save</TextButton>
+      <TextButton onClick={save}>Save</TextButton>
     </>}>
-      <div className="p-stepper">
-        <IconButton icon="fRemove" label={`Less by ${step}`} onClick={() => bump(-step)} />
-        <input className="p-stepper-field" inputMode="decimal" value={text} autoFocus enterKeyHint="done"
-          onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => { if (ev.key === "Enter") save(); }} />
-        <span className="unit">{what === "kg" ? "kg" : "reps"}</span>
-        <IconButton icon="fAdd" label={`More by ${step}`} onClick={() => bump(step)} />
-      </div>
+      <SlideStepper value={num} onChange={setNum} step={kg ? 2.5 : 1} max={999} format={fmtKg} unit={kg ? "kg" : "reps"}
+        decimal={kg} clearable buttons label={kg ? "Weight" : "Reps"} />
     </Dialog>
   );
 }

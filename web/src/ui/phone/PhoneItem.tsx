@@ -30,6 +30,7 @@ import { fetchPlaceOfLink } from "../../store/preview.ts";
 import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
+import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
@@ -379,13 +380,12 @@ function CustomLeadDialog({ value, onSave, onClose }: { value: number; onSave: (
   const a = Math.abs(value);
   const first = [...LEAD_UNITS].reverse().find(([, , m]) => a > 0 && a % m === 0) ?? LEAD_UNITS[0];
   const [unit, setUnit] = useState(first[0]);
-  const [text, setText] = useState(String(a / first[2]));
+  const [n, setN] = useState(a / first[2]);
   const [after, setAfter] = useState(value < 0);
   const per = LEAD_UNITS.find(([k]) => k === unit)![2];
-  const n = /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
   const total = n * per;
-  const valid = Number.isInteger(n) && total <= MAX_LEAD;
-  const bump = (d: number) => { feel("tick"); setText(String(Math.max(0, (Number.isInteger(n) ? n : 0) + d))); };
+  // A bigger unit can push the same number past 4 weeks: then it says so, and Save waits.
+  const valid = total <= MAX_LEAD;
   const save = () => { if (!valid) return; onSave(after ? -total : total); onClose(); };
   return (
     <Dialog title="Custom reminder" onClose={onClose} actions={<>
@@ -393,12 +393,7 @@ function CustomLeadDialog({ value, onSave, onClose }: { value: number; onSave: (
       <TextButton onClick={onClose}>Cancel</TextButton>
       <TextButton disabled={!valid} onClick={save}>Save</TextButton>
     </>}>
-      <div className="p-stepper">
-        <IconButton icon="fRemove" label="One less" onClick={() => bump(-1)} />
-        <input className="p-stepper-field" inputMode="numeric" value={text} autoFocus enterKeyHint="done" aria-label="How many"
-          onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => { if (ev.key === "Enter") save(); }} />
-        <IconButton icon="fAdd" label="One more" onClick={() => bump(1)} />
-      </div>
+      <SlideStepper value={n} onChange={(v) => setN(v ?? 0)} step={1} max={Math.floor(MAX_LEAD / per)} buttons label="How many" />
       <div className="pe-lead-row"><Segmented value={unit} options={LEAD_UNITS.map(([k, l]): [string, string] => [k, l])} onChange={setUnit} /></div>
       <div className="pe-lead-row"><Segmented value={after ? "after" : "before"} options={[["before", "Before"], ["after", "After"]]} onChange={(v) => setAfter(v === "after")} /></div>
       <div className="pe-small pe-lead-sum">{valid ? offsetText(after ? -total : total) : "Up to 4 weeks"}</div>
