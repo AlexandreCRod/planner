@@ -8,12 +8,19 @@ import { parseDays } from "../domain/recurrence.ts";
 import { doneTodosToTrash, expiredTrash, staleVersions } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
+import { logProblem } from "../problems.ts";
 import {
   type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
   TYPE_COLORS, cssColor, isRecurring, newItem,
 } from "../domain/types.ts";
 
-export const KINDS = ["categories", "tags", "items", "completions", "reminders", "itemTags", "links", "versions", "images"] as const;
+export const KINDS = [
+  "categories", "tags", "items", "completions", "reminders", "itemTags", "links", "versions", "images",
+  // Training (domain/training.ts): the plan's files, pushed by the plan session's script, then the user's own.
+  "trainingFiles", "trainingEntries", "trainingLifts", "trainingState",
+] as const;
+/** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
+export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);
 export type Kind = (typeof KINDS)[number];
 type Rec = Record<string, unknown>;
 
@@ -48,7 +55,25 @@ function list<T>(kind: Kind): T[] {
 
 let saveTimer: number | undefined;
 let unsaved = false;
-const writeNow = () => { clearTimeout(saveTimer); saveTimer = undefined; unsaved = false; return db.put("records", [...records.entries()]); };
+/** A save that failed (the device's storage full...): kept in the problem log and shown, never swallowed. */
+function saveFailed(e: unknown): never {
+  unsaved = true;
+  logProblem("save", `Couldn't save on this device: ${e instanceof Error ? e.message : String(e)}`);
+  throw e;
+}
+const writeNow = () => {
+  clearTimeout(saveTimer); saveTimer = undefined; unsaved = false;
+  return db.put("records", [...records.entries()]).catch(saveFailed);
+};
+/**
+ * Saves the records now, with [extra] keys, in one transaction. Sync saves what it received this way
+ * together with its copy of what was synced, so a kill in between can't make received records look
+ * deleted here (and be sent back as deletes).
+ */
+export function saveWith(extra: [string, unknown][]): Promise<void> {
+  clearTimeout(saveTimer); saveTimer = undefined; unsaved = false;
+  return db.putMany([["records", [...records.entries()]], ...extra]).catch(saveFailed);
+}
 /** Call after any change: refreshes the UI, saves to IndexedDB and lets sync know. */
 export function changed(fromSync = false) {
   version++;
@@ -56,7 +81,7 @@ export function changed(fromSync = false) {
   listeners.forEach((l) => l());
   clearTimeout(saveTimer);
   unsaved = true;
-  saveTimer = window.setTimeout(() => void writeNow(), 250);
+  saveTimer = window.setTimeout(() => void writeNow().catch(() => {}), 250);
   if (!fromSync) onChange();
 }
 
@@ -335,7 +360,10 @@ export function deleteIfEmpty(id: number) {
   if (i && i.type === "NOTE" && isEmptyNote(i)) deleteForever(id);
 }
 
-/** Fixed ids 1-4, the same as the phone, so two fresh devices don't duplicate them. */
+/**
+ * Fixed ids 1-4, the same as the phone, so two fresh devices don't duplicate them. Called only once a
+ * sync has finished and found no categories (main.tsx), so they can't overwrite the user's own.
+ */
 export function ensureDefaults() {
   if (list<Category>("categories").length) return;
   const defs: Category[] = [

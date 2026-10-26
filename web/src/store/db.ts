@@ -36,6 +36,19 @@ export async function put(key: string, value: unknown): Promise<void> {
   });
 }
 
+/** Writes several keys in one transaction: all of them land, or none. */
+export async function putMany(entries: [string, unknown][]): Promise<void> {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    for (const [key, value] of entries) store.put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function clear(): Promise<void> {
   const db = await open();
   return new Promise((resolve, reject) => {

@@ -6,9 +6,24 @@ import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
 import { filesToFetch, syncedFile } from "../domain/media.ts";
 import type { NoteImage } from "../domain/types.ts";
-import { type Kind, allRecords, applyRemote } from "./store.ts";
+import { FIRST_KINDS, type Kind, allRecords, applyRemote, saveWith } from "./store.ts";
 import { count } from "../domain/plural.ts";
 import { remoteToApply } from "../domain/syncMerge.ts";
+import { logProblem } from "../problems.ts";
+
+/** The app's version, sent with each sync so a later Worker can warn an outdated app. */
+const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
+/** Largest record sent (the Worker refuses bigger ones by name). */
+const MAX_RECORD_CHARS = 1_000_000;
+
+/**
+ * Whether the Worker takes records of [kind]: the first kinds always; newer ones (Training...) once it
+ * has said it takes any kind. Until then they wait on this device, so updating the app before the
+ * Worker never stops sync.
+ */
+function serverTakes(kind: Kind): boolean {
+  return FIRST_KINDS.includes(kind) || (localStorage.getItem("serverFeatures") ?? "").split(",").includes("anyKind");
+}
 
 type Rec = Record<string, unknown>;
 interface Base { seq: number; records: Record<string, Rec> }
@@ -90,13 +105,19 @@ async function doSync(force: boolean): Promise<number> {
   const sent = new Map(allRecords());
   const local: Record<string, Rec> = Object.fromEntries(sent);
   const outgoing: Change[] = [];
+  const tooLarge: string[] = [];
   for (const key of new Set([...Object.keys(base.records), ...Object.keys(local)])) {
     const l = local[key], b = base.records[key];
     if (l === undefined && b === undefined) continue;
-    if (l !== undefined && b !== undefined && canonical(l) === canonical(b)) continue;
+    const lc = l === undefined ? undefined : canonical(l);
+    if (lc !== undefined && b !== undefined && lc === canonical(b)) continue;
     const slash = key.indexOf("/");
-    outgoing.push({ kind: key.slice(0, slash) as Kind, id: key.slice(slash + 1), data: l ?? null });
+    const kind = key.slice(0, slash) as Kind;
+    if (!serverTakes(kind)) continue; // waits here, out of the synced copy, until the Worker takes it
+    if (lc !== undefined && lc.length > MAX_RECORD_CHARS) { tooLarge.push(key); continue; }
+    outgoing.push({ kind, id: key.slice(slash + 1), data: l ?? null });
   }
+  if (tooLarge.length) logProblem("sync", `Too large to sync (over 1 MB), kept on this device: ${tooLarge.join(", ")}`);
   try {
     // A picture's file goes up before its record, so the phone can always fetch it. A video's file stays
     // here (the server takes pictures only): only its still goes up (domain/media.ts).
@@ -106,8 +127,12 @@ async function doSync(force: boolean): Promise<number> {
     }
     const reply = await api(`/api/sync${force ? "?force=1" : ""}`, {
       method: "POST",
-      body: JSON.stringify({ since: base.seq, changes: outgoing }),
-    }) as { seq: number; conflicts: number; changes: Change[] };
+      body: JSON.stringify({ since: base.seq, changes: outgoing, app: APP_VERSION }),
+    }) as { seq: number; conflicts: number; changes: Change[]; features?: string[] };
+    // What this Worker takes; newer kinds held back so far go in the next round once it takes them.
+    const hadAny = serverTakes("trainingEntries");
+    localStorage.setItem("serverFeatures", (reply.features ?? []).join(","));
+    if (!hadAny && serverTakes("trainingEntries")) again = true;
     // What was edited here while the request was out stays; the next round sends it.
     const { apply, kept } = remoteToApply(reply.changes, sent, allRecords());
     applyRemote(apply);
@@ -115,22 +140,46 @@ async function doSync(force: boolean): Promise<number> {
     const records = { ...base.records };
     for (const c of outgoing) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
     for (const c of reply.changes) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
-    await db.put("base", { seq: reply.seq, records });
+    // The received records and the copy they were synced against land together (see saveWith).
+    await saveWith([["base", { seq: reply.seq, records }]]);
     const now = Date.now();
     localStorage.setItem("lastSyncAt", String(now));
     const parts = ["Synced"];
     if (outgoing.length || reply.changes.length) parts.push(`sent ${outgoing.length}, received ${reply.changes.length}`);
     if (reply.conflicts) parts.push(`${count(reply.conflicts, "conflict")} settled`);
+    if (tooLarge.length) parts.push(`${count(tooLarge.length, "record")} too large to sync (see Problem log)`);
     setStatus({ state: "idle", lastSyncAt: now, message: parts.join(" · ") });
     await fetchMissing(filesToFetch(allRecords()));
     return reply.changes.length;
   } catch (e) {
     if (e instanceof HttpError && e.code === 401) setStatus({ state: "signed-out", message: "Wrong password" });
-    else if (e instanceof HttpError && e.code === 409) setStatus({ state: "needs-confirm", message: e.message });
+    else if (e instanceof HttpError && e.code === 409) {
+      const n = (await pendingDeletes()).filter(([k]) => k.startsWith("items/")).length;
+      setStatus({ state: "needs-confirm", message: `${count(n, "item")} deleted on this device ${n === 1 ? "is" : "are"} waiting. Delete ${n === 1 ? "it" : "them"} everywhere, or restore ${n === 1 ? "it" : "them"}?` });
+    }
     else if (e instanceof HttpError) setStatus({ state: "error", message: `Server error ${e.code}: ${e.message}` });
     else setStatus({ state: "offline", message: "Can't reach the server — changes are saved here and will sync later" });
     return 0;
   }
+}
+
+/** Records in the synced copy that are gone here: what this device deleted since its last sync. */
+async function pendingDeletes(): Promise<[string, Rec][]> {
+  const base = (await db.get<Base>("base")) ?? { seq: 0, records: {} };
+  const local = allRecords();
+  return Object.entries(base.records).filter(([k]) => !local.has(k));
+}
+
+/** The deletion guard held a sync back, and the user meant it: send the deletes anyway. */
+export function confirmDeletes(): Promise<number> {
+  return syncNow(true);
+}
+
+/** The deletion guard held a sync back, and it was a mistake: everything deleted here since the last sync comes back. */
+export async function restoreDeletes(): Promise<number> {
+  const back = await pendingDeletes();
+  applyRemote(back.map(([k, data]) => { const slash = k.indexOf("/"); return { kind: k.slice(0, slash) as Kind, id: k.slice(slash + 1), data }; }));
+  return syncNow();
 }
 
 let debounce: number | undefined;

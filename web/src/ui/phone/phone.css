@@ -359,6 +359,10 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .muted { color: var(--muted); }
 .phone .clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .phone .p-endspace { height: 88px; }
+/* A page that crashed (ErrorBoundary): a calm message with Reload, where the page was. */
+.phone .p-crashed { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 24px; text-align: center; color: var(--muted); height: 100%; }
+.phone .p-crashed b { color: var(--text); font-size: 18px; font-weight: 500; }
+.p-crashed.full { min-height: 100vh; }
 .phone .p-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
 .phone .p-divider { flex: none; height: 1px; background: var(--line); }
 

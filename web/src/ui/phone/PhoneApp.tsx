@@ -10,7 +10,7 @@ import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../shared/common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
-import { PhoneCategories, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
+import { PhoneCategories, PhoneProblems, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
 import { PhoneToday, resetToday, showTodayDay, todayViewedDay } from "./PhoneToday.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
@@ -23,6 +23,7 @@ import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKe
 import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendar, calendarGoToday, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
 import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.tsx";
+import { ErrorBoundary } from "../shared/ErrorBoundary.tsx";
 import "./phone.css";
 import "./wide.css";
 import { App as CapApp } from "@capacitor/app";
@@ -433,6 +434,10 @@ function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview
 
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
 const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; active: boolean }) {
+  return <ErrorBoundary where={tabKey}>{pageOf(tabKey, onNewAt, pending, active)}</ErrorBoundary>;
+}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active));
+
+function pageOf(tabKey: string, onNewAt: (day: number, min: number) => void, pending: SlotPreview | null, active: boolean) {
   switch (tabKey) {
     case "today": return <PhoneToday />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
@@ -441,7 +446,7 @@ const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: 
     case "alarms": return <PhoneAlarms active={active} />;
     default: return null;
   }
-}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active));
+}
 
 /** Full-screen pages over the pager: an item, search, settings. (The open note is the shell's own.) */
 function Overlay({ route, path, query }: { route: string; path: string[]; query: URLSearchParams }) {
@@ -456,9 +461,9 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
-    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : <PhoneSettings />;
+    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : <PhoneSettings />;
   }
-  return <div className={`p-overlay ${route === "graph" ? "graph" : ""}`}>{body}<div className="p-navstrip" aria-hidden="true" /></div>;
+  return <div className={`p-overlay ${route === "graph" ? "graph" : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
 }
 
 /**
@@ -516,8 +521,13 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       // The pages go a little further than the finger, so a short slide turns a page.
       pos.follow(clamp(g.from + (g.dir * BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST));
     };
+    // Whatever happens in [up], the slide ends: a throw mustn't leave the bar ignoring every touch.
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
+      try { up(e); } finally { stop(); }
+    };
+    const up = (e: PointerEvent) => {
+      if (!g) return;
       if (g.sliding) {
         swallowNextClick();
         const at = clamp(g.from + (g.dir * BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
@@ -531,7 +541,6 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
         // Pages caught mid-settle by the finger and not sent anywhere by the tap go on where they were going.
         if (!pos.resting) settleRef.current(pos.target);
       }
-      stop();
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;

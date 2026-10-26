@@ -8,7 +8,8 @@ import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, 
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
-import { resetLocal, signOut, syncNow } from "../../store/sync.ts";
+import { confirmDeletes, resetLocal, restoreDeletes, signOut, syncNow } from "../../store/sync.ts";
+import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
 import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, setServer, useWide } from "../../platform.ts";
@@ -211,6 +212,13 @@ export function PhoneSettings() {
         {/* The PC is served by the server itself; only the phone build is told where it is. */}
         {isNative && <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />}
         <ListItem headline="Status" supporting={<span className="ps-pre">{status}</span>} />
+        {/* The server held back deletions that would remove most items: the user says which was meant. */}
+        {sync.state === "needs-confirm" && (
+          <div className="ps-buttons">
+            <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await confirmDeletes(); setBusy(false); }}>Delete them</OutlinedButton>
+            <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await restoreDeletes(); setBusy(false); }}>Restore them</OutlinedButton>
+          </div>
+        )}
         <div className="ps-buttons">
           <OutlinedButton disabled={busy || sync.state === "signed-out"} onClick={async () => { setBusy(true); await syncNow(); setBusy(false); }}>Sync now</OutlinedButton>
           <OutlinedButton onClick={() => setDialog("signout")}>Sign out</OutlinedButton>
@@ -220,6 +228,7 @@ export function PhoneSettings() {
         <SectionHeader>Data</SectionHeader>
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
+        <ProblemsRow />
         {isNative && <UpdateRow />}
         <div className="p-endspace" />
       </div>
@@ -278,6 +287,41 @@ function CategoryDialog({ c, onClose }: { c: Category; onClose: () => void }) {
         <Segmented value={alert} options={[["NOTIFICATION", "Notification"], ["REMINDER", "Reminder"], ["ALARM", "Alarm"]]} onChange={setAlert} />
       </div>
     </Dialog>
+  );
+}
+
+// ---------- Problem log ----------
+
+function useProblems(): Problem[] {
+  const [list, setList] = useState(problems);
+  useEffect(() => onProblems(() => setList(problems())), []);
+  return list;
+}
+
+function ProblemsRow() {
+  const list = useProblems();
+  return <ListItem headline="Problem log" supporting={list.length ? `${count(list.length, "problem")} · last ${formatDateTime(list[0].at)}` : "Nothing has gone wrong"}
+    onClick={() => go("settings/problems")} />;
+}
+
+/** What went wrong on this device, to read or copy into a message (problems.ts). */
+export function PhoneProblems() {
+  const list = useProblems();
+  const copy = () => void navigator.clipboard.writeText(problemsText(list)).then(() => showSnackbar("Copied"), () => showSnackbar("Couldn't copy"));
+  return (
+    <Scaffold title="Problem log" back flush actions={list.length > 0 ? <>
+      <TextButton onClick={copy}>Copy</TextButton>
+      <TextButton onClick={clearProblems}>Clear</TextButton>
+    </> : undefined}>
+      <div className="p-content ps">
+        {list.length === 0 && <div className="ps-empty">Nothing has gone wrong on this device.</div>}
+        {list.map((p) => (
+          <ListItem key={`${p.at}${p.message}`} headline={<span className="ps-pre">{p.message}</span>}
+            supporting={<span className="ps-pre">{`${formatDateTime(p.at)} · ${p.kind}${p.detail ? `\n${p.detail.split("\n").slice(0, 4).join("\n")}` : ""}`}</span>} />
+        ))}
+        <div className="p-endspace" />
+      </div>
+    </Scaffold>
   );
 }
 

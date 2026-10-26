@@ -751,15 +751,18 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       settling = { stop: spring(dx, -dir * w, vx, moveLayers, finish), end: finish };
     };
 
+    // Whatever happens in [up], the gesture ends: a throw mustn't leave the grid ignoring every touch.
     const onUp = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
-      const cur = g;
+      try { up(e); } finally { end(); }
+    };
+    const up = (e: PointerEvent) => {
+      const cur = g!;
       if (cur.resize) {
         const info = placed.current.get(cur.key);
         setGhost(null);
         if (cur.block) cur.block.style.height = "";
         if (info && cur.snap && Number(cur.snap) !== info.p.end) { feel("settle"); setEventEnd(info.p.o, Number(cur.snap)); }
-        end();
         return;
       }
       if (cur.lifted) {
@@ -807,7 +810,6 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
           else setArmed({ day, min });
         }
       }
-      end();
     };
 
     const onCancel = (e: PointerEvent) => {

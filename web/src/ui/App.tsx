@@ -1,6 +1,7 @@
 import { useWide } from "../platform.ts";
 import { Login } from "./Login.tsx";
 import { PhoneApp } from "./phone/PhoneApp.tsx";
+import { ErrorBoundary } from "./shared/ErrorBoundary.tsx";
 import { useSyncStatus } from "./shared/settings.ts";
 
 export function App() {
@@ -13,5 +14,5 @@ export function App() {
   document.documentElement.classList.add("phone");
   document.documentElement.classList.toggle("wide", wide);
   if (sync.state === "signed-out") return <Login message={sync.message} />;
-  return <PhoneApp />;
+  return <ErrorBoundary where="App" full><PhoneApp /></ErrorBoundary>;
 }
