@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
-  KINDS, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
-  canonical, clientWins, deletionGuard, isPhone, keyOf, syncDeletionGuard,
+  FEATURES, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
+  canonical, clientWins, deletionGuard, isPhone, keyOf, kindsIn, recordsOf, syncDeletionGuard,
 } from "./records.ts";
 
 export interface Env {
@@ -14,7 +14,7 @@ export type PushResult =
   | { ok: false; reason: string };
 
 export type SyncResult =
-  | { ok: true; seq: number; applied: number; conflicts: number; changes: Change[] }
+  | { ok: true; seq: number; applied: number; conflicts: number; changes: Change[]; features: readonly string[] }
   | { ok: false; reason: string };
 
 export interface Change {
@@ -102,16 +102,26 @@ export class PlannerStore extends DurableObject<Env> {
       lastDevice: this.meta("lastDevice"),
       counts,
       storageBytes: this.sql.databaseSize,
+      features: FEATURES,
     };
   }
 
-  /** Makes the stored data match [snapshot]; only records that actually changed get a new seq. */
-  async push(snapshot: Snapshot, force: boolean, device: string | null): Promise<PushResult> {
-    const storedItems = this.sql
-      .exec<{ n: number }>("SELECT COUNT(*) AS n FROM records WHERE kind = 'items' AND deleted = 0")
+  /** Items stored and not in the trash: what the deletion guard protects. */
+  private liveItems(): number {
+    return this.sql
+      .exec<{ n: number }>("SELECT COUNT(*) AS n FROM records WHERE kind = 'items' AND deleted = 0 AND json_extract(data, '$.deletedAt') IS NULL")
       .one().n;
-    if (!force) {
-      const problem = deletionGuard(storedItems, snapshot.items.length);
+  }
+
+  /**
+   * Makes the stored data match [snapshot] for the kinds it carries (others are left alone); only
+   * records that actually changed get a new seq.
+   */
+  async push(snapshot: Snapshot, force: boolean, device: string | null): Promise<PushResult> {
+    const kinds = kindsIn(snapshot);
+    if (!force && kinds.includes("items")) {
+      const incoming = recordsOf(snapshot, "items").filter((r) => r.deletedAt === null || r.deletedAt === undefined).length;
+      const problem = deletionGuard(this.liveItems(), incoming);
       if (problem) return { ok: false, reason: problem };
     }
 
@@ -119,7 +129,7 @@ export class PlannerStore extends DurableObject<Env> {
     let deleted = 0;
     this.ctx.storage.transactionSync(() => {
       let seq = this.seq();
-      for (const kind of KINDS) {
+      for (const kind of kinds) {
         const existing = new Map<string, { data: string | null; deleted: number }>();
         for (const row of this.sql
           .exec<{ id: string; data: string | null; deleted: number }>("SELECT id, data, deleted FROM records WHERE kind = ?", kind)
@@ -127,7 +137,7 @@ export class PlannerStore extends DurableObject<Env> {
           existing.set(row.id, { data: row.data, deleted: row.deleted });
         }
         const seen = new Set<string>();
-        for (const record of snapshot[kind]) {
+        for (const record of recordsOf(snapshot, kind)) {
           const id = keyOf(kind, record);
           seen.add(id);
           const data = canonical(record);
@@ -152,8 +162,9 @@ export class PlannerStore extends DurableObject<Env> {
       if (device) this.setMeta("lastDevice", device);
     });
 
-    await this.maybeKeepHistory(snapshot);
-    return { ok: true, seq: this.seq(), upserted, deleted };
+    const seq = this.seq();
+    await this.maybeKeepHistory();
+    return { ok: true, seq, upserted, deleted };
   }
 
   /**
@@ -172,11 +183,16 @@ export class PlannerStore extends DurableObject<Env> {
         .toArray()[0];
 
     if (!force) {
-      const storedItems = this.sql
-        .exec<{ n: number }>("SELECT COUNT(*) AS n FROM records WHERE kind = 'items' AND deleted = 0")
-        .one().n;
-      const deletedItems = changes.filter((c) => c.kind === "items" && c.data === null && live("items", c.id)?.deleted === 0).length;
-      const problem = syncDeletionGuard(storedItems, deletedItems);
+      // Only items that are live and not in the trash count: emptying the trash and the 30-day purge
+      // remove items the user already threw away, which is never a mistake to guard against.
+      const removesLive = (c: IncomingChange) => {
+        if (c.kind !== "items" || c.data !== null) return false;
+        const row = live("items", c.id);
+        if (!row || row.deleted !== 0 || row.data === null) return false;
+        const stored = JSON.parse(row.data) as PlannerRecord;
+        return stored.deletedAt === null || stored.deletedAt === undefined;
+      };
+      const problem = syncDeletionGuard(this.liveItems(), changes.filter(removesLive).length);
       if (problem) return { ok: false, reason: problem };
     }
 
@@ -225,18 +241,19 @@ export class PlannerStore extends DurableObject<Env> {
       .filter((r) => !kept.has(`${r.kind}\u0000${r.id}`))
       .map((r) => ({ kind: r.kind, id: r.id, seq: r.seq, data: r.data === null ? null : (JSON.parse(r.data) as PlannerRecord) }));
 
-    if (applied > 0) await this.maybeKeepHistory(await this.snapshot());
-    return { ok: true, seq: this.seq(), applied, conflicts, changes: missing };
+    // The position is taken before anything else can run, so a sync arriving meanwhile can't be skipped.
+    const seq = this.seq();
+    if (applied > 0) await this.maybeKeepHistory();
+    return { ok: true, seq, applied, conflicts, changes: missing, features: FEATURES };
   }
 
   /** The current data in the same shape the Android app uses for backups. */
   async snapshot(): Promise<Snapshot> {
-    const out = { version: 1, createdAt: Date.now(), seq: this.seq() } as Snapshot & { seq: number };
-    for (const kind of KINDS) out[kind] = [];
+    const out: Snapshot = { version: 1, createdAt: Date.now(), seq: this.seq(), items: [] };
     for (const row of this.sql
       .exec<{ kind: Kind; data: string }>("SELECT kind, data FROM records WHERE deleted = 0 ORDER BY kind, seq")
       .toArray()) {
-      out[row.kind]?.push(JSON.parse(row.data));
+      ((out[row.kind] ??= []) as PlannerRecord[]).push(JSON.parse(row.data));
     }
     return out;
   }
@@ -286,24 +303,32 @@ export class PlannerStore extends DurableObject<Env> {
     return row ? { mime: row.mime, data: row.data } : null;
   }
 
-  /** Removes image files that no note has referred to for a while. */
+  /**
+   * Removes files no note has referred to for a while. A picture's file is its `hash`; a video's
+   * uploaded file is its still, `poster` (the video itself stays on the phone that added it).
+   */
   private gcBlobs() {
     this.sql.exec(
       `DELETE FROM blobs WHERE created_at < ? AND hash NOT IN (
-         SELECT json_extract(data, '$.hash') FROM records WHERE kind = 'images' AND deleted = 0)`,
+         SELECT json_extract(data, '$.hash') FROM records WHERE kind = 'images' AND deleted = 0 AND json_extract(data, '$.hash') IS NOT NULL
+         UNION SELECT json_extract(data, '$.poster') FROM records WHERE kind = 'images' AND deleted = 0 AND json_extract(data, '$.poster') IS NOT NULL)`,
       Date.now() - BLOB_GRACE_MS,
     );
   }
 
-  /** Keeps one compressed full copy per day (last 14), as a safety net against bad pushes. */
-  private async maybeKeepHistory(snapshot: Snapshot) {
+  /**
+   * Keeps one compressed full copy per day (last 14), as a safety net against bad pushes. The copy is
+   * only built when one is due.
+   */
+  private async maybeKeepHistory() {
     const last = this.sql.exec<{ t: number | null }>("SELECT MAX(created_at) AS t FROM history").one().t ?? 0;
     if (Date.now() - last < DAY_MS) return;
     this.gcBlobs();
+    const snapshot = await this.snapshot();
     const stream = new Blob([JSON.stringify(snapshot)]).stream().pipeThrough(new CompressionStream("gzip"));
     const gz = await new Response(stream).arrayBuffer();
     if (gz.byteLength > MAX_HISTORY_BYTES) return;
-    this.sql.exec("INSERT INTO history (created_at, items, gz) VALUES (?, ?, ?)", Date.now(), snapshot.items.length, gz);
+    this.sql.exec("INSERT INTO history (created_at, items, gz) VALUES (?, ?, ?)", Date.now(), recordsOf(snapshot, "items").length, gz);
     this.sql.exec(
       "DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT ?)",
       HISTORY_KEEP,

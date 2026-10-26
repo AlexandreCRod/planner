@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canonical, deletionGuard, keyOf, parseSnapshot, tokensMatch } from "../src/records.ts";
+import { MAX_RECORD_CHARS, canonical, deletionGuard, isKind, keyOf, kindsIn, parseSnapshot, recordsOf, tokensMatch } from "../src/records.ts";
 
 test("composite keys for join tables", () => {
   assert.equal(keyOf("completions", { itemId: 3, day: 20374 }), "3:20374");
@@ -13,10 +13,11 @@ test("canonical JSON ignores key order", () => {
   assert.notEqual(canonical({ a: 1 }), canonical({ a: 2 }));
 });
 
-test("snapshot validation fills missing kinds and rejects bad shapes", () => {
-  const ok = parseSnapshot({ items: [{ id: 1, title: "x" }] });
+test("snapshot validation keeps only the kinds sent, and rejects bad shapes", () => {
+  const ok = parseSnapshot({ items: [{ id: 1, title: "x" }], trainingEntries: [{ id: "p:t1" }] });
   assert.ok(typeof ok !== "string");
-  assert.deepEqual(ok.links, []);
+  assert.deepEqual(kindsIn(ok).sort(), ["items", "trainingEntries"]); // links weren't sent: a push leaves them alone
+  assert.deepEqual(recordsOf(ok, "links"), []);
   assert.equal(typeof parseSnapshot({ items: {} }), "string");
   assert.equal(typeof parseSnapshot({ completions: [{ itemId: 1 }] }), "string");
   assert.equal(typeof parseSnapshot("nope"), "string");
@@ -44,7 +45,8 @@ test("sync body validation", () => {
   assert.ok(typeof ok !== "string");
   assert.equal(ok.changes.length, 2);
   assert.equal(typeof parseSyncBody({ since: -1, changes: [] }), "string");
-  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "nope", id: "1", data: null }] }), "string");
+  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "Nope!", id: "1", data: null }] }), "string");
+  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "__proto__", id: "1", data: null }] }), "string");
   assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "items", id: "8", data: { id: 7 } }] }), "string");
 });
 
@@ -82,4 +84,27 @@ test("item fields pass through untouched, new ones included (e.g. routine)", () 
   assert.deepEqual(ok.changes[0].data, item);
   // What the store writes and later sends back keeps the field.
   assert.deepEqual(JSON.parse(canonical(ok.changes[0].data)), item);
+});
+
+test("newer record kinds need no Worker change; their records are keyed by id", () => {
+  assert.ok(isKind("items") && isKind("trainingEntries") && isKind("insightsDays"));
+  assert.ok(!isKind("Training") && !isKind("a") && !isKind("training-entries") && !isKind(""));
+  const ok = parseSyncBody({ since: 0, changes: [{ kind: "trainingEntries", id: "hm:t004", data: { id: "hm:t004", day: 1, updatedAt: 2 } }] });
+  assert.ok(typeof ok !== "string");
+  assert.equal(keyOf("trainingLifts", { id: "hm:t005:x001" }), "hm:t005:x001");
+  assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "trainingEntries", id: "x", data: { id: "y" } }] }), "string");
+});
+
+test("a record too large is refused by name", () => {
+  const big = { id: "p:Plan.md", text: "x".repeat(MAX_RECORD_CHARS) };
+  const r = parseSyncBody({ since: 0, changes: [{ kind: "trainingFiles", id: "p:Plan.md", data: big }] });
+  assert.equal(typeof r, "string");
+  assert.match(r as string, /^Too large: trainingFiles\/p:Plan\.md/);
+});
+
+test("newer kinds with edit times: the later edit wins between devices of the same kind", () => {
+  assert.equal(clientWins("trainingEntries", { updatedAt: 5 }, { updatedAt: 9 }), false);
+  assert.equal(clientWins("trainingEntries", { updatedAt: 9 }, { updatedAt: 5 }), true);
+  assert.equal(clientWins("trainingEntries", { updatedAt: 5 }, { updatedAt: 9 }, true, false), true); // the phone still wins over the PC
+  assert.equal(isPhone("plan-script"), false);
 });

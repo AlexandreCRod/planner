@@ -6,9 +6,10 @@ export { PlannerStore };
 /**
  * HTTP API in front of the Durable Object.
  *
- *   POST /api/sync[?force=1]         two-way sync: send local changes, receive the rest
+ *   POST /api/sync[?force=1]         two-way sync: send local changes, receive the rest (any record kind
+ *                                    with a well-formed name; the reply lists the Worker's features)
  *   GET  /api/status                 counts, sequence number, last push time
- *   PUT  /api/snapshot[?force=1]     replace the stored data with the app's full snapshot
+ *   PUT  /api/snapshot[?force=1]     replace the stored data of the kinds the snapshot carries
  *   GET  /api/snapshot               full data, same JSON shape as an app backup
  *   GET  /api/changes?since=N        records changed after sequence N (for other clients)
  *   GET  /api/history                daily safety copies kept by the server
@@ -61,7 +62,7 @@ export default {
           return json({ error: "Body is not valid JSON" }, 400);
         }
         const parsed = parseSyncBody(body);
-        if (typeof parsed === "string") return json({ error: parsed }, 400);
+        if (typeof parsed === "string") return json({ error: parsed }, parsed.startsWith("Too large") ? 413 : 400);
         const result = await store.sync(parsed.since, parsed.changes, url.searchParams.get("force") === "1", request.headers.get("X-Device"));
         return result.ok ? json(result) : json({ error: result.reason }, 409);
       }

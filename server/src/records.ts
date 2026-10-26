@@ -1,6 +1,7 @@
 // Pure helpers shared by the Durable Object and the tests: how a planner snapshot
 // (the same JSON the Android app writes as a backup) maps to individual records.
 
+/** The kinds the first apps knew. Any other kind with a well-formed name is accepted too (see [isKind]). */
 export const KINDS = [
   "items",
   "completions",
@@ -13,11 +14,39 @@ export const KINDS = [
   "images",
 ] as const;
 
-export type Kind = (typeof KINDS)[number];
+/** A record kind: one of [KINDS], or a newer one ("trainingEntries"...) that needs no Worker change. */
+export type Kind = string;
 export type PlannerRecord = Record<string, unknown>;
-export type Snapshot = { version: number; createdAt: number } & { [K in Kind]: PlannerRecord[] };
+/** A full copy: each kind's records under its name ("items": [...]), plus when it was made. */
+export type Snapshot = { version: number; createdAt: number; [kind: string]: unknown };
 
-/** Stable identity of a record within its kind. Join tables have composite keys. */
+/** The kinds a snapshot carries (the lists in it). */
+export function kindsIn(snapshot: Snapshot): Kind[] {
+  return Object.keys(snapshot).filter((k) => isKind(k) && Array.isArray(snapshot[k]));
+}
+
+/** A snapshot's records of one kind (none when it doesn't carry that kind). */
+export function recordsOf(snapshot: Snapshot, kind: Kind): PlannerRecord[] {
+  const list = snapshot[kind];
+  return Array.isArray(list) ? (list as PlannerRecord[]) : [];
+}
+
+/** What this Worker can do, reported by /api/status and every sync reply, so newer apps know what to send. */
+export const FEATURES = ["anyKind", "maxRecord"] as const;
+
+/** Largest record accepted, as canonical JSON (Durable Object rows hold 2 MB; leave room). */
+export const MAX_RECORD_CHARS = 1_000_000;
+
+/** A snapshot's own fields, never record kinds. */
+const RESERVED = new Set(["version", "createdAt", "seq", "constructor", "prototype"]);
+
+/** A kind name: a known one, or a new one made of letters and digits, starting lower case. */
+export function isKind(kind: unknown): kind is Kind {
+  return typeof kind === "string" && !RESERVED.has(kind) &&
+    ((KINDS as readonly string[]).includes(kind) || /^[a-z][A-Za-z0-9]{1,31}$/.test(kind));
+}
+
+/** Stable identity of a record within its kind. Join tables have composite keys; every newer kind uses `id`. */
 export function keyOf(kind: Kind, r: PlannerRecord): string {
   switch (kind) {
     case "completions":
@@ -45,16 +74,16 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** Returns the snapshot if it has the expected shape, otherwise an error message. */
+/**
+ * Returns the snapshot if it has the expected shape, otherwise an error message. A push replaces only
+ * the kinds the snapshot carries; a kind it leaves out is left alone (so an older app can't wipe a newer
+ * kind it doesn't know about).
+ */
 export function parseSnapshot(input: unknown): Snapshot | string {
-  if (input === null || typeof input !== "object") return "Body must be a JSON object";
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return "Body must be a JSON object";
   const obj = input as Record<string, unknown>;
-  for (const kind of KINDS) {
-    const list = obj[kind];
-    if (list === undefined) {
-      obj[kind] = [];
-      continue;
-    }
+  for (const [kind, list] of Object.entries(obj)) {
+    if (!isKind(kind) || list === undefined) continue;
     if (!Array.isArray(list)) return `"${kind}" must be an array`;
     for (const r of list) {
       if (r === null || typeof r !== "object" || Array.isArray(r)) return `"${kind}" contains a non-object`;
@@ -112,25 +141,30 @@ export function parseSyncBody(input: unknown): { since: number; changes: Incomin
   for (const c of obj.changes as unknown[]) {
     if (c === null || typeof c !== "object") return "Each change must be an object";
     const { kind, id, data } = c as Record<string, unknown>;
-    if (!KINDS.includes(kind as Kind)) return `Unknown kind "${String(kind)}"`;
+    if (!isKind(kind)) return `Unknown kind "${String(kind)}"`;
     if (typeof id !== "string" || id.length === 0) return "Each change needs a string id";
     if (data !== null && (typeof data !== "object" || Array.isArray(data))) return "data must be an object or null";
-    if (data !== null && keyOf(kind as Kind, data as PlannerRecord) !== id) return `id "${id}" does not match its ${String(kind)} record`;
-    changes.push({ kind: kind as Kind, id, data: data as PlannerRecord | null });
+    if (data !== null && keyOf(kind, data as PlannerRecord) !== id) return `id "${id}" does not match its ${kind} record`;
+    if (data !== null && canonical(data).length > MAX_RECORD_CHARS) return `Too large: ${kind}/${id} is over ${MAX_RECORD_CHARS / 1_000_000} MB`;
+    changes.push({ kind, id, data: data as PlannerRecord | null });
   }
   return { since, changes };
 }
 
-/** The PC app identifies itself as "PC browser"; any other named device is the phone. */
+/**
+ * The PC app identifies itself as "PC browser", and the training plan's push script as "plan-script";
+ * any other named device is the phone.
+ */
 export function isPhone(device: string | null): boolean {
-  return device !== null && device !== "PC browser";
+  return device !== null && device !== "PC browser" && device !== "plan-script";
 }
 
 /**
  * Both sides changed the same record since the client last synced: who wins?
  * - An edit beats a delete (nothing a person typed is silently thrown away).
  * - Two edits from different devices: the phone's version wins.
- * - Two edits of an item from the same kind of device: the later `updatedAt` wins.
+ * - Two edits from the same kind of device of a record that has an `updatedAt` (items, training
+ *   entries...): the later one wins.
  * - Anything else: the client that is syncing now wins (it holds the most recent action).
  */
 export function clientWins(
@@ -140,7 +174,7 @@ export function clientWins(
   if (incoming === null) return existing === null;
   if (existing === null) return true;
   if (incomingFromPhone !== existingFromPhone) return incomingFromPhone;
-  if (kind === "items") {
+  if (kind === "items" || (incoming.updatedAt !== undefined && existing.updatedAt !== undefined)) {
     const a = Number(incoming.updatedAt ?? 0);
     const b = Number(existing.updatedAt ?? 0);
     return a >= b;

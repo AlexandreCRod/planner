@@ -48,7 +48,7 @@ await step("rejects missing and wrong tokens", async () => {
 });
 
 // Start from a clean slate (force) so the test can be re-run.
-await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [] }) });
+await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [], images: [], trainingEntries: [], trainingFiles: [] }) });
 const startSeq = (await call("GET", "/api/status")).json.seq;
 
 const three = [item(1, "Stretch"), item(2, "Read"), item(3, "Water plants")];
@@ -136,7 +136,7 @@ await step("rejects malformed bodies", async () => {
 
 await step("two devices sync both ways", async () => {
   // Start empty, then the phone syncs its data for the first time.
-  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [] }) });
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [], images: [], trainingEntries: [], trainingFiles: [] }) });
   const s0 = (await call("GET", "/api/status")).json.seq;
   const PHONE = { device: "Google Pixel 6a" };
   const PC = { device: "PC browser" };
@@ -203,6 +203,48 @@ await step("image files: stored by hash, synced as records", async () => {
   const r = await call("POST", "/api/sync", { body: { since: s0, changes: [{ kind: "images", id: "77", data: image }] } });
   assert.equal(r.json.applied, 1);
   assert.deepEqual((await call("GET", "/api/snapshot")).json.images, [image]);
+});
+
+await step("newer record kinds sync with no Worker change, and the reply lists the features", async () => {
+  const status = (await call("GET", "/api/status")).json;
+  assert.ok(status.features.includes("anyKind"));
+  const entry = { id: "hm:t004", planId: "hm", sessionId: "t004", day: 20390, status: "planned", updatedAt: 5 };
+  const r = await call("POST", "/api/sync", { device: "Pixel", body: { since: status.seq, changes: [{ kind: "trainingEntries", id: "hm:t004", data: entry }] } });
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.ok(r.json.features.includes("anyKind"));
+  assert.deepEqual((await call("GET", "/api/snapshot")).json.trainingEntries, [entry]);
+  // An older app's push carries only the kinds it knows: the training records stay.
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([item(1, "Stretch")]) });
+  assert.deepEqual((await call("GET", "/api/snapshot")).json.trainingEntries, [entry]);
+  // The plan script's files: a plain record kind too.
+  const file = { id: "hm:planner.json", planId: "hm", file: "planner.json", text: "{}", pushedAt: 1 };
+  const s1 = (await call("GET", "/api/status")).json.seq;
+  const f = await call("POST", "/api/sync", { device: "plan-script", body: { since: s1, changes: [{ kind: "trainingFiles", id: file.id, data: file }] } });
+  assert.equal(f.json.applied, 1);
+});
+
+await step("a record over 1 MB is refused by name, with 413", async () => {
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const big = { id: "hm:Big.md", text: "x".repeat(1_000_001) };
+  const r = await call("POST", "/api/sync", { body: { since: s0, changes: [{ kind: "trainingFiles", id: big.id, data: big }] } });
+  assert.equal(r.status, 413);
+  assert.match(r.json.error, /trainingFiles\/hm:Big\.md/);
+});
+
+await step("the deletion guard ignores items already in the trash", async () => {
+  const many = Array.from({ length: 30 }, (_, i) => item(1000 + i, `Old ${i}`, { deletedAt: 1 }));
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([item(1, "Stretch"), ...many]) });
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  // Emptying the trash: 30 deletes of trashed items go through.
+  const purge = await call("POST", "/api/sync", { body: { since: s0, changes: many.map((m) => ({ kind: "items", id: String(m.id), data: null })) } });
+  assert.equal(purge.status, 200, JSON.stringify(purge.json));
+  // Deleting most live items is still refused, until forced.
+  const live = Array.from({ length: 24 }, (_, i) => item(2000 + i, `Live ${i}`));
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot(live) });
+  const s1 = (await call("GET", "/api/status")).json.seq;
+  const wipe = { since: s1, changes: live.slice(0, 20).map((m) => ({ kind: "items", id: String(m.id), data: null })) };
+  assert.equal((await call("POST", "/api/sync", { body: wipe })).status, 409);
+  assert.equal((await call("POST", "/api/sync?force=1", { body: wipe })).status, 200);
 });
 
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);
