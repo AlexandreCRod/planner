@@ -258,4 +258,15 @@ await step("web link previews: need the token, refuse private and non-http addre
   assert.equal((await call("GET", "/api/preview")).status, 400);
 });
 
+await step("place links: need the token, only Google Maps short links are accepted (all offline)", async () => {
+  const q = (u) => `/api/resolve-place?url=${encodeURIComponent(u)}`;
+  assert.equal((await call("GET", q("https://maps.app.goo.gl/abc"), { auth: null })).status, 401);
+  for (const bad of ["https://example.com/maps", "http://127.0.0.1/", "https://goo.gl/other", "https://maps.app.goo.gl.evil.com/x", "nope"]) {
+    const r = await call("GET", q(bad));
+    assert.equal(r.status, 400, bad);
+    assert.ok(r.json.error);
+  }
+  assert.equal((await call("GET", "/api/resolve-place")).status, 400);
+});
+
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);

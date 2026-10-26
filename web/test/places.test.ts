@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mapsQuery, matchScore, NO_PLACE, photonUrl, placeFields, placeLines, placesFromPhoton, stableMerge, usualArea, type Place } from "../src/domain/places.ts";
+import { locationLink, mapsQuery, mapsShortLink, matchScore, NO_PLACE, photonUrl, placeFields, placeLines, placesFromPhoton, stableMerge, usualArea, type Place } from "../src/domain/places.ts";
 import type { Item } from "../src/domain/types.ts";
 
 const feature = (props: Record<string, string>, lng: number, lat: number) => ({ geometry: { coordinates: [lng, lat] }, properties: props });
@@ -76,4 +76,16 @@ test("how a place reads, and what Google Maps is asked", () => {
   assert.deepEqual(placeLines({ ...picked, location: "Shoes shop" }), { main: "Shoes shop", sub: "Decathlon · Alfragide" });
   assert.equal(mapsQuery({ ...picked, location: "Shoes shop" }), "Decathlon, Rua da Quinta 3, Amadora");
   assert.deepEqual(placeLines(NO_PLACE), { main: "", sub: "" });
+});
+
+test("Google Maps short links pasted as a location", () => {
+  for (const ok of ["https://maps.app.goo.gl/AbC123", " https://goo.gl/maps/Xy12Z ", "https://share.google/aBcDeF", "http://maps.app.goo.gl/x"]) assert.equal(mapsShortLink(ok), ok.trim(), ok);
+  for (const bad of ["", "Cafe", "see https://maps.app.goo.gl/AbC123", "https://goo.gl/other", "https://maps.app.goo.gl/", "https://www.google.com/maps/place/X", "https://evil.com/maps.app.goo.gl/x"]) assert.equal(mapsShortLink(bad), null, bad);
+});
+
+test("a location that is only a web link opens that link, until it has a place", () => {
+  assert.equal(locationLink({ location: "https://maps.app.goo.gl/AbC123", lat: null, lng: null }), "https://maps.app.goo.gl/AbC123");
+  assert.equal(locationLink({ location: "https://maps.app.goo.gl/AbC123", lat: 1, lng: 2 }), null);
+  assert.equal(locationLink({ location: "Cafe https://maps.app.goo.gl/AbC123", lat: null, lng: null }), null);
+  assert.equal(locationLink({ location: "", lat: null, lng: null }), null);
 });

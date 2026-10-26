@@ -1,5 +1,7 @@
 import { isBlobHash, parseSnapshot, parseSyncBody, sha256Hex, tokensMatch } from "./records.ts";
+import { parseMapsLink } from "./places.ts";
 import { parseWebUrl } from "./preview.ts";
+import { resolvePlace } from "./resolve.ts";
 import { type Env, MAX_BLOB_BYTES, PlannerStore } from "./store.ts";
 import { previewOf } from "./web.ts";
 
@@ -23,6 +25,11 @@ export { PlannerStore };
  *                                    private addresses are refused (400); 4 s timeout, 256 KB of page read,
  *                                    5 redirects (each host checked); "image" is a data URL of at most 150 KB
  *                                    or "" (the device never contacts the site). 502 when the page can't be read.
+ *   GET  /api/resolve-place?url=...  the place behind a Google Maps short link (maps.app.goo.gl, goo.gl/maps,
+ *                                    share.google): { url, name, address, area, lat, lng }, the fields of a
+ *                                    picked place. Other hosts are refused (400); redirects (at most 5) are
+ *                                    followed by hand through Google's own hosts only; 422 when no place is
+ *                                    found where the link leads (share.google is best effort).
  *
  * Every request needs "Authorization: Bearer <API_TOKEN>".
  */
@@ -49,6 +56,13 @@ export default {
         let card = null;
         try { card = await previewOf(target); } catch { /* timed out or refused: reported below */ }
         return card ? json(card) : json({ error: "The page could not be read" }, 502);
+      }
+      if (path === "/api/resolve-place" && request.method === "GET") {
+        const target = parseMapsLink(url.searchParams.get("url"));
+        if (!target) return json({ error: "Only Google Maps short links can be resolved" }, 400);
+        let place = null;
+        try { place = await resolvePlace(target); } catch { /* timed out or refused: reported below */ }
+        return place ? json(place) : json({ error: "No place found for that link" }, 422);
       }
       if (path === "/api/status" && request.method === "GET") {
         return json(await store.status());

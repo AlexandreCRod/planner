@@ -1,6 +1,7 @@
 // Places for tasks and events: suggestions from Photon (komoot's OpenStreetMap search, made for
 // search-as-you-type and good at shop and place names), how a place is shown, and how the list of
 // suggestions changes as more is typed. Pure, checked by test/places.test.ts.
+import { findLinks } from "./links.ts";
 import type { Item } from "./types.ts";
 
 /** A suggestion: its name, the address under it, a short area to tell it apart, and its coordinates. */
@@ -136,3 +137,19 @@ export function placeFields(p: Place): Pick<Item, "location" | "placeName" | "ad
 /** An item with no place at all. */
 export const NO_PLACE: Pick<Item, "location" | "placeName" | "address" | "area" | "lat" | "lng"> =
   { location: "", placeName: "", address: "", area: "", lat: null, lng: null };
+
+/** Google's short map links (what its Share button gives), which the Worker can turn into a place. */
+const MAPS_SHORT = /^https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps(?:\/|$)|share\.google\/)\S+$/i;
+
+/** [text] as a Google Maps short link, when that is all it is (pasted into the location field), else null. */
+export function mapsShortLink(text: string | null | undefined): string | null {
+  const t = (text ?? "").trim();
+  return MAPS_SHORT.test(t) ? t : null;
+}
+
+/** The address a location is when it's just a web link (a map link not turned into a place), else null. */
+export function locationLink(item: Pick<Item, "location" | "lat" | "lng">): string | null {
+  if (item.lat != null && item.lng != null) return null;
+  const l = findLinks((item.location ?? "").trim());
+  return l.length === 1 && l[0].start === 0 && l[0].end === (item.location ?? "").trim().length ? l[0].url : null;
+}

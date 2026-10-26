@@ -25,10 +25,12 @@ import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
 import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
-import { NO_PLACE, type Place, mapsQuery, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
+import { fetchPlaceOfLink } from "../../store/preview.ts";
+import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { HeldTime } from "./TimeWheel.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
+import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
@@ -450,6 +452,8 @@ function EarlyAlarmControls({ itemId, reminders }: { itemId: number; reminders: 
  * what it finds under the field. A picked suggestion brings its name (the label shown, which can then be
  * changed), address, area and coordinates; the grey line under the field says which place it is. The list
  * only grows or shrinks at its end as more is typed, and never changes while a finger is on it.
+ * A pasted Google Maps share link is resolved through the Worker and becomes a picked place; if it can't
+ * be, the link stays as the location (and opens when tapped).
  */
 function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<Item>) => void; autoFocus?: boolean }) {
   const loc = d.location ?? "";
@@ -457,6 +461,7 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
   // What's being typed (null once a place is picked or the field is left), and the places it matches.
   const [query, setQuery] = useState<string | null>(null);
   const [found, setFound] = useState<Place[]>([]);
+  const [finding, setFinding] = useState(false);
   const touching = useRef(false);
   const waiting = useRef<Place[] | null>(null);
   // What the shown suggestions were found for: the typed town or area lifts its place to the top.
@@ -468,13 +473,25 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
   useEffect(() => { if (autoFocus) { const t = window.setTimeout(() => ref.current?.focus(), 80); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const q = query?.trim() ?? "";
-    if (q.length < 2) { if (!touching.current) setFound([]); return; }
+    if (q.length < 2 || mapsShortLink(q)) { if (!touching.current) setFound([]); return; }
     const ctl = new AbortController();
     const t = window.setTimeout(() => {
       void searchPlaces(q, usualArea(snapshot().items), ctl.signal).then((r) => { if (!ctl.signal.aborted) { asked.current = q; show(r); } });
     }, 250);
     return () => { clearTimeout(t); ctl.abort(); };
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+  const link = mapsShortLink(loc);
+  useEffect(() => {
+    if (!link) { setFinding(false); return; }
+    const ctl = new AbortController();
+    setFinding(true);
+    void fetchPlaceOfLink(link, ctl.signal).then((p) => {
+      if (ctl.signal.aborted) return;
+      setFinding(false);
+      if (p) { set(placeFields(p)); setQuery(null); setFound([]); }
+    });
+    return () => ctl.abort();
+  }, [link]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (p: Place) => { set(placeFields(p)); setQuery(null); setFound([]); ref.current?.blur(); };
   const { sub } = placeLines(d);
   const release = () => {
@@ -486,11 +503,11 @@ function LocationField({ d, set, autoFocus }: { d: Item; set: (patch: Partial<It
   };
   return <>
     <FieldRow icon="oLocationOn">
-      <span className={`grow pe-placefield ${sub ? "two" : ""}`}>
+      <span className={`grow pe-placefield ${sub || finding ? "two" : ""}`}>
         <input ref={ref} className="pe-input" placeholder="Add location" value={loc} enterKeyHint="done" autoCapitalize="words"
           onChange={(e) => { const v = e.target.value; set(v.trim() ? { location: v } : NO_PLACE); setQuery(v); }}
           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-        {sub && <span className="pe-place-sub ellipsis">{sub}</span>}
+        {(finding || sub) && <span className="pe-place-sub ellipsis">{finding ? "Finding the place…" : sub}</span>}
       </span>
       {loc && <IconButton icon="fClose" label="Clear location" onClick={() => { set(NO_PLACE); setQuery(null); setFound([]); }} />}
     </FieldRow>
@@ -700,8 +717,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
         {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a long press changes it. */}
         {(item.location ?? "").trim() && (
-          <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => openInGoogleMaps(mapsQuery(item))}
-            onLongPress={() => setEditing("location")} trailing={
+          <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => { const l = locationLink(item); if (l) openExternal(l); else openInGoogleMaps(mapsQuery(item)); }}
+            onLongPress={() => setEditing("location")} trailing={locationLink(item) ? undefined :
               <IconButton icon="oDirections" label="Directions" className="primary"
                 onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
             } />
