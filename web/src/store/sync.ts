@@ -42,9 +42,9 @@ export const getToken = () => localStorage.getItem("apiToken") ?? "";
 export function setToken(t: string) { localStorage.setItem("apiToken", t.trim()); }
 export function signOut() { localStorage.removeItem("apiToken"); setStatus({ state: "signed-out", message: "" }); }
 
-class HttpError extends Error { constructor(public code: number, msg: string) { super(msg); } }
+export class HttpError extends Error { constructor(public code: number, msg: string) { super(msg); } }
 
-async function api(path: string, init: RequestInit = {}): Promise<unknown> {
+export async function api(path: string, init: RequestInit = {}): Promise<unknown> {
   const res = await fetch(apiUrl(path), {
     ...init,
     headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json", "X-Device": deviceName(), ...(init.headers ?? {}) },

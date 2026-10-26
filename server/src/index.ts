@@ -1,5 +1,7 @@
 import { isBlobHash, parseSnapshot, parseSyncBody, sha256Hex, tokensMatch } from "./records.ts";
+import { parseWebUrl } from "./preview.ts";
 import { type Env, MAX_BLOB_BYTES, PlannerStore } from "./store.ts";
+import { previewOf } from "./web.ts";
 
 export { PlannerStore };
 
@@ -16,6 +18,11 @@ export { PlannerStore };
  *   GET  /api/history/:id            one of those copies
  *   PUT  /api/blobs/:sha256          store an image file (body = its bytes)
  *   GET  /api/blobs/:sha256          fetch an image file
+ *   GET  /api/preview?url=...        card for a web link, fetched only when asked (a long press on the link):
+ *                                    { url, title, description, site, image }. http(s) only; localhost and
+ *                                    private addresses are refused (400); 4 s timeout, 256 KB of page read,
+ *                                    5 redirects (each host checked); "image" is a data URL of at most 150 KB
+ *                                    or "" (the device never contacts the site). 502 when the page can't be read.
  *
  * Every request needs "Authorization: Bearer <API_TOKEN>".
  */
@@ -36,6 +43,13 @@ export default {
     const path = url.pathname.replace(/\/+$/, "");
 
     try {
+      if (path === "/api/preview" && request.method === "GET") {
+        const target = parseWebUrl(url.searchParams.get("url"));
+        if (!target) return json({ error: "Only public http(s) addresses can be previewed" }, 400);
+        let card = null;
+        try { card = await previewOf(target); } catch { /* timed out or refused: reported below */ }
+        return card ? json(card) : json({ error: "The page could not be read" }, 502);
+      }
       if (path === "/api/status" && request.method === "GET") {
         return json(await store.status());
       }

@@ -29,6 +29,7 @@ import { isNative } from "../../platform.ts";
 import { setNoteFind } from "./desk.ts";
 import { PhoneLinks } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
+import { useWebLinks } from "./WebLinks.tsx";
 
 const PASTELS = PAGE_COLORS.map((c) => (parseInt(c.slice(1), 16) | 0xff000000) | 0);
 const PATTERNS = ["Plain", "Lines", "Grid", "Dots"];
@@ -128,6 +129,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const undoState = useUndoState();
   const keepFocus = { onPointerDown: (e: React.PointerEvent) => e.preventDefault(), onMouseDown: (e: React.MouseEvent) => e.preventDefault() };
 
+  const webLinks = useWebLinks();
   return (
     <div ref={pageEl} className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg!, ["--pn-bg" as string]: page } : undefined}>
       <TopAppBar back title={isDaily ? formatDate(base.noteDay!) : ""} className="pn-appbar" actions={<>
@@ -178,7 +180,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
         {images.length > 0 && <MediaStrip media={images} onOpen={(i) => setViewing(images[i])} onLens={(start, pointer) => { feel("pickup"); setLens({ start, pointer }); }} />}
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
           <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
-            placeholder="Start writing…" onFocusChange={setFocused} />
+            placeholder="Start writing…" onFocusChange={setFocused} links={webLinks.act} />
           <CaretMarker editor={() => rich.current?.root() ?? null} host={() => textBox.current} show={focused && !kbUp} />
           <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks} />
         </div>
@@ -187,6 +189,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
         </div>
       </div>
 
+      {webLinks.card}
       {peek !== null && <NotePeek key={peek} id={peek} host={() => pageEl.current} onSwap={swap} onClose={() => setPeek(null)} />}
 
       {writing && <RichBar editor={rich} onHold={setHeld} extra={<RichBarButton icon="oAddPhotoAlternate" label="Add picture or video" onClick={pickPictures} />} />}

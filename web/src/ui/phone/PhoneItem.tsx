@@ -17,6 +17,9 @@ import {
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
+import { linkAtCaretOf, linkInTextarea } from "../shared/linkHit.ts";
+import { useLinkGesture } from "../shared/linkGesture.ts";
+import { useWebLinks } from "./WebLinks.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
@@ -855,6 +858,7 @@ function LocationSheet({ item, onClose, onSave }: { item: Item; onClose: () => v
 /**
  * A description box: plain text in an auto-growing field, no formatting tools. A tap puts the cursor
  * after the last character (where one usually carries on writing); once in, taps place it as usual.
+ * A tap on a web link in it opens the link, a long press (or right-click) shows its card.
  */
 function DescriptionField({ value, onChange, onBlur }: { value: string; onChange: (v: string) => void; onBlur?: () => void }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -866,12 +870,17 @@ function DescriptionField({ value, onChange, onBlur }: { value: string; onChange
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
   const end = () => { const el = ref.current; if (el) { const n = el.value.length; el.setSelectionRange(n, n); } };
-  return (
+  const webLinks = useWebLinks();
+  const { onLinkClick, onLinkKey, ...linkHandlers } = useLinkGesture(
+    (x, y) => (ref.current ? linkInTextarea(ref.current, x, y) : null), () => (ref.current ? linkAtCaretOf(ref.current) : null), webLinks.act);
+  return <>
     <textarea ref={ref} className="grow pe-desc" rows={1} placeholder="Add description" value={value} autoCapitalize="sentences"
       onFocus={() => { toEnd.current = true; end(); window.setTimeout(() => { toEnd.current = false; }, 500); }}
-      onClick={() => { if (toEnd.current) { toEnd.current = false; end(); } }}
+      onClick={(e) => { if (onLinkClick(e)) { toEnd.current = false; return; } if (toEnd.current) { toEnd.current = false; end(); } }}
+      onKeyDown={(e) => { onLinkKey(e); }} {...linkHandlers}
       onChange={(e) => onChange(e.target.value)} onBlur={onBlur} />
-  );
+    {webLinks.card}
+  </>;
 }
 
 /**

@@ -247,4 +247,15 @@ await step("the deletion guard ignores items already in the trash", async () => 
   assert.equal((await call("POST", "/api/sync?force=1", { body: wipe })).status, 200);
 });
 
+await step("web link previews: need the token, refuse private and non-http addresses (all offline)", async () => {
+  const q = (u) => `/api/preview?url=${encodeURIComponent(u)}`;
+  assert.equal((await call("GET", q("https://example.com/"), { auth: null })).status, 401);
+  for (const bad of ["http://127.0.0.1:8787/api/status", "http://localhost/", "http://[::1]/", "http://169.254.169.254/", "ftp://example.com/", "javascript:alert(1)", "nope"]) {
+    const r = await call("GET", q(bad));
+    assert.equal(r.status, 400, bad);
+    assert.ok(r.json.error);
+  }
+  assert.equal((await call("GET", "/api/preview")).status, 400);
+});
+
 console.log(`\nAll ${steps.length} end-to-end checks passed against ${base}`);

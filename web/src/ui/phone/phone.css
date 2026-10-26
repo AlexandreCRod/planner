@@ -1508,3 +1508,11 @@ html.phone[data-theme="dark"] {
 .phone .pn-picture video { max-width: 100%; max-height: 100%; }
 .phone .pn-picture-note { position: absolute; left: 24px; right: 24px; bottom: calc(var(--sab) + 32px); text-align: center; color: #fff; opacity: .85; font-size: 14px; line-height: 20px; }
 .phone .p-glide { position: relative; }
+
+/* ---------- Web link card (a long press on a link in a note or description) ---------- */
+.phone .wl-card { padding: 0 24px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.phone .wl-image { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; background: var(--p-sc-low); }
+.phone .wl-site { font-size: 12px; line-height: 16px; letter-spacing: .5px; color: var(--muted); }
+.phone .wl-title { font-size: 16px; line-height: 24px; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.phone .wl-desc { font-size: 14px; line-height: 20px; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.phone .wl-url { font-size: 12px; line-height: 16px; color: var(--p-primary); overflow-wrap: anywhere; margin-top: 4px; }

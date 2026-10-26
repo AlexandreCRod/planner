@@ -4,6 +4,8 @@ import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef
 import { editorText } from "../../domain/noteDraft.ts";
 import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickMoveOrder } from "../../domain/checklist.ts";
 import { feel } from "../phone/haptics.ts";
+import { linkAtCaretIn, linkInEditable } from "./linkHit.ts";
+import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
 const INDENT = "⠀⠀⠀";
@@ -141,8 +143,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   revision?: number; fontFamily?: string; placeholder?: string;
   /** Told when the text gains or loses the focus. */
   onFocusChange?: (focused: boolean) => void;
-}>(function RichEditor({ initialHtml, revision, onChange, minHeight = 360, fontFamily, placeholder, onFocusChange }, ref) {
+  /** What a tap and a long press do on a web link in the text (nothing special without it). */
+  links?: LinkActions;
+}>(function RichEditor({ initialHtml, revision, onChange, minHeight = 360, fontFamily, placeholder, onFocusChange, links }, ref) {
   const el = useRef<HTMLDivElement>(null);
+  const { onLinkClick, onLinkKey, ...linkHandlers } = useLinkGesture(
+    (x, y) => (el.current ? linkInEditable(el.current, x, y) : null), () => (el.current ? linkAtCaretIn(el.current) : null), links);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
   const checkEmpty = () => setEmpty(!el.current || isBlank(el.current));
   const wrap = useRef<HTMLDivElement>(null);
@@ -368,6 +374,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
 
   // Click on a box ticks it and strikes through the rest of the line.
   const onClick = (e: React.MouseEvent) => {
+    if (onLinkClick(e)) return;
     const pos = (document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null }).caretPositionFromPoint?.(e.clientX, e.clientY);
     const range = pos ? null : document.caretRangeFromPoint?.(e.clientX, e.clientY);
     const node = pos?.offsetNode ?? range?.startContainer;
@@ -427,6 +434,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   // coming until the line's box is removed (the ☐ button, or deleting the box while typing). The text
   // after the caret goes onto the new box, unticked, with its formatting.
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (onLinkKey(e)) return;
     if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { if (tickAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && !e.shiftKey && enterOnBox()) e.preventDefault();
@@ -485,7 +493,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
         style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
-        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
+        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} {...linkHandlers} />
       {heads.map((h) => (
         <button key={h.key} type="button" className={h.folded ? "pn-done-head is-folded" : "pn-done-head"} style={{ top: h.top, height: HEAD_H - 4 }}
           aria-expanded={!h.folded} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFold(h)}>
