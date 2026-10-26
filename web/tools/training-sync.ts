@@ -128,7 +128,8 @@ async function sync(changes: Change[]): Promise<{ state: State; received: number
   if (!res.ok || typeof body.seq !== "number") throw new Stop(`Server error ${res.status}: ${body.error ?? text.slice(0, 200)}`);
   // Without this, the Worker would refuse (or ignore) our kinds: stop before saving anything.
   if (!(body.features ?? []).includes("anyKind")) throw new Stop("The server doesn't take training records yet: update the Worker first.");
-  const received = body.changes ?? [];
+  // Only training records are kept: the rest of the user's data (notes, tasks...) never lands in this file.
+  const received = (body.changes ?? []).filter((c) => c.kind.startsWith("training"));
   const next = { seq: body.seq, records: applyChanges(state.records, changes, received) };
   saveState(next);
   return { state: next, received: received.length };
