@@ -34,6 +34,7 @@ import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from 
 import { BAR_GAIN, barSwipeReversed, barTarget } from "./pager.ts";
 import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
+import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
@@ -441,7 +442,7 @@ function pageOf(tabKey: string, onNewAt: (day: number, min: number) => void, pen
   }
 }
 
-/** Full-screen pages over the pager: an item, search, settings. (The open note is the shell's own.) */
+/** Full-screen pages over the pager: an item, search, settings, training. (The open note is the shell's own.) */
 function Overlay({ route, path, query }: { route: string; path: string[]; query: URLSearchParams }) {
   let body: ReactNode = null;
   if (route === "item" && path[1]) {
@@ -455,8 +456,10 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
     body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : <PhoneSettings />;
+  } else if (route === "training") {
+    body = <PhoneTraining query={query} />;
   }
-  return <div className={`p-overlay ${route === "graph" ? "graph" : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
+  return <div className={`p-overlay ${route === "graph" || route === "training" ? route : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
 }
 
 /**

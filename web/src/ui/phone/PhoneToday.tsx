@@ -21,6 +21,7 @@ import { HeldTime } from "./TimeWheel.tsx";
 import { BottomSheet } from "./m3.tsx";
 import { DayPickerSheet } from "./pickers.tsx";
 import { count } from "../../domain/plural.ts";
+import { TrainingLine } from "./PhoneTraining.tsx";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -121,6 +122,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   const top = <>
     {dayTasks.length > 0 && <PhoneProgress done={doneCount} total={dayTasks.length} />}
     {(routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
+    <TrainingLine day={day} t={t} />
     {nothing && <div className="hint empty p-nothing">{nothingText}</div>}
   </>;
   const tasks = <>

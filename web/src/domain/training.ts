@@ -480,13 +480,13 @@ export function repBests(lifts: Iterable<Lift>, tracked: ReadonlySet<string>, si
   return out;
 }
 
-/** The rep counts a lift sets a new best at, against every other lift: for the quiet "new best" mark. */
+/** The rep counts a lift sets a new best at, against every other lift: for the quiet "new best" mark. The first lift of an exercise sets none (nothing to beat yet). */
 export function newBestsIn(lift: Lift, others: Iterable<Lift>, tracked: ReadonlySet<string>, since: number | null): number[] {
   if (!tracked.has(lift.exercise) || (since !== null && lift.day < since)) return [];
   const before = repBests(others, tracked, since, lift.id).get(lift.exercise);
   const mine = repBests([lift], tracked, since).get(lift.exercise);
-  if (!mine) return [];
-  return BEST_REPS.filter((n) => { const m = mine.get(n); return !!m && (!before?.get(n) || m.kg > before.get(n)!.kg); });
+  if (!mine || !before) return [];
+  return BEST_REPS.filter((n) => { const m = mine.get(n); return !!m && (!before.get(n) || m.kg > before.get(n)!.kg); });
 }
 
 // ---------- The logs back to the plan session ----------

@@ -197,6 +197,7 @@ test("rep bests count sets since the return, at 1, 3 and 5 reps, and a new one i
   assert.deepEqual(newBestsIn(b, [old, a], tracked, since), [5]);
   assert.deepEqual(newBestsIn(a, [old, b], tracked, since), [1, 3]);
   assert.deepEqual(newBestsIn(lift("l3", 105, [[50, 5]]), [a, b], tracked, since), []);
+  assert.deepEqual(newBestsIn(a, [old], tracked, since), []); // the first since the return: nothing to beat
   assert.deepEqual(newBestsIn(lift("l4", 105, [[90, 5]], { exercise: "x002" }), [a], tracked, since), []); // not tracked
 });
 

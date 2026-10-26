@@ -1,0 +1,53 @@
+// Small pieces the Training screens share: an icon per kind of session, a phase's short name, the
+// numbered scales (effort, pain, RPE) and number formats.
+import type { SessionKind } from "../../domain/training.ts";
+import { feel } from "./haptics.ts";
+
+export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
+  switch (kind) {
+    case "run": return "oDirectionsRun";
+    case "gym": return "oFitnessCenter";
+    case "bike": return "oDirectionsBike";
+    case "futsal": return "oSportsSoccer";
+    case "record": return "oEmojiEvents";
+    default: return "oTaskAlt";
+  }
+}
+
+export const KIND_LABEL: Record<SessionKind, string> = { run: "Run", gym: "Gym", bike: "Bike", physio: "Physio", other: "Session" };
+
+/** "Week 1 – Re-entry" → ["Week 1", "Re-entry"]; a name without a dash is all short. */
+export function phaseNames(name: string): [string, string] {
+  const m = /^(.*?)\s+[–—-]\s+(.*)$/.exec(name);
+  return m ? [m[1], m[2]] : [name, ""];
+}
+
+/** 60 → "60", 62.5 → "62.5". */
+export const fmtKg = (kg: number) => (Number.isInteger(kg) ? String(kg) : String(Math.round(kg * 100) / 100));
+
+/** "2–3" sets of "5" → "2–3 × 5"; one set shows only its reps ("5 min"). */
+export const setsText = (sets: string, reps: string) => (sets && sets !== "1" ? `${sets} × ${reps}` : reps);
+
+/** The query that keeps an older plan open while moving between the Training screens. */
+export const planQ = (planId: string | null) => (planId ? `&p=${encodeURIComponent(planId)}` : "");
+
+/** A short random id for futsal and records (never derived from text or position). */
+export const randomId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+
+/** A row of numbered buttons (effort 1–10, pain 0–10, RPE): a tap picks, a tap on the picked one clears it. */
+export function Scale({ label, hint, from, to, value, onPick, disabled }: {
+  label: string; hint?: string; from: number; to: number; value: number | null; onPick: (v: number | null) => void; disabled?: boolean;
+}) {
+  return (
+    <div className="tr-scale">
+      <div className="tr-scale-head"><span>{label}</span>{hint && <span className="hint">{hint}</span>}</div>
+      <div className="tr-scale-row" role="radiogroup" aria-label={label}>
+        {Array.from({ length: to - from + 1 }, (_, k) => from + k).map((n) => (
+          <button key={n} role="radio" aria-checked={value === n} className={value === n ? "on" : ""} disabled={disabled}
+            onClick={() => { feel("tick"); onPick(value === n ? null : n); }}>{n}</button>
+        ))}
+      </div>
+    </div>
+  );
+}

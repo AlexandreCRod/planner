@@ -18,6 +18,7 @@ import { EventRow, TaskRow, go, openItem, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
@@ -103,6 +104,8 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))
     && (showRoutines || !isRoutineItem(i))), [s, f, showRoutines]);
   const noteDays = useMemo(() => new Set(s.items.filter((i) => i.type === "NOTE" && i.noteDay !== null).map((i) => i.noteDay!)), [s]);
+  // Training days get a light mark by the date (the session itself is on the Training page).
+  const trainDays = useTrainingDays();
   const grid = mode === "day" || mode === "3day" || mode === "week";
 
   const menuItems: MenuItem[] = [
@@ -128,9 +131,9 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
         </div>
       </header>
       <div className="p-calbody">
-        {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} onNewAt={onNewAt} pending={pending} noteDays={noteDays}
+        {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
           onDayHeader={(d) => { setAnchor(d); setMode("day"); }} onDayNote={(d) => openDailyNote(s, d)} />}
-        {mode === "month" && <MonthView s={s} items={items} anchor={anchor} noteDays={noteDays} onStep={step}
+        {mode === "month" && <MonthView s={s} items={items} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
           onLong={(d) => { setAnchor(d); onNewAt(d, 9 * 60); }} onDayNote={(d) => openDailyNote(s, d)} />}
         {mode === "year" && <YearView s={s} items={items} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
@@ -175,8 +178,8 @@ function OccurrenceRow({ o, s, now }: { o: Occurrence; s: Snapshot; now: number 
 
 const monthOf = (d: number) => { const { y, m } = ymd(d); return epochOf(y, m, 1); };
 
-function MonthView({ s, items, anchor, noteDays, onStep, onPick, onLong, onDayNote }: {
-  s: Snapshot; items: Item[]; anchor: number; noteDays: Set<number>; onStep: (dir: number) => void;
+function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLong, onDayNote }: {
+  s: Snapshot; items: Item[]; anchor: number; noteDays: Set<number>; trainDays: Map<number, string>; onStep: (dir: number) => void;
   onPick: (d: number) => void; onLong: (d: number) => void; onDayNote: (d: number) => void;
 }) {
   const now = useNow();
@@ -193,7 +196,7 @@ function MonthView({ s, items, anchor, noteDays, onStep, onPick, onLong, onDayNo
         <div className="p-hstrip" ref={strip}>
           {months.map((first, i) => (
             <div key={first} className={`p-hpanel ${i === 1 ? "cur" : ""}`} style={{ left: `${(i - 1) * 100}%` }} aria-hidden={i !== 1}>
-              <MonthGrid s={s} items={items} first={first} t={t} selected={i === 1 ? anchor : null} noteDays={noteDays} onPick={onPick} onLong={onLong} />
+              <MonthGrid s={s} items={items} first={first} t={t} selected={i === 1 ? anchor : null} noteDays={noteDays} trainDays={trainDays} onPick={onPick} onLong={onLong} />
             </div>
           ))}
         </div>
@@ -212,8 +215,8 @@ function MonthView({ s, items, anchor, noteDays, onStep, onPick, onLong, onDayNo
   );
 }
 
-const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDays, onPick, onLong }: {
-  s: Snapshot; items: Item[]; first: number; t: number; selected: number | null; noteDays: Set<number>;
+const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDays, trainDays, onPick, onLong }: {
+  s: Snapshot; items: Item[]; first: number; t: number; selected: number | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onPick: (d: number) => void; onLong: (d: number) => void;
 }) {
   const start = startOfWeek(first, mondayFirst());
@@ -254,6 +257,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
                   <div className="p-mnum-row">
                     <span className={`p-mnum ${d === t ? "today" : ""} ${ymd(d).m !== month ? "out" : ""}`}>{ymd(d).d}</span>
                     {noteDays.has(d) && <MIcon name="oEditNote" size={11} />}
+                    {trainDays.has(d) && <span className="tr-mark"><MIcon name={trainDays.get(d)!} size={11} /></span>}
                   </div>
                   {room > 0 && <span className="p-mspace" style={{ height: room * 11 }} />}
                   {own.map((o) => {
@@ -396,9 +400,9 @@ interface Gesture {
   resize: boolean;
 }
 
-function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, onDayHeader, onDayNote }: {
+function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
   s: Snapshot; items: Item[]; first: number; count: number; onStep: (dir: number) => void;
-  onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>;
+  onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
   const days = useMemo(() => Array.from({ length: count }, (_, i) => first + i), [first, count]);
@@ -935,12 +939,16 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                 <span className="wdl">{WEEKDAYS_LONG[weekday(d) - 1]}</span>
                 <span className="my">{monthLong(ymd(d).m)} {ymd(d).y}</span>
               </span>
+              {trainDays.has(d) && (
+                <button className="note" aria-label="Training" onClick={(e) => { e.stopPropagation(); go(`training?d=${d}`); }}><MIcon name={trainDays.get(d)!} size={16} /></button>
+              )}
               <button className="note" onClick={(e) => { e.stopPropagation(); onDayNote(d); }}>{noteDays.has(d) ? "Note" : "＋ note"}</button>
             </div>
           ) : (
             <div key={d} className={`pg-dh ${d === t ? "today" : ""} ${j % count === 0 ? "range" : ""}`} role="button" onClick={() => onDayHeader(d)}>
               <span className="wd">{NARROW[weekday(d) - 1]}</span>
               <span className="num">{ymd(d).d}</span>
+              {trainDays.has(d) && <span className="tr-mark"><MIcon name={trainDays.get(d)!} size={11} /></span>}
               {count <= 3 && (
                 <button className="note" onClick={(e) => { e.stopPropagation(); onDayNote(d); }}>{noteDays.has(d) ? "Note" : "＋ note"}</button>
               )}

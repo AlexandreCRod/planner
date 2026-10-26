@@ -1,0 +1,488 @@
+// The Training page (#/training): the active plan a phase at a time, as the plan session wrote it.
+// The phase strip at the top; the phase's summary, notes and placement rules; To place (sessions without a
+// day: tap one, then tap a day); then each day with its sessions and futsal. A placed session can be held
+// and dragged to another day (or back to To place). The ring on a row ticks it done, and a small "how it
+// went" row opens under it and closes by itself. A tap on a row opens the session (TrainingSession.tsx):
+// over the week on the phone, beside it in a wide window. Bests and the documents are in the top bar.
+// Also here: Today's training line and the calendar's light marks.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
+import { count } from "../../domain/plural.ts";
+import {
+  type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, leftToPlace, newEntry, phaseIndexAt,
+  phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
+} from "../../domain/training.ts";
+import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
+import { useWide } from "../../platform.ts";
+import { go, replaceRoute } from "../shared/common.tsx";
+import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
+import { feel } from "./haptics.ts";
+import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
+import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { edgeSpeed } from "./selectScroll.ts";
+import { ExerciseHistory, TrainingBests, TrainingDocs } from "./TrainingDocs.tsx";
+import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
+import { kindIcon, phaseNames, planQ, randomId } from "./trainingParts.tsx";
+import "./training.css";
+
+/** Held this long, a placed session lifts to be dragged to another day (as a note card does). */
+const LONG_PRESS = 450;
+/** The "how it went" row after a tick closes by itself after this long untouched. */
+const ASK_MS = 8000;
+
+export function PhoneTraining({ query }: { query: URLSearchParams }) {
+  const tr = useTraining();
+  const t = todayEpoch();
+  const wide = useWide();
+  const planId = query.get("p");
+  const active = activeOf(tr, t);
+  const lp = (planId && tr.plans.find((p) => p.plan.id === planId)) || active;
+  if (!lp) {
+    return (
+      <Scaffold title="Training" back>
+        <EmptyHint>No training plan on this device yet. The plan session sends it from the PC, and it arrives with the next sync.</EmptyHint>
+      </Scaffold>
+    );
+  }
+  const view = query.get("view");
+  const sid = query.get("s");
+  const readOnly = lp !== active;
+  const d = query.get("d");
+  return <>
+    <TrainingWeek tr={tr} lp={lp} t={t} wide={wide} sessionId={view ? null : sid} readOnly={readOnly} planId={planId} focusDay={d ? Number(d) : null} />
+    {!wide && sid && !view && (
+      <div className="tr-layer"><SessionView key={sid} tr={tr} lp={lp} sessionId={sid} readOnly={readOnly} onClose={() => history.back()} /></div>
+    )}
+    {view && (
+      <div className="tr-layer full">
+        {view === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
+          : view === "bests" ? <TrainingBests tr={tr} lp={lp} planId={planId} />
+          : view === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
+          : null}
+      </div>
+    )}
+  </>;
+}
+
+// The phase looked at and the list's scroll, kept while the page is away (a document, the session).
+let kept: { plan: string; phase: number; scroll: number } | null = null;
+
+function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }: {
+  tr: Training; lp: LoadedPlan; t: number; wide: boolean; sessionId: string | null; readOnly: boolean; planId: string | null; focusDay: number | null;
+}) {
+  const { plan } = lp;
+  const [phase, setPhaseState] = useState(() =>
+    focusDay !== null ? phaseIndexAt(plan, focusDay) : kept?.plan === plan.id ? Math.min(kept.phase, plan.phases.length - 1) : phaseIndexAt(plan, t));
+  const [picked, setPicked] = useState<string | null>(null);
+  const [asked, setAsked] = useState<string | null>(null);
+  const [futsal, setFutsal] = useState<Entry | "new" | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(() => localStorage.getItem("trainingRulesOpen") === "1");
+  const scroller = useRef<HTMLDivElement>(null);
+  const setPhase = (i: number) => { setPhaseState(i); setPicked(null); if (scroller.current) scroller.current.scrollTop = 0; };
+  useLayoutEffect(() => {
+    if (kept?.plan === plan.id && focusDay === null && scroller.current) scroller.current.scrollTop = kept.scroll;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { kept = { plan: plan.id, phase, scroll: scroller.current?.scrollTop ?? 0 }; });
+
+  const sessions = useMemo(() => new Map(sessionsOf(plan).map((s) => [s.id, s])), [plan]);
+  const place = (sid: string, day: number | null) => {
+    const s = sessions.get(sid);
+    if (!s || s.locked) return;
+    const before = entryFor(plan, s, training().entries);
+    if (dayOfSession(s, training().entries.get(before.id)) === day) { setPicked(null); return; }
+    patchEntry(lp, s, { day });
+    feel("settle");
+    setPicked(null);
+    showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
+  };
+  const drag = useDayDrag(scroller, place);
+
+  if (!plan.phases.length) return <Scaffold title="Training" back><EmptyHint>This plan has no phases yet.</EmptyHint></Scaffold>;
+  const ph = plan.phases[phase];
+  const v = phaseView(plan, phase, tr.entries, tr.entries.values());
+  const [short, long] = phaseNames(ph.name);
+  const open = (sid: string) => {
+    const route = `training?s=${encodeURIComponent(sid)}${planQ(planId)}`;
+    // Wide, the open session is swapped in place, so closing it goes back to the week, not through each one.
+    if (wide && sessionId) replaceRoute(route); else go(route);
+  };
+  const tick = (s: Session, e: Entry) => {
+    if (readOnly) return;
+    const next = e.status === "planned" ? "done" : "planned";
+    if (next === "done") { feel("confirm"); setAsked(entryId(plan.id, s.id)); } else setAsked(null);
+    setSessionStatus(lp, s, next, t);
+  };
+  const tickFutsal = (e: Entry) => {
+    if (readOnly) return;
+    if (e.status !== "done") feel("confirm");
+    saveEntry({ ...e, status: e.status === "done" ? "planned" : "done", doneDay: e.status === "done" ? null : e.day });
+  };
+  const pickedSession = picked ? sessions.get(picked) : undefined;
+  const showToPlace = v.toPlace.length > 0 || drag.lifted !== null;
+
+  const week = (
+    <div className="p-content tr-week" ref={scroller}>
+      <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
+      {readOnly && <div className="tr-oldplan">An earlier plan: read only.</div>}
+      <ChipRow className="tr-phases">
+        {plan.phases.map((p, i) => (
+          <FilterChip key={i} selected={i === phase} onClick={() => setPhase(i)}>
+            {phaseNames(p.name)[0]}{t >= p.start && t <= p.end ? <span className="tr-nowdot" aria-label="now" /> : null}
+          </FilterChip>
+        ))}
+      </ChipRow>
+      <div className="tr-phase">
+        <div className="tr-phase-name">{long || short}</div>
+        <div className="tr-phase-sub">{formatDate(ph.start)} – {formatDate(ph.end)}{ph.summary ? ` · ${ph.summary}` : ""}</div>
+        {ph.notes.map((n, i) => <div key={i} className="tr-phase-note">{n}</div>)}
+        {ph.rules.length > 0 && <>
+          <button className="tr-rules-head" aria-expanded={rulesOpen}
+            onClick={() => { const o = !rulesOpen; setRulesOpen(o); localStorage.setItem("trainingRulesOpen", o ? "1" : "0"); }}>
+            <span>Placement rules</span><MIcon name={rulesOpen ? "fExpandLess" : "fExpandMore"} size={18} />
+          </button>
+          {rulesOpen && <ul className="tr-rules">{ph.rules.map((r, i) => <li key={i}>{r}</li>)}</ul>}
+        </>}
+      </div>
+
+      {showToPlace && (
+        <div className={`tr-toplace ${drag.over === "none" ? "over" : ""}`} data-drop="none">
+          <SectionHeader>To place</SectionHeader>
+          {pickedSession
+            ? <div className="tr-placing"><span>Tap a day for <b>{pickedSession.title}</b></span><TextButton onClick={() => setPicked(null)}>Cancel</TextButton></div>
+            : !readOnly && v.toPlace.some((s) => (tr.entries.get(entryId(plan.id, s.id))?.status ?? "planned") === "planned") && <div className="tr-hint">Tap a session, then the day it goes on.</div>}
+          {v.toPlace.length === 0 && <div className="tr-hint">Drop here to take it off its day.</div>}
+          <div className="tr-cards">
+            {v.toPlace.map((s) => {
+              const e = entryFor(plan, s, tr.entries);
+              return (
+                <div key={s.id} className={`tr-card-place ${picked === s.id ? "on" : ""} ${picked && picked !== s.id ? "dim" : ""} ${e.status}`}>
+                  <button className="main" onClick={() => { if (readOnly || e.status !== "planned") open(s.id); else { feel("tick"); setPicked(picked === s.id ? null : s.id); } }}>
+                    <MIcon name={kindIcon(s.kind)} size={20} />
+                    <span className="text"><span className="title">{s.title}</span>
+                      <span className="detail">{[s.detail, s.optional ? "optional" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span></span>
+                  </button>
+                  <IconButton icon="fKeyboardArrowRight" label={`Open ${s.title}`} onClick={() => open(s.id)} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {v.days.map(({ day, items }) => (
+        <div key={day} data-drop={day}
+          className={`tr-day ${day === t ? "today" : ""} ${day < ph.start || day > ph.end ? "outside" : ""} ${picked ? "target" : ""} ${drag.over === String(day) ? "over" : ""}`}
+          onClickCapture={picked ? (ev) => { ev.stopPropagation(); ev.preventDefault(); place(picked, day); } : undefined}>
+          <div className="tr-dayhead"><span>{formatDate(day)}</span>{day === t && <span className="tr-todaytag">Today</span>}</div>
+          {items.length === 0 && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
+          {items.map(({ session: s, entry: e }) => s ? (
+            <div key={s.id}>
+              <SessionRow s={s} e={e} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
+                onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly || s.locked ? undefined : drag.props(s.id)} />
+              {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
+            </div>
+          ) : (
+            <FutsalRow key={e.id} e={e} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+          ))}
+        </div>
+      ))}
+      {!readOnly && (
+        <div className="tr-actions">
+          <button className="p-assist" onClick={() => setFutsal("new")}><MIcon name="oSportsSoccer" size={18} /><span>Futsal</span></button>
+        </div>
+      )}
+      <div className="p-endspace" />
+    </div>
+  );
+
+  return (
+    <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} back flush actions={<>
+      <IconButton icon="oEmojiEvents" label="Bests" onClick={() => go(`training?view=bests${planQ(planId)}`)} />
+      <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
+    </>}>
+      {wide ? (
+        <div className="tr-split">
+          {week}
+          <div className="tr-side">
+            {sessionId
+              ? <SessionView key={sessionId} tr={tr} lp={lp} sessionId={sessionId} readOnly={readOnly} closeIcon
+                  onClose={() => replaceRoute(`training${planId ? `?p=${encodeURIComponent(planId)}` : ""}`)} />
+              : <div className="tr-side-hint"><MIcon name="oDirectionsRun" size={40} /><span>Open a session to see its card and log it here</span></div>}
+          </div>
+        </div>
+      ) : week}
+      {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t} onClose={() => setFutsal(null)} />}
+    </Scaffold>
+  );
+}
+
+function SessionRow({ s, e, selected, lifted, onTick, onOpen, dragProps }: {
+  s: Session; e: Entry; selected: boolean; lifted: boolean; onTick: () => void; onOpen: () => void;
+  dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
+}) {
+  return (
+    <div className={`tr-row ${e.status} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
+      <button className="tr-ring" aria-pressed={e.status === "done"} aria-label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`}
+        onClick={(ev) => { ev.stopPropagation(); onTick(); }}>
+        {e.status === "done" && <MIcon name="fCheck" size={16} />}
+      </button>
+      <MIcon name={kindIcon(s.kind)} size={20} />
+      <span className="tr-row-text">
+        <span className="title">{s.title}</span>
+        <span className="detail">{[s.detail, s.optional ? "optional" : "", s.locked ? "fixed" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span>
+      </span>
+    </div>
+  );
+}
+
+function FutsalRow({ e, onTick, onOpen }: { e: Entry; onTick: () => void; onOpen: () => void }) {
+  return (
+    <div className={`tr-row ${e.status}`} role="button" onClick={onOpen}>
+      <button className="tr-ring" aria-pressed={e.status === "done"} aria-label={e.status === "done" ? "Futsal: done. Tap to undo" : "Mark futsal done"}
+        onClick={(ev) => { ev.stopPropagation(); onTick(); }}>
+        {e.status === "done" && <MIcon name="fCheck" size={16} />}
+      </button>
+      <MIcon name="oSportsSoccer" size={20} />
+      <span className="tr-row-text">
+        <span className="title">Futsal</span>
+        <span className="detail">{[e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Under a session just ticked: effort, pain and a note, all optional. Closes by itself once left alone. */
+function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; onDone: () => void }) {
+  const timer = useRef(0);
+  const focused = useRef(false);
+  const arm = () => { clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (!focused.current) onDone(); }, ASK_MS); };
+  useEffect(() => { arm(); return () => clearTimeout(timer.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="tr-ask" onPointerDown={arm} onKeyDown={arm}
+      onFocus={() => { focused.current = true; }} onBlur={() => { focused.current = false; arm(); }}>
+      <HowItWent lp={lp} s={s} e={e} readOnly={false} compact />
+    </div>
+  );
+}
+
+/** Adds or changes a futsal game: its day (in the phase shown), how long, a note. */
+function FutsalSheet({ plan, ph, entry, t, onClose }: { plan: Plan; ph: Phase; entry: Entry | null; t: number; onClose: () => void }) {
+  const [day, setDay] = useState(entry?.day ?? Math.min(ph.end, Math.max(ph.start, t)));
+  const [dur, setDur] = useState<number | null>(entry ? entry.durationMin : 60);
+  const [note, setNote] = useState(entry?.note ?? "");
+  const days = Array.from({ length: ph.end - ph.start + 1 }, (_, k) => ph.start + k);
+  if (!days.includes(day)) days.unshift(day);
+  const save = (close: () => void) => {
+    const base = entry ?? newEntry({ id: `futsal-${randomId()}`, planId: plan.id, kind: "futsal", title: "Futsal" });
+    saveEntry({ ...base, day, durationMin: dur, note: note.trim(), doneDay: base.status === "done" ? day : null });
+    feel("settle");
+    close();
+  };
+  return (
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="tr-futsal">
+        <div className="tr-sheet-title t-title-medium">{entry ? "Futsal" : "Add futsal"}</div>
+        <div className="tr-label">Day</div>
+        <ChipRow>{days.map((d) => <FilterChip key={d} selected={d === day} onClick={() => setDay(d)}>{formatDate(d)}</FilterChip>)}</ChipRow>
+        <div className="tr-label">How long</div>
+        <ChipRow>{[45, 60, 75, 90, 120].map((m) => <FilterChip key={m} selected={dur === m} onClick={() => setDur(dur === m ? null : m)}>{m} min</FilterChip>)}</ChipRow>
+        <div className="tr-futsal-note"><OutlinedTextField label="Note" value={note} onChange={setNote} onEnter={() => save(close)} /></div>
+        <div className="p-sheet-buttons">
+          {entry && <TextButton onClick={() => { saveEntry({ ...entry, deletedAt: Date.now() }); close(); showSnackbar("Futsal removed", "Undo", () => saveEntry({ ...entry, deletedAt: null })); }}>Remove</TextButton>}
+          <span className="grow" />
+          <TextButton onClick={close}>Cancel</TextButton>
+          <button className="p-filled-btn" onClick={() => save(close)}>Save</button>
+        </div>
+      </div>
+    )}</BottomSheet>
+  );
+}
+
+/**
+ * After the plan session pushes an update: the changes that affect a day the user had (a session taken
+ * out, a fixed day moved, a day now outside its week), until dismissed. With nothing to say, what was
+ * seen is brought up to date quietly.
+ */
+function UpdateNotice({ tr, lp, readOnly }: { tr: Training; lp: LoadedPlan; readOnly: boolean }) {
+  const { plan } = lp;
+  const seen = tr.seen.get(plan.id) ?? null;
+  const changes = planChanges(plan, seen, tr.entries.values()).filter((c) => !seen?.dismissed?.includes(changeKey(c)));
+  const now = seenOf(plan);
+  const stale = !seen || JSON.stringify(seen.sessions) !== JSON.stringify(now.sessions);
+  useEffect(() => {
+    if (!readOnly && changes.length === 0 && stale) saveSeen({ ...now, dismissed: seen?.dismissed ?? [] });
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!changes.length || readOnly) return null;
+  const when = (d: number | null | undefined) => (d == null ? "no fixed day" : formatDate(d));
+  return (
+    <div className="tr-notice" role="status">
+      <div className="tr-notice-head"><MIcon name="oUpdate" size={20} /><span>The plan was updated</span></div>
+      <ul>
+        {changes.map((c) => (
+          <li key={changeKey(c)}>
+            {c.kind === "removed" ? `${c.title} (${when(c.day)}) was taken out of the plan.`
+              : c.kind === "moved" ? `The plan moved ${c.title} from ${when(c.day)} to ${when(c.newDay)}.`
+              : `${c.title} is on ${when(c.day)}, outside its week now.`}
+          </li>
+        ))}
+      </ul>
+      <div className="tr-notice-actions">
+        <TextButton onClick={() => saveSeen({ ...now, dismissed: [...(seen?.dismissed ?? []), ...changes.map(changeKey)] })}>Got it</TextButton>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Holding a placed session lifts it; dragged over a day (or To place) and let go, it goes there. The list
+ * doesn't scroll under the finger while one is held, but does near its top and bottom edges.
+ */
+function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day: number | null) => void) {
+  const [lifted, setLifted] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const g = useRef<{ sid: string; id: number; x0: number; y0: number; fy: number; el: HTMLElement; held: boolean; timer: number;
+    ghost: HTMLElement | null; over: string | null; raf: number; stop: () => void } | null>(null);
+  const dropRef = useRef(onDrop);
+  dropRef.current = onDrop;
+
+  const hover = (d: NonNullable<typeof g.current>) => {
+    const el = document.elementFromPoint(d.x0, d.fy)?.closest<HTMLElement>("[data-drop]");
+    const key = el?.dataset.drop ?? null;
+    if (key !== d.over) { d.over = key; setOver(key); if (key) feel("tick"); }
+  };
+  const end = () => {
+    const d = g.current;
+    if (!d) return;
+    clearTimeout(d.timer);
+    cancelAnimationFrame(d.raf);
+    d.ghost?.remove();
+    d.stop();
+    g.current = null;
+    setLifted(null);
+    setOver(null);
+  };
+  useEffect(() => end, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const props = (sid: string) => ({
+    onPointerDown: (ev: React.PointerEvent<HTMLElement>) => {
+      if (g.current || !ev.isPrimary || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+      if ((ev.target as Element).closest(".tr-ring")) return;
+      const el = ev.currentTarget;
+      const move = (e: PointerEvent) => {
+        const d = g.current;
+        if (!d || e.pointerId !== d.id) return;
+        if (!d.held) { if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > TOUCH_SLOP) end(); return; }
+        d.fy = e.clientY;
+        if (d.ghost) d.ghost.style.transform = `translate3d(0,${e.clientY - d.y0}px,0) scale(1.02)`;
+        hover(d);
+      };
+      const up = (e: PointerEvent) => {
+        const d = g.current;
+        if (!d || e.pointerId !== d.id) return;
+        const target = d.held && e.type === "pointerup" ? d.over : null;
+        if (d.held) swallowClick(500);
+        end();
+        if (target !== null) dropRef.current(sid, target === "none" ? null : Number(target));
+      };
+      const noScroll = (e: TouchEvent) => { if (g.current?.held && e.cancelable) e.preventDefault(); };
+      window.addEventListener("pointermove", move, { passive: true });
+      window.addEventListener("pointerup", up, { passive: true });
+      window.addEventListener("pointercancel", up, { passive: true });
+      document.addEventListener("touchmove", noScroll, { passive: false });
+      const d = {
+        sid, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, fy: ev.clientY, el, held: false, timer: 0, ghost: null as HTMLElement | null, over: null, raf: 0,
+        stop: () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+          document.removeEventListener("touchmove", noScroll);
+        },
+      };
+      g.current = d;
+      d.timer = window.setTimeout(() => {
+        if (g.current !== d) return;
+        d.held = true;
+        feel("pickup");
+        // A copy of the row follows the finger; the row itself stays, faded, where it was.
+        const r = el.getBoundingClientRect();
+        const ghost = el.cloneNode(true) as HTMLElement;
+        ghost.classList.add("tr-ghost");
+        Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+        document.body.appendChild(ghost);
+        d.ghost = ghost;
+        setLifted(sid);
+        hover(d);
+        // Near the top or bottom edge, the list scrolls (the finger stays put, so the day under it changes).
+        let last = performance.now();
+        const step = (now: number) => {
+          if (g.current !== d) return;
+          const sc = scroller.current;
+          if (sc) {
+            const r2 = sc.getBoundingClientRect();
+            const vy = edgeSpeed(d.fy, r2.top, r2.bottom) * Math.min(3, Math.max(0.5, (now - last) / 16.7));
+            if (vy) { sc.scrollTop += vy; hover(d); }
+          }
+          last = now;
+          d.raf = requestAnimationFrame(step);
+        };
+        d.raf = requestAnimationFrame(step);
+      }, LONG_PRESS);
+    },
+    // A long press mustn't bring up the browser's own menu.
+    onContextMenu: (ev: React.MouseEvent) => ev.preventDefault(),
+  });
+  return { props, lifted, over };
+}
+
+// ---------- Today and the calendar ----------
+
+/**
+ * Today's training line for the day shown: its session(s), else how many are still to place this week,
+ * else a rest day. Only while a plan runs; a tap opens the session or the week.
+ */
+export function TrainingLine({ day, t }: { day: number; t: number }) {
+  const tr = useTraining();
+  const lp = activeOf(tr, t);
+  if (!lp || day < lp.plan.start || day > lp.plan.end) return null;
+  const { plan } = lp;
+  const on = sessionsOnDay(plan, day, tr.entries).filter((x) => x.entry.status !== "skipped");
+  const futsal = [...tr.entries.values()].some((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+  let text: string, icon = "oDirectionsRun", target = `training?d=${day}`, rest = false;
+  if (on.length) {
+    text = on.length === 1 ? [on[0].session.title, on[0].session.detail].filter(Boolean).join(" · ") : on.map((x) => x.session.title).join(" + ");
+    icon = kindIcon(on[0].session.kind);
+    if (on.length === 1) target = `training?s=${encodeURIComponent(on[0].session.id)}&d=${day}`;
+  } else {
+    const left = day >= t ? leftToPlace(plan, day, tr.entries) : [];
+    if (left.length) text = `${count(left.length, "session")} to place this week`;
+    else { text = futsal ? "Futsal" : "Rest day"; rest = !futsal; }
+  }
+  if (on.length && futsal) text += " · Futsal";
+  const done = on.length > 0 && on.every((x) => x.entry.status === "done");
+  return (
+    <button className={`tr-todayline ${rest ? "rest" : ""} ${done ? "done" : ""}`} onClick={() => go(target)}>
+      <MIcon name={icon} size={18} />
+      <span className="label">Training</span>
+      <span className="text">{text}</span>
+      {done && <MIcon name="fCheck" size={16} />}
+      <MIcon name="fKeyboardArrowRight" size={18} />
+    </button>
+  );
+}
+
+/** The days with a session on them (placed, or the plan's own day), each with its icon: the calendar's light marks. */
+export function useTrainingDays(): Map<number, string> {
+  const tr = useTraining();
+  return useMemo(() => {
+    const out = new Map<number, string>();
+    const lp = activeOf(tr);
+    if (!lp) return out;
+    for (const s of sessionsOf(lp.plan)) {
+      const e = tr.entries.get(entryId(lp.plan.id, s.id));
+      const day = dayOfSession(s, e);
+      if (day !== null && e?.status !== "skipped" && !out.has(day)) out.set(day, kindIcon(s.kind));
+    }
+    return out;
+  }, [tr]);
+}
+

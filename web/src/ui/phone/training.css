@@ -1,0 +1,215 @@
+/* The Training page (PhoneTraining.tsx, TrainingSession.tsx, TrainingDocs.tsx). Same tokens and sizes as
+   phone.css: 1 CSS px = 1 dp, M3 colours, 16 dp page margins. Wide (html.wide): the week and the open
+   session side by side. */
+
+/* Screens shown over the week (a session on the phone, the documents, Bests): the week stays mounted
+   underneath, so coming back finds it as it was. */
+.phone .tr-layer { position: absolute; inset: 0; z-index: 2; background: var(--bg); animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
+.phone .tr-title { display: flex; flex-direction: column; line-height: 1.15; }
+.phone .tr-title .sub { font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); font-weight: 400; }
+.phone .tr-week { padding: 0 0 calc(var(--sab) + 24px); }
+.phone .tr-page { padding-bottom: calc(var(--sab) + 24px); }
+.phone .tr-hint { padding: 4px 16px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-oldplan { margin: 8px 16px 0; font-size: 13px; color: var(--muted); }
+
+/* The phases, the one shown, its notes and rules. */
+.phone .tr-phases { padding-top: 8px; padding-bottom: 4px; }
+.phone .tr-nowdot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--p-primary); vertical-align: middle; }
+.phone .tr-phase { padding: 8px 16px 4px; }
+.phone .tr-phase-name { font-size: 22px; line-height: 28px; color: var(--text); }
+.phone .tr-phase-sub { margin-top: 2px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-phase-note { position: relative; margin-top: 6px; padding-left: 14px; font-size: 14px; line-height: 20px; color: var(--text); }
+.phone .tr-phase-note::before { content: ""; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--p-tertiary, var(--p-primary)); }
+.phone .tr-rules-head { display: flex; align-items: center; gap: 4px; margin: 8px -8px 0; padding: 6px 8px; border: 0; border-radius: 16px; background: none; color: var(--p-primary); font-size: 14px; font-weight: 500; letter-spacing: .1px; }
+.phone .tr-rules { margin: 0 0 4px; padding-left: 20px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-rules li + li { margin-top: 2px; }
+
+/* To place: the sessions without a day, as small cards; the one picked is filled, the rest dim. */
+.phone .tr-toplace { margin-top: 4px; border-radius: 16px; transition: background-color .15s; }
+.phone .tr-toplace.over { background: var(--p-sec-container); }
+.phone .tr-placing { display: flex; align-items: center; gap: 8px; padding: 0 8px 4px 16px; font-size: 14px; line-height: 20px; color: var(--text); }
+.phone .tr-placing span { flex: 1; min-width: 0; }
+.phone .tr-cards { display: flex; flex-direction: column; gap: 8px; padding: 4px 16px 8px; }
+.phone .tr-card-place { display: flex; align-items: center; min-height: 56px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); transition: background-color .15s, border-color .15s, opacity .15s; }
+.phone .tr-card-place .main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px 0 8px 14px; border: 0; background: none; text-align: left; color: var(--muted); }
+.phone .tr-card-place .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .tr-card-place .title { font-size: 16px; line-height: 22px; color: var(--text); }
+.phone .tr-card-place .detail { font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-card-place.on { border-color: transparent; background: var(--p-sec-container); }
+.phone .tr-card-place.dim { opacity: .5; }
+.phone .tr-card-place.skipped .title { text-decoration: line-through; color: var(--muted); }
+
+/* The days: a header line, then rows. While a session is picked, every day is a target. */
+.phone .tr-day { margin: 4px 8px 0; padding: 4px 0 6px; border-radius: 16px; transition: background-color .15s, box-shadow .15s; }
+.phone .tr-day.target { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-primary) 45%, transparent); cursor: pointer; }
+.phone .tr-day.over, .phone .tr-day.target:active { background: var(--p-sec-container); }
+.phone .tr-day.outside { opacity: .7; }
+.phone .tr-dayhead { display: flex; align-items: center; gap: 8px; padding: 8px 8px 2px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
+.phone .tr-day.today .tr-dayhead { color: var(--p-primary); }
+.phone .tr-todaytag { padding: 0 8px; border-radius: 10px; background: var(--p-primary); color: var(--p-on-primary); font-size: 11px; line-height: 18px; }
+.phone .tr-rest { padding: 2px 8px 4px; font-size: 14px; line-height: 20px; color: var(--muted); opacity: .8; }
+
+.phone .tr-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 0; border-radius: 12px; color: var(--muted);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.phone .tr-row.sel { background: var(--p-sec-container); }
+.phone .tr-row.lifted { opacity: .35; }
+.phone .tr-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .tr-row-text .title { font-size: 16px; line-height: 22px; color: var(--text); }
+.phone .tr-row-text .detail { font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-row.done .title, .phone .tr-row.skipped .title { color: var(--muted); }
+.phone .tr-row.skipped .title { text-decoration: line-through; }
+/* The ring: a 48 dp target around a 22 dp circle; done fills it in the accent with a tick. */
+.phone .tr-ring { flex: none; width: 44px; height: 44px; margin-right: -6px; border: 0; background: none; display: grid; place-items: center; color: var(--p-on-primary); padding: 0; position: relative; }
+.phone .tr-ring::before { content: ""; position: absolute; left: 11px; top: 11px; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--p-outline); transition: background-color .15s, box-shadow .15s; }
+.phone .tr-ring[aria-pressed="true"]::before { background: var(--p-primary); box-shadow: none; }
+.phone .tr-ring svg { position: relative; }
+/* A held row's copy, following the finger. */
+.phone .tr-ghost { position: fixed; z-index: 70; margin: 0; pointer-events: none; background: var(--p-sc-high, var(--surface-2)); opacity: 1;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .18), 0 8px 20px rgb(0 0 0 / .14); transform: scale(1.02); will-change: transform; }
+
+/* "How it went" under a row just ticked, and in the session view. */
+.phone .tr-ask { margin: 0 8px 6px; padding: 4px 10px 10px; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); animation: tr-open .2s cubic-bezier(.2, 0, 0, 1); }
+@keyframes tr-open { from { opacity: 0; transform: translate3d(0, -6px, 0); } }
+.phone .tr-howwent { padding: 0 16px; }
+.phone .tr-howwent.compact { padding: 0; }
+.phone .tr-howwent:not(.compact) .p-section { margin: 0 -16px; }
+.phone .tr-scale { margin-top: 8px; }
+.phone .tr-scale-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 18px; color: var(--text); }
+.phone .tr-scale-head .hint { font-size: 12px; color: var(--muted); }
+.phone .tr-scale-row { display: flex; gap: 3px; margin-top: 4px; }
+.phone .tr-scale-row button { flex: 1; min-width: 0; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+.phone .tr-scale-row button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
+.phone .tr-scale-row button:disabled { opacity: .6; }
+.phone .tr-notefield { display: block; width: 100%; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--text);
+  font: inherit; font-size: 15px; line-height: 21px; resize: none; user-select: text; -webkit-user-select: text; }
+.phone .tr-notefield:focus { outline: none; border-color: var(--p-primary); }
+
+.phone .tr-actions { display: flex; gap: 8px; padding: 12px 16px 0; }
+.phone .tr-notice { margin: 8px 16px 0; padding: 12px 16px 4px; border-radius: 16px; background: var(--p-primary-container); color: var(--p-on-primary-container); }
+.phone .tr-notice-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+.phone .tr-notice ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; line-height: 20px; }
+.phone .tr-notice-actions { display: flex; justify-content: flex-end; }
+.phone .tr-notice .p-text-btn { color: inherit; }
+
+/* Sheets: moving a session, futsal. */
+.phone .tr-sheet-title { padding: 4px 24px 8px; }
+.phone .tr-move { padding-bottom: 8px; }
+.phone .tr-move-day { display: flex; align-items: baseline; gap: 12px; width: 100%; min-height: 48px; padding: 12px 24px; border: 0; background: none; text-align: left; color: var(--text); }
+.phone .tr-move-day .d { flex: none; width: 112px; font-size: 15px; }
+.phone .tr-move-day .what { flex: 1; min-width: 0; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-move-day.on { background: var(--p-sec-container); }
+.phone .tr-futsal { padding-bottom: 12px; }
+.phone .tr-label { padding: 12px 24px 6px; font-size: 13px; color: var(--muted); }
+.phone .tr-futsal .p-chiprow { padding-left: 24px; padding-right: 24px; }
+.phone .tr-futsal-note { padding: 4px 24px 0; }
+.phone .tr-sheet-actions { display: flex; justify-content: flex-end; padding: 8px 16px 0; }
+
+/* One session. */
+.phone .tr-session { padding: 0 0 calc(var(--sab) + 24px); }
+.phone .tr-shead { padding: 4px 16px 0; }
+.phone .tr-kindline { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-detail { margin-top: 6px; font-size: 22px; line-height: 28px; color: var(--text); }
+.phone .tr-dayline { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; margin-top: 2px; font-size: 15px; color: var(--text); }
+.phone .tr-dayline .p-text-btn { margin-right: -12px; }
+.phone .tr-extra { margin-top: 4px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-status { display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; min-height: 56px; }
+.phone .tr-status .p-filled-btn { min-width: 112px; }
+.phone .tr-statustext { flex: 1; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--muted); }
+.phone .tr-statustext.done { color: var(--p-primary); }
+.phone .tr-card { padding: 0 16px; }
+.phone .tr-cardlink { margin: 4px -12px 0; }
+
+/* Gym: ticks and set rows. */
+.phone .tr-tick { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 4px 16px 4px 8px; }
+.phone .tr-tick .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .tr-tick .name { font-size: 15px; line-height: 21px; color: var(--text); }
+.phone .tr-tick .sub { font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-tick.done .name { color: var(--muted); text-decoration: line-through; }
+.phone .tr-ex { margin: 4px 12px 8px; padding: 10px 12px 8px; border-radius: 16px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .tr-ex-head { display: flex; align-items: center; gap: 4px; }
+.phone .tr-ex-name { flex: 1; min-width: 0; padding: 4px 0; border: 0; background: none; text-align: left; font-size: 17px; line-height: 24px; font-weight: 500; color: var(--text); }
+.phone .tr-ex-head .p-text-btn { gap: 4px; margin-right: -8px; }
+.phone .tr-ex-target { font-size: 14px; line-height: 20px; color: var(--text); }
+.phone .tr-ex-sub { margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-newbest { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 0 8px; border-radius: 10px; background: var(--p-sec-container); color: var(--p-on-sec-container); font-size: 12px; line-height: 20px; }
+.phone .tr-sets { margin-top: 6px; }
+.phone .tr-set { display: flex; align-items: center; gap: 4px; min-height: 48px; padding-left: 4px; border-radius: 12px; user-select: none; -webkit-user-select: none; }
+.phone .tr-set .n { flex: none; width: 22px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.phone .tr-set .x { color: var(--muted); font-size: 14px; }
+.phone .tr-num { min-width: 44px; height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--bg); color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums; }
+.phone .tr-check { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: transparent; box-shadow: inset 0 0 0 2px var(--p-outline); transform: scale(.8); transition: background-color .15s, color .15s, box-shadow .15s; }
+.phone .tr-set.done .tr-check { background: var(--p-primary); color: var(--p-on-primary); box-shadow: none; }
+.phone .tr-set.done .tr-num { background: none; color: var(--muted); }
+.phone .tr-addset, .phone .tr-addpain { margin-left: -4px; }
+.phone .tr-ex .tr-scale:first-of-type { margin-top: 4px; }
+.phone .tr-stepper { display: flex; align-items: center; gap: 4px; }
+.phone .tr-stepper-field { flex: 1; min-width: 0; height: 56px; padding: 0 12px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; color: var(--text); font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+.phone .tr-stepper-field:focus { outline: none; border: 2px solid var(--p-primary); }
+.phone .tr-stepper .unit { color: var(--muted); font-size: 14px; }
+
+/* The documents, read. */
+.phone .tr-docchips { padding-top: 4px; padding-bottom: 8px; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.phone .tr-doc { padding: 4px 16px calc(var(--sab) + 32px); }
+.phone .tr-md { font-size: 15px; line-height: 23px; color: var(--text); user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
+.phone .tr-md :is(h1, h2, h3, h4, h5, h6) { margin: 20px 0 6px; color: var(--text); font-weight: 500; scroll-margin-top: 8px; border-radius: 6px; transition: background-color .6s; }
+.phone .tr-md h1 { font-size: 24px; line-height: 32px; font-weight: 400; }
+.phone .tr-md h2 { font-size: 20px; line-height: 28px; }
+.phone .tr-md h3 { font-size: 17px; line-height: 24px; }
+.phone .tr-md :is(h4, h5, h6) { font-size: 15px; line-height: 22px; }
+.phone .tr-md > :first-child { margin-top: 8px; }
+.phone .tr-md p { margin: 8px 0; }
+.phone .tr-md :is(ul, ol) { margin: 6px 0; padding-left: 22px; }
+.phone .tr-md li { margin: 3px 0; }
+.phone .tr-md li > :is(ul, ol) { margin: 2px 0; }
+.phone .tr-md a { color: var(--p-primary); text-decoration: none; }
+.phone .tr-md a.web { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.phone .tr-md strong { font-weight: 600; }
+.phone .tr-md code { padding: 0 4px; border-radius: 4px; background: var(--p-sc-low, var(--surface-2)); font-size: 13px; }
+.phone .tr-md pre { overflow-x: auto; padding: 8px 12px; border-radius: 8px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .tr-md pre code { padding: 0; background: none; }
+.phone .tr-md hr { margin: 16px 0; border: 0; border-top: 1px solid var(--line); }
+.phone .tr-md blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.phone .tr-md details { margin: 8px 0; padding: 4px 12px; border-radius: 8px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .tr-md summary { padding: 6px 0; color: var(--p-primary); font-weight: 500; cursor: pointer; }
+.phone .tr-md-table { overflow-x: auto; margin: 8px 0; }
+.phone .tr-md table { border-collapse: collapse; font-size: 14px; }
+.phone .tr-md :is(th, td) { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.phone .tr-md .tr-flash { background: var(--p-sec-container); transition: none; }
+.phone .tr-exsheet-body { padding: 0 24px 8px; max-height: 70vh; overflow-y: auto; }
+.phone .tr-exsheet-body .tr-sheet-title { padding-left: 0; }
+
+/* Bests. */
+.phone .tr-bests { display: flex; gap: 8px; padding: 4px 16px 8px; }
+.phone .tr-best { flex: 1; display: flex; flex-direction: column; padding: 10px 12px; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .tr-best .kg { font-size: 20px; line-height: 26px; color: var(--text); }
+.phone .tr-best .n { font-size: 13px; color: var(--muted); }
+.phone .tr-best .when { font-size: 12px; color: var(--muted); }
+
+/* Today's line. */
+.phone .tr-todayline { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); min-height: 44px; margin: 8px 8px 0; padding: 0 8px 0 12px; border: 0; border-radius: 12px;
+  background: var(--p-sc-low, var(--surface-2)); color: var(--p-primary); text-align: left; }
+.phone .tr-todayline .label { flex: none; font-size: 14px; font-weight: 500; letter-spacing: .1px; }
+.phone .tr-todayline .text { flex: 1; min-width: 0; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-todayline > svg:last-child { color: var(--muted); }
+.phone .tr-todayline.rest { background: none; }
+.phone .tr-todayline.rest .text { color: var(--muted); }
+.phone .tr-todayline.done .text { color: var(--muted); }
+
+/* The calendar's light marks. */
+.phone .p-mnum-row .tr-mark { margin-left: 1px; color: var(--p-primary); opacity: .75; }
+.phone .pg-dh .tr-mark { display: flex; color: var(--p-primary); opacity: .75; height: 12px; }
+
+/* Wide: the week on the left, the open session beside it. */
+.wide .p-overlay.training > .p-scaffold { max-width: 1160px; }
+.wide .tr-layer > .p-scaffold { max-width: var(--page-w); margin: 0 auto; }
+.wide .tr-layer.full .tr-doc .tr-md { max-width: 720px; margin: 0 auto; }
+.phone .tr-split { flex: 1; min-height: 0; display: flex; }
+.wide .tr-split .tr-week { flex: 0 0 440px; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.wide .tr-side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wide .tr-side-hint { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); opacity: .8; }
+@media (hover: hover) {
+  html.phone :is(.tr-row, .tr-card-place .main, .tr-move-day, .tr-set, .tr-todayline, .tr-rules-head, .tr-ex-name, .tr-scale-row button):hover {
+    background-image: linear-gradient(color-mix(in srgb, currentColor 6%, transparent), color-mix(in srgb, currentColor 6%, transparent));
+  }
+}
+@media (prefers-reduced-motion: reduce) { .phone :is(.tr-layer, .tr-ask) { animation: none; } }
