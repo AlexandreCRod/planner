@@ -70,6 +70,14 @@ export async function testToken(token: string): Promise<{ items: number }> {
   return { items: body.counts?.items ?? 0 };
 }
 
+/** How many bytes the server holds (its database, pictures included); null when it can't be asked. */
+export async function serverStorageBytes(): Promise<number | null> {
+  try {
+    const body = await api("/api/status") as { storageBytes?: unknown };
+    return typeof body.storageBytes === "number" ? body.storageBytes : null;
+  } catch { return null; }
+}
+
 /** JSON with sorted keys, so field order never counts as a change. */
 function canonical(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;

@@ -8,7 +8,8 @@ import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, 
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
-import { confirmDeletes, resetLocal, restoreDeletes, signOut, syncNow } from "../../store/sync.ts";
+import { confirmDeletes, resetLocal, restoreDeletes, serverStorageBytes, signOut, syncNow } from "../../store/sync.ts";
+import { sizeText, STORAGE_LIMIT, storageUse } from "../../domain/storage.ts";
 import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
 import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
@@ -104,6 +105,19 @@ function AlarmSettingsSection() {
         onPick={(m) => setAlarmSettings(time === "task" ? { defaultTaskTime: m } : time === "qs" ? { quietStart: m } : { quietEnd: m })} />
     )}
   </>;
+}
+
+/** "Server storage": how full the sync server is, with a thin meter, and a warning from 80% (212). Asked again after each sync. */
+function StorageRow({ syncedAt }: { syncedAt: number }) {
+  const [bytes, setBytes] = useState<number | null>(null);
+  useEffect(() => { void serverStorageBytes().then(setBytes); }, [syncedAt]);
+  if (bytes === null) return null;
+  const use = storageUse(bytes);
+  return <ListItem headline="Server storage" supporting={<>
+    <span className={use.warn ? "ps-warn" : undefined}>{use.text}</span>
+    <span className={`ps-meter${use.warn ? " warn" : ""}`}><i style={{ width: `${Math.max(use.share * 100, 1)}%` }} /></span>
+    {use.warn && <span className="ps-pre">{`Almost full. At ${sizeText(STORAGE_LIMIT)} new changes can't be saved; everything already there can still be read.`}</span>}
+  </>} />;
 }
 
 /** "Check for updates": the installed version; a tap asks GitHub now (update.ts), whatever was dismissed. */
@@ -212,6 +226,7 @@ export function PhoneSettings() {
         {/* The PC is served by the server itself; only the phone build is told where it is. */}
         {isNative && <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />}
         <ListItem headline="Status" supporting={<span className="ps-pre">{status}</span>} />
+        {sync.state !== "signed-out" && <StorageRow syncedAt={sync.lastSyncAt} />}
         {/* The server held back deletions that would remove most items: the user says which was meant. */}
         {sync.state === "needs-confirm" && (
           <div className="ps-buttons">

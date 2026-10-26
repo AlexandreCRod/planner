@@ -871,6 +871,10 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .ps-swatch.on { border: 3px solid var(--text); }
 .phone .ps-name { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
 .phone .ps-pre { white-space: pre-line; }
+.phone .ps-meter { display: block; height: 4px; margin: 6px 0 4px; border-radius: 2px; background: var(--p-sc-highest); overflow: hidden; }
+.phone .ps-meter i { display: block; height: 100%; border-radius: 2px; background: var(--p-primary); }
+.phone .ps-meter.warn i, .phone .ps-warn { color: var(--danger); }
+.phone .ps-meter.warn i { background: var(--danger); }
 .phone .ps-buttons { display: flex; gap: 8px; padding: 0 16px 8px; }
 .phone .ps-dot { width: 20px; height: 20px; border-radius: 50%; margin: 0 2px; }
 .phone .ps-fab { bottom: calc(var(--sab) + 16px); }
