@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "noUnusedLocals": true
   },
-  "include": ["src"]
+  "include": ["src", "tools"]
 }
