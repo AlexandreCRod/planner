@@ -1047,6 +1047,8 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-segmented button { position: relative; z-index: 1; background: none !important; color: var(--muted); transition: color .2s; }
 .phone .p-segmented button.on { color: var(--text); }
 .phone .p-segmented button + button { border-left: 0; }
+/* No ripple either: its square tint, clipped to the segment, read as separators while the pill slid. */
+.phone .p-segmented .p-ripple { display: none; }
 .phone .p-seg-ind { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 20px; background: var(--p-sec-container); transition: transform .25s cubic-bezier(.2, 0, 0, 1); will-change: transform; }
 
 /* ---------- Tasks: Scheduled and To-do side by side, turned with a sideways swipe ---------- */
