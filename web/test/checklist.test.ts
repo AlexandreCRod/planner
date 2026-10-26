@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickMoveOrder } from "../src/domain/checklist.ts";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickAnchor, tickMoveOrder } from "../src/domain/checklist.ts";
 
 const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
 
@@ -83,6 +83,27 @@ test("a ticked item joins the end of the completed ones; unticking goes back abo
   // Not among the completed ones (an older note): it stays where it is.
   assert.equal(tickMoveOrder(["☐ A", "☐ B", "☑ C"], 0), null);
   assert.equal(tickMoveOrder(["☐ A", "☐ B"], 1), null);
+});
+
+test("an unticked item goes back where it was: after the open item it remembered", () => {
+  // Ticking remembers the open item above (a sub-item's parent counts as the item).
+  assert.equal(tickAnchor(["☐ A", "☑ B", "☐ C"], 1), "A");
+  assert.equal(tickAnchor(["☑ A", "☐ B"], 0), "");
+  assert.equal(tickAnchor(["☐ A", "⠀⠀⠀☐ a", "☑ B"], 2), "A");
+  assert.equal(tickAnchor(["Text", "☑ A"], 0), null);
+  // B was between A and C: back after A, with its sub-item.
+  const anchors = (m: Record<number, string>) => (line: number) => m[line] ?? null;
+  const u = ["☐ A", "☐ C", "☐ D", "☐ B", "⠀⠀⠀☐ b"];
+  assert.deepEqual(applyOrder(u, tickMoveOrder(u, 3, anchors({ 3: "A" }))), ["☐ A", "☐ B", "⠀⠀⠀☐ b", "☐ C", "☐ D"]);
+  // A was ticked too since: B goes where A would (the top).
+  const v = ["☐ C", "☐ D", "☐ B", "☑ A"];
+  assert.deepEqual(applyOrder(v, tickMoveOrder(v, 2, anchors({ 2: "A", 3: "" }))), ["☐ B", "☐ C", "☐ D", "☑ A"]);
+  // Its neighbour was deleted or reworded: the end of the open items, as before.
+  const w = ["☐ C", "☐ D", "☐ B", "☑ E"];
+  assert.deepEqual(applyOrder(w, tickMoveOrder(w, 2, anchors({ 2: "A" }))), w);
+  assert.deepEqual(applyOrder(w, tickMoveOrder(w, 2, anchors({ 2: "C" }))), ["☐ C", "☐ B", "☐ D", "☑ E"]);
+  // Already in its place: nothing moves.
+  assert.equal(tickMoveOrder(["☐ A", "☐ B"], 1, anchors({ 1: "A" })), null);
 });
 
 test("completed sections: the ticked items at the end of each checklist", () => {

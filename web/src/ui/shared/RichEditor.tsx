@@ -2,7 +2,7 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickMoveOrder } from "../../domain/checklist.ts";
+import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickAnchor, tickMoveOrder } from "../../domain/checklist.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
@@ -402,7 +402,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     setDone(block, t, at, !checked);
     feel("tick");
     const lines = [...root.children] as HTMLElement[];
-    const order = tickMoveOrder(lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : "")), lines.indexOf(block));
+    const texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
+    // A ticked line remembers the open line above it (saved with the note), so unticking puts it back there.
+    const anchor = checked ? null : tickAnchor(texts, lines.indexOf(block));
+    const order = tickMoveOrder(texts, lines.indexOf(block), (k) => lines[k]?.dataset.after ?? null);
+    if (anchor !== null) block.dataset.after = anchor;
+    else delete block.dataset.after;
     if (order) {
       const lo = order.findIndex((k, j) => k !== j);
       let hi = order.length - 1;
