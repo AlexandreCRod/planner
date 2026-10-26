@@ -2,11 +2,21 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead, enterSplitsAt } from "../../domain/checklist.ts";
+import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickMoveOrder } from "../../domain/checklist.ts";
+import { feel } from "../phone/haptics.ts";
 
 const BOX = "☐", TICK = "☑";
 const INDENT = "⠀⠀⠀";
 const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
+/** Whether the "Completed" sections start folded on this device (the last choice made on any of them). */
+const FOLD_KEY = "completedFolded";
+/** Room above a section's first line for its "N completed" bar (the same in the style sheet). */
+const HEAD_H = 34;
+
+interface DoneHead { key: string; top: number; count: number; folded: boolean }
+
+const savedFold = () => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } };
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export interface RichEditorHandle {
   html(): string; focus(): void; insertText(t: string): void;
@@ -135,6 +145,56 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const el = useRef<HTMLDivElement>(null);
   const [empty, setEmpty] = useState(!initialHtml.replace(/<[^>]*>/g, "").trim());
   const checkEmpty = () => setEmpty(!el.current || isBlank(el.current));
+  const wrap = useRef<HTMLDivElement>(null);
+  const [heads, setHeads] = useState<DoneHead[]>([]);
+  const headsKey = useRef("");
+  // Which checklists' completed sections are folded, by the text of their first line.
+  const folded = useRef(new Map<string, boolean>());
+
+  /**
+   * Gives each checklist's completed lines (the ticked ones at its end, see completedSections) their marks:
+   * room above the first for the "N completed" bar, and hidden when folded. The marks are classes, never
+   * saved (normalize), so the note's text stays exactly the lines in order.
+   */
+  const layoutDone = () => {
+    const root = el.current, box = wrap.current;
+    if (!root || !box) return;
+    const lines = [...root.children] as HTMLElement[];
+    const texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
+    const secs = completedSections(texts);
+    const out: DoneHead[] = [];
+    const hidden = new Set<number>(), firsts = new Set<number>();
+    for (const sec of secs) {
+      const key = (texts[checklistRun(texts, sec.first)![0]] ?? "").trim();
+      const isFolded = folded.current.get(key) ?? savedFold();
+      firsts.add(sec.first);
+      if (isFolded) for (let i = sec.first; i <= sec.last; i++) hidden.add(i);
+      out.push({ key, top: 0, count: sec.count, folded: isFolded });
+    }
+    lines.forEach((l, i) => {
+      if (l.classList.contains("pn-done-first") !== firsts.has(i)) l.classList.toggle("pn-done-first", firsts.has(i));
+      if (l.classList.contains("pn-folded") !== hidden.has(i)) l.classList.toggle("pn-folded", hidden.has(i));
+    });
+    // A caret inside a line that was just folded away moves to the line above it.
+    const sel = getSelection();
+    if (hidden.size && sel?.anchorNode && root.contains(sel.anchorNode) && document.activeElement === root) {
+      const b = currentBlockOf(sel.anchorNode, root);
+      if (b?.classList.contains("pn-folded")) {
+        let p = b.previousElementSibling as HTMLElement | null;
+        while (p?.classList.contains("pn-folded")) p = p.previousElementSibling as HTMLElement | null;
+        if (p) placeCaretAtEnd(p);
+      }
+    }
+    const base = box.getBoundingClientRect().top;
+    secs.forEach((sec, k) => { out[k].top = Math.round(lines[sec.first].getBoundingClientRect().top - base - HEAD_H); });
+    const k = out.map((h) => `${h.key}|${h.top}|${h.count}|${h.folded}`).join("\n");
+    if (k !== headsKey.current) { headsKey.current = k; setHeads(out); }
+  };
+  const toggleFold = (h: DoneHead) => {
+    folded.current.set(h.key, !h.folded);
+    try { localStorage.setItem(FOLD_KEY, h.folded ? "0" : "1"); } catch { /* private mode */ }
+    layoutDone();
+  };
 
   useEffect(() => {
     if (el.current) el.current.innerHTML = sanitize(initialHtml);
@@ -145,10 +205,16 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   useEffect(() => {
     const root = el.current;
     if (!root) return;
-    const mo = new MutationObserver(checkEmpty);
+    let raf = 0;
+    const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; layoutDone(); }); };
+    const mo = new MutationObserver(() => { checkEmpty(); later(); });
     mo.observe(root, { childList: true, subtree: true, characterData: true });
+    // The bars move with the lines when the text re-wraps (a resize, a rotated phone).
+    const ro = new ResizeObserver(later);
+    ro.observe(root);
     checkEmpty();
-    return () => mo.disconnect();
+    layoutDone();
+    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);
@@ -312,10 +378,49 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (at === undefined || t.data.slice(0, at).replace(/⠀/g, "") !== "") return;
     const block = currentBlockOf(t, el.current!);
     if (!block || firstText(block) !== t) return;
+    tickLine(block, t, at);
+  };
+
+  /** Ticks or unticks the line whose box is at [at] in [t], moving it to or from its list's Completed section. */
+  const tickLine = (block: HTMLElement, t: Text, at: number) => {
+    const root = el.current!;
     const checked = t.data[at] === TICK;
     t.replaceData(at, 1, checked ? BOX : TICK);
     setDone(block, t, at, !checked);
+    feel("tick");
+    const lines = [...root.children] as HTMLElement[];
+    const order = tickMoveOrder(lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : "")), lines.indexOf(block));
+    if (order) {
+      const lo = order.findIndex((k, j) => k !== j);
+      let hi = order.length - 1;
+      while (order[hi] === hi) hi--;
+      const before = new Map(lines.map((l) => [l, l.getBoundingClientRect().top]));
+      const anchor = lines[hi].nextSibling;
+      for (const k of order.slice(lo, hi + 1)) root.insertBefore(lines[k], anchor);
+      layoutDone();
+      // The moved lines glide to their places (the others make room), unless motion is turned down.
+      if (!reducedMotion()) {
+        for (const l of lines.slice(lo, hi + 1)) {
+          if (l.classList.contains("pn-folded") || !l.animate) continue;
+          const dy = (before.get(l) ?? 0) - l.getBoundingClientRect().top;
+          if (Math.abs(dy) < 1) continue;
+          l.animate([{ transform: `translateY(${dy}px)`, opacity: l === block ? 0.55 : 1 }, { transform: "none", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.2, 0, 0, 1)" });
+        }
+      }
+    } else layoutDone();
+    if (document.activeElement === root && !block.classList.contains("pn-folded")) placeCaretAtEnd(block);
     onChange();
+  };
+
+  /** Ctrl+Enter: ticks (or unticks) the checklist line with the caret. True if it did. */
+  const tickAtCaret = (): boolean => {
+    const root = el.current;
+    const block = root && currentBlock(root);
+    if (!block || block.tagName === "LI") return false;
+    const info = boxInfo(block), t = firstText(block);
+    if (!info.hasBox || !t || t.data[info.indent] !== (info.checked ? TICK : BOX)) return false;
+    tickLine(block, t, info.indent);
+    return true;
   };
 
   // Enter on a checklist line starts the next box at the same indent, even after an empty box: boxes keep
@@ -323,6 +428,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   // after the caret goes onto the new box, unticked, with its formatting.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { if (tickAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && !e.shiftKey && enterOnBox()) e.preventDefault();
   };
 
@@ -376,9 +482,18 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   };
 
   return (
-    <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-      style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
-      data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
+    <div ref={wrap} className="rich-wrap">
+      <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
+        style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
+        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} />
+      {heads.map((h) => (
+        <button key={h.key} type="button" className={h.folded ? "pn-done-head is-folded" : "pn-done-head"} style={{ top: h.top, height: HEAD_H - 4 }}
+          aria-expanded={!h.folded} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFold(h)}>
+          <svg className="pn-done-chev" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          {h.count} completed
+        </button>
+      ))}
+    </div>
   );
 });
 

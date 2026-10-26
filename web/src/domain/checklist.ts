@@ -86,3 +86,83 @@ export function enterSplitsAt(text: string, caret: number): number | null {
   while (at < text.length && /\s/.test(text[at])) at++;
   return at < text.length ? at : null;
 }
+
+/** Whether checklist line [text] is ticked (false for an open box and for a line that isn't one). */
+export function checklistTicked(text: string): boolean {
+  const d = checklistDepth(text);
+  return d >= 0 && text[d] === "☑";
+}
+
+/**
+ * The top-level items of the run [run] (a line and the lines indented under it), in order. Lines
+ * before the first top-level one (a run that starts indented) are items of their own, never ticked.
+ */
+function runItems(texts: string[], run: [number, number]): { s: number; e: number; done: boolean }[] {
+  let base = Infinity;
+  for (let i = run[0]; i <= run[1]; i++) base = Math.min(base, checklistDepth(texts[i]));
+  const out: { s: number; e: number; done: boolean }[] = [];
+  for (let i = run[0]; i <= run[1]; i++) {
+    const top = checklistDepth(texts[i]) === base;
+    const prev = out[out.length - 1];
+    if (top || !prev) out.push({ s: i, e: i, done: top && checklistTicked(texts[i]) });
+    else prev.e = i;
+  }
+  return out;
+}
+
+/** The items at the end of the run that are all ticked: where the "Completed" section starts. */
+function doneTail(items: { s: number; e: number; done: boolean }[]): number {
+  let k = items.length;
+  while (k > 0 && items[k - 1].done) k--;
+  return k;
+}
+
+/**
+ * The "N completed" sections to show: for each checklist (run of checklist lines) the ticked items at
+ * its very end, as the lines [first, last] and how many items there are. Ticked items elsewhere in a
+ * list (an older note, or sub-items under an open line) stay among the lines.
+ */
+export function completedSections(texts: string[]): { first: number; last: number; count: number }[] {
+  const out: { first: number; last: number; count: number }[] = [];
+  for (let i = 0; i < texts.length; i++) {
+    const run = checklistRun(texts, i);
+    if (!run) continue;
+    i = run[1];
+    const items = runItems(texts, run);
+    const k = doneTail(items);
+    if (k < items.length) out.push({ first: items[k].s, last: run[1], count: items.length - k });
+  }
+  return out;
+}
+
+/**
+ * Where the lines go after line [i] was just ticked or unticked (texts already show the new box), as
+ * the order of the old line indexes, or null when nothing moves. A ticked item (with its sub-items)
+ * goes to the end of its checklist; an unticked one, if it was in the completed section, goes to the
+ * end of the open items, just above it. Sub-items never move on their own: they follow their parent.
+ */
+export function tickMoveOrder(texts: string[], i: number): number[] | null {
+  const run = checklistRun(texts, i);
+  if (!run) return null;
+  const items = runItems(texts, run);
+  const at = items.findIndex((it) => it.s === i);
+  if (at < 0) return null; // a sub-item
+  const { s, e, done } = items[at];
+  const all = texts.map((_, k) => k);
+  const block = all.slice(s, e + 1);
+  const rest = [...all.slice(0, s), ...all.slice(e + 1)];
+  let to: number; // where the block lands in [rest]
+  if (done) {
+    if (e === run[1]) return null;
+    to = run[1] + 1 - block.length;
+  } else {
+    // It was ticked before: in the tail if the items after it were all ticked too.
+    const wasTail = doneTail(items.map((it, k) => (k === at ? { ...it, done: true } : it))) <= at;
+    if (!wasTail) return null;
+    const without = items.filter((_, k) => k !== at);
+    const k = doneTail(without);
+    if (k === at) return null; // already just above the completed items
+    to = k < without.length ? without[k].s - (without[k].s > s ? block.length : 0) : run[1] + 1 - block.length;
+  }
+  return [...rest.slice(0, to), ...block, ...rest.slice(to)];
+}

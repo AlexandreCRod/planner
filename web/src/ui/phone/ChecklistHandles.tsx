@@ -49,7 +49,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       // A small gap after each run of checkbox lines, as lists have (the class is never saved: RichEditor's normalize).
       lines.forEach((el, i) => { const end = isCheck(el) && !isCheck(lines[i + 1]); if (el.classList.contains("pn-check-end") !== end) el.classList.toggle("pn-check-end", end); });
       lines.forEach((el, i) => {
-        if (!isCheck(el)) return;
+        if (!isCheck(el) || el.classList.contains("pn-folded")) return; // lines folded into "completed" have no handle
         const r = el.getBoundingClientRect();
         const lh = parseFloat(getComputedStyle(el).lineHeight) || 24;
         out.push({ i, top: r.top - base, h: Math.min(r.height, lh) });

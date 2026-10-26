@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checklistBlock, checklistDepth, checklistRun, checklistSlots, enterSplitsAt, moveChecklistBlock } from "../src/domain/checklist.ts";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickMoveOrder } from "../src/domain/checklist.ts";
 
 const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
 
@@ -58,4 +58,38 @@ test("Enter in a checkbox line moves the text after the caret onto the new box",
   assert.equal(enterSplitsAt("⠀⠀⠀☐ Free range", 9), 10);
   // Not a checklist line.
   assert.equal(enterSplitsAt("Shopping", 3), null);
+});
+
+const applyOrder = (texts: string[], order: number[] | null) => (order ? order.map((k) => texts[k]) : texts);
+
+test("a ticked item goes to the end of its own checklist, with its sub-items", () => {
+  // Milk was just ticked: it lands after Bread; the other list and the title stay.
+  const a = ["Shopping", "☑ Milk", "⠀⠀⠀☐ Oat", "☐ Eggs", "☐ Bread", "", "☐ Other"];
+  assert.deepEqual(applyOrder(a, tickMoveOrder(a, 1)), ["Shopping", "☐ Eggs", "☐ Bread", "☑ Milk", "⠀⠀⠀☐ Oat", "", "☐ Other"]);
+  // Already last: nothing moves. A ticked sub-item stays under its parent.
+  assert.equal(tickMoveOrder(["☐ A", "☑ B"], 1), null);
+  assert.equal(tickMoveOrder(["☐ A", "⠀⠀⠀☑ a", "☐ B"], 1), null);
+  assert.equal(tickMoveOrder(["Text"], 0), null);
+});
+
+test("a ticked item joins the end of the completed ones; unticking goes back above them", () => {
+  const t = ["☑ A", "☑ B", "☑ C", "☐ D"];
+  assert.deepEqual(applyOrder(t, tickMoveOrder(t, 0)), ["☑ B", "☑ C", "☐ D", "☑ A"]);
+  // Unticked: it goes to the end of the open items, just above the completed ones (with its sub-items).
+  const v = ["☐ A", "☑ B", "☐ C", "⠀⠀⠀☑ c"];
+  assert.deepEqual(applyOrder(v, tickMoveOrder(v, 2)), ["☐ A", "☐ C", "⠀⠀⠀☑ c", "☑ B"]);
+  // Already just above the completed items: nothing moves.
+  assert.equal(tickMoveOrder(["☐ A", "☐ B", "☑ C", "☑ D"], 1), null);
+  // Not among the completed ones (an older note): it stays where it is.
+  assert.equal(tickMoveOrder(["☐ A", "☐ B", "☑ C"], 0), null);
+  assert.equal(tickMoveOrder(["☐ A", "☐ B"], 1), null);
+});
+
+test("completed sections: the ticked items at the end of each checklist", () => {
+  const n = ["Title", "☐ A", "☑ B", "⠀⠀⠀☑ b", "☑ C", "", "☑ X", "☐ Y", "", "☑ Only"];
+  assert.deepEqual(completedSections(n), [{ first: 2, last: 4, count: 2 }, { first: 9, last: 9, count: 1 }]);
+  // Ticked items above an open one (an older note) are not a section; a ticked sub-item under an open line neither.
+  assert.deepEqual(completedSections(["☑ A", "☐ B", "⠀⠀⠀☑ b"]), []);
+  assert.equal(checklistTicked("⠀⠀⠀☑ b"), true);
+  assert.equal(checklistTicked("☐ b"), false);
 });
