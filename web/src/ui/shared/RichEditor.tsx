@@ -380,26 +380,45 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     onChange();
   };
 
-  // Click on a box ticks it and strikes through the rest of the line.
+  // Click on a box ticks it and strikes through the rest of the line; anywhere else, the caret stays out of the box's lead.
   const onClick = (e: React.MouseEvent) => {
     if (onLinkClick(e)) return;
+    if (!tickTapped(e)) caretPastBox();
+  };
+
+  /** Ticks the box under a tap, if the tap was on one. */
+  const tickTapped = (e: React.MouseEvent): boolean => {
     const pos = (document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null }).caretPositionFromPoint?.(e.clientX, e.clientY);
     const range = pos ? null : document.caretRangeFromPoint?.(e.clientX, e.clientY);
     const node = pos?.offsetNode ?? range?.startContainer;
     const offset = pos?.offset ?? range?.startOffset ?? 0;
-    if (!node || node.nodeType !== Node.TEXT_NODE) return;
+    if (!node || node.nodeType !== Node.TEXT_NODE) return false;
     const t = node as Text;
     const at = [offset, offset - 1].find((i) => t.data[i] === BOX || t.data[i] === TICK);
-    if (at === undefined || t.data.slice(0, at).replace(/⠀/g, "") !== "") return;
+    if (at === undefined || t.data.slice(0, at).replace(/⠀/g, "") !== "") return false;
     const block = currentBlockOf(t, el.current!);
-    if (!block || firstText(block) !== t) return;
+    if (!block || firstText(block) !== t) return false;
     // Only a tap on the box itself ticks: on an empty line the caret lands next to the box from anywhere on it.
     const r = document.createRange();
     r.setStart(t, at);
     r.setEnd(t, at + 1);
     const box = r.getBoundingClientRect();
-    if (e.clientX > box.right + BOX_SLOP || e.clientY < box.top - BOX_SLOP || e.clientY > box.bottom + BOX_SLOP) return;
+    if (e.clientX > box.right + BOX_SLOP || e.clientY < box.top - BOX_SLOP || e.clientY > box.bottom + BOX_SLOP) return false;
     tickLine(block, t, at);
+    return true;
+  };
+
+  /** A caret left before a line's box or between it and its space goes after them, where a new box puts it. */
+  const caretPastBox = () => {
+    const sel = getSelection(), root = el.current;
+    if (!sel || !sel.isCollapsed || !sel.anchorNode || !root?.contains(sel.anchorNode)) return;
+    const block = currentBlockOf(sel.anchorNode, root);
+    if (!block) return;
+    const lead = checklistLead(block.textContent ?? "");
+    const before = document.createRange();
+    before.setStart(block, 0);
+    before.setEnd(sel.anchorNode, sel.anchorOffset);
+    if (before.toString().length < lead) sel.collapse(...pointAt(block, lead));
   };
 
   // Copied (or cut) lines leave their boxes behind: what's pasted elsewhere is just the words.
