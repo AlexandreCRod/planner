@@ -113,6 +113,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     { label: "Filter…", icon: "oFilterList", divider: true, onClick: () => setFilterOpen(true) },
     { label: "Show routines", icon: "oTaskAlt", checked: showRoutines, onClick: toggleRoutines },
     { label: "Note for selected day", icon: "oEditNote", onClick: () => openDailyNote(s, anchor) },
+    { label: "Training", icon: "oDirectionsRun", onClick: () => go("training") },
     { label: "Search", icon: "oSearch", onClick: openSearch },
     { label: "Settings", icon: "oSettings", onClick: () => go("settings") },
   ];
