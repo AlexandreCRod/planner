@@ -2,15 +2,19 @@
 //   node --experimental-strip-types web/tools/training-sync.ts check <folder>
 //   node --experimental-strip-types web/tools/training-sync.ts push  <folder>
 //   node --experimental-strip-types web/tools/training-sync.ts pull  <folder>
-// check: planner.json and its documents agree (same rules as the app). push: sends the plan files that
-// changed. pull: writes the training CSVs from what the phone logged. Node built-ins only.
+// check: planner.json and its documents agree (same rules as the app), and so do runs.json and meals.json
+// when the folder has them. push: sends the files that changed: the plan's, and runs.json and meals.json
+// under the plan id "shared" (one taken out of the folder is removed from the server). pull: writes the
+// training CSVs from what the phone logged, and bodyweight.csv from the weigh-ins. Node built-ins only.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { anchorsIn } from "../src/domain/markdown.ts";
+import { count } from "../src/domain/plural.ts";
 import {
   type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, logCsv, missingCards, planFileId, readPlan, setsCsv,
 } from "../src/domain/training.ts";
+import { MEALS_FILE, RUNS_FILE, SHARED_PLAN, type WeighIn, readMeals, readRuns, weighInsCsv } from "../src/domain/trends.ts";
 
 type Rec = Record<string, unknown>;
 export interface Change { kind: string; id: string; data: Rec | null }
@@ -18,6 +22,7 @@ export interface Change { kind: string; id: string; data: Rec | null }
 export interface State { seq: number; records: Record<string, Rec> }
 
 const KIND = "trainingFiles";
+const BODYWEIGHT_FILE = "bodyweight.csv";
 
 // ---------- Pure helpers (tested in test/trainingSync.test.ts) ----------
 
@@ -61,6 +66,7 @@ export function checkPlan(raw: unknown, read: (file: string) => string | null): 
   const { plan, problems } = readPlan(raw);
   const texts = new Map<string, string>();
   if (!plan) return { plan, problems, texts };
+  if (plan.id === SHARED_PLAN) problems.push(`The plan id "${SHARED_PLAN}" is kept for ${RUNS_FILE} and ${MEALS_FILE}; pick another.`);
   const anchors = new Map<string, Set<string>>();
   for (const d of plan.documents) {
     const text = read(d.file);
@@ -70,6 +76,26 @@ export function checkPlan(raw: unknown, read: (file: string) => string | null): 
   }
   problems.push(...missingCards(plan, (file) => anchors.get(file) ?? null));
   return { plan, problems, texts };
+}
+
+/**
+ * runs.json and meals.json, each when the folder has it ([read] gives a file's text, or null if absent): the
+ * text to push, what's wrong in plain words (JSON errors and what readRuns and readMeals find), and an OK
+ * line for each one that's there.
+ */
+export function checkShared(read: (file: string) => string | null): { texts: Map<string, string>; problems: string[]; ok: string[] } {
+  const texts = new Map<string, string>(), problems: string[] = [], ok: string[] = [];
+  for (const file of [RUNS_FILE, MEALS_FILE]) {
+    const text = read(file);
+    if (text === null) continue;
+    let raw: unknown;
+    try { raw = JSON.parse(text); } catch (e) { problems.push(`${file} isn't valid JSON: ${(e as Error).message}`); continue; }
+    texts.set(file, text);
+    const r = file === RUNS_FILE ? readRuns(raw) : readMeals(raw);
+    problems.push(...r.problems.map((p) => `${file}: ${p}`));
+    ok.push(`OK: ${file}: ${"runs" in r ? count(r.runs.length, "run") : count(r.meals.length, "meal")}.`);
+  }
+  return { texts, problems, ok };
 }
 
 // ---------- Settings, state and the server ----------
@@ -148,25 +174,33 @@ function readFolder(folder: string) {
 
 function check(folder: string) {
   const { raw, planText } = readFolder(folder);
-  const r = checkPlan(raw, (f) => { const p = join(folder, f); return existsSync(p) ? readFileSync(p, "utf8") : null; });
-  if (r.problems.length || !r.plan) {
-    console.log(`Found ${r.problems.length} problem${r.problems.length === 1 ? "" : "s"}:`);
-    for (const p of r.problems) console.log(`- ${p}`);
+  const read = (f: string) => { const p = join(folder, f); return existsSync(p) ? readFileSync(p, "utf8") : null; };
+  const r = checkPlan(raw, read);
+  // A byte order mark (some Windows tools add one) is dropped, so the app can read what is pushed.
+  const shared = checkShared((f) => read(f)?.replace(/^﻿/, "") ?? null);
+  const problems = [...r.problems, ...shared.problems];
+  if (problems.length || !r.plan) {
+    console.log(`Found ${problems.length} problem${problems.length === 1 ? "" : "s"}:`);
+    for (const p of problems) console.log(`- ${p}`);
     return null;
   }
   const sessions = r.plan.phases.reduce((n, p) => n + p.sessions.length, 0);
   console.log(`OK: plan ${r.plan.id}, ${r.plan.phases.length} phases, ${sessions} sessions, ${r.plan.documents.length} documents.`);
-  return { plan: r.plan, texts: r.texts, planText };
+  for (const line of shared.ok) console.log(line);
+  return { plan: r.plan, texts: r.texts, planText, shared: shared.texts };
 }
 
 async function push(folder: string) {
   const r = check(folder);
   if (!r) throw new Stop("Not pushing: fix the problems above first.");
   const files = new Map<string, string>([[PLAN_FILE, r.planText], ...r.texts]);
-  const changes = fileChanges(r.plan.id, files, loadState().records, Date.now());
+  const base = loadState().records, now = Date.now();
+  const changes = [...fileChanges(r.plan.id, files, base, now), ...fileChanges(SHARED_PLAN, r.shared, base, now)];
   const { received } = await sync(changes);
-  const sent = changes.filter((c) => c.data).map((c) => (c.data as unknown as PlanFile).file);
-  const gone = changes.filter((c) => !c.data).map((c) => c.id.slice(r.plan.id.length + 1));
+  // Plan ids never hold a ":", so a record id splits into plan and file at the first one.
+  const name = (planId: string, file: string) => (planId === SHARED_PLAN ? `shared/${file}` : file);
+  const sent = changes.filter((c) => c.data).map((c) => { const f = c.data as unknown as PlanFile; return name(f.planId, f.file); });
+  const gone = changes.filter((c) => !c.data).map((c) => { const i = c.id.indexOf(":"); return name(c.id.slice(0, i), c.id.slice(i + 1)); });
   if (!changes.length) console.log("Nothing to push: the server already has these files.");
   else console.log(`Pushed ${sent.length} file(s)${sent.length ? ` (${sent.join(", ")})` : ""}${gone.length ? `; removed ${gone.join(", ")}` : ""}.`);
   if (received) console.log(`Received ${received} record(s) from the server.`);
@@ -179,7 +213,8 @@ async function pull(folder: string) {
   const log = `training-log-${plan.id}.csv`, sets = `training-sets-${plan.id}.csv`;
   writeFileSync(join(folder, log), logCsv(plan, recordsOfKind<Entry>(state.records, "trainingEntries")));
   writeFileSync(join(folder, sets), setsCsv(plan, recordsOfKind<Lift>(state.records, "trainingLifts")));
-  console.log(`Received ${received} record(s). Wrote ${log} and ${sets} in ${folder}.`);
+  writeFileSync(join(folder, BODYWEIGHT_FILE), weighInsCsv(recordsOfKind<WeighIn>(state.records, "trainingWeighIns")));
+  console.log(`Received ${received} record(s). Wrote ${log}, ${sets} and ${BODYWEIGHT_FILE} in ${folder}.`);
 }
 
 async function main() {

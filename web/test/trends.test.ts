@@ -1,0 +1,295 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
+import {
+  type Run, type WeighIn, carbsTarget, dayType, e1rmOf, easyRuns, liftPoints, longRuns, longestIn, readMeals, readRuns, topSetOf,
+  trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
+} from "../src/domain/trends.ts";
+
+const d = (iso: string) => dayOf(iso)!;
+const close = (actual: number | null, expected: number) => assert.ok(actual !== null && Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+
+// ---------- Lifts ----------
+
+let n = 0;
+const lift = (sets: [number | null, number | null][], extra: Partial<Lift> = {}): Lift => ({
+  id: `l${++n}`, planId: "p", sessionId: "s1", planned: "x001", exercise: "x001", day: 100,
+  sets: sets.map(([kg, reps]) => ({ kg, reps, done: true })), rpe: 7, pain: null, note: "", name: "Front squat", target: "3×5", updatedAt: 1, ...extra,
+});
+
+test("e1RM: heaviest done set of 1 to 6 reps, with the RPE, to the nearest 0.5 kg", () => {
+  assert.equal(e1rmOf(lift([[60, 5]])), 76);                                   // 60 × (1 + (5 + 3) ÷ 30)
+  assert.equal(e1rmOf(lift([[60, 5]], { rpe: null })), null);                  // no RPE, no number
+  assert.equal(e1rmOf(lift([[50, 8], [40, 12]])), null);                       // only sets over 6 reps
+  assert.equal(e1rmOf(lift([[50, 8], [40, 6]], { rpe: 10 })), 48);             // the 8-rep set is skipped: 40 × (1 + 6 ÷ 30)
+  assert.equal(e1rmOf(lift([[60, 5], [70, 3]], { rpe: 8 })), 81.5);            // the heavier set, even with fewer reps: 81.67 → 81.5
+  assert.equal(e1rmOf(lift([[80, 3], [80, 5]], { rpe: 9 })), 96);              // same weight: the one with more reps
+  assert.equal(e1rmOf(lift([[72.5, 5]], { rpe: 8 })), 89.5);                   // 89.42 → 89.5
+  assert.equal(e1rmOf(lift([[100, 3]], { sets: [{ kg: 120, reps: 3, done: false }, { kg: 100, reps: 3, done: true }] })), 120);   // not done: ignored (the 100 kg set: 100 × (1 + 6 ÷ 30))
+  assert.equal(e1rmOf(lift([[0, 5], [null, 5], [60, 0]])), null);              // no weight, or no reps
+});
+
+test("the top set is the heaviest done set at any reps", () => {
+  assert.deepEqual(topSetOf(lift([[60, 5], [100, 8], [100, 10]])), { kg: 100, reps: 10 });
+  assert.deepEqual(topSetOf(lift([[60, 5]], { sets: [{ kg: 120, reps: 1, done: false }, { kg: 60, reps: 5, done: true }] })), { kg: 60, reps: 5 });
+  assert.equal(topSetOf(lift([[null, 12], [0, 10]])), null);
+});
+
+test("lift points: one per time lifted, across plans, by the exercise actually done", () => {
+  const a = lift([[60, 5]], { day: 110, planId: "p1", sessionId: "s2", pain: 2 });
+  const b = lift([[65, 5]], { day: 100, planId: "p0", sessionId: "s9", rpe: null });
+  const swapped = lift([[50, 8]], { day: 105, planned: "x001", exercise: "x002" });           // done as another exercise
+  const none = lift([[60, 5]], { day: 120, sets: [{ kg: 60, reps: 5, done: false }] });         // nothing done
+  assert.deepEqual(liftPoints([a, swapped, none, b], "x001"), [
+    { day: 100, topKg: 65, topReps: 5, e1rm: null, pain: null, planId: "p0", sessionId: "s9" },
+    { day: 110, topKg: 60, topReps: 5, e1rm: 76, pain: 2, planId: "p1", sessionId: "s2" },
+  ]);
+  assert.equal(liftPoints([a, b], "x999").length, 0);
+});
+
+test("weekly hard sets: every Monday-first week of the range, empty ones as 0", () => {
+  const mon = d("2026-11-02");   // a Monday
+  const ls = [
+    lift([[60, 5], [60, 5], [60, 5]], { day: mon + 1 }),
+    lift([[60, 5]], { day: mon + 6, sets: [{ kg: 60, reps: 5, done: true }, { kg: 60, reps: 5, done: false }, { kg: 60, reps: 0, done: true }] }),
+    lift([[60, 5], [60, 5]], { day: mon + 22, exercise: "x002" }),     // 3 weeks later, a different exercise in the list
+    lift([[60, 5], [60, 5]], { day: mon + 8, exercise: "x003" }),      // not one of the exercises asked about
+  ];
+  assert.deepEqual(weeklyHardSets(ls, ["x001", "x002"], mon, mon + 27), [
+    { weekStart: mon, sets: 4 }, { weekStart: mon + 7, sets: 0 }, { weekStart: mon + 14, sets: 0 }, { weekStart: mon + 21, sets: 2 },
+  ]);
+  // A range that starts and ends mid-week still gives whole weeks.
+  assert.deepEqual(weeklyHardSets(ls, new Set(["x001"]), mon + 3, mon + 4), [{ weekStart: mon, sets: 4 }]);
+  assert.deepEqual(weeklyHardSets([], ["x001"], mon, mon + 6), [{ weekStart: mon, sets: 0 }]);
+});
+
+// ---------- Runs ----------
+
+const run = (id: string, day: string, extra: Partial<Run> = {}): Run => ({
+  id, day: d(day), time: null, title: "", sessionId: null, type: "easy", distanceKm: 5, durationS: 1800, paceSPerKm: 360,
+  avgHr: 140, maxHr: 160, cadenceSpm: 170, ascentM: 20, ...extra,
+});
+
+test("weekly km: Monday weeks, zeros included, whole weeks", () => {
+  const runs = [run("a", "2026-11-02", { distanceKm: 10 }), run("b", "2026-11-18", { distanceKm: 5.1 }), run("c", "2026-11-19", { distanceKm: 4.2 }), run("e", "2026-11-04", { distanceKm: null })];
+  assert.deepEqual(weeklyKm(runs, d("2026-11-02"), d("2026-11-22")), [
+    { weekStart: d("2026-11-02"), km: 10 }, { weekStart: d("2026-11-09"), km: 0 }, { weekStart: d("2026-11-16"), km: 9.3 },
+  ]);
+  assert.deepEqual(weeklyKm(runs, d("2026-11-04"), d("2026-11-04")), [{ weekStart: d("2026-11-02"), km: 10 }]);
+});
+
+test("long runs, easy runs for pace against heart rate, and the longest in the last 30 days", () => {
+  const runs = [
+    run("c", "2026-10-20", { type: "long", distanceKm: 16 }),
+    run("a", "2026-09-01", { type: "long", distanceKm: 12, avgHr: null }),
+    run("b", "2026-10-05", { avgHr: 148 }),
+    run("x", "2026-10-06", { avgHr: 149 }),
+    run("y", "2026-10-07", { paceSPerKm: null }),
+    run("z", "2026-10-08", { type: "quality", distanceKm: 8, avgHr: 165 }),
+  ];
+  assert.deepEqual(longRuns(runs).map((r) => r.id), ["a", "c"]);
+  assert.deepEqual(easyRuns(runs).map((r) => r.id), ["b", "c"]);         // 148 counts; no pace, no heart rate, or too high: out
+  assert.deepEqual(easyRuns(runs, 140).map((r) => r.id), ["c"]);
+  assert.equal(longestIn(runs, d("2026-10-26")), 16);
+  assert.equal(longestIn(runs, d("2026-10-26"), 5), null);               // nothing in the last 5 days
+  assert.equal(longestIn(runs, d("2026-09-30")), 12);                    // a 30-day window ending on the 30th starts on the 1st
+  assert.equal(longestIn(runs, d("2026-10-01")), null);                  // and one ending on the 1st has left it behind
+  assert.equal(longestIn(runs, d("2026-10-06")), 5);
+});
+
+// ---------- Weight ----------
+
+const w = (day: number, kg: number, extra: Partial<WeighIn> = {}): WeighIn => ({
+  id: `w${++n}`, day, time: null, kg, when: "morning", note: "", updatedAt: 1, deletedAt: null, ...extra,
+});
+
+test("the weight trend: mornings only, the first of each day, gaps count for more", () => {
+  const list = [
+    w(10, 80), w(11, 79, { time: "07:00" }), w(11, 70, { time: "08:00" }),    // the second on a day is ignored
+    w(11, 90, { when: "pre-run", time: "06:00" }), w(12, 100, { when: "post-run" }), // so are the other times of day
+    w(13, 50, { deletedAt: 5 }),                                                // and deleted ones
+    w(14, 78),
+  ];
+  const t = weightTrend(list);
+  assert.deepEqual(t.map((p) => [p.day, p.kg]), [[10, 80], [11, 79], [14, 78]]);
+  close(t[0].trend, 80);                                  // the first weigh-in starts it
+  close(t[1].trend, 79.9);                                // 10% of the way after a day
+  close(t[2].trend, 79.9 + (1 - 0.9 ** 3) * (78 - 79.9)); // 3 days since: 27.1% of the way
+  assert.deepEqual(weightTrend([]), []);
+  assert.deepEqual(weightTrend([w(5, 80, { when: "pre-run" })]), []);
+});
+
+test("trend at a day, and its change over a week", () => {
+  const list = Array.from({ length: 8 }, (_, i) => w(100 + i, 80));
+  list.push(w(108, 79));
+  const t = weightTrend(list);
+  assert.equal(trendAt(t, 99), null);
+  assert.equal(trendAt(t, 100), 80);
+  close(trendAt(t, 150), 79.9);                           // after the last: the last
+  close(weeklyChange(t), -0.1);                           // 108 against 101
+  close(weeklyChange(t, 107), 0);
+  assert.equal(weeklyChange(t, 104), null);               // nothing a week before
+  assert.equal(weeklyChange(t, 99), null);
+  assert.equal(weeklyChange([]), null);
+});
+
+test("bodyweight.csv: sorted, deleted ones left out, notes quoted like the other CSVs", () => {
+  const list = [
+    w(d("2026-10-27"), 80.2, { time: "07:10", note: 'felt "heavy", ok' }),
+    w(d("2026-10-26"), 81, { when: "post-run", time: "11:00" }),
+    w(d("2026-10-26"), 80.5, { time: "07:05" }),
+    w(d("2026-10-25"), 99, { deletedAt: 9 }),
+  ];
+  assert.equal(weighInsCsv(list), [
+    "date,kg,when,note",
+    "2026-10-26,80.5,morning,",
+    "2026-10-26,81,post-run,",
+    '2026-10-27,80.2,morning,"felt ""heavy"", ok"',
+    "",
+  ].join("\r\n"));
+  assert.equal(weighInsCsv([]), "date,kg,when,note\r\n");
+});
+
+// ---------- runs.json and meals.json ----------
+
+test("runs.json reads what it can: a bad entry is skipped with a line naming it, unknown fields are ignored", () => {
+  const { runs, problems } = readRuns({
+    version: 1, extra: true,
+    runs: [
+      { id: "g2026-10-31T09:12", date: "2026-10-31", start_time: "09:12", title: "Long", session_id: "t004", run_type: "long", distance_km: 16.2, duration_s: 5400, pace_s_per_km: 333, avg_hr: 146, max_hr: 160, cadence_spm: null, ascent_m: 80, shoes: "x" },
+      { id: "g2026-10-24T08:00", date: "2026-10-24", start_time: null, title: "Easy", session_id: null, run_type: "easy", distance_km: 6 },
+      { id: "bad-date", date: "31/10/2026", run_type: "easy" },
+      { date: "2026-10-30", run_type: "easy" },
+      { id: "g2026-10-24T08:00", date: "2026-10-25", run_type: "easy" },
+      { id: "odd", date: "2026-10-26", start_time: "9am", run_type: "tempo", distance_km: "5" },
+      "nonsense",
+    ],
+  });
+  assert.deepEqual(runs.map((r) => r.id), ["g2026-10-24T08:00", "odd", "g2026-10-31T09:12"]);   // by day
+  const long = runs[2];
+  assert.deepEqual([long.day, long.time, long.sessionId, long.type, long.distanceKm, long.paceSPerKm, long.cadenceSpm, long.ascentM], [d("2026-10-31"), "09:12", "t004", "long", 16.2, 333, null, 80]);
+  assert.deepEqual([runs[0].sessionId, runs[0].time, runs[0].maxHr, runs[0].ascentM], [null, null, null, null]);   // missing numbers are null
+  assert.equal(runs[1].type, "other");
+  assert.equal(runs[1].time, null);
+  assert.equal(runs[1].distanceKm, null);
+  assert.equal(isoOf(runs[1].day), "2026-10-26");
+  assert.equal(problems.length, 7);
+  assert.ok(problems.some((p) => p.includes("bad-date") && p.includes("unreadable date")));
+  assert.ok(problems.some((p) => p.includes("Run 4 has no id")));
+  assert.ok(problems.some((p) => p.includes("g2026-10-24T08:00 is used twice")));
+  assert.ok(problems.some((p) => p.includes("Run odd") && p.includes("run_type") && p.includes("tempo")));
+  assert.ok(problems.some((p) => p.includes("Run odd") && p.includes("start_time")));
+  assert.ok(problems.some((p) => p.includes("Run odd") && p.includes("distance_km")));
+  assert.ok(problems.some((p) => p.includes("Run 7 isn't an object")));
+});
+
+test("runs.json: the wrong shape gives no runs and one line; a newer version still reads", () => {
+  for (const raw of [null, [], "x", { version: 1 }, { version: 1, runs: {} }]) {
+    const r = readRuns(raw);
+    assert.deepEqual(r.runs, []);
+    assert.equal(r.problems.length, 1);
+    assert.match(r.problems[0], /runs\.json must look like/);
+  }
+  const newer = readRuns({ version: 2, runs: [{ id: "a", date: "2026-10-31", run_type: "easy", new_field: 1 }] });
+  assert.equal(newer.runs.length, 1);
+  assert.match(newer.problems[0], /newer than this Planner reads/);
+  assert.match(readRuns({ runs: [] }).problems[0], /No format version/);
+  assert.deepEqual(readRuns({ version: 1, runs: [] }), { runs: [], problems: [] });
+});
+
+test("meals.json reads like runs.json, with [low, high] amounts", () => {
+  const { meals, plateCm, problems } = readMeals({
+    version: 1, plate_cm: 27, more: 1,
+    meals: [
+      { id: "m2026-10-27-2", date: "2026-10-27", time: "19:30", meal: "dinner", items: "pasta, chicken", kcal: [700, 850], protein_g: [45, 55], carbs_g: [80, 100], fat_g: [15, 25], confidence: "medium", note: "big plate", extra: 1 },
+      { id: "m2026-10-27-1", date: "2026-10-27", time: null, meal: "brunch", items: "eggs", kcal: [400, "lots"], protein_g: 30, confidence: "sure" },
+      { id: "m-bad", date: "yesterday", meal: "lunch" },
+    ],
+  });
+  assert.equal(plateCm, 27);
+  assert.deepEqual(meals.map((m) => m.id), ["m2026-10-27-2", "m2026-10-27-1"]);      // same day: the one with no time last
+  assert.deepEqual([meals[0].kcal, meals[0].proteinG, meals[0].carbsG, meals[0].fatG, meals[0].confidence, meals[0].meal, meals[0].time], [[700, 850], [45, 55], [80, 100], [15, 25], "medium", "dinner", "19:30"]);
+  assert.deepEqual([meals[1].meal, meals[1].confidence, meals[1].kcal, meals[1].proteinG, meals[1].carbsG], ["snack", "low", null, [30, 30], null]);
+  assert.equal(problems.length, 4);
+  assert.ok(problems.some((p) => p.includes("m-bad") && p.includes("unreadable date")));
+  assert.ok(problems.some((p) => p.includes("Meal m2026-10-27-1") && p.includes("brunch")));
+  assert.ok(problems.some((p) => p.includes("Meal m2026-10-27-1") && p.includes("kcal")));
+  assert.ok(problems.some((p) => p.includes("Meal m2026-10-27-1") && p.includes("confidence")));
+  const bad = readMeals({ meals: "none", version: 1 });
+  assert.deepEqual([bad.meals, bad.plateCm, bad.problems.length], [[], null, 1]);
+  assert.equal(readMeals({ version: 1, meals: [] }).plateCm, null);
+});
+
+// ---------- A day's nutrition type ----------
+
+const planWith = (extra: Record<string, unknown> = {}) => {
+  const r = readPlan({
+    version: 1, plan: { id: "p", start: "2026-11-02", end: "2026-11-15" },
+    nutrition: {
+      protein_g: [135, 150],
+      day_types: { rest: { carbs_g: [330, 415] }, training: { carbs_g: [415, 580] }, long: { carbs_g: [500, 665] }, carb_load: { carbs_g: [600, 800] }, race: { note: "see Race day" } },
+      date_overrides: [{ date: "2026-11-12", day_type: "carb_load" }],
+      kcal_target: null,
+    },
+    phases: [{
+      name: "Weeks", start: "2026-11-02", end: "2026-11-15", sessions: [
+        { id: "run", title: "Easy run", kind: "run", default_date: null },
+        { id: "long", title: "Long run", kind: "run", day_type: "long", default_date: "2026-11-08" },
+        { id: "gym", title: "Gym", kind: "gym", default_date: null },
+        { id: "physio", title: "Physio", kind: "physio", default_date: null },
+        { id: "walk", title: "Walk", kind: "other", day_type: "training", default_date: null },
+        { id: "race", title: "RACE", kind: "run", day_type: "race", locked: true, default_date: "2026-11-15" },
+      ],
+    }],
+    ...extra,
+  });
+  assert.deepEqual(r.problems, []);
+  return r.plan!;
+};
+const placed = (id: string, day: string, extra: Partial<Entry> = {}) =>
+  newEntry({ id: entryId("p", id), planId: "p", sessionId: id, kind: "session", day: d(day), ...extra });
+const futsal = (day: string, extra: Partial<Entry> = {}) => newEntry({ id: `f${++n}`, planId: "p", kind: "futsal", day: d(day), ...extra });
+const entries = (...es: Entry[]) => new Map(es.map((e) => [e.id, e]));
+
+test("a day's type: override, then long, training, rest; futsal is training", () => {
+  const p = planWith();
+  const on = (day: string, ...es: Entry[]) => dayType(p, d(day), entries(...es));
+  assert.equal(on("2026-11-05"), "rest");                                       // nothing on it
+  assert.equal(on("2026-11-08"), "long");                                       // the plan's own long run
+  assert.equal(on("2026-11-15"), "race");
+  assert.equal(on("2026-11-03", placed("run", "2026-11-03")), "training");
+  assert.equal(on("2026-11-03", placed("run", "2026-11-03"), placed("gym", "2026-11-03")), "training");
+  assert.equal(on("2026-11-04", placed("physio", "2026-11-04")), "rest");       // physio alone: still rest
+  assert.equal(on("2026-11-08", placed("gym", "2026-11-08")), "long");          // long beats training
+  assert.equal(on("2026-11-10", placed("walk", "2026-11-10")), "training");     // a session's own day_type counts whatever its kind
+  assert.equal(on("2026-11-06", futsal("2026-11-06")), "training");
+  assert.equal(on("2026-11-06", futsal("2026-11-06", { status: "done", doneDay: d("2026-11-06") })), "training");
+  assert.equal(on("2026-11-07", futsal("2026-11-07", { status: "skipped" })), "rest");
+  assert.equal(on("2026-11-09", futsal("2026-11-09", { deletedAt: 5 })), "rest");
+  assert.equal(on("2026-11-04", futsal("2026-11-04", { planId: "another" })), "rest");
+  // The plan's override wins over what's on the day.
+  assert.equal(on("2026-11-12"), "carb_load");
+  assert.equal(on("2026-11-12", placed("run", "2026-11-12"), futsal("2026-11-12")), "carb_load");
+});
+
+test("a session counts on the day it was done, not skipped", () => {
+  const p = planWith();
+  const moved = entries(placed("run", "2026-11-03", { status: "done", doneDay: d("2026-11-04") }));
+  assert.equal(dayType(p, d("2026-11-03"), moved), "rest");
+  assert.equal(dayType(p, d("2026-11-04"), moved), "training");
+  assert.equal(dayType(p, d("2026-11-03"), entries(placed("run", "2026-11-03", { status: "skipped" }))), "rest");
+  assert.equal(dayType(p, d("2026-11-15"), entries(placed("race", "2026-11-15", { status: "skipped" }))), "rest");   // even a locked one
+  assert.equal(dayType(p, d("2026-11-05"), entries(placed("run", "2026-11-03", { day: null, status: "done", doneDay: d("2026-11-05") }))), "training");
+});
+
+test("the carbs target is the plan's range for the day's type", () => {
+  const p = planWith();
+  assert.deepEqual(carbsTarget(p, d("2026-11-05"), entries()), [330, 415]);
+  assert.deepEqual(carbsTarget(p, d("2026-11-08"), entries()), [500, 665]);
+  assert.deepEqual(carbsTarget(p, d("2026-11-12"), entries()), [600, 800]);
+  assert.equal(carbsTarget(p, d("2026-11-15"), entries()), null);               // race day only has a note
+  const bare = planWith({ nutrition: undefined });
+  assert.equal(bare.nutrition, null);
+  assert.equal(carbsTarget(bare, d("2026-11-05"), entries()), null);
+  assert.equal(dayType(bare, d("2026-11-08"), entries()), "long");              // the type still works without a nutrition block
+});

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyChanges, checkPlan, fileChanges } from "../tools/training-sync.ts";
+import { applyChanges, checkPlan, checkShared, fileChanges } from "../tools/training-sync.ts";
+import { planFileId } from "../src/domain/training.ts";
+import { MEALS_FILE, RUNS_FILE, SHARED_PLAN } from "../src/domain/trends.ts";
 
 const rec = (planId: string, file: string, text: string) => ({ id: `${planId}:${file}`, planId, file, text, updatedAt: 1 });
 

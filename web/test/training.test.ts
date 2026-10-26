@@ -67,6 +67,44 @@ test("the plan reads with defaults, and unknown fields are ignored", () => {
   assert.equal(p.bestsSince, d("2026-10-01"));
 });
 
+test("nutrition, a session's day type and the body weight range are read; an older plan has none", () => {
+  const old = read();
+  assert.deepEqual([old.nutrition, old.bodyweightTarget, old.phases[0].sessions[3].dayType], [null, null, null]);
+  const next = {
+    ...raw(),
+    nutrition: {
+      protein_g: [135, 150], kcal_target: null, future: 1,
+      day_types: { rest: { carbs_g: [330, 415] }, long: { carbs_g: [500, 665] }, race: { note: "see Race day" } },
+      date_overrides: [{ date: "2026-11-13", day_type: "long" }],
+    },
+    bodyweight: { target_kg_range: [66, 70] },
+  };
+  (next.phases[0].sessions[3] as Record<string, unknown>).day_type = "long";
+  const r = readPlan(next);
+  assert.deepEqual(r.problems, []);
+  const n = r.plan!.nutrition!;
+  assert.deepEqual([n.proteinG, n.kcalTarget, n.dateOverrides], [[135, 150], null, [{ day: d("2026-11-13"), dayType: "long" }]]);
+  assert.deepEqual([n.dayTypes.get("rest"), n.dayTypes.get("race"), n.dayTypes.has("training")], [{ carbsG: [330, 415], note: "" }, { carbsG: null, note: "see Race day" }, false]);
+  assert.deepEqual([r.plan!.bodyweightTarget, r.plan!.phases[0].sessions[3].dayType], [[66, 70], "long"]);
+
+  // Plain-words problems for what can't be used; the plan still reads.
+  const bad = { ...next, nutrition: { ...next.nutrition, protein_g: "lots", date_overrides: [{ date: "soon", day_type: "long" }, { date: "2026-11-14", day_type: "feast" }] }, bodyweight: { target_kg_range: ["a"] } };
+  (bad.phases[0].sessions[0] as Record<string, unknown>).day_type = "tempo";
+  const b = readPlan(bad);
+  assert.ok(b.plan);
+  assert.equal(b.problems.length, 5);
+  assert.ok(b.problems.some((p) => p.includes("protein_g must be [low, high]")));
+  assert.ok(b.problems.some((p) => p.includes("override needs a date")));
+  assert.ok(b.problems.some((p) => p.includes("feast") && p.includes("isn't in day_types")));
+  assert.ok(b.problems.some((p) => p.includes("target_kg_range")));
+  assert.ok(b.problems.some((p) => p.includes("t001") && p.includes("tempo")));
+  // A day_type with no nutrition block to check it against is just kept.
+  const loose = raw();
+  (loose.phases[0].sessions[0] as Record<string, unknown>).day_type = "tempo";
+  assert.deepEqual(readPlan(loose).problems, []);
+  assert.deepEqual(readPlan({ ...raw(), nutrition: "high protein" }).problems, ["The nutrition block must be an object."]);
+});
+
 test("the reader lists what's wrong, in plain words", () => {
   const bad = raw();
   bad.phases[0].sessions[1].id = "t001";                                   // duplicate session id

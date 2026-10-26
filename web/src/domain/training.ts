@@ -9,6 +9,7 @@
 //   renames, replaces or drops a session.
 // Exercise ids are permanent across all plans (the plan session keeps a growing catalogue), so history and
 // bests carry on from one plan to the next. Session ids are per plan.
+// Runs, meals, body weight and the lift and run trends are in trends.ts (same two owners).
 import { epochOf, ymd } from "./dates.ts";
 
 /** The planner.json format versions this app reads; a newer one is still shown as far as it goes. */
@@ -35,27 +36,52 @@ export interface Session {
   locked: boolean; optional: boolean; extra: string[]; exercises: SessionExercise[];
   /** Its phase's place in [Plan.phases]. */
   phase: number;
+  /** The nutrition day type this session makes its day ("training", "long"...); null leaves it to its kind (see dayType). */
+  dayType: string | null;
 }
 export interface Phase { name: string; start: number; end: number; summary: string; rules: string[]; notes: string[]; sessions: Session[] }
 export interface HistoricalBest { exercise: string; kg: number; reps: number; label: string }
 export interface EstimatedMax { exercise: string; kg: number; day: number | null; from: string }
 export interface RunRecord { distance: string; time: string; day: number | null; source: string; note: string }
+/** [low, high]. */
+export type Range = [number, number];
+/** A kind of day in the nutrition plan: its carbs, or only a note (race day: "see Race day"). */
+export interface DayType { carbsG: Range | null; note: string }
+export interface Nutrition {
+  proteinG: Range | null;
+  /** By key: "rest", "training", "long", "carb_load", "race"... */
+  dayTypes: Map<string, DayType>;
+  /** Days that are a given type whatever is on them (the carb load before the race). */
+  dateOverrides: { day: number; dayType: string }[];
+  kcalTarget: Range | null;
+}
 export interface Plan {
   version: number; id: string; name: string; start: number; end: number;
   /** Rep bests count sets from this day on (the return to lifting). */
   bestsSince: number | null;
   documents: PlanDocument[]; exercises: Exercise[]; phases: Phase[];
   records: { historical: HistoricalBest[]; estimatedMax: EstimatedMax[]; runs: RunRecord[] };
+  nutrition: Nutrition | null;
+  /** The body weight range in kg the plan aims for, when it says. */
+  bodyweightTarget: Range | null;
 }
 
 // ---------- Reading planner.json ----------
 
-type Raw = Record<string, unknown>;
-const obj = (v: unknown): Raw => (v && typeof v === "object" && !Array.isArray(v) ? (v as Raw) : {});
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const str = (v: unknown): string => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const strs = (v: unknown): string[] => arr(v).map(str).filter(Boolean);
+// (Shared with trends.ts, which reads runs.json and meals.json the same tolerant way.)
+export type Raw = Record<string, unknown>;
+export const obj = (v: unknown): Raw => (v && typeof v === "object" && !Array.isArray(v) ? (v as Raw) : {});
+export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+export const str = (v: unknown): string => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
+export const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+export const strs = (v: unknown): string[] => arr(v).map(str).filter(Boolean);
+/** [low, high] from two numbers (either order) or one number (both ends); null for anything else. */
+export function range(v: unknown): Range | null {
+  const one = num(v);
+  if (one !== null) return [one, one];
+  const [a, b] = arr(v).map(num);
+  return arr(v).length === 2 && a !== null && b !== null ? [Math.min(a, b), Math.max(a, b)] : null;
+}
 
 /** "2026-11-29" → local day number; null for anything else. */
 export function dayOf(iso: unknown): number | null {
@@ -80,6 +106,30 @@ function card(v: unknown): Card | null {
 }
 
 const KINDS: SessionKind[] = ["run", "gym", "bike", "physio", "other"];
+
+/** The "nutrition" block of planner.json; null when the plan has none. Adds to [problems] what it can't read. */
+function readNutrition(v: unknown, problems: string[]): Nutrition | null {
+  if (v === undefined || v === null) return null;
+  if (!v || typeof v !== "object" || Array.isArray(v)) { problems.push("The nutrition block must be an object."); return null; }
+  const n = obj(v);
+  const asRange = (x: unknown, what: string) => {
+    const r = range(x);
+    if (r === null && x != null) problems.push(`Nutrition ${what} must be [low, high].`);
+    return r;
+  };
+  const dayTypes = new Map<string, DayType>();
+  for (const [key, d] of Object.entries(obj(n.day_types))) {
+    dayTypes.set(key, { carbsG: asRange(obj(d).carbs_g, `${key} carbs_g`), note: str(obj(d).note) });
+  }
+  const dateOverrides: Nutrition["dateOverrides"] = [];
+  for (const o of arr(n.date_overrides).map(obj)) {
+    const day = dayOf(o.date), dayType = str(o.day_type).trim();
+    if (day === null || !dayType) { problems.push(`A nutrition date override needs a date and a day_type ("${str(o.date)}").`); continue; }
+    if (!dayTypes.has(dayType)) problems.push(`The nutrition override for ${str(o.date)} uses day type ${dayType}, which isn't in day_types.`);
+    dateOverrides.push({ day, dayType });
+  }
+  return { proteinG: asRange(n.protein_g, "protein_g"), dayTypes, dateOverrides, kcalTarget: asRange(n.kcal_target, "kcal_target") };
+}
 
 /**
  * Reads planner.json (already parsed) into a [Plan], filling in what's missing and ignoring fields it
@@ -116,6 +166,11 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
     });
   }
 
+  const nutrition = readNutrition(root.nutrition, problems);
+  const bodyweight = obj(root.bodyweight);
+  const bodyweightTarget = range(bodyweight.target_kg_range);
+  if (bodyweightTarget === null && bodyweight.target_kg_range != null) problems.push("The bodyweight target_kg_range must be [low, high].");
+
   const sessionIds = new Set<string>();
   const phases: Phase[] = arr(root.phases).map(obj).map((ph, index) => {
     const name = str(ph.name) || `Phase ${index + 1}`;
@@ -136,9 +191,11 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
       const kind = str(s.kind) as SessionKind;
       const locked = s.locked === true;
       if (locked && defaultDay === null) problems.push(`Session ${sid} is locked but has no default_date.`);
+      const dayType = str(s.day_type).trim() || null;
+      if (dayType && nutrition && !nutrition.dayTypes.has(dayType)) problems.push(`Session ${sid} has day_type ${dayType}, which isn't in the nutrition day types.`);
       sessions.push({
         id: sid, title: title || sid, detail: str(s.detail), kind: KINDS.includes(kind) ? kind : "other", card: card(s.card),
-        defaultDay, locked, optional: s.optional === true, extra: strs(s.extra), phase: index,
+        defaultDay, locked, optional: s.optional === true, extra: strs(s.extra), phase: index, dayType,
         exercises: arr(s.exercises).map(obj).map((x) => {
           const ex = str(x.exercise);
           if (!exIds.has(ex)) problems.push(`Session ${sid} uses exercise ${ex || "(none)"}, which isn't in the exercise list.`);
@@ -168,6 +225,7 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
       estimatedMax: arr(r.estimated_1rm).map(obj).map((h) => ({ exercise: str(h.exercise), kg: num(h.kg) ?? 0, day: dayOf(h.date), from: str(h.from) })),
       runs: arr(r.runs).map(obj).map((h) => ({ distance: str(h.distance), time: str(h.time), day: dayOf(h.date), source: str(h.source), note: str(h.note) })),
     },
+    nutrition, bodyweightTarget,
   } : null;
   return { plan, problems };
 }
@@ -491,7 +549,7 @@ export function newBestsIn(lift: Lift, others: Iterable<Lift>, tracked: Readonly
 
 // ---------- The logs back to the plan session ----------
 
-function csv(rows: (string | number | null)[][]): string {
+export function csv(rows: (string | number | null)[][]): string {
   const cell = (v: string | number | null) => {
     const s = v === null ? "" : String(v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
