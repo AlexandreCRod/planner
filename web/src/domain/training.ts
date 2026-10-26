@@ -38,8 +38,43 @@ export interface Session {
   phase: number;
   /** The nutrition day type this session makes its day ("training", "long"...); null leaves it to its kind (see dayType). */
   dayType: string | null;
+  /** What the placement rules pick it by besides its kind and day type ("quality"). */
+  tags: string[];
 }
-export interface Phase { name: string; start: number; end: number; summary: string; rules: string[]; notes: string[]; sessions: Session[] }
+export interface Phase {
+  name: string; start: number; end: number; summary: string; rules: string[]; notes: string[]; sessions: Session[];
+  /** The rules for which day things go on (see placement.ts). */
+  placement: PlacementRule[];
+}
+
+/** What a placement rule applies to: sessions of a kind (or futsal), of a day type, with a tag, or named. */
+export type Selector = { kind: string } | { dayType: string } | { tag: string } | { sessions: string[] };
+/** "avoid" and "ideally" are broken rules, worst first; a "note" is only a hint, never broken. */
+export type PlacementLevel = "avoid" | "ideally" | "note";
+export type PlacementCheck =
+  /** No a the day before a b. */
+  | { type: "not_day_before"; a: Selector; b: Selector }
+  /** No a on a b's day. */
+  | { type: "not_same_day"; a: Selector; b: Selector }
+  /** An a at least [days] days before a b (calendar days: Mon → Wed is 2). */
+  | { type: "min_days_before"; a: Selector; b: Selector; days: number }
+  /** Each a [minDays] to [maxDays] days after the one before it. */
+  | { type: "gap"; a: Selector; minDays: number | null; maxDays: number | null }
+  /** At least [min] days in the phase with nothing on them. */
+  | { type: "rest_days"; min: number }
+  /** At most [max] days in a row with something on them. */
+  | { type: "max_in_a_row"; max: number }
+  /** An a only on these weekdays (1 = Monday ... 7 = Sunday). */
+  | { type: "weekdays"; a: Selector; days: number[] }
+  /** At most [max] a in the phase. */
+  | { type: "max_count"; a: Selector; max: number }
+  /** An a on or before [day]. */
+  | { type: "not_after"; a: Selector; day: number }
+  /** A hint shown when an a and a b share a day. */
+  | { type: "same_day_note"; a: Selector; b: Selector }
+  /** No a at all in the phase. */
+  | { type: "none"; a: Selector };
+export interface PlacementRule { id: string; level: PlacementLevel; check: PlacementCheck; text: string; why: string }
 export interface HistoricalBest { exercise: string; kg: number; reps: number; label: string }
 export interface EstimatedMax { exercise: string; kg: number; day: number | null; from: string }
 export interface RunRecord { distance: string; time: string; day: number | null; source: string; note: string }
@@ -106,6 +141,96 @@ function card(v: unknown): Card | null {
 }
 
 const KINDS: SessionKind[] = ["run", "gym", "bike", "physio", "other"];
+const LEVELS: PlacementLevel[] = ["avoid", "ideally", "note"];
+const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** One selector of a check; null (with a problem said) when it can't be read. Named sessions go to [named] to check later. */
+function readSelector(v: unknown, bad: (text: string) => void, named: string[]): Selector | null {
+  const s = obj(v);
+  if (typeof s.kind === "string") {
+    if (s.kind === "futsal" || KINDS.includes(s.kind as SessionKind)) return { kind: s.kind };
+    bad(`picks kind "${s.kind}", which isn't futsal or a session kind (${KINDS.join(", ")}).`);
+    return null;
+  }
+  if (str(s.day_type).trim()) return { dayType: str(s.day_type).trim() };
+  if (str(s.tag).trim()) return { tag: str(s.tag).trim() };
+  const ids = str(s.session).trim() ? [str(s.session).trim()] : strs(s.sessions);
+  if (ids.length) { named.push(...ids); return { sessions: ids }; }
+  bad(v == null ? "is missing (what the rule applies to)." : "can't be read (use kind, day_type, tag, session or sessions).");
+  return null;
+}
+
+/**
+ * A phase's "placement" list. A rule with an unknown check type or level, or a missing field, is left out
+ * and told in [problems]; the others are read. Session ids named go to [named] with the rule, to check once
+ * every session is read.
+ */
+function readPlacement(v: unknown, phase: string, problems: string[], named: { rule: string; ids: string[] }[]): PlacementRule[] {
+  const out: PlacementRule[] = [];
+  const seen = new Set<string>();
+  arr(v).forEach((x, i) => {
+    const r = obj(x);
+    const id = str(r.id).trim();
+    const what = `Placement rule ${id || i + 1} in "${phase}"`;
+    let ok = true;
+    const bad = (text: string) => { problems.push(`${what} ${text}`); ok = false; };
+    if (!id) bad("has no id.");
+    else if (seen.has(id)) bad("is there twice.");
+    seen.add(id);
+    const level = str(r.level) as PlacementLevel;
+    if (!LEVELS.includes(level)) bad(`has level "${str(r.level)}", which isn't avoid, ideally or note.`);
+    const text = str(r.text).trim(), why = str(r.why).trim();
+    if (!text) bad("has no text.");
+    if (!why && level !== "note") bad("has no why.");
+    const c = obj(r.check);
+    const ids: string[] = [];
+    const sel = (key: "a" | "b") => readSelector(c[key], (t) => bad(`check ${key} ${t}`), ids);
+    const whole = (key: string, min: number) => {
+      const n = num(c[key]);
+      if (n === null || n < min || !Number.isInteger(n)) { bad(`needs ${key}, a whole number from ${min}.`); return 0; }
+      return n;
+    };
+    const type = str(c.type);
+    let check: PlacementCheck | null = null;
+    if (type === "not_day_before" || type === "not_same_day" || type === "same_day_note") {
+      const a = sel("a"), b = sel("b");
+      if (a && b) check = { type, a, b };
+    } else if (type === "min_days_before") {
+      const a = sel("a"), b = sel("b"), days = whole("days", 1);
+      if (a && b) check = { type, a, b, days };
+    } else if (type === "gap") {
+      const a = sel("a");
+      const minDays = c.min_days == null ? null : whole("min_days", 0), maxDays = c.max_days == null ? null : whole("max_days", 0);
+      if (minDays === null && maxDays === null) bad("needs min_days or max_days.");
+      else if (minDays !== null && maxDays !== null && maxDays < minDays) bad("has max_days below min_days.");
+      if (a) check = { type, a, minDays, maxDays };
+    } else if (type === "rest_days") {
+      check = { type, min: whole("min", 1) };
+    } else if (type === "max_in_a_row") {
+      check = { type, max: whole("max", 1) };
+    } else if (type === "weekdays") {
+      const a = sel("a");
+      const names = strs(c.days).map((d) => d.toLowerCase());
+      const unknown = names.filter((d) => !WEEKDAYS.includes(d));
+      if (!names.length) bad(`needs days, e.g. ["sat", "sun"].`);
+      else if (unknown.length) bad(`has days it can't read (${unknown.join(", ")}); use mon, tue... sun.`);
+      if (a) check = { type, a, days: names.map((d) => WEEKDAYS.indexOf(d) + 1) };
+    } else if (type === "max_count") {
+      const a = sel("a"), max = whole("max", 0);
+      if (a) check = { type, a, max };
+    } else if (type === "not_after") {
+      const a = sel("a"), day = dayOf(c.date);
+      if (day === null) bad("needs a date (YYYY-MM-DD).");
+      if (a && day !== null) check = { type, a, day };
+    } else if (type === "none") {
+      const a = sel("a");
+      if (a) check = { type, a };
+    } else bad(type ? `has check type "${type}", which this Planner doesn't know.` : "has no check type.");
+    if (ids.length) named.push({ rule: what, ids });
+    if (ok && check) out.push({ id, level, check, text, why });
+  });
+  return out;
+}
 
 /** The "nutrition" block of planner.json; null when the plan has none. Adds to [problems] what it can't read. */
 function readNutrition(v: unknown, problems: string[]): Nutrition | null {
@@ -172,6 +297,7 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
   if (bodyweightTarget === null && bodyweight.target_kg_range != null) problems.push("The bodyweight target_kg_range must be [low, high].");
 
   const sessionIds = new Set<string>();
+  const named: { rule: string; ids: string[] }[] = [];
   const phases: Phase[] = arr(root.phases).map(obj).map((ph, index) => {
     const name = str(ph.name) || `Phase ${index + 1}`;
     const ps = dayOf(ph.start), pe = dayOf(ph.end);
@@ -195,7 +321,7 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
       if (dayType && nutrition && !nutrition.dayTypes.has(dayType)) problems.push(`Session ${sid} has day_type ${dayType}, which isn't in the nutrition day types.`);
       sessions.push({
         id: sid, title: title || sid, detail: str(s.detail), kind: KINDS.includes(kind) ? kind : "other", card: card(s.card),
-        defaultDay, locked, optional: s.optional === true, extra: strs(s.extra), phase: index, dayType,
+        defaultDay, locked, optional: s.optional === true, extra: strs(s.extra), phase: index, dayType, tags: strs(s.tags),
         exercises: arr(s.exercises).map(obj).map((x) => {
           const ex = str(x.exercise);
           if (!exIds.has(ex)) problems.push(`Session ${sid} uses exercise ${ex || "(none)"}, which isn't in the exercise list.`);
@@ -208,8 +334,10 @@ export function readPlan(raw: unknown): { plan: Plan | null; problems: string[] 
         }),
       });
     }
-    return { name, start: ps ?? 0, end: pe ?? 0, summary: str(ph.summary), rules: strs(ph.rules), notes: strs(ph.notes), sessions };
+    const placement = readPlacement(ph.placement, name, problems, named);
+    return { name, start: ps ?? 0, end: pe ?? 0, summary: str(ph.summary), rules: strs(ph.rules), notes: strs(ph.notes), sessions, placement };
   });
+  for (const n of named) for (const sid of n.ids) if (!sessionIds.has(sid)) problems.push(`${n.rule} names session ${sid}, which isn't in the plan.`);
   phases.forEach((a, i) => {
     const b = phases[i + 1];
     if (b && a.end && b.start && b.start <= a.end) problems.push(`Phases "${a.name}" and "${b.name}" overlap.`);
@@ -354,6 +482,22 @@ export function entryFor(plan: Plan, s: Session, entries: ReadonlyMap<string, En
 export function dayOfSession(s: Session, e: Entry | undefined): number | null {
   if (s.locked) return s.defaultDay;
   return e ? e.day : s.defaultDay;
+}
+
+/**
+ * The day a session counts on (for the day's type and the placement rules): the day it was done, else the
+ * day it's on; none if skipped.
+ */
+export function countedDay(s: Session, e: Entry | undefined): number | null {
+  if (e?.status === "skipped") return null;
+  const placed = dayOfSession(s, e);
+  return e?.status === "done" ? e.doneDay ?? placed : placed;
+}
+
+/** The day a futsal game counts on, the same way; none if deleted or skipped. */
+export function futsalDay(e: Entry): number | null {
+  if (e.kind !== "futsal" || e.deletedAt !== null || e.status === "skipped") return null;
+  return e.status === "done" ? e.doneDay ?? e.day : e.day;
 }
 
 export interface WeekItem { session: Session | null; entry: Entry }

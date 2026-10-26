@@ -11,7 +11,7 @@
 // Days are epoch-day numbers (domain/dates.ts); weeks start on Monday.
 import { startOfWeek } from "./dates.ts";
 import {
-  type Entry, type Lift, type LiftSet, type Plan, type Raw, type Range, arr, csv, dayOf, dayOfSession, entryId, isoOf, num, obj, range, sessionsOf, str,
+  type Entry, type Lift, type LiftSet, type Plan, type Raw, type Range, arr, countedDay, csv, dayOf, entryId, futsalDay, isoOf, num, obj, range, sessionsOf, str,
 } from "./training.ts";
 
 export type { DayType, Nutrition } from "./training.ts";
@@ -172,16 +172,12 @@ export function dayType(plan: Plan, day: number, entries: ReadonlyMap<string, En
   if (over) return over.dayType;
   const found: string[] = [];
   for (const s of sessionsOf(plan)) {
-    const e = entries.get(entryId(plan.id, s.id));
-    if (e?.status === "skipped") continue;
-    const placed = dayOfSession(s, e);
-    if ((e?.status === "done" ? e.doneDay ?? placed : placed) !== day) continue;
+    if (countedDay(s, entries.get(entryId(plan.id, s.id))) !== day) continue;
     const type = s.dayType ?? (s.kind === "run" || s.kind === "gym" || s.kind === "bike" ? "training" : null);
     if (type) found.push(type);
   }
   for (const e of entries.values()) {
-    if (e.planId !== plan.id || e.kind !== "futsal" || e.deletedAt !== null || e.status === "skipped") continue;
-    if ((e.status === "done" ? e.doneDay ?? e.day : e.day) === day) found.push("training");
+    if (e.planId === plan.id && futsalDay(e) === day) found.push("training");
   }
   return found.sort((a, b) => dayTypeRank(a) - dayTypeRank(b))[0] ?? "rest";
 }
