@@ -10,6 +10,14 @@ export function checklistDepth(text: string): number {
   return text[i] === "☐" || text[i] === "☑" ? i : -1;
 }
 
+/** Copied text without its checklist boxes: "☐ Milk" → "Milk"; an indented line keeps its indent, as spaces. */
+export function withoutBoxes(text: string): string {
+  return text.split("\n").map((l) => {
+    const d = checklistDepth(l);
+    return d < 0 ? l : " ".repeat(d) + l.slice(checklistLead(l));
+  }).join("\n");
+}
+
 /** The run of adjoining checklist lines around line [i]: [first, last] (inclusive), or null. */
 export function checklistRun(texts: string[], i: number): [number, number] | null {
   if (checklistDepth(texts[i] ?? "") < 0) return null;

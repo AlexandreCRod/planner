@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickAnchor, tickMoveOrder } from "../src/domain/checklist.ts";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickAnchor, tickMoveOrder, withoutBoxes } from "../src/domain/checklist.ts";
 
 const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
 
@@ -83,6 +83,11 @@ test("a ticked item joins the end of the completed ones; unticking goes back abo
   // Not among the completed ones (an older note): it stays where it is.
   assert.equal(tickMoveOrder(["☐ A", "☐ B", "☑ C"], 0), null);
   assert.equal(tickMoveOrder(["☐ A", "☐ B"], 1), null);
+});
+
+test("copied lists leave their boxes behind", () => {
+  assert.equal(withoutBoxes("Shopping\n☐ Milk\n☑ Eggs\n⠀⠀⠀☐ Free range\n☐ \nAnd ☐ this stays"), "Shopping\nMilk\nEggs\n   Free range\n\nAnd ☐ this stays");
+  assert.equal(withoutBoxes("☐Milk"), "Milk");
 });
 
 test("an unticked item goes back where it was: after the open item it remembered", () => {

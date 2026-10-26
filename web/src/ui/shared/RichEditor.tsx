@@ -2,12 +2,14 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickAnchor, tickMoveOrder } from "../../domain/checklist.ts";
+import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
+/** How far outside the box a tap still ticks it (px). */
+const BOX_SLOP = 6;
 const INDENT = "⠀⠀⠀";
 const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 /** Whether the "Completed" sections start folded on this device (the last choice made on any of them). */
@@ -391,7 +393,33 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     if (at === undefined || t.data.slice(0, at).replace(/⠀/g, "") !== "") return;
     const block = currentBlockOf(t, el.current!);
     if (!block || firstText(block) !== t) return;
+    // Only a tap on the box itself ticks: on an empty line the caret lands next to the box from anywhere on it.
+    const r = document.createRange();
+    r.setStart(t, at);
+    r.setEnd(t, at + 1);
+    const box = r.getBoundingClientRect();
+    if (e.clientX > box.right + BOX_SLOP || e.clientY < box.top - BOX_SLOP || e.clientY > box.bottom + BOX_SLOP) return;
     tickLine(block, t, at);
+  };
+
+  // Copied (or cut) lines leave their boxes behind: what's pasted elsewhere is just the words.
+  const onCopy = (e: React.ClipboardEvent, cut = false) => {
+    const sel = getSelection(), root = el.current;
+    if (!sel || sel.isCollapsed || !root?.contains(sel.anchorNode)) return;
+    // Line by line (the browser's own text puts a blank line between paragraphs).
+    const range = sel.getRangeAt(0);
+    const text = [...root.children].filter((l) => range.intersectsNode(l)).map((l) => {
+      const r = document.createRange();
+      r.selectNodeContents(l);
+      if (l.contains(range.startContainer)) r.setStart(range.startContainer, range.startOffset);
+      if (l.contains(range.endContainer)) r.setEnd(range.endContainer, range.endOffset);
+      return r.toString();
+    }).join("\n");
+    const words = withoutBoxes(text);
+    if (words === text) return; // no boxes: the browser copies as usual
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", words);
+    if (cut) document.execCommand("delete");
   };
 
   /** Ticks or unticks the line whose box is at [at] in [t], moving it to or from its list's Completed section. */
@@ -504,7 +532,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
         style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
-        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} {...linkHandlers} />
+        data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} {...linkHandlers} />
       {heads.map((h) => (
         <button key={h.key} type="button" className={h.folded ? "pn-done-head is-folded" : "pn-done-head"} style={{ top: h.top, height: HEAD_H - 4 }}
           aria-expanded={!h.folded} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFold(h)}>

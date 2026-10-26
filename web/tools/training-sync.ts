@@ -85,7 +85,7 @@ function loadConfig(): { server: string; token: string } {
   const p = configPath();
   if (!existsSync(p)) throw new Stop(`No sync settings found. Create ${p} containing {"server":"https://your-worker.example.workers.dev","token":"your password"}.`);
   let c: { server?: unknown; token?: unknown };
-  try { c = JSON.parse(readFileSync(p, "utf8")); } catch { throw new Stop(`${p} isn't valid JSON.`); }
+  try { c = JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, "")); } catch { throw new Stop(`${p} isn't valid JSON.`); }
   if (typeof c.server !== "string" || typeof c.token !== "string" || !c.server || !c.token) throw new Stop(`${p} needs a "server" and a "token".`);
   return { server: c.server.replace(/\/+$/, ""), token: c.token };
 }

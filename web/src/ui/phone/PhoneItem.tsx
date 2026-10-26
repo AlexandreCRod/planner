@@ -326,6 +326,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
 }) {
   const mine = all.map((r, i) => [r, i] as const).filter(([r]) => (r.type === "ALARM") === alarms);
   const [picking, setPicking] = useState<null | "date" | number>(null);
+  const [custom, setCustom] = useState<number | null>(null);
   const icon = alarms ? "oAlarm" : "oNotifications";
   const set = (i: number, r: Reminder) => onChange(all.map((x, j) => (j === i ? r : x)));
   const untimed = ` (${formatTime(useAlarmSettings().defaultTaskTime)})`;
@@ -337,7 +338,10 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
     {mine.map(([r, i], n) => (
       <FieldRow key={i} icon={n === 0 ? icon : null}>
         <span className="grow">
-          <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={[...OFFSETS, ...AFTER_OFFSETS].map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, divider: o === AFTER_OFFSETS[0], onClick: () => set(i, { ...r, offsetMin: o }) }))} />
+          <MenuText text={onDate ? `${offsetText(r.offsetMin)} · once it has a date` : offsetText(r.offsetMin) + (timed ? "" : untimed)} items={[
+            ...[...OFFSETS, ...AFTER_OFFSETS].map((o) => ({ label: offsetText(o), checked: o === r.offsetMin, divider: o === AFTER_OFFSETS[0], onClick: () => set(i, { ...r, offsetMin: o }) })),
+            { label: "Custom…", divider: true, checked: !OFFSETS.includes(r.offsetMin) && !AFTER_OFFSETS.includes(r.offsetMin), onClick: () => setCustom(i) },
+          ]} />
         </span>
         {alarms && hasAlarms && (
           <IconButton icon="oMusicNote" className={r.soundUri ? "primary" : ""} label={r.soundUri ? "Alarm sound (custom)" : "Alarm sound (default)"}
@@ -361,7 +365,46 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
     </FieldRow>
     {picking === "date" && <DatePickerDialog value={null} onClose={() => setPicking((p) => (p === "date" ? null : p))} onPick={(d) => setPicking(d)} />}
     {typeof picking === "number" && <TimePickerDialog value={null} onClose={() => setPicking(null)} onPick={(m) => { onDate?.(picking, m); setPicking(null); }} />}
+    {custom !== null && all[custom] && (
+      <CustomLeadDialog value={all[custom].offsetMin} onSave={(m) => set(custom, { ...all[custom], offsetMin: m })} onClose={() => setCustom(null)} />
+    )}
   </>;
+}
+
+const LEAD_UNITS: [string, string, number][] = [["min", "Minutes", 1], ["hour", "Hours", 60], ["day", "Days", 1440], ["week", "Weeks", 10080]];
+/** The longest custom lead time, either way: 4 weeks. */
+const MAX_LEAD = 4 * 10080;
+
+/** A reminder time of one's own: a number, its unit, and before or after the start. */
+function CustomLeadDialog({ value, onSave, onClose }: { value: number; onSave: (min: number) => void; onClose: () => void }) {
+  const a = Math.abs(value);
+  const first = [...LEAD_UNITS].reverse().find(([, , m]) => a > 0 && a % m === 0) ?? LEAD_UNITS[0];
+  const [unit, setUnit] = useState(first[0]);
+  const [text, setText] = useState(String(a / first[2]));
+  const [after, setAfter] = useState(value < 0);
+  const per = LEAD_UNITS.find(([k]) => k === unit)![2];
+  const n = /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;
+  const total = n * per;
+  const valid = Number.isInteger(n) && total <= MAX_LEAD;
+  const bump = (d: number) => { feel("tick"); setText(String(Math.max(0, (Number.isInteger(n) ? n : 0) + d))); };
+  const save = () => { if (!valid) return; onSave(after ? -total : total); onClose(); };
+  return (
+    <Dialog title="Custom reminder" onClose={onClose} actions={<>
+      <span className="grow" />
+      <TextButton onClick={onClose}>Cancel</TextButton>
+      <TextButton disabled={!valid} onClick={save}>Save</TextButton>
+    </>}>
+      <div className="p-stepper">
+        <IconButton icon="fRemove" label="One less" onClick={() => bump(-1)} />
+        <input className="p-stepper-field" inputMode="numeric" value={text} autoFocus enterKeyHint="done" aria-label="How many"
+          onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => { if (ev.key === "Enter") save(); }} />
+        <IconButton icon="fAdd" label="One more" onClick={() => bump(1)} />
+      </div>
+      <div className="pe-lead-row"><Segmented value={unit} options={LEAD_UNITS.map(([k, l]): [string, string] => [k, l])} onChange={setUnit} /></div>
+      <div className="pe-lead-row"><Segmented value={after ? "after" : "before"} options={[["before", "Before"], ["after", "After"]]} onChange={(v) => setAfter(v === "after")} /></div>
+      <div className="pe-small pe-lead-sum">{valid ? offsetText(after ? -total : total) : "Up to 4 weeks"}</div>
+    </Dialog>
+  );
 }
 
 /** While one of the item's alarms rings: Snooze and Stop right here (it rings on whatever the screen shows). */

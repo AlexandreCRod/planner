@@ -124,4 +124,9 @@ test("lead times read both ways", () => {
   assert.equal(offsetText(-15), "15 minutes after");
   assert.equal(offsetText(0), "At the time");
   assert.equal(offsetText(1440), "1 day before");
+  // Custom lead times read in parts.
+  assert.equal(offsetText(90), "1 hour 30 minutes before");
+  assert.equal(offsetText(1500), "1 day 1 hour before");
+  assert.equal(offsetLabel(-75), "1 hour 15 min after");
+  assert.equal(offsetText(20160), "2 weeks before");
 });

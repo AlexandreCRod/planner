@@ -1523,3 +1523,10 @@ html.phone[data-theme="dark"] {
 .phone .wl-title { font-size: 16px; line-height: 24px; font-weight: 500; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .phone .wl-desc { font-size: 14px; line-height: 20px; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .phone .wl-url { font-size: 12px; line-height: 16px; color: var(--p-primary); overflow-wrap: anywhere; margin-top: 4px; }
+/* A number with − and + beside it (a set's weight, a custom reminder time). */
+.phone .p-stepper { display: flex; align-items: center; gap: 4px; }
+.phone .p-stepper-field { flex: 1; min-width: 0; height: 56px; padding: 0 12px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; color: var(--text); font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
+.phone .p-stepper-field:focus { outline: none; border: 2px solid var(--p-primary); }
+.phone .p-stepper .unit { color: var(--muted); font-size: 14px; }
+.phone .pe-lead-row { margin-top: 12px; }
+.phone .pe-lead-sum { margin-top: 12px; text-align: center; }

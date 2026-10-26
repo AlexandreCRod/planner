@@ -142,10 +142,6 @@
 .phone .tr-set.done .tr-num { background: none; color: var(--muted); }
 .phone .tr-addset, .phone .tr-addpain { margin-left: -4px; }
 .phone .tr-ex .tr-scale:first-of-type { margin-top: 4px; }
-.phone .tr-stepper { display: flex; align-items: center; gap: 4px; }
-.phone .tr-stepper-field { flex: 1; min-width: 0; height: 56px; padding: 0 12px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; color: var(--text); font-size: 24px; text-align: center; font-variant-numeric: tabular-nums; }
-.phone .tr-stepper-field:focus { outline: none; border: 2px solid var(--p-primary); }
-.phone .tr-stepper .unit { color: var(--muted); font-size: 14px; }
 
 /* The documents, read. */
 .phone .tr-docchips { padding-top: 4px; padding-bottom: 8px; box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 60%, transparent); }

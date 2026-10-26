@@ -337,9 +337,9 @@ function NumberDialog({ what, set, value, canRemove, onSave, onRemove, onClose }
       <TextButton onClick={onClose}>Cancel</TextButton>
       <TextButton disabled={!valid} onClick={save}>Save</TextButton>
     </>}>
-      <div className="tr-stepper">
+      <div className="p-stepper">
         <IconButton icon="fRemove" label={`Less by ${step}`} onClick={() => bump(-step)} />
-        <input className="tr-stepper-field" inputMode="decimal" value={text} autoFocus enterKeyHint="done"
+        <input className="p-stepper-field" inputMode="decimal" value={text} autoFocus enterKeyHint="done"
           onChange={(ev) => setText(ev.target.value)} onKeyDown={(ev) => { if (ev.key === "Enter") save(); }} />
         <span className="unit">{what === "kg" ? "kg" : "reps"}</span>
         <IconButton icon="fAdd" label={`More by ${step}`} onClick={() => bump(step)} />
