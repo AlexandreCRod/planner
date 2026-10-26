@@ -87,10 +87,10 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-tab { flex: 1; min-width: 0; height: var(--bar-h); position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); }
 /* The label shows under the selected tab only: unselected icons sit centred, and the chosen tab's icon
    rises as its label fades in (M3 emphasized easing, 200 ms: it never holds up the tap or the page). */
-.phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s, transform .2s cubic-bezier(.2, 0, 0, 1); }
-.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s, opacity .15s linear, transform .2s cubic-bezier(.2, 0, 0, 1); }
-.phone .p-tab:not(.on) .p-tab-icon { transform: translateY(10px); }
-.phone .p-tab:not(.on) .p-tab-label { opacity: 0; transform: translateY(6px); }
+.phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s; }
+.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s, opacity .15s linear; }
+/* The icons never move: choosing a tab only changes the indicator, the colours and its label, which fades in under it. */
+.phone .p-tab:not(.on) .p-tab-label { opacity: 0; }
 .phone .p-tab.on .p-tab-icon { color: var(--p-on-sec-container); }
 .phone .p-tab.on .p-tab-label { color: var(--text); }
 

@@ -38,7 +38,7 @@ const GLANCE_ROWS = 3;
 const WEEK_ROWS = 3;
 /** The day Today shows (the phone's + button adds to it). */
 export const todayViewedDay = () => viewed ?? todayEpoch();
-/** Back to the real today (a double tap on the phone's Today tab). */
+/** Back to the real today (a tap on the Today tab while it shows). */
 export const resetToday = () => { viewed = null; };
 /** Turns Today to [day] (the T key), at once, like its own "Back to today" button. */
 export function showTodayDay(day: number) {

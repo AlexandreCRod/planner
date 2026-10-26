@@ -31,7 +31,7 @@ import { isNative, useWide } from "../../platform.ts";
 import { setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { BAR_GAIN, barSwipeReversed, barTarget, spring } from "./pager.ts";
+import { BAR_GAIN, barSwipeReversed, barTarget } from "./pager.ts";
 import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
@@ -46,8 +46,12 @@ const TABS: { key: string; label: string }[] = [
   ...(hasAlarms ? [{ key: "alarms", label: "Alarms" }] : []),
 ];
 const LAST = TABS.length - 1;
-/** Two taps on the same tab closer than this (finger lifts, ms) reset its page (HomeScreen.kt). */
-const DOUBLE_TAP_MS = 350;
+/**
+ * Going back to today (a tap on the tab already shown): the old view slides out as today's slides in, both
+ * together, on a quick ease-out with no overshoot, as Google Calendar's Today does.
+ */
+const RESET_MS = 300;
+const RESET_EASE = "cubic-bezier(.2, 0, 0, 1)";
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 /**
  * The pager's offset (down the side rail, [axis] Y, for its indicator). While it moves it's a 3D
@@ -183,11 +187,10 @@ export function PhoneApp() {
       window.removeEventListener("pointercancel", onUp, { capture: true });
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Bumped by a double tap on a tab: that page is built afresh (scroll, filters, search all reset).
+  // Bumped by a tap on the tab already shown: that page is built afresh (scroll, filters, search all reset).
   const [resets, setResets] = useState<Record<string, number>>({});
   const selectListeners = useRef(new Set<(i: number) => void>());
   const popBar = useRef<() => void>();
-  const lastTap = useRef({ i: -1, at: 0 });
   const pagerEl = useRef<HTMLDivElement>(null);
   const [pos] = useState(() => new ShellPos(tab, () => pagerEl.current?.clientWidth ?? window.innerWidth, (r) => selectListeners.current.forEach((l) => l(r))));
   const wide = useWide();
@@ -232,9 +235,9 @@ export function PhoneApp() {
   };
 
   /**
-   * Back to the page's base view, like a double tap on a native tab. On Today and Calendar, when that
-   * changes the day shown, today slides in as if swiped back to: a still copy of the old view moves out
-   * on one side while the new one comes in from the other, on the pager's spring.
+   * Back to the page's base view (a tap on the tab already shown). On Today and Calendar, when that
+   * changes the day shown, today slides in: a still copy of the old view moves out on one side while the
+   * new one comes in from the other (RESET_MS, composited).
    */
   const resetPage = (i: number) => {
     const key = TABS[i].key;
@@ -250,17 +253,15 @@ export function PhoneApp() {
     const area = page?.querySelector<HTMLElement>(AREA);
     if (!ghost || !area) { ghost?.remove(); return; }
     const w = area.offsetWidth, dir = t > from ? 1 : -1;
-    const place = (x: number) => {
-      area.style.transform = x ? `translate3d(${x}px,0,0)` : "";
-      ghost.style.transform = `translate3d(${x - dir * w}px,0,0)`;
-    };
-    place(dir * w);
-    spring(dir * w, 0, 0, place, () => { place(0); ghost.remove(); });
+    const opts: KeyframeAnimationOptions = { duration: RESET_MS, easing: RESET_EASE };
+    area.animate([{ transform: `translate3d(${dir * w}px,0,0)` }, { transform: "translate3d(0,0,0)" }], opts);
+    ghost.animate([{ transform: "translate3d(0,0,0)" }, { transform: `translate3d(${-dir * w}px,0,0)` }], { ...opts, fill: "forwards" })
+      .finished.then(() => ghost.remove(), () => ghost.remove());
   };
 
   /**
-   * A tap on a tab (taken as the finger lifts, never held back to wait for a second one) goes there; a
-   * second tap on the same tab within 350 ms puts it back to its base view.
+   * A tap on a tab (taken as the finger lifts) goes there; a tap on the tab already shown puts it back to
+   * its base view.
    */
   const onTabTap = (i: number) => {
     const key = TABS[i].key;
@@ -269,7 +270,6 @@ export function PhoneApp() {
       // Wide, the note sits beside the Notes list: Notes again leaves it there.
       if (wide && key === "notes" && tabRef.current === i) return;
       minimizing.current = true;
-      lastTap.current = { i: -1, at: 0 };
       history.replaceState(null, "", `#/${TABS[i].key}`);
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       if (i === tabRef.current) popBar.current?.();
@@ -287,14 +287,7 @@ export function PhoneApp() {
       location.hash = dock.hash;
       return;
     }
-    const now = performance.now();
-    const prev = lastTap.current;
-    if (prev.i === i && now - prev.at < DOUBLE_TAP_MS && tabRef.current === i) {
-      lastTap.current = { i: -1, at: 0 };
-      resetPage(i);
-      return;
-    }
-    lastTap.current = { i, at: now };
+    if (tabRef.current === i && pos.resting) { resetPage(i); return; }
     settle(i, 0, true);
   };
 
