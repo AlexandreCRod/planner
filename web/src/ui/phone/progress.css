@@ -1,0 +1,81 @@
+/* Progress (TrainingProgress.tsx, ProgressChart.tsx). Same tokens and sizes as phone.css and training.css:
+   1 CSS px = 1 dp, 16 dp page margins. The list: rows with a sparkline; a card: a surface with 16 dp corners.
+   Wide (html.wide): the list and the open card side by side (tr-split, training.css). */
+
+.phone .pg-page { padding: 0 16px calc(var(--sab) + 24px); }
+.phone .pg-tabs { padding: 8px 0 12px; }
+/* Nutrition comes later: its tab is greyed until picked. */
+.phone .pg-tabs .p-segmented button:last-child:not(.on) { opacity: .5; }
+.phone .pg-tabs .p-segmented button { padding: 0 4px; }
+.phone .pg-soon { padding: 10px 12px; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .pg-act { margin-right: 4px; }
+
+/* The list. */
+.phone .pg-group { margin: 12px 0 2px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
+.phone .pg-row { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 8px; margin: 0 -8px; border-radius: 12px; cursor: pointer;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 60%, transparent); transition: background-color .15s; }
+.phone .pg-row:active, .phone .pg-row.sel { background: var(--p-sec-container); }
+.phone .pg-row.still { cursor: default; min-height: 52px; }
+.phone .pg-row.still:active { background: none; }
+.phone .pg-row .n { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .pg-row .n b { font-weight: 400; font-size: 16px; line-height: 22px; color: var(--text); }
+.phone .pg-row .n span { font-size: 13px; line-height: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .pg-row .v { min-width: 72px; text-align: right; font-size: 18px; line-height: 24px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-row .v span { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-spark { flex: none; overflow: visible; }
+.phone .pg-spark .pg-ring-bg { stroke: var(--bg); }
+
+/* A card. */
+.phone .pg-card { margin-bottom: 12px; padding: 14px 16px 14px; border-radius: 16px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-ct { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .pg-ct-read { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-head { height: 56px; }
+.phone .pg-hv { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-top: 2px; font-size: 34px; line-height: 44px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-hv small { font-size: 14px; color: var(--muted); }
+.phone .pg-chip { align-self: center; padding: 2px 8px; border-radius: 8px; background: var(--p-sc-high, var(--surface-2)); font-size: 13px; line-height: 18px; color: var(--text); }
+.phone .pg-ro .a { margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .pg-ro .b { font-size: 24px; line-height: 32px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-ro .b small { font-size: 13px; color: var(--muted); }
+.phone .pg-none { padding: 16px 0 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .pg-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.phone .pg-leg i { display: inline-block; vertical-align: middle; margin-right: 5px; }
+.phone .pg-leg i.ln { width: 14px; height: 2px; border-radius: 1px; }
+.phone .pg-leg i.dt { width: 8px; height: 8px; border-radius: 50%; }
+.phone .pg-leg i.ho { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; border: 2px solid; }
+.phone .pg-leg i.tri { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid; }
+.phone .pg-foot { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.phone .pg-range { margin: 4px 0 12px; }
+.phone .pg-range .p-segmented { height: 36px; }
+.phone .pg-range .p-segmented button { padding: 0 4px; font-size: 13px; }
+
+/* A small list in a card (rep bests, the pairs around runs). */
+.phone .pg-mini .r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: 15px; line-height: 20px; color: var(--text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.phone .pg-mini .pg-ct + .r { margin-top: 4px; box-shadow: none; }
+.phone .pg-mini .r > span:last-child { color: var(--muted); }
+.phone .pg-mini .r > span.big { font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-mini .r small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+
+/* The chart: hairline grid, axis text muted (never in a series colour), dots ringed in the card's colour. */
+.phone .pg-chart { margin: 4px -4px 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.phone .pg-chart svg { display: block; overflow: visible; cursor: crosshair; }
+.phone .pg-chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.phone .pg-chart .pg-grid { stroke: color-mix(in srgb, var(--line) 70%, transparent); stroke-width: 1; }
+.phone .pg-chart .pg-ring { stroke: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-chart .pg-fill { fill: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-chart .pg-cursor { stroke: var(--muted); stroke-width: 1; }
+
+/* "+ Weigh in". */
+.phone .pg-weigh { padding: 0 16px; }
+.phone .pg-weigh .tr-sheet-title { padding: 4px 8px 8px; }
+.phone .pg-weigh .p-sheet-buttons { padding-left: 0; padding-right: 0; }
+.phone .pg-when { margin-top: 12px; }
+.phone .pg-when .p-segmented button { padding: 0 4px; }
+
+/* Wide: the card beside the list. */
+.wide .tr-split .pg-list { flex: 0 0 440px; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.wide .pg-side { padding-top: 12px; }
+.wide .pg-side > * { max-width: 720px; }
+
+/* The cards on an exercise's history page. */
+.phone .pg-embed { padding: 4px 16px 0; }

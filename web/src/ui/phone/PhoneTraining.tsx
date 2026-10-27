@@ -3,9 +3,9 @@
 // day: tap one, then tap a day); then each day with its sessions and futsal. A placed session can be held
 // and dragged to another day (or back to To place). The ring on a row ticks it done, and a small "how it
 // went" row opens under it and closes by itself. A tap on a row opens the session (TrainingSession.tsx):
-// over the week on the phone, beside it in a wide window. Bests and the documents are in the top bar.
-// Placing a session or futsal on a day that breaks one of the phase's rules opens a sheet that says so (it's
-// never blocked), and a row shows "⚠ 1 rule" while it breaks one.
+// over the week on the phone, beside it in a wide window. Progress (TrainingProgress.tsx) and the documents are
+// in the top bar. Placing a session or futsal on a day that breaks one of the phase's rules opens a sheet that
+// says so (it's never blocked), and a row shows "⚠ 1 rule" while it breaks one.
 // Also here: Today's training line and the calendar's light marks.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { dayShort, formatDate, today as todayEpoch, weekday } from "../../domain/dates.ts";
@@ -25,7 +25,8 @@ import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { edgeSpeed } from "./selectScroll.ts";
-import { ExerciseHistory, TrainingBests, TrainingDocs } from "./TrainingDocs.tsx";
+import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
+import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { kindIcon, phaseNames, planQ, randomId } from "./trainingParts.tsx";
 import "./training.css";
@@ -74,7 +75,7 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
     {view && (
       <div className="tr-layer full">
         {view === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
-          : view === "bests" ? <TrainingBests tr={tr} lp={lp} planId={planId} />
+          : view === "progress" || view === "bests" ? <TrainingProgress tr={tr} lp={lp} query={query} planId={planId} />
           : view === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
           : null}
       </div>
@@ -229,7 +230,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
   return (
     <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} back flush actions={<>
-      <IconButton icon="oEmojiEvents" label="Bests" onClick={() => go(`training?view=bests${planQ(planId)}`)} />
+      <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
     </>}>
       {wide ? (
