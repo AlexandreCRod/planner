@@ -12,12 +12,26 @@
 .phone .tr-hint { padding: 4px 16px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .tr-oldplan { margin: 8px 16px 0; font-size: 13px; color: var(--muted); }
 
+/* A colour per kind (item 207): runs teal, gym amber, futsal grey-blue; deeper shades on the light theme.
+   An element with k-run, k-gym or k-futsal gets its kind's colour as --k. */
+html.phone { --k-run: #23806f; --k-gym: #9a6c12; --k-futsal: #557089; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: #9fb3c8; } }
+html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: #9fb3c8; }
+.phone .k-run { --k: var(--k-run); }
+.phone .k-gym { --k: var(--k-gym); }
+.phone .k-futsal { --k: var(--k-futsal); }
+
 /* The phases, the one shown, its notes and rules. */
 .phone .tr-phases { padding-top: 8px; padding-bottom: 4px; }
 .phone .tr-nowdot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--p-primary); vertical-align: middle; }
 .phone .tr-phase { padding: 8px 16px 4px; }
 .phone .tr-phase-name { font-size: 22px; line-height: 28px; color: var(--text); }
 .phone .tr-phase-sub { margin-top: 2px; font-size: 14px; line-height: 20px; color: var(--muted); }
+/* The week bar: a segment per session or futsal game, filling in its kind's colour when done. */
+.phone .tr-bar { display: flex; gap: 4px; margin-top: 10px; }
+.phone .tr-bar i { flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: var(--p-sc-high); transition: background-color .3s; }
+.phone .tr-bar i.done { background: var(--k, var(--p-primary)); }
+.phone .tr-bar-text { display: flex; justify-content: space-between; gap: 8px; margin: 5px 0 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .tr-phase-note { position: relative; margin-top: 6px; padding-left: 14px; font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .tr-phase-note::before { content: ""; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--p-tertiary, var(--p-primary)); }
 .phone .tr-rules-head { display: flex; align-items: center; gap: 4px; margin: 8px -8px 0; padding: 6px 8px; border: 0; border-radius: 16px; background: none; color: var(--p-primary); font-size: 14px; font-weight: 500; letter-spacing: .1px; }
@@ -58,11 +72,24 @@
 .phone .tr-row-text .detail { font-size: 13px; line-height: 18px; color: var(--muted); }
 .phone .tr-row.done .title, .phone .tr-row.skipped .title { color: var(--muted); }
 .phone .tr-row.skipped .title { text-decoration: line-through; }
+.phone :is(.tr-row.done.k-run, .tr-row.done.k-gym) .title { color: var(--k); }
+/* The kind's icon in a 30 dp circle of its colour. */
+.phone .tr-bub { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; }
+.phone .tr-bub:is(.k-run, .k-gym, .k-futsal) { background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); }
+/* "⚠ 1 rule": a placement rule broken now. Its touch target reaches past the small chip. */
+.phone .tr-warn { position: relative; flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 6px; border: 0; border-radius: 10px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 11px; line-height: 20px; }
+.phone .tr-warn::before { content: ""; position: absolute; inset: -14px -6px; }
 /* The ring: a 48 dp target around a 22 dp circle; done fills it in the accent with a tick. */
 .phone .tr-ring { flex: none; width: 44px; height: 44px; margin-right: -6px; border: 0; background: none; display: grid; place-items: center; color: var(--p-on-primary); padding: 0; position: relative; }
 .phone .tr-ring::before { content: ""; position: absolute; left: 11px; top: 11px; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--p-outline); transition: background-color .15s, box-shadow .15s; }
 .phone .tr-ring[aria-pressed="true"]::before { background: var(--p-primary); box-shadow: none; }
 .phone .tr-ring svg { position: relative; }
+/* In a kind's colour, the ring is that colour and fills with it, popping as it's ticked. */
+.phone .tr-ring:is(.k-run, .k-gym, .k-futsal)::before { box-shadow: inset 0 0 0 2px var(--k); }
+.phone .tr-ring:is(.k-run, .k-gym, .k-futsal)[aria-pressed="true"]::before { background: var(--k); box-shadow: none; }
+.phone .tr-ring.pop { animation: tr-pop .32s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes tr-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.18); } 100% { transform: none; } }
 /* A held row's copy, following the finger. */
 .phone .tr-ghost { position: fixed; z-index: 70; margin: 0; pointer-events: none; background: var(--p-sc-high, var(--surface-2)); opacity: 1;
   box-shadow: 0 2px 6px rgb(0 0 0 / .18), 0 8px 20px rgb(0 0 0 / .14); transform: scale(1.02); will-change: transform; }
@@ -208,4 +235,4 @@
     background-image: linear-gradient(color-mix(in srgb, currentColor 6%, transparent), color-mix(in srgb, currentColor 6%, transparent));
   }
 }
-@media (prefers-reduced-motion: reduce) { .phone :is(.tr-layer, .tr-ask) { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .phone :is(.tr-layer, .tr-ask, .tr-ring.pop) { animation: none; } }

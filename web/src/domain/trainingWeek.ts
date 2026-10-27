@@ -59,3 +59,18 @@ export function fmtKm(km: number): string {
   const r = Math.round(km * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
+
+/**
+ * A done run's row subtitle (item 209): "8.4 km · 5:02 /km · 158 bpm", leaving out what the run doesn't
+ * have. The pace is the run's own, else its time over its distance. "" when there's nothing to show.
+ */
+export function runLine(run: Run): string {
+  const km = run.distanceKm !== null && run.distanceKm > 0 ? run.distanceKm : null;
+  const pace = run.paceSPerKm ?? (km !== null && run.durationS ? run.durationS / km : null);
+  const s = pace !== null && pace > 0 ? Math.round(pace) : null;
+  return [
+    km !== null ? `${fmtKm(km)} km` : "",
+    s !== null ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km` : "",
+    run.avgHr ? `${Math.round(run.avgHr)} bpm` : "",
+  ].filter(Boolean).join(" · ");
+}
