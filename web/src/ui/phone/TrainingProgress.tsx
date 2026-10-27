@@ -388,7 +388,7 @@ function RunCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
   const runChart = (list: Run[], value: (r: Run) => number, opts: { fmt?: (v: number) => string; invert?: boolean; zero?: boolean }, onRead: (i: number | null) => void) => {
     const shown = inRange(list, span.start);
     return shown.length
-      ? <Chart series={[{ kind: "line", color: RUN, pts: shown.map((r) => ({ day: r.day, v: value(r) })) }]} domain={span.domain} today={t} height={140}
+      ? <Chart series={[{ kind: "line", color: RUN, pts: shown.map((r) => ({ day: r.day, v: value(r) })) }]} domain={xDomain(span.range, t, list.map((r) => r.day))} today={t} height={140}
           fmt={opts.fmt} invert={opts.invert} zero={opts.zero} reads={shown.map((r) => r.day)} onRead={onRead} />
       : <Empty />;
   };

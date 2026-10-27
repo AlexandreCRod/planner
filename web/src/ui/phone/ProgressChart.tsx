@@ -137,7 +137,7 @@ export function Spark({ values, color, bars = false, invert = false }: { values:
     const bw = Math.max(2, Math.min(10, 70 / values.length - 3));
     return (
       <svg className="pg-spark" width={W} height={H} aria-hidden>
-        {values.map((v, i) => { const h = Math.max(1, 20 * f(v)); return <rect key={i} x={3 + 68 * (i + 0.5) / values.length - bw / 2} y={23 - h} width={bw} height={h} rx={2} fill={color} />; })}
+        {values.map((v, i) => { const h = v > 0 ? Math.max(1, 20 * f(v)) : 0; return <rect key={i} x={3 + 68 * (i + 0.5) / values.length - bw / 2} y={23 - h} width={bw} height={h} rx={2} fill={color} />; })}
       </svg>
     );
   }
