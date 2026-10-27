@@ -1,16 +1,18 @@
-// The plan's documents read in the app (in place of Markor), the Bests page and an exercise's history.
+// The plan's documents read in the app (in place of Markor) and an exercise's history (its Progress cards,
+// then each time it was done).
 // Documents are drawn from parsed blocks (domain/markdown.ts) as React elements, never as HTML. Links
 // between them open the other document at its place; web links open in the browser.
 import { type ReactNode, useLayoutEffect, useMemo, useRef } from "react";
-import { formatDate, formatDateShort } from "../../domain/dates.ts";
+import { formatDate } from "../../domain/dates.ts";
 import { type Block, type Inline, parseDocLink, parseMarkdown } from "../../domain/markdown.ts";
-import { type Exercise, type Lift, BEST_REPS, entryId, repBests } from "../../domain/training.ts";
+import { type Lift, entryId } from "../../domain/training.ts";
 import type { LoadedPlan, Training } from "../../store/training.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
 import { ChipRow, EmptyHint, FilterChip, Scaffold, SectionHeader } from "./chrome.tsx";
 import { ListItem } from "./m3.tsx";
 import { openExternal } from "./native.ts";
-import { fmtKg, planQ } from "./trainingParts.tsx";
+import { allExercises, fmtKg, planQ } from "./trainingParts.tsx";
+import { LiftCards } from "./TrainingProgress.tsx";
 
 type OnLink = (href: string) => void;
 
@@ -129,80 +131,19 @@ export function TrainingDocs({ lp, file, anchor, planId }: { lp: LoadedPlan; fil
   );
 }
 
-/** Every exercise named in any plan, by id; a later plan's name wins (ids are permanent across plans). */
-export function allExercises(tr: Training): Map<string, Exercise> {
-  const out = new Map<string, Exercise>();
-  for (const p of tr.plans) for (const e of p.plan.exercises) out.set(e.id, e);
-  return out;
-}
+export { allExercises };
 
 /** "60 × 5 · 60 × 5 · 62.5 × 5": the sets done. */
 export function setsLine(l: Lift): string {
   return l.sets.filter((s) => s.done).map((s) => `${s.kg !== null ? `${fmtKg(s.kg)} × ` : "× "}${s.reps ?? "?"}`).join(" · ");
 }
 
-const bestWord = (n: number) => (n === 1 ? "1 rep" : `${n} reps`);
-
-/** The rep counts worth showing: one is left out when more reps were done at the same weight or more. */
-const shownBests = (m: ReadonlyMap<number, { kg: number }>) =>
-  BEST_REPS.filter((n) => m.has(n) && !BEST_REPS.some((k) => k > n && (m.get(k)?.kg ?? -1) >= m.get(n)!.kg));
-
-/** Rep bests since the return, the plan's estimates and historical bests, run records, and every exercise's history. */
-export function TrainingBests({ tr, lp, planId }: { tr: Training; lp: LoadedPlan; planId: string | null }) {
-  const { plan } = lp;
-  const exs = allExercises(tr);
-  const nameOf = (id: string) => exs.get(id)?.name ?? id;
-  const tracked = new Set([...exs.values()].filter((e) => e.trackBests).map((e) => e.id));
-  const bests = repBests(tr.lifts, tracked, plan.bestsSince);
-  const logged = [...new Set(tr.lifts.filter((l) => l.sets.some((s) => s.done)).map((l) => l.exercise))].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-  const open = (id: string) => go(`training?view=ex&x=${encodeURIComponent(id)}${planQ(planId)}`);
-  const { estimatedMax, historical, runs } = plan.records;
-  return (
-    <Scaffold title="Bests" back flush>
-      <div className="p-content ps tr-page">
-        <SectionHeader>{plan.bestsSince !== null ? `Since ${formatDateShort(plan.bestsSince)}` : "Rep bests"}</SectionHeader>
-        {bests.size === 0 && <div className="tr-hint">Bests show here once sets are logged. Just a record, never a target.</div>}
-        {[...bests.entries()].sort((a, b) => nameOf(a[0]).localeCompare(nameOf(b[0]))).map(([id, m]) => (
-          <ListItem key={id} headline={nameOf(id)} onClick={() => open(id)}
-            supporting={shownBests(m).map((n) => `${bestWord(n)}: ${fmtKg(m.get(n)!.kg)} kg`).join(" · ")} />
-        ))}
-        {estimatedMax.length > 0 && <>
-          <SectionHeader>Estimated maxes</SectionHeader>
-          {estimatedMax.map((e, i) => (
-            <ListItem key={i} headline={`${nameOf(e.exercise)}: ~${fmtKg(e.kg)} kg`}
-              supporting={["Estimate", e.from, e.day !== null ? formatDateShort(e.day) : ""].filter(Boolean).join(" · ")} />
-          ))}
-        </>}
-        {historical.length > 0 && <>
-          <SectionHeader>Historical</SectionHeader>
-          {historical.map((h, i) => (
-            <ListItem key={i} headline={`${nameOf(h.exercise)}: ${fmtKg(h.kg)} kg × ${h.reps}`} supporting={h.label} />
-          ))}
-        </>}
-        {runs.length > 0 && <>
-          <SectionHeader>Runs</SectionHeader>
-          {runs.map((r, i) => (
-            <ListItem key={i} headline={`${r.distance}: ${r.time}`}
-              supporting={[r.day !== null ? formatDateShort(r.day) : "", r.note].filter(Boolean).join(" · ")} />
-          ))}
-        </>}
-        {logged.length > 0 && <>
-          <SectionHeader>Exercise history</SectionHeader>
-          {logged.map((id) => <ListItem key={id} headline={nameOf(id)} onClick={() => open(id)} />)}
-        </>}
-        <div className="p-endspace" />
-      </div>
-    </Scaffold>
-  );
-}
-
-/** One exercise across every plan: its bests and each time it was done, newest first. */
+/** One exercise across every plan: its Progress cards (the chart and rep bests), then each time it was done, newest first. */
 export function ExerciseHistory({ tr, lp, id, planId }: { tr: Training; lp: LoadedPlan; id: string; planId: string | null }) {
   const exs = allExercises(tr);
   const ex = exs.get(id);
   const lifts = tr.lifts.filter((l) => l.exercise === id && l.sets.some((s) => s.done)).sort((a, b) => b.day - a.day || b.updatedAt - a.updatedAt);
   const name = ex?.name ?? lifts[0]?.name ?? id;
-  const best = ex?.trackBests ? repBests(tr.lifts, new Set([id]), lp.plan.bestsSince).get(id) : undefined;
   const card = ex?.card;
   return (
     <Scaffold title={name} back flush>
@@ -211,15 +152,7 @@ export function ExerciseHistory({ tr, lp, id, planId }: { tr: Training; lp: Load
           <ListItem headline="How to do it" supporting={lp.plan.documents.find((d) => d.file === card.doc)?.title ?? card.doc}
             onClick={() => go(docRoute(card.doc, card.anchor || null, planId))} />
         )}
-        {best && best.size > 0 && <>
-          <SectionHeader>Bests</SectionHeader>
-          <div className="tr-bests">
-            {shownBests(best).map((n) => (
-              <div key={n} className="tr-best"><span className="kg">{fmtKg(best.get(n)!.kg)} kg</span><span className="n">{bestWord(n)}</span>
-                <span className="when">{formatDateShort(best.get(n)!.day)}</span></div>
-            ))}
-          </div>
-        </>}
+        <LiftCards tr={tr} lp={lp} id={id} />
         <SectionHeader>History</SectionHeader>
         {lifts.length === 0 && <div className="tr-hint">Not logged yet.</div>}
         {lifts.map((l) => {

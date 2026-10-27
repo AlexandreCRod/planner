@@ -1,6 +1,7 @@
 // Small pieces the Training screens share: an icon per kind of session, a phase's short name, the
-// numbered scales (effort, pain, RPE) and number formats.
-import type { SessionKind } from "../../domain/training.ts";
+// numbered scales (effort, pain, RPE), number formats, every exercise by id and the rep bests worth showing.
+import { type Exercise, type SessionKind, BEST_REPS } from "../../domain/training.ts";
+import type { Training } from "../../store/training.ts";
 import { feel } from "./haptics.ts";
 
 export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
@@ -51,3 +52,16 @@ export function Scale({ label, hint, from, to, value, onPick, disabled }: {
     </div>
   );
 }
+
+/** Every exercise named in any plan, by id; a later plan's name wins (ids are permanent across plans). */
+export function allExercises(tr: Training): Map<string, Exercise> {
+  const out = new Map<string, Exercise>();
+  for (const p of tr.plans) for (const e of p.plan.exercises) out.set(e.id, e);
+  return out;
+}
+
+export const bestWord = (n: number) => (n === 1 ? "1 rep" : `${n} reps`);
+
+/** The rep counts worth showing: one is left out when more reps were done at the same weight or more. */
+export const shownBests = (m: ReadonlyMap<number, { kg: number }>) =>
+  BEST_REPS.filter((n) => m.has(n) && !BEST_REPS.some((k) => k > n && (m.get(k)?.kg ?? -1) >= m.get(n)!.kg));
