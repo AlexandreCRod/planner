@@ -38,10 +38,17 @@ const ASK_MS = 8000;
 /** The placement sheet's subject: what's on [day], and how to take it back (null when opened from a row's marker). */
 interface Warn { item: ItemRef; day: number; undo: (() => void) | null }
 
+/** The sheet's subject when [item], just put on [day], breaks a rule there; else null. */
+function checkPlaced(lp: LoadedPlan, item: ItemRef, day: number, undo: () => void): Warn | null {
+  if (!breachesOnly(brokenRules(lp.plan, training().entries, item, day)).length) return null;
+  return { item, day, undo };
+}
+
 export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const tr = useTraining();
   const t = todayEpoch();
   const wide = useWide();
+  const [movedWarn, setMovedWarn] = useState<Warn | null>(null);
   const planId = query.get("p");
   const active = activeOf(tr, t);
   const lp = (planId && tr.plans.find((p) => p.plan.id === planId)) || active;
@@ -56,11 +63,14 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const sid = query.get("s");
   const readOnly = lp !== active;
   const d = query.get("d");
+  // A session moved from its own page (over the week, on a phone) onto a day that breaks a rule.
+  const moved = (sid: string, day: number, undo: () => void) => { const w = checkPlaced(lp, { session: sid }, day, undo); if (w) setMovedWarn(w); return !!w; };
   return <>
     <TrainingWeek tr={tr} lp={lp} t={t} wide={wide} sessionId={view ? null : sid} readOnly={readOnly} planId={planId} focusDay={d ? Number(d) : null} />
     {!wide && sid && !view && (
-      <div className="tr-layer"><SessionView key={sid} tr={tr} lp={lp} sessionId={sid} readOnly={readOnly} onClose={() => history.back()} /></div>
+      <div className="tr-layer"><SessionView key={sid} tr={tr} lp={lp} sessionId={sid} readOnly={readOnly} onClose={() => history.back()} onMoved={moved} /></div>
     )}
+    {movedWarn && <PlacementSheet tr={tr} lp={lp} warn={movedWarn} onMoved={setMovedWarn} onClose={() => setMovedWarn(null)} />}
     {view && (
       <div className="tr-layer full">
         {view === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
@@ -98,11 +108,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const sessions = useMemo(() => new Map(sessionsOf(plan).map((s) => [s.id, s])), [plan]);
   // What breaks a placement rule now, by session id or futsal entry id: the rows' markers.
   const broken = useMemo(() => (readOnly ? new Map<string, Breach[]>() : brokenNow(plan, tr.entries)), [plan, tr.entries, readOnly]);
-  /** The sheet's subject when [item], just put on [day], breaks a rule there; else null. */
-  const check = (item: ItemRef, day: number, undo: () => void): Warn | null => {
-    if (!breachesOnly(brokenRules(plan, training().entries, item, day)).length) return null;
-    return { item, day, undo };
-  };
+  const check = (item: ItemRef, day: number, undo: () => void) => checkPlaced(lp, item, day, undo);
   const place = (sid: string, day: number | null) => {
     const s = sessions.get(sid);
     if (!s || s.locked) return;
@@ -232,6 +238,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           <div className="tr-side">
             {sessionId
               ? <SessionView key={sessionId} tr={tr} lp={lp} sessionId={sessionId} readOnly={readOnly} closeIcon
+                  onMoved={(sid, day, undo) => { const w = check({ session: sid }, day, undo); if (w) setWarn(w); return !!w; }}
                   onClose={() => replaceRoute(`training${planId ? `?p=${encodeURIComponent(planId)}` : ""}`)} />
               : <div className="tr-side-hint"><MIcon name="oDirectionsRun" size={40} /><span>Open a session to see its card and log it here</span></div>}
           </div>

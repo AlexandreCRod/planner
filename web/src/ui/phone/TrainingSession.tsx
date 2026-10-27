@@ -36,17 +36,25 @@ export function setSessionStatus(lp: LoadedPlan, s: Session, status: Entry["stat
 }
 
 /** The phase's days to move a session to, with what's on each, and To place. */
-export function MoveSheet({ lp, s, onClose }: { lp: LoadedPlan; s: Session; onClose: () => void }) {
+/** [onMoved]: after a move onto a day, opens the placement sheet if it breaks a rule there (true then: no snackbar). */
+export function MoveSheet({ lp, s, onMoved, onClose }: {
+  lp: LoadedPlan; s: Session; onMoved?: (sid: string, day: number, undo: () => void) => boolean; onClose: () => void;
+}) {
   const tr = training();
   const ph = lp.plan.phases[s.phase];
   const cur = dayOfSession(s, tr.entries.get(entryFor(lp.plan, s, tr.entries).id));
   const days = Array.from({ length: ph.end - ph.start + 1 }, (_, k) => ph.start + k);
   const on = (d: number) => sessionsOf(lp.plan).filter((x) => x.id !== s.id && x.phase === s.phase && dayOfSession(x, tr.entries.get(entryId(lp.plan.id, x.id))) === d).map((x) => x.title);
   const move = (day: number | null, close: () => void) => {
+    const before = entryFor(lp.plan, s, training().entries);
     patchEntry(lp, s, { day });
     feel("settle");
-    showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`);
     close();
+    // Once this sheet has gone (as the futsal sheet does), the placement sheet if a rule breaks, else the snackbar.
+    window.setTimeout(() => {
+      if (day !== null && onMoved?.(s.id, day, () => saveEntry(before))) return;
+      showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`);
+    }, 210);
   };
   return (
     <BottomSheet onClose={onClose}>{(close) => (
@@ -64,8 +72,9 @@ export function MoveSheet({ lp, s, onClose }: { lp: LoadedPlan; s: Session; onCl
   );
 }
 
-export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon }: {
+export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, onMoved }: {
   tr: Training; lp: LoadedPlan; sessionId: string; readOnly: boolean; onClose: () => void; closeIcon?: boolean;
+  onMoved?: (sid: string, day: number, undo: () => void) => boolean;
 }) {
   const { plan } = lp;
   const t = todayEpoch();
@@ -112,7 +121,7 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon }:
         {s.card && <CardSection lp={lp} card={s.card} openAtStart={!gym} />}
         <div className="p-endspace" />
       </div>
-      {moving && <MoveSheet lp={lp} s={s} onClose={() => setMoving(false)} />}
+      {moving && <MoveSheet lp={lp} s={s} onMoved={onMoved} onClose={() => setMoving(false)} />}
     </Scaffold>
   );
 }
