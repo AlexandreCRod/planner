@@ -452,6 +452,8 @@ test("around runs: a before-run weigh-in pairs with the next after-run one the s
     [d("2026-11-19"), 79.0, 78.4, 0.6, null],     // a morning weigh-in between doesn't break the pair; no run that day
   ]);
   assert.deepEqual(runWeights([]), []);
+  // Weighed in the same minute: the before-run one still comes first, whatever the ids.
+  assert.deepEqual(runWeights([w("z", "2026-11-20", "10:00", 79.0, "pre-run"), w("a", "2026-11-20", "10:00", 78.5, "post-run")]).map((p) => p.lost), [0.5]);
 });
 
 test("source names: history says where it came from, Planner's own says nothing", () => {

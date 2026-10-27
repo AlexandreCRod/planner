@@ -152,7 +152,7 @@ export function ExerciseHistory({ tr, lp, id, planId }: { tr: Training; lp: Load
           <ListItem headline="How to do it" supporting={lp.plan.documents.find((d) => d.file === card.doc)?.title ?? card.doc}
             onClick={() => go(docRoute(card.doc, card.anchor || null, planId))} />
         )}
-        <LiftCards tr={tr} lp={lp} id={id} />
+        <div className="pg-embed"><LiftCards tr={tr} lp={lp} id={id} /></div>
         <SectionHeader>History</SectionHeader>
         {lifts.length === 0 && <div className="tr-hint">Not logged yet.</div>}
         {lifts.map((l) => {

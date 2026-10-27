@@ -67,6 +67,7 @@
 
 /* "+ Weigh in". */
 .phone .pg-weigh { padding: 0 16px; }
+.phone .pg-weigh .tr-sheet-title { padding: 4px 8px 8px; }
 .phone .pg-weigh .p-sheet-buttons { padding-left: 0; padding-right: 0; }
 .phone .pg-when { margin-top: 12px; }
 .phone .pg-when .p-segmented button { padding: 0 4px; }
@@ -75,3 +76,6 @@
 .wide .tr-split .pg-list { flex: 0 0 440px; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
 .wide .pg-side { padding-top: 12px; }
 .wide .pg-side > * { max-width: 720px; }
+
+/* The cards on an exercise's history page. */
+.phone .pg-embed { padding: 4px 16px 0; }

@@ -386,7 +386,11 @@ export interface RunWeights { day: number; before: number; after: number; lost: 
 export function runWeights(weighIns: Iterable<{ day: number; time: string | null; id: string; kg: number; when: string; deletedAt?: number | null }>, runs: readonly Run[] = []): RunWeights[] {
   const out: RunWeights[] = [];
   let open: { day: number; time: string | null; kg: number } | null = null;
-  for (const w of [...weighIns].filter((w) => (w.deletedAt ?? null) === null).sort(byMoment)) {
+  // At the same minute (or both without a time), a before-run weigh-in comes first.
+  const order = (when: string) => (when === "pre-run" ? 0 : when === "post-run" ? 2 : 1);
+  const list = [...weighIns].filter((w) => (w.deletedAt ?? null) === null)
+    .sort((a, b) => a.day - b.day || (a.time ?? "99:99").localeCompare(b.time ?? "99:99") || order(a.when) - order(b.when) || a.id.localeCompare(b.id));
+  for (const w of list) {
     if (open && open.day !== w.day) open = null;
     if (w.when === "pre-run") open = w;
     else if (w.when === "post-run" && open) {
