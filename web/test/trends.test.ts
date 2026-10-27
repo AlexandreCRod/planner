@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
-  type Run, type WeighIn, carbsTarget, dayType, e1rmOf, easyRuns, liftPoints, longRuns, longestIn, readMeals, readRuns, topSetOf,
-  trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
+  type Run, type WeighIn, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readMeals, readRuns, rpeFor,
+  targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
 const d = (iso: string) => dayOf(iso)!;
@@ -41,10 +41,46 @@ test("lift points: one per time lifted, across plans, by the exercise actually d
   const swapped = lift([[50, 8]], { day: 105, planned: "x001", exercise: "x002" });           // done as another exercise
   const none = lift([[60, 5]], { day: 120, sets: [{ kg: 60, reps: 5, done: false }] });         // nothing done
   assert.deepEqual(liftPoints([a, swapped, none, b], "x001"), [
-    { day: 100, topKg: 65, topReps: 5, e1rm: null, pain: null, planId: "p0", sessionId: "s9" },
-    { day: 110, topKg: 60, topReps: 5, e1rm: 76, pain: 2, planId: "p1", sessionId: "s2" },
+    { day: 100, topKg: 65, topReps: 5, e1rm: null, rpeBasis: null, pain: null, planId: "p0", sessionId: "s9" },
+    { day: 110, topKg: 60, topReps: 5, e1rm: 76, rpeBasis: "logged", pain: 2, planId: "p1", sessionId: "s2" },
   ]);
   assert.equal(liftPoints([a, b], "x999").length, 0);
+});
+
+test("the top of a plan's RPE", () => {
+  assert.deepEqual(["6–7", "7", "5-6", "7.5", "", "easy", "RPE 12"].map(topRpe), [7, 7, 6, 7.5, null, null, null]);
+});
+
+test("a lift without an RPE: the session's target (assumed), else a lower bound for imports only", () => {
+  const plan = readPlan({
+    version: 1, plan: { id: "p", start: "2026-10-26", end: "2026-11-29" },
+    exercises: [{ id: "x001", name: "Front squat" }, { id: "x002", name: "RDL" }],
+    phases: [{
+      name: "Weeks", start: "2026-10-26", end: "2026-11-29", sessions: [
+        { id: "s1", title: "Gym A", kind: "gym", default_date: null, exercises: [
+          { exercise: "x001", group: "warm-up", sets: "2", reps: "5", rpe: "" },
+          { exercise: "x001", sets: "3", reps: "5", rpe: "6–7" },
+          { exercise: "x002", sets: "3", reps: "6", rpe: "7–8" },
+        ] },
+        { id: "s2", title: "Gym B", kind: "gym", default_date: null, exercises: [{ exercise: "x001", sets: "3", reps: "5", rpe: "" }] },
+      ],
+    }],
+  }).plan!;
+  const noRpe = (extra: Partial<Lift> = {}) => lift([[60, 5]], { rpe: null, ...extra });
+  assert.equal(targetRpeOf([plan], noRpe()), 7);                                 // the main sets' 6–7, not the warm-up's none
+  assert.equal(targetRpeOf([plan], noRpe({ planned: "x002", exercise: "x001" })), 8);   // a swap keeps the planned slot's target
+  assert.equal(targetRpeOf([plan], noRpe({ sessionId: "s2" })), null);           // no target
+  assert.equal(targetRpeOf([plan], noRpe({ planId: "gone" })), null);
+  assert.equal(targetRpeOf([], noRpe()), null);
+
+  assert.deepEqual(rpeFor(lift([[60, 5]], { rpe: 9 }), 7), { rpe: 9, basis: "logged" });    // a logged RPE always wins
+  assert.deepEqual(rpeFor(noRpe(), 7), { rpe: 7, basis: "assumed" });
+  assert.equal(rpeFor(noRpe(), null), null);                                      // a plan lift is never RPE 10
+  assert.deepEqual(rpeFor(noRpe(), null, true), { rpe: 10, basis: "lowerBound" });
+  assert.equal(e1rmOf(noRpe(), 10), 70);                                          // plain Epley: 60 × (1 + 5 ÷ 30)
+
+  const points = liftPoints([noRpe({ day: 101 }), noRpe({ day: 102, sessionId: "s2" }), lift([[60, 5]], { day: 103, rpe: 8 })], "x001", [plan]);
+  assert.deepEqual(points.map((p) => [p.e1rm, p.rpeBasis]), [[76, "assumed"], [null, null], [74, "logged"]]);   // RPE 7: 60 × (1 + 8 ÷ 30); RPE 8: 60 × (1 + 7 ÷ 30)
 });
 
 test("weekly hard sets: every Monday-first week of the range, empty ones as 0", () => {
@@ -86,10 +122,12 @@ test("long runs, easy runs for pace against heart rate, and the longest in the l
     run("x", "2026-10-06", { avgHr: 149 }),
     run("y", "2026-10-07", { paceSPerKm: null }),
     run("z", "2026-10-08", { type: "quality", distanceKm: 8, avgHr: 165 }),
+    run("w", "2026-10-09", { paceSPerKm: 541, avgHr: 120 }),
+    run("v", "2026-10-10", { paceSPerKm: 540, avgHr: 125 }),
   ];
   assert.deepEqual(longRuns(runs).map((r) => r.id), ["a", "c"]);
-  assert.deepEqual(easyRuns(runs).map((r) => r.id), ["b", "c"]);         // 148 counts; no pace, no heart rate, or too high: out
-  assert.deepEqual(easyRuns(runs, 140).map((r) => r.id), ["c"]);
+  assert.deepEqual(easyRuns(runs).map((r) => r.id), ["b", "v", "c"]);    // 148 and 9:00 /km count; no pace, no heart rate, too high or slower: out
+  assert.deepEqual(easyRuns(runs, 140).map((r) => r.id), ["v", "c"]);
   assert.equal(longestIn(runs, d("2026-10-26")), 16);
   assert.equal(longestIn(runs, d("2026-10-26"), 5), null);               // nothing in the last 5 days
   assert.equal(longestIn(runs, d("2026-09-30")), 12);                    // a 30-day window ending on the 30th starts on the 1st
@@ -292,4 +330,15 @@ test("the carbs target is the plan's range for the day's type", () => {
   assert.equal(bare.nutrition, null);
   assert.equal(carbsTarget(bare, d("2026-11-05"), entries()), null);
   assert.equal(dayType(bare, d("2026-11-08"), entries()), "long");              // the type still works without a nutrition block
+});
+
+test("the kcal target: the day type's own, else the plan's for any day, else none (calibrating)", () => {
+  assert.equal(kcalTarget(planWith(), d("2026-11-05"), entries()), null);
+  const p = planWith({ nutrition: {
+    protein_g: [135, 150], kcal_target: [2400, 2700],
+    day_types: { rest: { carbs_g: [330, 415] }, training: { carbs_g: [415, 580] }, long: { carbs_g: [500, 665], kcal: [2900, 3200] }, race: { note: "see Race day" } },
+  } });
+  assert.deepEqual(kcalTarget(p, d("2026-11-08"), entries()), [2900, 3200]);
+  assert.deepEqual(kcalTarget(p, d("2026-11-05"), entries()), [2400, 2700]);
+  assert.equal(kcalTarget(planWith({ nutrition: undefined }), d("2026-11-05"), entries()), null);
 });

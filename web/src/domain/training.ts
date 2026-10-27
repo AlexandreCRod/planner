@@ -80,14 +80,17 @@ export interface EstimatedMax { exercise: string; kg: number; day: number | null
 export interface RunRecord { distance: string; time: string; day: number | null; source: string; note: string }
 /** [low, high]. */
 export type Range = [number, number];
-/** A kind of day in the nutrition plan: its carbs, or only a note (race day: "see Race day"). */
-export interface DayType { carbsG: Range | null; note: string }
+/** A kind of day in the nutrition plan: its carbs and kcal, or only a note (race day: "see Race day"). */
+export interface DayType { carbsG: Range | null; kcal: Range | null; note: string }
 export interface Nutrition {
   proteinG: Range | null;
   /** By key: "rest", "training", "long", "carb_load", "race"... */
   dayTypes: Map<string, DayType>;
   /** Days that are a given type whatever is on them (the carb load before the race). */
   dateOverrides: { day: number; dayType: string }[];
+  /** The same every day. */
+  fatG: Range | null;
+  /** For any day; a day type's own kcal wins (see kcalTarget in trends.ts). Null while it's calibrating. */
   kcalTarget: Range | null;
 }
 export interface Plan {
@@ -244,7 +247,7 @@ function readNutrition(v: unknown, problems: string[]): Nutrition | null {
   };
   const dayTypes = new Map<string, DayType>();
   for (const [key, d] of Object.entries(obj(n.day_types))) {
-    dayTypes.set(key, { carbsG: asRange(obj(d).carbs_g, `${key} carbs_g`), note: str(obj(d).note) });
+    dayTypes.set(key, { carbsG: asRange(obj(d).carbs_g, `${key} carbs_g`), kcal: asRange(obj(d).kcal, `${key} kcal`), note: str(obj(d).note) });
   }
   const dateOverrides: Nutrition["dateOverrides"] = [];
   for (const o of arr(n.date_overrides).map(obj)) {
@@ -253,7 +256,9 @@ function readNutrition(v: unknown, problems: string[]): Nutrition | null {
     if (!dayTypes.has(dayType)) problems.push(`The nutrition override for ${str(o.date)} uses day type ${dayType}, which isn't in day_types.`);
     dateOverrides.push({ day, dayType });
   }
-  return { proteinG: asRange(n.protein_g, "protein_g"), dayTypes, dateOverrides, kcalTarget: asRange(n.kcal_target, "kcal_target") };
+  return {
+    proteinG: asRange(n.protein_g, "protein_g"), dayTypes, dateOverrides, fatG: asRange(n.fat_g, "fat_g"), kcalTarget: asRange(n.kcal_target, "kcal_target"),
+  };
 }
 
 /**

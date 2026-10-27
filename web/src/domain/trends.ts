@@ -187,6 +187,12 @@ export function carbsTarget(plan: Plan, day: number, entries: ReadonlyMap<string
   return plan.nutrition?.dayTypes.get(dayType(plan, day, entries))?.carbsG ?? null;
 }
 
+/** The kcal [low, high] for the day: its type's own, else the plan's one for any day; null while it sets none (calibrating). */
+export function kcalTarget(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): Range | null {
+  const n = plan.nutrition;
+  return n ? n.dayTypes.get(dayType(plan, day, entries))?.kcal ?? n.kcalTarget : null;
+}
+
 // ---------- Body weight ----------
 
 export type WeighWhen = "morning" | "pre-run" | "post-run";
@@ -254,35 +260,82 @@ function heaviest(sets: readonly LiftSet[], fit: (reps: number | null) => boolea
 }
 
 /**
- * The estimated one-rep max of a lift, to the nearest 0.5 kg: from its heaviest done set of 1 to 6 reps,
- * kg × (1 + (reps + reps left in the tank) ÷ 30), the tank being 10 − RPE. Null without an RPE (the number
- * would be a guess) or without such a set.
+ * Where the RPE behind an e1RM comes from: logged with the lift; "assumed" from its session's target in the
+ * plan (drawn as a hollow dot); or a "lowerBound": RPE 10 for imported history that never had one (FitNotes),
+ * so the real max was at least that.
  */
-export function e1rmOf(lift: Lift): number | null {
-  if (lift.rpe === null) return null;
+export type RpeBasis = "logged" | "assumed" | "lowerBound";
+
+/** The top of a plan's RPE text ("6–7" → 7, "7" → 7); null when it gives none. */
+export function topRpe(text: string): number | null {
+  const all = (text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number).filter((x) => x >= 1 && x <= 10);
+  return all.length ? Math.max(...all) : null;
+}
+
+/** The RPE a lift's plan set for its exercise in its session (the higher if it's there twice); null when the plan, session or target is missing. */
+export function targetRpeOf(plans: readonly Plan[], lift: Lift): number | null {
+  const plan = plans.find((p) => p.id === lift.planId);
+  let best: number | null = null;
+  for (const s of plan ? sessionsOf(plan) : []) {
+    if (s.id !== lift.sessionId) continue;
+    for (const x of s.exercises) {
+      const r = x.exercise === lift.planned ? topRpe(x.rpe) : null;
+      if (r !== null && (best === null || r > best)) best = r;
+    }
+  }
+  return best;
+}
+
+/**
+ * The RPE to estimate a lift's max with, and where it came from: the logged one always wins; else the
+ * session's [target]; else, only for [imported] history, RPE 10 as a lower bound. A plan lift with neither
+ * has none: the user stops 2–3 reps short, so RPE 10 would draw false dips.
+ */
+export function rpeFor(lift: Lift, target: number | null, imported = false): { rpe: number; basis: RpeBasis } | null {
+  if (lift.rpe !== null) return { rpe: lift.rpe, basis: "logged" };
+  if (target !== null) return { rpe: target, basis: "assumed" };
+  return imported ? { rpe: 10, basis: "lowerBound" } : null;
+}
+
+/**
+ * The estimated one-rep max of a lift, to the nearest 0.5 kg: from its heaviest done set of 1 to 6 reps,
+ * kg × (1 + (reps + reps left in the tank) ÷ 30), the tank being 10 − [rpe] (the logged one unless given;
+ * see rpeFor). Null without an RPE (the number would be a guess) or without such a set.
+ */
+export function e1rmOf(lift: Lift, rpe: number | null = lift.rpe): number | null {
+  if (rpe === null) return null;
   const top = heaviest(lift.sets, (r) => r !== null && r >= 1 && r <= 6);
   if (!top) return null;
-  return Math.round(top.kg * (1 + ((top.reps ?? 0) + (10 - lift.rpe)) / 30) * 2) / 2;
+  return Math.round(top.kg * (1 + ((top.reps ?? 0) + (10 - rpe)) / 30) * 2) / 2;
 }
 
 /** The heaviest set done in a lift, any reps (ties: more reps); null when none has a weight. */
 export const topSetOf = (lift: Lift) => heaviest(lift.sets, () => true);
 
 export interface LiftPoint {
-  day: number; topKg: number | null; topReps: number | null; e1rm: number | null; pain: number | null; planId: string; sessionId: string;
+  day: number; topKg: number | null; topReps: number | null; e1rm: number | null;
+  /** Where e1rm's RPE came from; null when there's no e1rm. */
+  rpeBasis: RpeBasis | null;
+  pain: number | null; planId: string; sessionId: string;
 }
 
 /**
  * One point per time an exercise was lifted (the exercise actually done, across all plans, since exercise
- * ids are permanent), oldest first; a lift with no set done is no point.
+ * ids are permanent), oldest first; a lift with no set done is no point. A lift logged without an RPE takes
+ * its session's target from [plans].
  */
-export function liftPoints(lifts: Iterable<Lift>, exerciseId: string): LiftPoint[] {
+export function liftPoints(lifts: Iterable<Lift>, exerciseId: string, plans: readonly Plan[] = []): LiftPoint[] {
   return [...lifts]
     .filter((l) => l.exercise === exerciseId && l.sets.some((s) => s.done))
     .sort((a, b) => a.day - b.day || a.updatedAt - b.updatedAt || a.id.localeCompare(b.id))
     .map((l) => {
       const top = topSetOf(l);
-      return { day: l.day, topKg: top?.kg ?? null, topReps: top?.reps ?? null, e1rm: e1rmOf(l), pain: l.pain, planId: l.planId, sessionId: l.sessionId };
+      const rpe = rpeFor(l, l.rpe === null ? targetRpeOf(plans, l) : null);
+      const e1rm = e1rmOf(l, rpe?.rpe ?? null);
+      return {
+        day: l.day, topKg: top?.kg ?? null, topReps: top?.reps ?? null, e1rm, rpeBasis: e1rm === null ? null : rpe!.basis,
+        pain: l.pain, planId: l.planId, sessionId: l.sessionId,
+      };
     });
 }
 
@@ -321,9 +374,12 @@ export function weeklyKm(runs: Iterable<Run>, fromDay: number, toDay: number): {
 /** The long runs, oldest first. */
 export const longRuns = (runs: Iterable<Run>): Run[] => [...runs].filter((r) => r.type === "long").sort(byMoment);
 
-/** Runs at an easy heart rate (average at most [maxHr]) that have a pace, oldest first: for pace against heart rate. */
-export const easyRuns = (runs: Iterable<Run>, maxHr = 148): Run[] =>
-  [...runs].filter((r) => r.avgHr !== null && r.avgHr <= maxHr && r.paceSPerKm !== null).sort(byMoment);
+/**
+ * Runs at an easy heart rate (average at most [maxHr]) with a pace no slower than [slowestPace] s/km, oldest
+ * first: for pace against heart rate. Slower than 9:00 /km are walk/run mixes and short treadmill runs.
+ */
+export const easyRuns = (runs: Iterable<Run>, maxHr = 148, slowestPace = 540): Run[] =>
+  [...runs].filter((r) => r.avgHr !== null && r.avgHr <= maxHr && r.paceSPerKm !== null && r.paceSPerKm <= slowestPace).sort(byMoment);
 
 /** The longest run in km among the [days] days up to and including [day]; null when there's none. For the plan's 10% rule against a sudden jump. */
 export function longestIn(runs: Iterable<Run>, day: number, days = 30): number | null {

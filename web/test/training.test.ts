@@ -73,8 +73,8 @@ test("nutrition, a session's day type and the body weight range are read; an old
   const next = {
     ...raw(),
     nutrition: {
-      protein_g: [135, 150], kcal_target: null, future: 1,
-      day_types: { rest: { carbs_g: [330, 415] }, long: { carbs_g: [500, 665] }, race: { note: "see Race day" } },
+      protein_g: [135, 150], fat_g: [65, 100], kcal_target: null, future: 1,
+      day_types: { rest: { carbs_g: [330, 415] }, long: { carbs_g: [500, 665], kcal: [2900, 3200] }, race: { note: "see Race day" } },
       date_overrides: [{ date: "2026-11-13", day_type: "long" }],
     },
     bodyweight: { target_kg_range: [66, 70] },
@@ -83,8 +83,10 @@ test("nutrition, a session's day type and the body weight range are read; an old
   const r = readPlan(next);
   assert.deepEqual(r.problems, []);
   const n = r.plan!.nutrition!;
-  assert.deepEqual([n.proteinG, n.kcalTarget, n.dateOverrides], [[135, 150], null, [{ day: d("2026-11-13"), dayType: "long" }]]);
-  assert.deepEqual([n.dayTypes.get("rest"), n.dayTypes.get("race"), n.dayTypes.has("training")], [{ carbsG: [330, 415], note: "" }, { carbsG: null, note: "see Race day" }, false]);
+  assert.deepEqual([n.proteinG, n.fatG, n.kcalTarget, n.dateOverrides], [[135, 150], [65, 100], null, [{ day: d("2026-11-13"), dayType: "long" }]]);
+  assert.deepEqual([n.dayTypes.get("rest"), n.dayTypes.get("long")!.kcal, n.dayTypes.get("race"), n.dayTypes.has("training")], [
+    { carbsG: [330, 415], kcal: null, note: "" }, [2900, 3200], { carbsG: null, kcal: null, note: "see Race day" }, false,
+  ]);
   assert.deepEqual([r.plan!.bodyweightTarget, r.plan!.phases[0].sessions[3].dayType], [[66, 70], "long"]);
 
   // Plain-words problems for what can't be used; the plan still reads.
