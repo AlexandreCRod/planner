@@ -10,6 +10,7 @@
 // - When a and b pick the same things (runs-same-day), they mean two different items.
 // - Notes (same_day_note) are hints, never breaches: brokenRules lists them, brokenNow and dayFit don't.
 import { weekday } from "./dates.ts";
+import { count } from "./plural.ts";
 import {
   type Entry, type Plan, type PlacementRule, type Selector, type Session, countedDay, entryId, futsalDay, sessionsOf,
 } from "./training.ts";
@@ -223,4 +224,16 @@ export function worstLevel(breaches: readonly Breach[]): Fit {
 /** For the popup's row of days: the worst level [item] would break on each of [days]. */
 export function dayFit(plan: Plan, entries: ReadonlyMap<string, Entry>, item: ItemRef, days: Iterable<number>): Map<number, Fit> {
   return new Map([...days].map((d) => [d, worstLevel(brokenRules(plan, entries, item, d))]));
+}
+
+/** Only the rules broken: notes left out. */
+export const breachesOnly = (breaches: readonly Breach[]) => breaches.filter((b) => b.rule.level !== "note");
+
+/** The sheet's subtitle: "breaks 1 rule, and 1 it ideally shouldn't"; "breaks 2 rules it ideally shouldn't". */
+export function breachSummary(breaches: readonly Breach[]): string {
+  const avoid = breaches.filter((b) => b.rule.level === "avoid").length;
+  const ideally = breaches.filter((b) => b.rule.level === "ideally").length;
+  if (avoid && ideally) return `breaks ${count(avoid, "rule")}, and ${ideally} it ideally shouldn't`;
+  if (avoid) return `breaks ${count(avoid, "rule")}`;
+  return ideally ? `breaks ${count(ideally, "rule")} it ideally shouldn't` : "";
 }

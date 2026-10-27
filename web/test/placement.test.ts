@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { weekday } from "../src/domain/dates.ts";
-import { type Breach, brokenNow, brokenRules, dayFit, worstLevel } from "../src/domain/placement.ts";
+import { type Breach, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, worstLevel } from "../src/domain/placement.ts";
 import { type Entry, dayOf, entryId, newEntry, readPlan } from "../src/domain/training.ts";
 
 // A made-up plan: two weeks, Mon 1 – Sun 14 Mar 2027 (the real one stays out of this public repo).
@@ -261,4 +261,13 @@ test("dayFit: the worst level on each day", () => {
   const runFit = dayFit(p, map(at("l1", SUN), at("e1", TUE)), { session: "q1" }, [MON, TUE, SUN]);
   assert.deepEqual([...runFit.values()], ["none", "ideally", "ideally"]);
   assert.deepEqual(brokenRules(p, map(), { session: "nope" }, MON), []);
+});
+
+test("the sheet's subtitle counts avoid and ideally rules; notes are left out", () => {
+  const b = (level: string) => ({ rule: rule(level, level, { type: "none", a: { kind: "gym" } }), phase: 0, others: [], span: null }) as unknown as Breach;
+  assert.equal(breachSummary([b("avoid"), b("ideally")]), "breaks 1 rule, and 1 it ideally shouldn't");
+  assert.equal(breachSummary([b("avoid"), b("avoid"), b("note")]), "breaks 2 rules");
+  assert.equal(breachSummary([b("ideally"), b("ideally")]), "breaks 2 rules it ideally shouldn't");
+  assert.equal(breachSummary([b("note")]), "");
+  assert.deepEqual(breachesOnly([b("note"), b("ideally")]).map((x) => x.rule.level), ["ideally"]);
 });

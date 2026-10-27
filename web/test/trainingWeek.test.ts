@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, entryId, newEntry, phaseView, readPlan } from "../src/domain/training.ts";
 import type { Run } from "../src/domain/trends.ts";
-import { fmtKm, plannedKm, runOf, summaryKm, weekBar } from "../src/domain/trainingWeek.ts";
+import { fmtKm, plannedKm, runLine, runOf, summaryKm, weekBar } from "../src/domain/trainingWeek.ts";
 
 // A made-up week, Mon 1 – Sun 7 Mar 2027.
 const plan = readPlan({
@@ -65,4 +65,15 @@ test("planned km, the matched run, the summary's km and km as text", () => {
   assert.equal(summaryKm("About −30%"), null);
   assert.equal(summaryKm("Restart weekend"), null);
   assert.deepEqual([fmtKm(0), fmtKm(8.44), fmtKm(13), fmtKm(12.96)], ["0", "8.4", "13", "13"]);
+});
+
+test("a done run's line: distance, pace and heart rate, leaving out what's missing", () => {
+  const r = (more: Partial<Run>): Run => ({ ...run("e1", null), ...more });
+  assert.equal(runLine(r({ distanceKm: 8.43, paceSPerKm: 302, avgHr: 158 })), "8.4 km · 5:02 /km · 158 bpm");
+  // No pace of its own: time over distance (2526 s over 8.4 km is 300.7 s/km).
+  assert.equal(runLine(r({ distanceKm: 8.4, durationS: 2526 })), "8.4 km · 5:01 /km");
+  // 359.6 s rounds up to 6:00, never 5:60.
+  assert.equal(runLine(r({ paceSPerKm: 359.6, avgHr: 141.4 })), "6:00 /km · 141 bpm");
+  assert.equal(runLine(r({ avgHr: 150 })), "150 bpm");
+  assert.equal(runLine(r({})), "");
 });

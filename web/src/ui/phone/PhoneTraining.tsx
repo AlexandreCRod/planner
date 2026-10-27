@@ -4,14 +4,19 @@
 // and dragged to another day (or back to To place). The ring on a row ticks it done, and a small "how it
 // went" row opens under it and closes by itself. A tap on a row opens the session (TrainingSession.tsx):
 // over the week on the phone, beside it in a wide window. Bests and the documents are in the top bar.
+// Placing a session or futsal on a day that breaks one of the phase's rules opens a sheet that says so (it's
+// never blocked), and a row shows "⚠ 1 rule" while it breaks one.
 // Also here: Today's training line and the calendar's light marks.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
+import { dayShort, formatDate, today as todayEpoch, weekday } from "../../domain/dates.ts";
+import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
 import {
   type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, leftToPlace, newEntry, phaseIndexAt,
   phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
 } from "../../domain/training.ts";
+import { type ColourKind, type WeekBar, colourKind, fmtKm, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
+import type { Run } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
@@ -29,6 +34,9 @@ import "./training.css";
 const LONG_PRESS = 450;
 /** The "how it went" row after a tick closes by itself after this long untouched. */
 const ASK_MS = 8000;
+
+/** The placement sheet's subject: what's on [day], and how to take it back (null when opened from a row's marker). */
+interface Warn { item: ItemRef; day: number; undo: (() => void) | null }
 
 export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const tr = useTraining();
@@ -76,6 +84,9 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const [picked, setPicked] = useState<string | null>(null);
   const [asked, setAsked] = useState<string | null>(null);
   const [futsal, setFutsal] = useState<Entry | "new" | null>(null);
+  const [warn, setWarn] = useState<Warn | null>(null);
+  // A futsal game saved onto a day that breaks a rule: the sheet opens once the futsal sheet has gone.
+  const warnNext = useRef<Warn | null>(null);
   const [rulesOpen, setRulesOpen] = useState(() => localStorage.getItem("trainingRulesOpen") === "1");
   const scroller = useRef<HTMLDivElement>(null);
   const setPhase = (i: number) => { setPhaseState(i); setPicked(null); if (scroller.current) scroller.current.scrollTop = 0; };
@@ -85,6 +96,13 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   useEffect(() => () => { kept = { plan: plan.id, phase, scroll: scroller.current?.scrollTop ?? 0 }; });
 
   const sessions = useMemo(() => new Map(sessionsOf(plan).map((s) => [s.id, s])), [plan]);
+  // What breaks a placement rule now, by session id or futsal entry id: the rows' markers.
+  const broken = useMemo(() => (readOnly ? new Map<string, Breach[]>() : brokenNow(plan, tr.entries)), [plan, tr.entries, readOnly]);
+  /** The sheet's subject when [item], just put on [day], breaks a rule there; else null. */
+  const check = (item: ItemRef, day: number, undo: () => void): Warn | null => {
+    if (!breachesOnly(brokenRules(plan, training().entries, item, day)).length) return null;
+    return { item, day, undo };
+  };
   const place = (sid: string, day: number | null) => {
     const s = sessions.get(sid);
     if (!s || s.locked) return;
@@ -93,7 +111,10 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     patchEntry(lp, s, { day });
     feel("settle");
     setPicked(null);
-    showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
+    // On a day that breaks a rule, the sheet says so (and can undo it); else the usual snackbar.
+    const w = day === null ? null : check({ session: sid }, day, () => saveEntry(before));
+    if (w) setWarn(w);
+    else showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
   };
   const drag = useDayDrag(scroller, place);
 
@@ -101,6 +122,9 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const ph = plan.phases[phase];
   const v = phaseView(plan, phase, tr.entries, tr.entries.values());
   const [short, long] = phaseNames(ph.name);
+  const bar = weekBar(v.days, tr.runs);
+  // A summary that's only a distance moves from the date line to the bar's km.
+  const totalKm = summaryKm(ph.summary);
   const open = (sid: string) => {
     const route = `training?s=${encodeURIComponent(sid)}${planQ(planId)}`;
     // Wide, the open session is swapped in place, so closing it goes back to the week, not through each one.
@@ -133,7 +157,8 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
       </ChipRow>
       <div className="tr-phase">
         <div className="tr-phase-name">{long || short}</div>
-        <div className="tr-phase-sub">{formatDate(ph.start)} – {formatDate(ph.end)}{ph.summary ? ` · ${ph.summary}` : ""}</div>
+        <div className="tr-phase-sub">{formatDate(ph.start)} – {formatDate(ph.end)}{ph.summary && !totalKm ? ` · ${ph.summary}` : ""}</div>
+        {bar.segments.length > 0 && <WeekBarView bar={bar} totalKm={totalKm} />}
         {ph.notes.map((n, i) => <div key={i} className="tr-phase-note">{n}</div>)}
         {ph.rules.length > 0 && <>
           <button className="tr-rules-head" aria-expanded={rulesOpen}
@@ -157,7 +182,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
               return (
                 <div key={s.id} className={`tr-card-place ${picked === s.id ? "on" : ""} ${picked && picked !== s.id ? "dim" : ""} ${e.status}`}>
                   <button className="main" onClick={() => { if (readOnly || e.status !== "planned") open(s.id); else { feel("tick"); setPicked(picked === s.id ? null : s.id); } }}>
-                    <MIcon name={kindIcon(s.kind)} size={20} />
+                    <KindIcon kind={colourKind({ session: s, entry: e })} icon={kindIcon(s.kind)} />
                     <span className="text"><span className="title">{s.title}</span>
                       <span className="detail">{[s.detail, s.optional ? "optional" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span></span>
                   </button>
@@ -177,12 +202,13 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           {items.length === 0 && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
             <div key={s.id}>
-              <SessionRow s={s} e={e} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
+              <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
+                warn={broken.get(s.id)?.length ?? 0} onWarn={() => setWarn({ item: { session: s.id }, day, undo: null })}
                 onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly || s.locked ? undefined : drag.props(s.id)} />
               {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
             </div>
           ) : (
-            <FutsalRow key={e.id} e={e} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+            <FutsalRow key={e.id} e={e} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
           ))}
         </div>
       ))}
@@ -211,42 +237,90 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           </div>
         </div>
       ) : week}
-      {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t} onClose={() => setFutsal(null)} />}
+      {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t}
+        onPlaced={(e, before) => { warnNext.current = check({ futsal: e.id }, e.day!, () => saveEntry(before ?? { ...e, deletedAt: Date.now() })); }}
+        onClose={() => { setFutsal(null); if (warnNext.current) { setWarn(warnNext.current); warnNext.current = null; } }} />}
+      {warn && <PlacementSheet tr={tr} lp={lp} warn={warn} onMoved={setWarn} onClose={() => setWarn(null)} />}
     </Scaffold>
   );
 }
 
-function SessionRow({ s, e, selected, lifted, onTick, onOpen, dragProps }: {
-  s: Session; e: Entry; selected: boolean; lifted: boolean; onTick: () => void; onOpen: () => void;
+/**
+ * Under the week's title: a short bar per session or futsal game on its days, filling in its kind's colour
+ * when done, then how many are done and the km run so far (of the week's planned km, when it has one).
+ */
+function WeekBarView({ bar, totalKm }: { bar: WeekBar; totalKm: string | null }) {
+  const km = totalKm ? `${fmtKm(bar.km)} of ${totalKm}` : bar.km > 0 ? `${fmtKm(bar.km)} km` : "";
+  return <>
+    <div className="tr-bar" aria-hidden="true">
+      {bar.segments.map((g, i) => <i key={i} className={`${g.kind ? `k-${g.kind}` : ""} ${g.done ? "done" : ""}`} />)}
+    </div>
+    <div className="tr-bar-text"><span>{bar.done} of {bar.segments.length} done</span><span>{km}</span></div>
+  </>;
+}
+
+/** A session's icon in a soft circle of its kind's colour (other kinds keep the plain icon colour). */
+function KindIcon({ kind, icon }: { kind: ColourKind | null; icon: string }) {
+  return <span className={`tr-bub ${kind ? `k-${kind}` : ""}`}><MIcon name={icon} size={18} /></span>;
+}
+
+/** The ring on a row: the kind's colour, filled with a small pop when ticked done. */
+function Ring({ kind, done, label, onTick }: { kind: ColourKind | null; done: boolean; label: string; onTick: () => void }) {
+  return (
+    <button className={`tr-ring ${kind ? `k-${kind}` : ""}`} aria-pressed={done} aria-label={label}
+      onClick={(ev) => {
+        ev.stopPropagation();
+        // Only a tick pops it, never a row drawn already done.
+        const el = ev.currentTarget;
+        el.classList.remove("pop");
+        if (!done) { void el.offsetWidth; el.classList.add("pop"); }
+        onTick();
+      }}
+      onAnimationEnd={(ev) => ev.currentTarget.classList.remove("pop")}>
+      {done && <MIcon name="fCheck" size={16} />}
+    </button>
+  );
+}
+
+/** "⚠ 1 rule" on a row that breaks a placement rule now; a tap opens the rules it breaks. */
+function RuleMark({ n, onOpen }: { n: number; onOpen: () => void }) {
+  return (
+    <button className="tr-warn" onClick={(ev) => { ev.stopPropagation(); onOpen(); }}>
+      <MIcon name="oWarningAmber" size={13} /><span>{count(n, "rule")}</span>
+    </button>
+  );
+}
+
+function SessionRow({ s, e, run, selected, lifted, warn, onWarn, onTick, onOpen, dragProps }: {
+  s: Session; e: Entry; run: Run | null; selected: boolean; lifted: boolean; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void;
   dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
 }) {
+  const kind = colourKind({ session: s, entry: e });
+  // A done run matched to one from the watch shows how it went instead of the plan's text.
+  const ran = run ? runLine(run) : "";
   return (
-    <div className={`tr-row ${e.status} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
-      <button className="tr-ring" aria-pressed={e.status === "done"} aria-label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`}
-        onClick={(ev) => { ev.stopPropagation(); onTick(); }}>
-        {e.status === "done" && <MIcon name="fCheck" size={16} />}
-      </button>
-      <MIcon name={kindIcon(s.kind)} size={20} />
+    <div className={`tr-row ${e.status} ${kind ? `k-${kind}` : ""} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
+      <Ring kind={kind} done={e.status === "done"} label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`} onTick={onTick} />
+      <KindIcon kind={kind} icon={kindIcon(s.kind)} />
       <span className="tr-row-text">
         <span className="title">{s.title}</span>
-        <span className="detail">{[s.detail, s.optional ? "optional" : "", s.locked ? "fixed" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span>
+        <span className="detail">{ran || [s.detail, s.optional ? "optional" : "", s.locked ? "fixed" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span>
       </span>
+      {warn > 0 && <RuleMark n={warn} onOpen={onWarn} />}
     </div>
   );
 }
 
-function FutsalRow({ e, onTick, onOpen }: { e: Entry; onTick: () => void; onOpen: () => void }) {
+function FutsalRow({ e, warn, onWarn, onTick, onOpen }: { e: Entry; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
   return (
-    <div className={`tr-row ${e.status}`} role="button" onClick={onOpen}>
-      <button className="tr-ring" aria-pressed={e.status === "done"} aria-label={e.status === "done" ? "Futsal: done. Tap to undo" : "Mark futsal done"}
-        onClick={(ev) => { ev.stopPropagation(); onTick(); }}>
-        {e.status === "done" && <MIcon name="fCheck" size={16} />}
-      </button>
-      <MIcon name="oSportsSoccer" size={20} />
+    <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
+      <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? "Futsal: done. Tap to undo" : "Mark futsal done"} onTick={onTick} />
+      <KindIcon kind="futsal" icon="oSportsSoccer" />
       <span className="tr-row-text">
         <span className="title">Futsal</span>
         <span className="detail">{[e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
       </span>
+      {warn > 0 && <RuleMark n={warn} onOpen={onWarn} />}
     </div>
   );
 }
@@ -266,7 +340,9 @@ function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; on
 }
 
 /** Adds or changes a futsal game: its day (in the phase shown), how long, a note. */
-function FutsalSheet({ plan, ph, entry, t, onClose }: { plan: Plan; ph: Phase; entry: Entry | null; t: number; onClose: () => void }) {
+function FutsalSheet({ plan, ph, entry, t, onPlaced, onClose }: {
+  plan: Plan; ph: Phase; entry: Entry | null; t: number; onPlaced: (e: Entry, before: Entry | null) => void; onClose: () => void;
+}) {
   const [day, setDay] = useState(entry?.day ?? Math.min(ph.end, Math.max(ph.start, t)));
   const [dur, setDur] = useState<number | null>(entry ? entry.durationMin : 60);
   const [note, setNote] = useState(entry?.note ?? "");
@@ -274,8 +350,10 @@ function FutsalSheet({ plan, ph, entry, t, onClose }: { plan: Plan; ph: Phase; e
   if (!days.includes(day)) days.unshift(day);
   const save = (close: () => void) => {
     const base = entry ?? newEntry({ id: `futsal-${randomId()}`, planId: plan.id, kind: "futsal", title: "Futsal" });
-    saveEntry({ ...base, day, durationMin: dur, note: note.trim(), doneDay: base.status === "done" ? day : null });
+    const saved = { ...base, day, durationMin: dur, note: note.trim(), doneDay: base.status === "done" ? day : null };
+    saveEntry(saved);
     feel("settle");
+    if (!entry || entry.day !== day) onPlaced(saved, entry);
     close();
   };
   return (
@@ -292,6 +370,78 @@ function FutsalSheet({ plan, ph, entry, t, onClose }: { plan: Plan; ph: Phase; e
           <span className="grow" />
           <TextButton onClick={close}>Cancel</TextButton>
           <button className="p-filled-btn" onClick={() => save(close)}>Save</button>
+        </div>
+      </div>
+    )}</BottomSheet>
+  );
+}
+
+/**
+ * Placing or moving a session or futsal onto a day that breaks one of the phase's rules (it's done all the
+ * same, never blocked), or a tap on a row's marker: the rules it breaks, worst first, and the plan's tips;
+ * then the week's days, each with a dot for how it would fit there, so a better day is one tap away. Cancel
+ * takes the placement back; moving re-checks the new day, and the sheet stays only if that breaks one too.
+ */
+function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
+  tr: Training; lp: LoadedPlan; warn: Warn; onMoved: (w: Warn) => void; onClose: () => void;
+}) {
+  const { plan } = lp;
+  const { item, day } = warn;
+  const [to, setTo] = useState<number | null>(null);
+  const s = "session" in item ? sessionsOf(plan).find((x) => x.id === item.session) : undefined;
+  const title = s?.title ?? "Futsal";
+  const all = brokenRules(plan, tr.entries, item, day);
+  const rules = breachesOnly(all);
+  const ph = plan.phases.find((p) => day >= p.start && day <= p.end);
+  const days = ph ? Array.from({ length: ph.end - ph.start + 1 }, (_, k) => ph.start + k) : [day];
+  const fit = useMemo(() => dayFit(plan, tr.entries, item, days), [plan, tr.entries, item, day]); // eslint-disable-line react-hooks/exhaustive-deps
+  const move = (close: () => void) => {
+    if (to === null) return;
+    // Taking it back goes to where it was before the first placement, or before this move from a marker.
+    let undo = warn.undo;
+    if (s) {
+      const before = entryFor(plan, s, training().entries);
+      undo ??= () => saveEntry(before);
+      patchEntry(lp, s, { day: to });
+    } else {
+      const e = "futsal" in item && item.futsal ? training().entries.get(item.futsal) : undefined;
+      if (!e) return;
+      undo ??= () => saveEntry(e);
+      saveEntry({ ...e, day: to, doneDay: e.status === "done" ? to : null });
+    }
+    feel("settle");
+    setTo(null);
+    if (breachesOnly(brokenRules(plan, training().entries, item, to)).length) onMoved({ item, day: to, undo });
+    else { close(); showSnackbar(`${title} on ${formatDate(to)}`, "Undo", undo); }
+  };
+  return (
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="tr-place">
+        <div className="tr-place-title">{title} on {formatDate(day)}</div>
+        <div className="tr-place-sub">{breachSummary(rules) || "breaks no rule now"}</div>
+        {rules.map((b) => (
+          <div key={`${b.phase}|${b.rule.id}`} className="tr-place-rule">
+            <span className={`tr-level ${b.rule.level}`}>{b.rule.level === "avoid" ? "Avoid" : "Ideally"}</span>
+            <span className="text"><span className="x">{b.rule.text}</span>{b.rule.why && <span className="why">{b.rule.why}</span>}</span>
+          </div>
+        ))}
+        {all.filter((b) => b.rule.level === "note").map((b) => (
+          <div key={`${b.phase}|${b.rule.id}`} className="tr-place-note"><MIcon name="oLightbulb" size={14} /><span>{b.rule.text}</span></div>
+        ))}
+        <div className="tr-place-label">Or move it to</div>
+        <div className="tr-place-days" role="radiogroup" aria-label="Move it to">
+          {days.map((d) => (
+            <button key={d} role="radio" aria-checked={to === d} className={`${d === day ? "cur" : ""} ${to === d ? "on" : ""}`}
+              onClick={() => { feel("tick"); setTo(d === day || to === d ? null : d); }}>
+              {dayShort(weekday(d))}<i className={`fit-${fit.get(d) ?? "none"}`} />
+            </button>
+          ))}
+        </div>
+        <div className="p-sheet-buttons">
+          <TextButton className="tr-place-cancel" onClick={() => { warn.undo?.(); close(); }}>{warn.undo ? "Cancel" : "Close"}</TextButton>
+          {(warn.undo || to !== null) && (
+            <TextButton onClick={() => (to === null ? close() : move(close))}>{to === null ? "Place anyway" : `Move to ${dayShort(weekday(to))}`}</TextButton>
+          )}
         </div>
       </div>
     )}</BottomSheet>
@@ -366,7 +516,7 @@ function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day:
   const props = (sid: string) => ({
     onPointerDown: (ev: React.PointerEvent<HTMLElement>) => {
       if (g.current || !ev.isPrimary || (ev.pointerType === "mouse" && ev.button !== 0)) return;
-      if ((ev.target as Element).closest(".tr-ring")) return;
+      if ((ev.target as Element).closest(".tr-ring, .tr-warn")) return;
       const el = ev.currentTarget;
       const move = (e: PointerEvent) => {
         const d = g.current;
