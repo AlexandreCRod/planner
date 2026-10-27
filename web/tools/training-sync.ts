@@ -2,10 +2,10 @@
 //   node --experimental-strip-types web/tools/training-sync.ts check <folder>
 //   node --experimental-strip-types web/tools/training-sync.ts push  <folder>
 //   node --experimental-strip-types web/tools/training-sync.ts pull  <folder>
-// check: planner.json and its documents agree (same rules as the app), and so do runs.json and meals.json
-// when the folder has them. push: sends the files that changed: the plan's, and runs.json and meals.json
-// under the plan id "shared" (one taken out of the folder stays on the server: runs.json is history pushed
-// once, and meals.json may come from another session). pull: writes the
+// check: planner.json and its documents agree (same rules as the app), and so do the shared files (runs.json,
+// meals.json, weights.json, lift-history.json, sleep.json) when the folder has them. push: sends the files
+// that changed: the plan's, and the shared ones under the plan id "shared" (one taken out of the folder stays
+// on the server: the history files are pushed once, and meals.json may come from another session). pull: writes the
 // training CSVs from what the phone logged, and bodyweight.csv from the weigh-ins. Node built-ins only.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,7 +15,10 @@ import { count } from "../src/domain/plural.ts";
 import {
   type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, logCsv, missingCards, planFileId, readPlan, setsCsv,
 } from "../src/domain/training.ts";
-import { MEALS_FILE, RUNS_FILE, SHARED_PLAN, type WeighIn, readMeals, readRuns, weighInsCsv } from "../src/domain/trends.ts";
+import {
+  LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
+  readLiftHistory, readMeals, readRuns, readSleep, readWeights, weighInsCsv,
+} from "../src/domain/trends.ts";
 
 type Rec = Record<string, unknown>;
 export interface Change { kind: string; id: string; data: Rec | null }
@@ -67,7 +70,7 @@ export function checkPlan(raw: unknown, read: (file: string) => string | null): 
   const { plan, problems } = readPlan(raw);
   const texts = new Map<string, string>();
   if (!plan) return { plan, problems, texts };
-  if (plan.id === SHARED_PLAN) problems.push(`The plan id "${SHARED_PLAN}" is kept for ${RUNS_FILE} and ${MEALS_FILE}; pick another.`);
+  if (plan.id === SHARED_PLAN) problems.push(`The plan id "${SHARED_PLAN}" is kept for ${RUNS_FILE} and the other shared files; pick another.`);
   const anchors = new Map<string, Set<string>>();
   for (const d of plan.documents) {
     const text = read(d.file);
@@ -79,22 +82,34 @@ export function checkPlan(raw: unknown, read: (file: string) => string | null): 
   return { plan, problems, texts };
 }
 
+/** The files pushed under "shared", each with its reader: what's wrong, and what the OK line says it holds. */
+const SHARED_FILES: [file: string, read: (raw: unknown) => { problems: string[]; summary: string }][] = [
+  [RUNS_FILE, (raw) => { const r = readRuns(raw); return { problems: r.problems, summary: count(r.runs.length, "run") }; }],
+  [MEALS_FILE, (raw) => { const r = readMeals(raw); return { problems: r.problems, summary: count(r.meals.length, "meal") }; }],
+  [WEIGHTS_FILE, (raw) => {
+    const r = readWeights(raw);
+    return { problems: r.problems, summary: `${count(r.weighIns.length, "weigh-in")}, ${count(r.measurements.length, "other measurement")}` };
+  }],
+  [LIFT_HISTORY_FILE, (raw) => { const r = readLiftHistory(raw); return { problems: r.problems, summary: count(r.sets.length, "set") }; }],
+  [SLEEP_FILE, (raw) => { const r = readSleep(raw); return { problems: r.problems, summary: count(r.nights.length, "night") }; }],
+];
+
 /**
- * runs.json and meals.json, each when the folder has it ([read] gives a file's text, or null if absent): the
- * text to push, what's wrong in plain words (JSON errors and what readRuns and readMeals find), and an OK
- * line for each one that's there.
+ * The shared files (runs.json, meals.json, weights.json, lift-history.json, sleep.json), each when the folder
+ * has it ([read] gives a file's text, or null if absent): the text to push, what's wrong in plain words (JSON
+ * errors and what their readers find), and an OK line for each one that's there.
  */
 export function checkShared(read: (file: string) => string | null): { texts: Map<string, string>; problems: string[]; ok: string[] } {
   const texts = new Map<string, string>(), problems: string[] = [], ok: string[] = [];
-  for (const file of [RUNS_FILE, MEALS_FILE]) {
+  for (const [file, readFile] of SHARED_FILES) {
     const text = read(file);
     if (text === null) continue;
     let raw: unknown;
     try { raw = JSON.parse(text); } catch (e) { problems.push(`${file} isn't valid JSON: ${(e as Error).message}`); continue; }
     texts.set(file, text);
-    const r = file === RUNS_FILE ? readRuns(raw) : readMeals(raw);
+    const r = readFile(raw);
     problems.push(...r.problems.map((p) => `${file}: ${p}`));
-    ok.push(`OK: ${file}: ${"runs" in r ? count(r.runs.length, "run") : count(r.meals.length, "meal")}.`);
+    ok.push(`OK: ${file}: ${r.summary}.`);
   }
   return { texts, problems, ok };
 }

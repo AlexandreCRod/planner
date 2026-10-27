@@ -41,3 +41,16 @@ test("checkPlan: reports missing documents and anchors", () => {
   assert.match(r.problems.join("\n"), /missing\.md/);
   assert.match(r.problems.join("\n"), /g\.md#nope/);
 });
+
+test("checkShared: the history files are checked and summed up like runs.json", () => {
+  const files: Record<string, string> = {
+    "weights.json": JSON.stringify({ version: 1, weights: [{ id: "f1", date: "2024-01-31", time: "10:49", kg: 85.9, when: null, source: "fitnotes", note: "" }], measurements: [] }),
+    "lift-history.json": JSON.stringify({ version: 1, sets: [{ id: "f1", date: "2024-02-19", exercise_id: "x036", name: "Deadlift", kg: 205, reps: 1, source: "fitnotes", note: "" }] }),
+    "sleep.json": "{ not json",
+  };
+  const r = checkShared((f) => files[f] ?? null);
+  assert.deepEqual([...r.texts.keys()], ["weights.json", "lift-history.json"]);
+  assert.deepEqual(r.ok, ["OK: weights.json: 1 weigh-in, 0 other measurements.", "OK: lift-history.json: 1 set."]);
+  assert.equal(r.problems.length, 1);
+  assert.match(r.problems[0], /^sleep\.json isn't valid JSON/);
+});

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
-  type Run, type WeighIn, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readMeals, readRuns, rpeFor,
+  type Run, type WeighIn, bodyWeights, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
+  readRuns, readSleep, readWeights, rpeFor,
   targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
@@ -41,8 +42,8 @@ test("lift points: one per time lifted, across plans, by the exercise actually d
   const swapped = lift([[50, 8]], { day: 105, planned: "x001", exercise: "x002" });           // done as another exercise
   const none = lift([[60, 5]], { day: 120, sets: [{ kg: 60, reps: 5, done: false }] });         // nothing done
   assert.deepEqual(liftPoints([a, swapped, none, b], "x001"), [
-    { day: 100, topKg: 65, topReps: 5, e1rm: null, rpeBasis: null, pain: null, planId: "p0", sessionId: "s9" },
-    { day: 110, topKg: 60, topReps: 5, e1rm: 76, rpeBasis: "logged", pain: 2, planId: "p1", sessionId: "s2" },
+    { day: 100, topKg: 65, topReps: 5, e1rm: null, rpeBasis: null, pain: null, planId: "p0", sessionId: "s9", source: "planner" },
+    { day: 110, topKg: 60, topReps: 5, e1rm: 76, rpeBasis: "logged", pain: 2, planId: "p1", sessionId: "s2", source: "planner" },
   ]);
   assert.equal(liftPoints([a, b], "x999").length, 0);
 });
@@ -341,4 +342,91 @@ test("the kcal target: the day type's own, else the plan's for any day, else non
   assert.deepEqual(kcalTarget(p, d("2026-11-08"), entries()), [2900, 3200]);
   assert.deepEqual(kcalTarget(p, d("2026-11-05"), entries()), [2400, 2700]);
   assert.equal(kcalTarget(planWith({ nutrition: undefined }), d("2026-11-05"), entries()), null);
+});
+
+// ---------- History from before Planner ----------
+
+test("runs.json: each run's source, null when it doesn't say", () => {
+  const { runs } = readRuns({ version: 1, runs: [
+    { id: "s1", date: "2024-01-02", run_type: "easy", source: "strava" }, { id: "g1", date: "2024-01-03", run_type: "easy" },
+  ] });
+  assert.deepEqual(runs.map((r) => r.source), ["strava", null]);
+});
+
+test("weights.json: weigh-ins with their source and when, the other measurements kept, bad ones skipped", () => {
+  const { weighIns, measurements, problems } = readWeights({
+    version: 1,
+    weights: [
+      { id: "f2024-01-31T10:49", date: "2024-01-31", time: "10:49", kg: 85.9, when: null, source: "fitnotes", note: "Manhã" },
+      { id: "g2025-09-10T14:00", date: "2025-09-10", time: "14:00", kg: 84.1, when: "later", source: "garmin", note: "" },
+      { id: "nokg", date: "2025-09-11", time: "08:00", when: "morning", source: "fitnotes" },
+      { id: "odd", date: "2025-09-12", time: "8am", kg: 84, when: "evening", source: "fitnotes" },
+    ],
+    measurements: [{ date: "2024-02-01", time: "13:28", name: "Cold Shower Day", value: 1, unit: "kgs", note: "1st day", source: "fitnotes" }, { name: "no date" }],
+  });
+  assert.deepEqual(weighIns.map((w) => [w.id, w.kg, w.when, w.source, w.time]), [
+    ["f2024-01-31T10:49", 85.9, null, "fitnotes", "10:49"], ["g2025-09-10T14:00", 84.1, "later", "garmin", "14:00"], ["odd", 84, null, "fitnotes", null],
+  ]);
+  assert.deepEqual(measurements, [{ day: d("2024-02-01"), time: "13:28", name: "Cold Shower Day", value: 1, unit: "kgs", note: "1st day", source: "fitnotes" }]);
+  assert.ok(problems.some((p) => p.includes("nokg") && p.includes("no weight")));
+  assert.ok(problems.some((p) => p.includes("odd") && p.includes("evening")));
+  assert.ok(problems.some((p) => p.includes("odd") && p.includes("time")));
+  assert.match(readWeights({ weights: "x" }).problems[0], /weights\.json must look like/);
+});
+
+test("body weights: a day keeps its best source's weigh-ins; unknown times count as morning; the trend takes them", () => {
+  const own = (id: string, day: string, kg: number, extra: Partial<WeighIn> = {}): WeighIn =>
+    ({ id, day: d(day), time: "08:00", kg, when: "morning", note: "", updatedAt: 1, deletedAt: null, ...extra });
+  const past = (id: string, day: string, kg: number, source: string, when: "morning" | "later" | null = null) =>
+    ({ id, day: d(day), time: "10:00", kg, when, source, note: "" });
+  const all = bodyWeights(
+    [own("p1", "2026-10-28", 82), own("p2", "2026-10-29", 81, { deletedAt: 5 })],
+    [past("f1", "2026-10-28", 83, "fitnotes"), past("g1", "2026-10-27", 84, "garmin"), past("f2", "2026-10-27", 83.5, "fitnotes"),
+      past("f3", "2026-10-27", 83.9, "fitnotes", "later"), past("g2", "2026-10-29", 80, "garmin")],
+  );
+  assert.deepEqual(all.map((w) => [w.id, w.source, w.when]), [
+    ["f2", "fitnotes", "morning"], ["f3", "fitnotes", "later"], ["p1", "planner", "morning"], ["g2", "garmin", "morning"],
+  ]);
+  assert.deepEqual(weightTrend(all).map((p) => p.kg), [83.5, 82, 80]);   // "later" stays out of the trend
+});
+
+test("lift-history.json: sets with their exercise, bad ones skipped", () => {
+  const { sets, problems } = readLiftHistory({ version: 1, sets: [
+    { id: "f2024-02-19-000", date: "2024-02-19", exercise_id: "x036", name: "Deadlift", kg: 205, reps: 1, source: "fitnotes", note: "" },
+    { id: "f2024-02-19-001", date: "2024-02-19", exercise_id: "", name: "Mystery", kg: 50, reps: 5, source: "fitnotes" },
+    { id: "f2024-02-19-002", date: "2024-02-19", exercise_id: "x013", name: "Pull-up", kg: 0, reps: 16, source: "fitnotes" },
+    { id: "f2024-02-19-003", date: "2024-02-19", exercise_id: "x015", kg: 100, reps: 0 },
+  ] });
+  assert.deepEqual(sets.map((s) => [s.id, s.exerciseId, s.kg, s.reps]), [["f2024-02-19-000", "x036", 205, 1], ["f2024-02-19-002", "x013", 0, 16]]);
+  assert.equal(problems.length, 2);
+});
+
+test("lift points with history: one per day, a lower bound from sets of up to 6 reps; a day logged in Planner wins", () => {
+  const past = (id: string, day: string, kg: number, reps: number) =>
+    ({ id, day: d(day), exerciseId: "x001", name: "Front squat", kg, reps, source: "fitnotes", note: "" });
+  const planned = lift([[60, 5]], { day: d("2025-03-02") });
+  const points = liftPoints([planned], "x001", [], [
+    past("a", "2025-03-01", 140, 3), past("b", "2025-03-01", 100, 8), past("c", "2025-03-02", 150, 1), past("e", "2025-03-03", 90, 10),
+  ]);
+  assert.deepEqual(points.map((p) => [p.day, p.topKg, p.topReps, p.e1rm, p.rpeBasis, p.source]), [
+    [d("2025-03-01"), 140, 3, 154, "lowerBound", "fitnotes"],
+    [d("2025-03-02"), 60, 5, 76, "logged", "planner"],
+    [d("2025-03-03"), 90, 10, null, null, "fitnotes"],
+  ]);
+});
+
+test("sleep.json: one night per date, blanks where Garmin had nothing", () => {
+  const { nights, problems } = readSleep({ version: 1, nights: [
+    { date: "2026-10-27", bed: "2026-10-27T04:10", wake: "2026-10-27T12:40", total_min: 470, awake_min: 40, deep_min: 80, light_min: 280, rem_min: 110, score: 78, resting_hr: 47, hrv_ms: 52, avg_spo2: 95, avg_respiration: 14.5 },
+    { date: "2025-09-09", bed: null, wake: null, total_min: null, resting_hr: 54 },
+    { date: "2025-09-09", resting_hr: 50 },
+    { date: "2025-09-10", bed: "late", resting_hr: 53 },
+  ] });
+  assert.deepEqual(nights.map((n) => [n.id, n.restingHr, n.totalMin, n.bed]), [
+    ["2025-09-09", 54, null, null], ["2025-09-10", 53, null, null], ["2026-10-27", 47, 470, "2026-10-27T04:10"],
+  ]);
+  assert.equal(nights[2].hrvMs, 52);
+  assert.equal(problems.length, 2);
+  assert.ok(problems.some((p) => p.includes("2025-09-09 is used twice")));
+  assert.ok(problems.some((p) => p.includes("2025-09-10") && p.includes("bed")));
 });

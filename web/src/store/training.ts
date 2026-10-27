@@ -9,7 +9,8 @@ import {
   type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan,
 } from "../domain/training.ts";
 import {
-  type Meal, type Run, type WeighIn, MEALS_FILE, RUNS_FILE, SHARED_PLAN, byMoment, readMeals, readRuns,
+  type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
+  SLEEP_FILE, WEIGHTS_FILE, byMoment, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
@@ -35,11 +36,20 @@ export interface Training {
   plateCm: number | null;
   /** Every weigh-in, oldest first, deleted ones included (views and trends skip them; sync needs them). */
   weighIns: WeighIn[];
+  /** The history from before Planner (weights.json, lift-history.json, sleep.json), oldest first; none until pushed. */
+  pastWeighIns: PastWeighIn[];
+  pastSets: PastSet[];
+  nights: Night[];
+  /** What was wrong in those three files, in plain words. */
+  historyProblems: string[];
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
 const readRunsOf = new WeakMap<PlanFile, ReturnType<typeof readRuns>>();
 const readMealsOf = new WeakMap<PlanFile, ReturnType<typeof readMeals>>();
+const readWeightsOf = new WeakMap<PlanFile, ReturnType<typeof readWeights>>();
+const readLiftHistoryOf = new WeakMap<PlanFile, ReturnType<typeof readLiftHistory>>();
+const readSleepOf = new WeakMap<PlanFile, ReturnType<typeof readSleep>>();
 let cache: { version: number; data: Training } | null = null;
 
 function readFile(f: PlanFile): { plan: Plan | null; problems: string[] } {
@@ -83,6 +93,9 @@ export function training(): Training {
   const shared = byPlan.get(SHARED_PLAN) ?? [];
   const runs = readShared(readRunsOf, shared.find((f) => f.file === RUNS_FILE), readRuns, { runs: [], problems: [] });
   const meals = readShared(readMealsOf, shared.find((f) => f.file === MEALS_FILE), readMeals, { meals: [], plateCm: null, problems: [] });
+  const weights = readShared(readWeightsOf, shared.find((f) => f.file === WEIGHTS_FILE), readWeights, { weighIns: [], measurements: [], problems: [] });
+  const pastLifts = readShared(readLiftHistoryOf, shared.find((f) => f.file === LIFT_HISTORY_FILE), readLiftHistory, { sets: [], problems: [] });
+  const sleep = readShared(readSleepOf, shared.find((f) => f.file === SLEEP_FILE), readSleep, { nights: [], problems: [] });
   const data: Training = {
     plans,
     entries: new Map(listOf<Entry>("trainingEntries").map((e) => [e.id, e])),
@@ -92,6 +105,8 @@ export function training(): Training {
     runs: runs.runs, runProblems: runs.problems,
     meals: meals.meals, mealProblems: meals.problems, plateCm: meals.plateCm,
     weighIns: listOf<WeighIn>("trainingWeighIns").sort(byMoment),
+    pastWeighIns: weights.weighIns, pastSets: pastLifts.sets, nights: sleep.nights,
+    historyProblems: [...weights.problems, ...pastLifts.problems, ...sleep.problems],
   };
   cache = { version: v, data };
   return data;
