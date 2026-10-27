@@ -129,6 +129,34 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
 .phone .tr-label { padding: 12px 24px 6px; font-size: 13px; color: var(--muted); }
 .phone .tr-futsal .p-chiprow { padding-left: 24px; padding-right: 24px; }
 .phone .tr-futsal-note { padding: 4px 24px 0; }
+/* The placement sheet: the rules a day breaks, the plan's tips, and the week's days with how each fits
+   (a green dot fits, red breaks an avoid rule, grey only an "ideally" one). */
+html.phone { --fit-ok: #2e8a4c; --fit-ideally: #79747e; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --fit-ok: #86c79a; --fit-ideally: #8e9095; } }
+html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
+.phone .tr-place { padding: 0 24px 8px; }
+.phone .tr-place-title { font-size: 18px; line-height: 24px; color: var(--text); }
+.phone .tr-place-sub { margin: 2px 0 8px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-place-rule { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.phone .tr-place-rule .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .tr-place-rule .x { font-size: 15px; line-height: 20px; color: var(--text); }
+.phone .tr-place-rule .why { margin-top: 1px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-level { flex: none; height: fit-content; margin-top: 1px; padding: 0 7px; border-radius: 6px; font-size: 11px; line-height: 18px; }
+.phone .tr-level.avoid { background: var(--danger); color: var(--p-sc-lowest); }
+.phone .tr-level.ideally { background: var(--p-sc-highest); color: var(--text); }
+.phone .tr-place-note { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-place-note svg { flex: none; margin-top: 2px; }
+.phone .tr-place-label { margin: 14px 0 8px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text); }
+.phone .tr-place-days { display: flex; gap: 4px; }
+.phone .tr-place-days button { flex: 1; min-width: 0; height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--text); font-size: 13px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; transition: background-color .15s, border-color .15s; }
+.phone .tr-place-days button.cur { border-color: var(--p-outline); background: var(--p-sc-high); }
+.phone .tr-place-days button.on { border-color: transparent; background: var(--p-primary-container); color: var(--p-on-primary-container); }
+.phone .tr-place-days i { width: 6px; height: 6px; border-radius: 50%; background: var(--fit-ok); }
+.phone .tr-place-days i.fit-avoid { background: var(--danger); }
+.phone .tr-place-days i.fit-ideally { background: var(--fit-ideally); }
+.phone .tr-place .p-sheet-buttons { padding: 12px 0 0; margin-right: -12px; }
+.phone .p-text-btn.tr-place-cancel { color: var(--muted); }
 .phone .tr-sheet-actions { display: flex; justify-content: flex-end; padding: 8px 16px 0; }
 
 /* One session. */
@@ -231,7 +259,7 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
 .wide .tr-side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .wide .tr-side-hint { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); opacity: .8; }
 @media (hover: hover) {
-  html.phone :is(.tr-row, .tr-card-place .main, .tr-move-day, .tr-set, .tr-todayline, .tr-rules-head, .tr-ex-name, .tr-scale-row button):hover {
+  html.phone :is(.tr-row, .tr-card-place .main, .tr-move-day, .tr-place-days button, .tr-set, .tr-todayline, .tr-rules-head, .tr-ex-name, .tr-scale-row button):hover {
     background-image: linear-gradient(color-mix(in srgb, currentColor 6%, transparent), color-mix(in srgb, currentColor 6%, transparent));
   }
 }
