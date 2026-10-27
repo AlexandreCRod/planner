@@ -141,6 +141,7 @@
 .phone .tr-set.done .tr-check { background: var(--p-primary); color: var(--p-on-primary); box-shadow: none; }
 .phone .tr-set.done .tr-num { background: none; color: var(--muted); }
 .phone .tr-addset, .phone .tr-addpain { margin-left: -4px; }
+.phone .tr-setbtns { display: flex; gap: 4px; }
 .phone .tr-ex .tr-scale:first-of-type { margin-top: 4px; }
 
 /* The documents, read. */

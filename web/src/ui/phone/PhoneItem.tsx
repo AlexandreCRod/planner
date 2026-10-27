@@ -672,6 +672,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const [catMenu, setCatMenu] = useState(false);
   const [prioMenu, setPrioMenu] = useState(false);
   const [overdueMenu, setOverdueMenu] = useState(false);
+  const { defaultTaskTime } = useAlarmSettings();
   const [pendingScope, setPendingScope] = useState<Item | null>(null);
   if (!item) return null;
 
@@ -706,7 +707,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const alerts = !completable || !done;
   const forDay = isRecurring(item) && day !== null ? ` for ${(() => { const r = relativeDay(day); return ["Today", "Tomorrow", "Yesterday"].includes(r) ? r.toLowerCase() : r; })()}` : "";
   const alertLines = (list: Reminder[], kind: string | null) => [...list].sort((a, b) => b.offsetMin - a.offsetMin)
-    .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin).toLowerCase()}`).join("\n");
+    .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin, item.startMin ?? defaultTaskTime).toLowerCase()}`).join("\n");
   const edit = () => go(`item/${id}?edit=1${occ !== null ? `&occ=${occ}` : ""}`);
   const duplicate = () => {
     duplicateSeed = { item: { ...item, id: 0, deletedAt: null }, reminders: reminders.map((r) => ({ ...r, id: 0 })), tags: tags.map((x) => x.name).join(" ") };

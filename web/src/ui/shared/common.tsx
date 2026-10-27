@@ -157,7 +157,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
         onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
-          {isRecurring(item) && <RepeatBadge color={color} />}
+          {isRecurring(item) && item.routine !== true && <RepeatBadge color={color} />}
           {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={priorityColor(item.priority)} /></span>}
           {item.title || "Untitled"}
         </div>
@@ -194,7 +194,7 @@ export function EventRow({ o, s, showDay, heldTime, past }: { o: Occurrence; s: 
       <div className="time">{o.timed ? <><span className="t1">{t1}</span>{o.endMin !== null && <><br /><span className="t2">{t2}</span></>}</> : <span className="t0">All day</span>}</div>
       <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: s.colorOf(o.item) }} />
       <div className="grow">
-        <div className="ellipsis" style={o.completed ? { textDecoration: "line-through" } : undefined}>{isRecurring(o.item) && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
+        <div className="ellipsis" style={o.completed ? { textDecoration: "line-through" } : undefined}>{isRecurring(o.item) && o.item.routine !== true && <RepeatBadge color={s.colorOf(o.item)} />}{o.item.title || "Untitled"}</div>
         <div className="hint ellipsis" style={{ fontSize: 12 }}>
           {[showDay ? relativeDay(o.day) : null, o.multiDay ? `until ${relativeDay(o.endDay)}` : null, isRecurring(o.item) ? describe(o.item) : null].filter(Boolean).join(" · ")}
           {!past && <ReminderIcon kind={reminderKind(s.reminders.get(o.item.id))} />}

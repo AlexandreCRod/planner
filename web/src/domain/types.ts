@@ -122,5 +122,8 @@ export function argbOf(hex: string): number {
 
 export const TYPE_COLORS: Record<ItemType, string> = { TASK: "#26a69a", EVENT: "#039be5", NOTE: "#ffa726" };
 
-/** The title with "↻" in front for repeating items, for places too small for a badge. */
-export const displayTitle = (item: Item) => (isRecurring(item) ? "↻ " : "") + (item.title || "Untitled");
+/**
+ * The title with "↻" in front for repeating items, for places too small for a badge. Not for a routine: it
+ * has its own mark (its ring), and both would overlap (215).
+ */
+export const displayTitle = (item: Item) => (isRecurring(item) && item.routine !== true ? "↻ " : "") + (item.title || "Untitled");

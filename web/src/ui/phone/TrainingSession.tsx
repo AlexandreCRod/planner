@@ -246,6 +246,13 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
     const keep = lift?.sets.some((st) => st.done);
     write({ exercise: to, name: exs.get(to)?.name ?? to, sets: keep ? sets : prefillSets(to === x.exercise ? x : { ...x, targetKg: null }, prev) });
   };
+  /** Takes the last set off, with Undo (one set always stays; any set can also go from its number's dialog). */
+  const removeLast = () => {
+    const before = sets;
+    feel("tick");
+    write({ sets: sets.slice(0, -1) });
+    showSnackbar(`Set ${before.length} removed`, "Undo", () => write({ sets: before }));
+  };
   const allDone = sets.length > 0 && sets.every((st) => st.done);
   const tracked = useMemo(() => new Set([...exs.values()].filter((e) => e.trackBests).map((e) => e.id)), [exs]);
   const bests = lift ? newBestsIn(lift, tr.lifts, tracked, plan.bestsSince) : [];
@@ -282,7 +289,12 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
             <span className="tr-check"><MIcon name="fCheck" size={20} /></span>
           </div>
         ))}
-        {!readOnly && <TextButton className="tr-addset" onClick={() => write({ sets: [...sets, { ...(sets[sets.length - 1] ?? { kg: null, reps: null }), done: false }] })}>+ Set</TextButton>}
+        {!readOnly && (
+          <div className="tr-setbtns">
+            <TextButton className="tr-addset" onClick={() => write({ sets: [...sets, { ...(sets[sets.length - 1] ?? { kg: null, reps: null }), done: false }] })}>+ Set</TextButton>
+            {sets.length > 1 && <TextButton onClick={removeLast}>− Set</TextButton>}
+          </div>
+        )}
       </div>
       {(allDone || lift?.rpe != null) && <>
         <Scale label="How hard (RPE)" from={1} to={10} value={lift?.rpe ?? null} disabled={readOnly} onPick={(v) => write({ rpe: v })} />

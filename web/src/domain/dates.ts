@@ -164,9 +164,14 @@ export function dueCountdown(dueTs: number, now = Date.now()): string {
   return mins > 0 ? `in ${text}` : `${text} overdue`;
 }
 
-/** A reminder's lead time, short: "At time", "30 min before", "1 hour before", "10 min after" (negative: after the start). */
-export function offsetLabel(min: number): string {
-  return min === 0 ? "At time" : `${leadParts(Math.abs(min), (m) => `${m} min`)} ${min < 0 ? "after" : "before"}`;
+/**
+ * A reminder's lead time, short: "At time", "30 min before", "1 hour before", "10 min after" (negative: after
+ * the start). Given the minute it rings at [at] (the item's time, or the default reminder time for one with
+ * none), "at the time" says it: "At 09:00" (216).
+ */
+export function offsetLabel(min: number, at: number | null = null): string {
+  if (min === 0) return at === null ? "At time" : `At ${formatTime(at)}`;
+  return `${leadParts(Math.abs(min), (m) => `${m} min`)} ${min < 0 ? "after" : "before"}`;
 }
 
 /** A reminder's lead time in full: "At the time", "15 minutes before", "1 hour 30 minutes before", "10 minutes after". */

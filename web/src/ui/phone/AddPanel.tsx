@@ -12,6 +12,7 @@
 // beside the hours, while the panel shrinks to a small bar with the title so the calendar shows.
 import { animated, easings, to, useSpring } from "@react-spring/web";
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useAlarmSettings } from "../../alarms/settings.ts";
 import { describe } from "../../domain/recurrence.ts";
 import { isNative } from "../../platform.ts";
 import { formatDate, formatDateShort, formatTime, offsetLabel, relativeDay } from "../../domain/dates.ts";
@@ -93,6 +94,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   // A draft kept from the last panel of this kind, flicked away (taken once).
   const [restored] = useState(() => { const r = takeKept(kept, req.mode); kept = r.rest; return r.state; });
   const kb = useKeyboardHeight();
+  const { defaultTaskTime } = useAlarmSettings();
   const [winH, setWinH] = useState(window.innerHeight);
   const [nav, setNav] = useState(0);
   const probe = useRef<HTMLDivElement>(null);
@@ -688,7 +690,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
                 <div className="gp-chips">
                   {parsed.place !== null && <span className="p-assist static"><MIcon name="oLocationOn" size={18} /> {parsed.place}</span>}
                   {parsedItem.freq !== "NONE" && <span className="p-assist static"><MIcon name="oRepeat" size={18} /> {describe(parsedItem)}</span>}
-                  {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o)}</span>)}
+                  {parsed.alerts.map(([o, t], i) => <span key={i} className="p-assist static"><MIcon name={t === "ALARM" ? "oAlarm" : "oNotificationsActive"} size={18} /> {t[0] + t.slice(1).toLowerCase()} · {offsetLabel(o, parsedItem.startMin ?? defaultTaskTime)}</span>)}
                   {parsedItem.priority > 0 && <span className="p-assist static" role="img" aria-label={`${PRIORITIES[parsedItem.priority]} priority`} data-tip><MIcon name="fFlag" size={18} color={priorityColor(parsedItem.priority)} /></span>}
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
