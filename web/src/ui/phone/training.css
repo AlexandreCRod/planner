@@ -141,7 +141,7 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-place-rule .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .phone .tr-place-rule .x { font-size: 15px; line-height: 20px; color: var(--text); }
 .phone .tr-place-rule .why { margin-top: 1px; font-size: 13px; line-height: 18px; color: var(--muted); }
-.phone .tr-level { flex: none; height: fit-content; margin-top: 1px; padding: 0 7px; border-radius: 6px; font-size: 11px; line-height: 18px; }
+.phone .tr-level { flex: none; height: fit-content; margin-top: 1px; min-width: 52px; box-sizing: border-box; text-align: center; padding: 0 7px; border-radius: 6px; font-size: 11px; line-height: 18px; }
 .phone .tr-level.avoid { background: var(--danger); color: var(--p-sc-lowest); }
 .phone .tr-level.ideally { background: var(--p-sc-highest); color: var(--text); }
 .phone .tr-place-note { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
