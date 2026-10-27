@@ -374,6 +374,39 @@ export function weeklyChange(points: readonly WeightPoint[], day = points[points
   return now === null || before === null ? null : now - before;
 }
 
+/** A run between two weigh-ins: the weight before and after it, and the weight lost on it (positive). */
+export interface RunWeights { day: number; before: number; after: number; lost: number; run: Run | null }
+
+/**
+ * Each before-run weigh-in followed, the same day, by an after-run one, oldest first: the weight lost on that
+ * run, for the plan session's sweat rate. Within a day, an after-run weigh-in pairs with the last before-run
+ * one not yet paired (a second before-run one replaces it). [run] is the day's run done after the before-run
+ * weigh-in when both times are known, else the day's first; null when runs.json has none that day.
+ */
+export function runWeights(weighIns: Iterable<{ day: number; time: string | null; id: string; kg: number; when: string; deletedAt?: number | null }>, runs: readonly Run[] = []): RunWeights[] {
+  const out: RunWeights[] = [];
+  let open: { day: number; time: string | null; kg: number } | null = null;
+  for (const w of [...weighIns].filter((w) => (w.deletedAt ?? null) === null).sort(byMoment)) {
+    if (open && open.day !== w.day) open = null;
+    if (w.when === "pre-run") open = w;
+    else if (w.when === "post-run" && open) {
+      const start = open.time;
+      const sameDay = runs.filter((r) => r.day === w.day);
+      const run = sameDay.find((r) => start !== null && r.time !== null && r.time >= start) ?? sameDay[0] ?? null;
+      out.push({ day: w.day, before: open.kg, after: w.kg, lost: Math.round((open.kg - w.kg) * 10) / 10, run });
+      open = null;
+    }
+  }
+  return out;
+}
+
+/** The name to give a source in "from …" ("FitNotes", "Garmin", "Strava"); null for the user's own (Planner) or none. */
+export function sourceName(source: string | null): string | null {
+  if (!source || source === "planner") return null;
+  if (source.startsWith("garmin")) return "Garmin";
+  return ({ fitnotes: "FitNotes", strava: "Strava", health_connect: "Health Connect" } as Record<string, string>)[source] ?? source;
+}
+
 /** bodyweight.csv for the plan session: one row per weigh-in not deleted. */
 export function weighInsCsv(list: Iterable<WeighIn>): string {
   const rows: (string | number | null)[][] = [["date", "kg", "when", "note"]];
@@ -497,13 +530,22 @@ export function liftPoints(lifts: Iterable<Lift>, exerciseId: string, plans: rea
 
 /**
  * Each Monday-first week of the range, with the sets that count as hard: the sets done (with reps) of the
- * given exercises. Whole weeks: the first and last count their days outside the range too. Weeks with none
- * are there with 0.
+ * given exercises, and the [past] sets from the history. Whole weeks: the first and last count their days
+ * outside the range too. Weeks with none are there with 0.
  */
-export function weeklyHardSets(lifts: Iterable<Lift>, exerciseIds: Iterable<string>, fromDay: number, toDay: number): { weekStart: number; sets: number }[] {
+export function weeklyHardSets(
+  lifts: Iterable<Lift>, exerciseIds: Iterable<string>, fromDay: number, toDay: number, past: Iterable<PastSet> = [],
+): { weekStart: number; sets: number }[] {
   const ids = new Set(exerciseIds);
   const items: [number, number][] = [];
-  for (const l of lifts) if (ids.has(l.exercise)) items.push([l.day, l.sets.filter((s) => s.done && (s.reps ?? 0) > 0).length]);
+  // As in liftPoints, a day the user logged an exercise in Planner keeps only Planner's sets of it.
+  const own = new Set<string>();
+  for (const l of lifts) {
+    if (!ids.has(l.exercise)) continue;
+    items.push([l.day, l.sets.filter((s) => s.done && (s.reps ?? 0) > 0).length]);
+    own.add(`${l.exercise}@${l.day}`);
+  }
+  for (const s of past) if (ids.has(s.exerciseId) && !own.has(`${s.exerciseId}@${s.day}`)) items.push([s.day, 1]);
   return weekTotals(fromDay, toDay, items).map(([weekStart, sets]) => ({ weekStart, sets }));
 }
 

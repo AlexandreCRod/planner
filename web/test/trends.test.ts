@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
   type Run, type WeighIn, bodyWeights, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
-  readRuns, readSleep, readWeights, rpeFor,
+  readRuns, readSleep, readWeights, rpeFor, runWeights, sourceName,
   targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
@@ -429,4 +429,48 @@ test("sleep.json: one night per date, blanks where Garmin had nothing", () => {
   assert.equal(problems.length, 2);
   assert.ok(problems.some((p) => p.includes("2025-09-09 is used twice")));
   assert.ok(problems.some((p) => p.includes("2025-09-10") && p.includes("bed")));
+});
+
+// ---------- Progress: around runs, sources, history in the hard sets ----------
+
+test("around runs: a before-run weigh-in pairs with the next after-run one the same day", () => {
+  const w = (id: string, day: string, time: string | null, kg: number, when: WeighIn["when"], deletedAt: number | null = null): WeighIn =>
+    ({ id, day: d(day), time, kg, when, note: "", updatedAt: 1, deletedAt });
+  const runs = [run("r1", "2026-11-15", { time: "09:00", distanceKm: 16 }), run("r2", "2026-11-17", { time: "07:00" }), run("r3", "2026-11-17", { time: "18:30" })];
+  const pairs = runWeights([
+    w("a", "2026-11-15", "08:40", 78.9, "pre-run"), w("b", "2026-11-15", "11:00", 77.5, "post-run"),
+    w("c", "2026-11-16", "08:00", 79.0, "pre-run"),                                                   // no after-run that day
+    w("d", "2026-11-17", "07:05", 78.0, "post-run"),                                                  // after-run with nothing open
+    w("e", "2026-11-17", "18:00", 79.2, "pre-run"), w("f", "2026-11-17", "18:10", 79.1, "pre-run"),   // the second one replaces the first
+    w("g", "2026-11-17", "19:40", 78.3, "post-run"),
+    w("h", "2026-11-18", null, 79.0, "pre-run"), w("i", "2026-11-18", null, 78.6, "post-run", 5),    // deleted: no pair
+    w("j", "2026-11-19", null, 79.0, "pre-run"), w("k", "2026-11-19", null, 78.0, "morning"), w("l", "2026-11-19", null, 78.4, "post-run"),
+  ], runs);
+  assert.deepEqual(pairs.map((p) => [p.day, p.before, p.after, p.lost, p.run?.id ?? null]), [
+    [d("2026-11-15"), 78.9, 77.5, 1.4, "r1"],
+    [d("2026-11-17"), 79.1, 78.3, 0.8, "r3"],     // the run after 18:10, not the morning one
+    [d("2026-11-19"), 79.0, 78.4, 0.6, null],     // a morning weigh-in between doesn't break the pair; no run that day
+  ]);
+  assert.deepEqual(runWeights([]), []);
+});
+
+test("source names: history says where it came from, Planner's own says nothing", () => {
+  assert.equal(sourceName("fitnotes"), "FitNotes");
+  assert.equal(sourceName("strava"), "Strava");
+  assert.equal(sourceName("garmin_export"), "Garmin");
+  assert.equal(sourceName("garmin_account"), "Garmin");
+  assert.equal(sourceName("garmin"), "Garmin");
+  assert.equal(sourceName("health_connect"), "Health Connect");
+  assert.equal(sourceName("planner"), null);
+  assert.equal(sourceName(null), null);
+  assert.equal(sourceName("polar"), "polar");
+});
+
+test("hard sets count the history's sets too, except on days logged in Planner", () => {
+  const mon = d("2026-11-02");
+  const past = (id: string, day: number, exerciseId = "x001") => ({ id, day, exerciseId, name: "", kg: 100, reps: 3, source: "fitnotes", note: "" });
+  const ls = [lift([[60, 5], [60, 5]], { day: mon + 1 })];
+  assert.deepEqual(weeklyHardSets(ls, ["x001"], mon, mon + 13, [past("a", mon + 1), past("b", mon + 3), past("c", mon + 3), past("d", mon + 8), past("e", mon + 8, "x002")]), [
+    { weekStart: mon, sets: 4 }, { weekStart: mon + 7, sets: 1 },
+  ]);
 });
