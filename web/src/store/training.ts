@@ -2,7 +2,7 @@
 // pushed (read-only here, see domain/training.ts) and the user's own entries, lifts and what was seen of
 // each plan, plus the runs and meals the plan session pushed (domain/trends.ts) and the weigh-ins. Rebuilt
 // only when a record changes and something asks for it; a plan's planner.json, runs.json and meals.json are
-// read once per pushed copy.
+// read once per pushed copy. The watch's data from Health Connect (healthSessions, healthNights, healthDays) is here too.
 import { useSyncExternalStore } from "react";
 import { today } from "../domain/dates.ts";
 import {
@@ -12,6 +12,7 @@ import {
   type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
   SLEEP_FILE, WEIGHTS_FILE, byMoment, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
+import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -42,6 +43,10 @@ export interface Training {
   nights: Night[];
   /** What was wrong in those three files, in plain words. */
   historyProblems: string[];
+  /** The watch's data from Health Connect (domain/health.ts), read by the phone and synced; oldest first. */
+  healthSessions: HealthSession[];
+  healthNights: HealthNight[];
+  healthDays: HealthDay[];
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -107,6 +112,9 @@ export function training(): Training {
     weighIns: listOf<WeighIn>("trainingWeighIns").sort(byMoment),
     pastWeighIns: weights.weighIns, pastSets: pastLifts.sets, nights: sleep.nights,
     historyProblems: [...weights.problems, ...pastLifts.problems, ...sleep.problems],
+    healthSessions: listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs),
+    healthNights: listOf<HealthNight>("healthNights").sort((a, b) => a.day - b.day || a.bed.localeCompare(b.bed)),
+    healthDays: listOf<HealthDay>("healthDays").sort((a, b) => a.day - b.day),
   };
   cache = { version: v, data };
   return data;
