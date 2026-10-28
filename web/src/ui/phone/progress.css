@@ -55,7 +55,8 @@
 .phone .pg-mini .r > span:last-child { color: var(--muted); }
 .phone .pg-mini .r > span.big { font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .pg-mini .r small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
-.phone .pg-mini .r.tap { cursor: pointer; margin: 0 -8px; padding: 8px; border-radius: 8px; }
+.phone .pg-mini .r.tap { cursor: pointer; margin: 0 -8px; padding: 8px; }
+.phone .pg-mini .r.tap:active { border-radius: 8px; box-shadow: none; }
 .phone .pg-mini .r.tap:active { background: var(--p-sec-container); }
 
 /* The chart: hairline grid, axis text muted (never in a series colour), dots ringed in the card's colour. */
