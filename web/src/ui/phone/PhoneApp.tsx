@@ -162,7 +162,7 @@ export function PhoneApp() {
   const routeTab = TABS.findIndex((t) => t.key === route);
   // The Training page reads its route (a session, a document...); while another tab shows, it keeps the last.
   const trainingQ = useRef(new URLSearchParams());
-  if (route === "training") { trainingQ.current = query; trainingHash = location.hash || "#/training"; }
+  if (route === "training") { trainingQ.current = query; trainingHash = `#/training${query.toString() ? `?${query}` : ""}`; }
   const [tab, setTab] = useState(routeTab >= 0 ? routeTab : 0);
   const tabRef = useRef(tab);
   // Pages already shown stay mounted (by key), so sliding back to them is instant. The rest arrive once the
