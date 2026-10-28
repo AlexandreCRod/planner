@@ -86,6 +86,17 @@ test("item fields pass through untouched, new ones included (e.g. routine)", () 
   assert.deepEqual(JSON.parse(canonical(ok.changes[0].data)), item);
 });
 
+test("futsal as events (240): an item's futsal mark and an entry's itemId/convertedTo round-trip", () => {
+  const item = { id: 1234567890123, type: "EVENT", title: "Football", startDay: 20760, allDay: true, freq: "NONE", futsal: true, updatedAt: 100 };
+  const log = { id: "futsal:1234567890123:20760", planId: "p", kind: "futsal", itemId: 1234567890123, day: null, durationMin: 60, updatedAt: 100 };
+  const old = { id: "futsal-abc", planId: "p", kind: "futsal", day: 20760, convertedTo: 1234567890123, updatedAt: 101 };
+  const ok = parseSyncBody({ since: 0, changes: [
+    { kind: "items", id: String(item.id), data: item }, { kind: "trainingEntries", id: log.id, data: log }, { kind: "trainingEntries", id: old.id, data: old },
+  ] });
+  assert.ok(typeof ok !== "string");
+  assert.deepEqual(ok.changes.map((c) => JSON.parse(canonical(c.data))), [item, log, old]);
+});
+
 test("newer record kinds need no Worker change; their records are keyed by id", () => {
   assert.ok(isKind("items") && isKind("trainingEntries") && isKind("trainingHidden") && isKind("insightsDays"));
   assert.ok(!isKind("Training") && !isKind("a") && !isKind("training-entries") && !isKind(""));
