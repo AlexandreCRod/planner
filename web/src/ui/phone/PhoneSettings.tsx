@@ -4,7 +4,7 @@
 // left out. Values are the same local keys the PC settings use.
 import { useEffect, useRef, useState } from "react";
 import { useKeep, useKeptScroll } from "./keep.ts";
-import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatDateTime } from "../../domain/dates.ts";
+import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatClock, formatDateTime } from "../../domain/dates.ts";
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
 import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
@@ -30,6 +30,7 @@ import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSetting
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
+import { canUseHealth, connect, disconnect, useHealth } from "../../health/healthConnect.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -121,6 +122,19 @@ function StorageRow({ syncedAt }: { syncedAt: number }) {
 }
 
 /** "Check for updates": the installed version; a tap asks GitHub now (update.ts), whatever was dismissed. */
+/** The phone only, with Health Connect: reading the watch's data on or off, and when it last read. */
+function HealthRow() {
+  const h = useHealth();
+  if (!canUseHealth(h)) return null;
+  const last = h.lastRead === null ? "" : new Date(h.lastRead).toDateString() === new Date().toDateString() ? formatClock(h.lastRead) : formatDateTime(h.lastRead);
+  const supporting = !h.on ? "Your watch's runs, sleep and daily data, from Health Connect"
+    : h.reading ? "Reading…"
+    : h.error ? `Couldn't read: ${h.error}`
+    : !h.granted && h.status === "available" && h.lastRead !== null ? "No permission now: turn off and on again to allow"
+    : last ? `Last read ${last}` : "Not read yet";
+  return <SwitchRow title="Watch data (Health Connect)" supporting={supporting} checked={h.on} onChange={(v) => { if (v) void connect(); else disconnect(); }} />;
+}
+
 function UpdateRow() {
   const [version, setVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -241,6 +255,7 @@ export function PhoneSettings() {
 
         <div className="p-hr" />
         <SectionHeader>Data</SectionHeader>
+        <HealthRow />
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
         <ProblemsRow />

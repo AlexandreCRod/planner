@@ -19,6 +19,7 @@ import { type ColourKind, type WeekBar, colourKind, fmtKm, runLine, runOf, summa
 import type { Run } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
+import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
 import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
@@ -154,6 +155,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const week = (
     <div className="p-content tr-week" ref={scroller}>
       <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
+      {!readOnly && <HealthCard />}
       {readOnly && <div className="tr-oldplan">An earlier plan: read only.</div>}
       <ChipRow className="tr-phases">
         {plan.phases.map((p, i) => (
@@ -486,6 +488,25 @@ function UpdateNotice({ tr, lp, readOnly }: { tr: Training; lp: LoadedPlan; read
       </ul>
       <div className="tr-notice-actions">
         <TextButton onClick={() => saveSeen({ ...now, dismissed: [...(seen?.dismissed ?? []), ...changes.map(changeKey)] })}>Got it</TextButton>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The phone only, once: asks to read the watch's runs and sleep from Health Connect. Connect asks Health
+ * Connect's permissions; Not now hides it for good (Settings has the switch).
+ */
+function HealthCard() {
+  const h = useHealth();
+  if (!canUseHealth(h) || h.on || cardDismissed()) return null;
+  return (
+    <div className="tr-notice" role="status">
+      <div className="tr-notice-head"><MIcon name="oDirectionsRun" size={20} /><span>Show your watch runs and sleep</span></div>
+      <p className="tr-notice-text">Planner reads them from Health Connect, where Garmin Connect puts them after each sync.</p>
+      <div className="tr-notice-actions">
+        <TextButton onClick={dismissCard}>Not now</TextButton>
+        <TextButton onClick={() => void connect()}>Connect</TextButton>
       </div>
     </div>
   );
