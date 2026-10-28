@@ -296,10 +296,14 @@ test("only changed records are saved; when they were made doesn't count", () => 
   const c = { ...b, title: "Tempo" };
   assert.deepEqual(changedOnly([c], stored), [c]);
   assert.deepEqual(changedOnly([{ ...b, id: "hc:new" }], stored).length, 1);
+  // A window where a type failed: a stored record isn't replaced by one missing that part; a new one is added.
+  assert.deepEqual(changedOnly([c, { ...b, id: "hc:new" }], stored, true).map((r) => r.id), ["hc:new"]);
 });
 
-test("read windows: the whole history at first, then from 3 days before the last read", () => {
-  assert.deepEqual(readWindows(null, 100, 120), [[100, 114], [114, 121]]);
+test("read windows: the whole history at first, newest week first, then from 3 days before the last read", () => {
+  assert.deepEqual(readWindows(null, 100, 120), [[114, 121], [100, 114]]);
+  assert.deepEqual(readWindows(null, 80, 120), [[114, 121], [100, 114], [86, 100], [80, 86]]);
+  assert.deepEqual(readWindows(null, 117, 120), [[117, 121]]);  // under a week of history
   assert.deepEqual(readWindows(118, 0, 120), [[115, 121]]);
   assert.deepEqual(readWindows(null, 200, 120), [[120, 121]]);  // nothing yet: just today
 });

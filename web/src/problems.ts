@@ -24,6 +24,19 @@ export function logProblem(kind: string, message: string, detail = "") {
   } catch { /* the log itself must never throw */ }
 }
 
+/**
+ * A note that isn't a problem but helps read one, e.g. the last Health Connect read's summary (253): only
+ * the newest of its [kind] is kept, so frequent notes never push real problems out of the log.
+ */
+export function logLatest(kind: string, message: string, detail = "") {
+  try {
+    const list = problems().filter((p) => p.kind !== kind);
+    list.unshift({ at: Date.now(), kind, message: message.slice(0, 500), detail: detail.slice(0, 4000) });
+    localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)));
+    listeners.forEach((l) => l());
+  } catch { /* the log itself must never throw */ }
+}
+
 export function clearProblems() {
   localStorage.removeItem(KEY);
   listeners.forEach((l) => l());

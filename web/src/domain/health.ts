@@ -475,9 +475,13 @@ function stable(v: unknown): string {
 /** Whether [a] and [b] say the same, apart from when they were made. */
 export const sameRecord = (a: unknown, b: unknown) => stable(a) === stable(b);
 
-/** The records of [fresh] that differ from what's stored ([stored] by id). */
-export function changedOnly<T extends { id: string }>(fresh: T[], stored: ReadonlyMap<string, unknown>): T[] {
-  return fresh.filter((r) => !sameRecord(r, stored.get(r.id)));
+/**
+ * The records of [fresh] that differ from what's stored ([stored] by id). [newOnly]: only those not stored
+ * at all, for a window where some type couldn't be read, so a whole stored record isn't replaced by one
+ * missing that type's part (it's completed on the next read, which retries the type).
+ */
+export function changedOnly<T extends { id: string }>(fresh: T[], stored: ReadonlyMap<string, unknown>, newOnly = false): T[] {
+  return fresh.filter((r) => (newOnly ? !stored.has(r.id) : !sameRecord(r, stored.get(r.id))));
 }
 
 // ---------- When to read ----------
@@ -486,14 +490,24 @@ export function changedOnly<T extends { id: string }>(fresh: T[], stored: Readon
 export const REREAD_DAYS = 3;
 /** First connect reads the history in windows this long, to keep memory low. */
 export const WINDOW_DAYS = 14;
+/** First connect reads this many newest days first, so the last few days show at once (253). */
+export const FIRST_DAYS = 7;
 
 /**
- * The local-day windows [from, to) to convert: from [first] (the earliest day with data, on first
- * connect) or [REREAD_DAYS] before the day of the last read, to today inclusive.
+ * The local-day windows [from, to) to convert, in the order to read them. On first connect
+ * ([lastReadDay] null): the newest [FIRST_DAYS] days, then back in [WINDOW_DAYS] chunks to [firstDay]
+ * (the earliest day with data). After that: from [REREAD_DAYS] before the day of the last read to today
+ * inclusive, oldest first.
  */
 export function readWindows(lastReadDay: number | null, firstDay: number, today: number): [number, number][] {
-  const start = lastReadDay === null ? Math.min(firstDay, today) : Math.min(lastReadDay - REREAD_DAYS, today);
   const out: [number, number][] = [];
-  for (let d = start; d <= today; d += WINDOW_DAYS) out.push([d, Math.min(d + WINDOW_DAYS, today + 1)]);
+  if (lastReadDay === null) {
+    const first = Math.min(firstDay, today);
+    let from = Math.max(first, today + 1 - FIRST_DAYS);
+    out.push([from, today + 1]);
+    while (from > first) { const to = from; from = Math.max(first, to - WINDOW_DAYS); out.push([from, to]); }
+    return out;
+  }
+  for (let d = Math.min(lastReadDay - REREAD_DAYS, today); d <= today; d += WINDOW_DAYS) out.push([d, Math.min(d + WINDOW_DAYS, today + 1)]);
   return out;
 }
