@@ -7,7 +7,8 @@
 //   way: weights.json (FitNotes and Garmin weigh-ins), lift-history.json (FitNotes sets) and sleep.json
 //   (Garmin's sleep, resting HR and HRV). Read-only here too.
 // - Body weight: the weigh-ins the user enters, records "trainingWeighIns", written only by the app. The
-//   script pulls them back as bodyweight.csv for the plan session.
+//   script pulls them back as bodyweight.csv for the plan session. The imported weigh-ins the user hid are
+//   records "trainingHidden", the app's too.
 // - Everything else here (lift e1RM and top sets, weekly hard sets, weekly km, the weight trend, a day's
 //   nutrition type) is worked out on the fly from those and from the user's lifts and entries; none of it
 //   is stored.
@@ -319,6 +320,25 @@ export interface WeighIn {
   deletedAt: number | null;
 }
 
+/**
+ * An imported weigh-in the user hid (records "trainingHidden"): one record per hidden one, so unhiding is a
+ * soft delete and two devices never fight over one list. Its id is "weighIn:" + the weigh-in's id (runs.json's
+ * ids could match weights.json's).
+ */
+export interface Hidden {
+  id: string;
+  kind: "weighIn";
+  /** The hidden weigh-in's id in weights.json. */
+  pastId: string;
+  hiddenAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+export const hiddenId = (pastId: string) => `weighIn:${pastId}`;
+/** The ids of the imported weigh-ins hidden now. */
+export const hiddenWeighIns = (list: Iterable<Hidden>): Set<string> =>
+  new Set([...list].filter((h) => h.kind === "weighIn" && h.deletedAt === null).map((h) => h.pastId));
+
 /** A day of the trend: the day's weight (the average of its weigh-ins), how many there were, and the trend. */
 export interface WeightPoint { day: number; kg: number; count: number; trend: number }
 
@@ -331,12 +351,13 @@ const sourceRank = (s: string) => { const i = WEIGHT_SOURCES.indexOf(s); return 
 
 /**
  * Every weigh-in to show, oldest first: the user's own (not deleted) and the history's, where a day keeps
- * only the weigh-ins of its best source (Planner, then FitNotes, Health Connect, Garmin).
+ * only the weigh-ins of its best source (Planner, then FitNotes, Health Connect, Garmin). The history's
+ * weigh-ins in [hidden] are left out first, so a day whose FitNotes ones are all hidden shows Garmin's.
  */
-export function bodyWeights(own: Iterable<WeighIn>, past: Iterable<PastWeighIn> = []): BodyWeight[] {
+export function bodyWeights(own: Iterable<WeighIn>, past: Iterable<PastWeighIn> = [], hidden: ReadonlySet<string> = new Set()): BodyWeight[] {
   const all: BodyWeight[] = [];
   for (const w of own) if (w.deletedAt === null) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, note: w.note, source: "planner" });
-  for (const w of past) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, note: w.note, source: w.source });
+  for (const w of past) if (!hidden.has(w.id)) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, note: w.note, source: w.source });
   const best = new Map<number, number>();
   for (const w of all) best.set(w.day, Math.min(best.get(w.day) ?? Infinity, sourceRank(w.source)));
   return all.filter((w) => sourceRank(w.source) === best.get(w.day)).sort(byMoment);

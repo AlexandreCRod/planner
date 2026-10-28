@@ -9,8 +9,8 @@ import {
   type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan,
 } from "../domain/training.ts";
 import {
-  type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
-  SLEEP_FILE, WEIGHTS_FILE, byMoment, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
+  type Hidden, type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
+  SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
@@ -38,6 +38,8 @@ export interface Training {
   weighIns: WeighIn[];
   /** The history from before Planner (weights.json, lift-history.json, sleep.json), oldest first; none until pushed. */
   pastWeighIns: PastWeighIn[];
+  /** The ids of the imported weigh-ins the user hid (bodyWeights leaves them out). */
+  hiddenWeighIns: Set<string>;
   pastSets: PastSet[];
   nights: Night[];
   /** What was wrong in those three files, in plain words. */
@@ -105,6 +107,7 @@ export function training(): Training {
     runs: runs.runs, runProblems: runs.problems,
     meals: meals.meals, mealProblems: meals.problems, plateCm: meals.plateCm,
     weighIns: listOf<WeighIn>("trainingWeighIns").sort(byMoment),
+    hiddenWeighIns: hiddenWeighIns(listOf<Hidden>("trainingHidden")),
     pastWeighIns: weights.weighIns, pastSets: pastLifts.sets, nights: sleep.nights,
     historyProblems: [...weights.problems, ...pastLifts.problems, ...sleep.problems],
   };
@@ -127,3 +130,4 @@ export function saveEntry(e: Entry) { putRecords("trainingEntries", [{ ...e, upd
 export function saveLift(l: Lift) { putRecords("trainingLifts", [{ ...l, updatedAt: Date.now() }]); }
 export function saveSeen(s: SeenPlan) { putRecords("trainingState", [{ ...s, updatedAt: Date.now() }]); }
 export function saveWeighIn(w: WeighIn) { putRecords("trainingWeighIns", [{ ...w, updatedAt: Date.now() }]); }
+export function saveHidden(h: Hidden) { putRecords("trainingHidden", [{ ...h, updatedAt: Date.now() }]); }

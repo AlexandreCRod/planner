@@ -87,7 +87,7 @@ test("item fields pass through untouched, new ones included (e.g. routine)", () 
 });
 
 test("newer record kinds need no Worker change; their records are keyed by id", () => {
-  assert.ok(isKind("items") && isKind("trainingEntries") && isKind("insightsDays"));
+  assert.ok(isKind("items") && isKind("trainingEntries") && isKind("trainingHidden") && isKind("insightsDays"));
   assert.ok(!isKind("Training") && !isKind("a") && !isKind("training-entries") && !isKind(""));
   const ok = parseSyncBody({ since: 0, changes: [{ kind: "trainingEntries", id: "hm:t004", data: { id: "hm:t004", day: 1, updatedAt: 2 } }] });
   assert.ok(typeof ok !== "string");

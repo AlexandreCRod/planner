@@ -17,8 +17,8 @@ import {
 export const KINDS = [
   "categories", "tags", "items", "completions", "reminders", "itemTags", "links", "versions", "images",
   // Training (domain/training.ts): the plan's files, pushed by the plan session's script, then the user's own.
-  // Weigh-ins (domain/trends.ts) are the user's own too.
-  "trainingFiles", "trainingEntries", "trainingLifts", "trainingState", "trainingWeighIns",
+  // Weigh-ins and the imported ones hidden (domain/trends.ts) are the user's own too.
+  "trainingFiles", "trainingEntries", "trainingLifts", "trainingState", "trainingWeighIns", "trainingHidden",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

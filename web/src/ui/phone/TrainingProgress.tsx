@@ -1,18 +1,20 @@
 // Progress (#/training?view=progress), in place of the old Bests page: how the lifts, runs and body weight
 // are moving. Tabs Lifts · Runs · Weight · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
-// headline number, a chart with the range switch, and what goes with it (hard sets, rep bests). Touching a chart reads a day, and the headline shows that day's reading, naming where it came
+// headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
+// weigh-ins). Touching a chart reads a day, and the headline shows that day's reading, naming where it came
 // from when it's history (FitNotes, Strava, Garmin). On the phone a card opens over the list (back closes
-// it); in a wide window the list and the card sit side by side. Weight's top bar has "+ Weigh in".
-// The numbers come from domain/trends.ts; nothing here is stored but the user's weigh-ins.
+// it); in a wide window the list and the card sit side by side. Weight's top bar has "+ Weigh in", and a
+// weigh-in tapped (a dot, or a row of the recent ones) opens to change or delete it, or hide an imported one.
+// The numbers come from domain/trends.ts; nothing here is stored but the user's weigh-ins and what they hid.
 import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
 import {
-  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
+  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
 } from "../../domain/trends.ts";
-import { type LoadedPlan, type Training, saveWeighIn } from "../../store/training.ts";
+import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
 import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, xDomain } from "./chartMath.ts";
@@ -438,7 +440,7 @@ function RunCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
 // ---------- Weight ----------
 
 function weightData(tr: Training) {
-  const all = bodyWeights(tr.weighIns, tr.pastWeighIns);
+  const all = bodyWeights(tr.weighIns, tr.pastWeighIns, tr.hiddenWeighIns);
   return { all, trend: weightTrend(all) };
 }
 
@@ -461,10 +463,20 @@ function timesOf(list: readonly BodyWeight[]): string {
   return list.map((w) => w.time).filter(Boolean).join(" & ");
 }
 
+/** How many weigh-ins the Recent list under the chart shows. */
+const RECENT = 7;
+
+/**
+ * The weight chart and the recent weigh-ins under it. Tapping a dot (that day's latest weigh-in) or a row
+ * opens the weigh-in: the user's own to change or delete, the history's to hide.
+ */
 function WeightCards({ tr, t }: { tr: Training; t: number }) {
   const { all, trend } = useMemo(() => weightData(tr), [tr]);
   const span = useSpan(trend.map((p) => p.day), t);
   const [at, setAt] = useState<number | null>(null);
+  const [editing, setEditing] = useState<BodyWeight | null>(null);
+  const openDay = (day: number) => { const w = all.filter((x) => x.day === day).pop(); if (w) { feel("tick"); setEditing(w); } };
+  const recent = all.slice(-RECENT).reverse();
   const shown = inRange(trend, span.start);
   const raw = inRange(all, span.start);
   const last = trend[trend.length - 1];
@@ -490,34 +502,84 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
         ? <Chart series={[
             { kind: "dots", r: 3, color: WEIGHT_DIM, pts: raw.map((w) => ({ day: w.day, v: w.kg })) },
             { kind: "line", dots: false, color: WEIGHT, pts: shown.map((q) => ({ day: q.day, v: q.trend })) },
-          ]} domain={span.domain} today={t} height={150} fmt={(v) => String(v)} reads={shown.map((q) => q.day)} onRead={setAt} />
+          ]} domain={span.domain} today={t} height={150} fmt={(v) => String(v)} reads={shown.map((q) => q.day)} onRead={setAt}
+            onTap={(i) => openDay(shown[i].day)} />
         : <Empty />}
     </ChartCard>
+    {recent.length > 0 && (
+      <div className="pg-card pg-mini">
+        <div className="pg-ct"><span>Recent weigh-ins</span></div>
+        {recent.map((w) => (
+          <div key={w.id} className="r tap" role="button" onClick={() => { feel("tick"); setEditing(w); }}>
+            <span>{join(formatDate(w.day), w.time)}{w.source !== "planner" && <small>{from(w.source)}</small>}</span>
+            <span className="big">{w.kg.toFixed(1)}</span>
+          </div>
+        ))}
+      </div>
+    )}
+    {editing && <WeighInSheet tr={tr} t={t} edit={editing} onClose={() => setEditing(null)} />}
   </>;
 }
 
-/** "+ Weigh in": the weight by the slide stepper (0.1 kg a step). Saved for today, at the time now. */
-function WeighInSheet({ tr, t, onClose }: { tr: Training; t: number; onClose: () => void }) {
-  const lastKg = useMemo(() => { const all = bodyWeights(tr.weighIns, tr.pastWeighIns); return all[all.length - 1]?.kg ?? 75; }, [tr]);
-  const [kg, setKg] = useState<number | null>(Math.round(lastKg * 10) / 10);
+/**
+ * The weigh-in sheet. "+ Weigh in" (no [edit]): the weight by the slide stepper (0.1 kg a step), saved for
+ * today at the time now. One of the user's own: the same stepper to change its weight (its day and time
+ * stay), with Delete. One from the history: its weight, read-only, with Hide. Each has an Undo.
+ */
+function WeighInSheet({ tr, t, edit, onClose }: { tr: Training; t: number; edit?: BodyWeight; onClose: () => void }) {
+  const own = edit?.source === "planner" ? tr.weighIns.find((w) => w.id === edit.id) : undefined;
+  const lastKg = useMemo(() => { const all = bodyWeights(tr.weighIns, tr.pastWeighIns, tr.hiddenWeighIns); return all[all.length - 1]?.kg ?? 75; }, [tr]);
+  const [kg, setKg] = useState<number | null>(Math.round((edit?.kg ?? lastKg) * 10) / 10);
+  const done = (close: () => void, text: string, undo: () => void) => { feel("settle"); close(); showSnackbar(text, "Undo", undo); };
   const save = (close: () => void) => {
     if (kg === null) return;
+    if (own) {
+      saveWeighIn({ ...own, kg });
+      done(close, `Saved: ${kg.toFixed(1)} kg`, () => saveWeighIn(own));
+      return;
+    }
     const now = new Date();
     const w = {
       id: randomId(), day: t, time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, kg, note: "",
       updatedAt: Date.now(), deletedAt: null,
     };
     saveWeighIn(w);
-    feel("settle");
-    close();
-    showSnackbar(`Weighed in: ${kg.toFixed(1)} kg`, "Undo", () => saveWeighIn({ ...w, deletedAt: Date.now() }));
+    done(close, `Weighed in: ${kg.toFixed(1)} kg`, () => saveWeighIn({ ...w, deletedAt: Date.now() }));
   };
+  const remove = (close: () => void) => {
+    if (!own) return;
+    saveWeighIn({ ...own, deletedAt: Date.now() });
+    done(close, "Weigh-in deleted", () => saveWeighIn({ ...own, deletedAt: null }));
+  };
+  const hide = (close: () => void) => {
+    if (!edit) return;
+    const h = { id: hiddenId(edit.id), kind: "weighIn" as const, pastId: edit.id, hiddenAt: Date.now(), updatedAt: Date.now(), deletedAt: null };
+    saveHidden(h);
+    done(close, "Weigh-in hidden", () => saveHidden({ ...h, deletedAt: Date.now() }));
+  };
+  const when = edit && join(formatDate(edit.day), edit.time, from(edit.source));
   return (
     <BottomSheet onClose={onClose}>{(close) => (
       <div className="pg-weigh">
-        <div className="tr-sheet-title t-title-medium">Weigh in</div>
-        <SlideStepper value={kg} onChange={setKg} step={0.1} min={30} max={250} format={(v) => v.toFixed(1)} unit="kg" decimal label="Weight" />
-        <SheetButtons onCancel={close} onSave={() => save(close)} enabled={kg !== null} />
+        <div className="tr-sheet-title t-title-medium">{edit ? "Weigh-in" : "Weigh in"}</div>
+        {when && <div className="pg-weigh-sub">{when}</div>}
+        {edit && !own ? <>
+          <div className="pg-weigh-kg">{edit.kg.toFixed(1)}<small>kg</small></div>
+          <div className="pg-weigh-sub">Imported: it can't be changed here, only hidden.</div>
+          <div className="p-sheet-buttons">
+            <TextButton onClick={close}>Cancel</TextButton>
+            <button className="p-filled-btn" onClick={() => hide(close)}>Hide</button>
+          </div>
+        </> : <>
+          <SlideStepper value={kg} onChange={setKg} step={0.1} min={30} max={250} format={(v) => v.toFixed(1)} unit="kg" decimal label="Weight" />
+          {own ? (
+            <div className="p-sheet-buttons">
+              <TextButton className="pg-left" onClick={() => remove(close)}>Delete</TextButton>
+              <TextButton onClick={close}>Cancel</TextButton>
+              <button className="p-filled-btn" disabled={kg === null} onClick={() => save(close)}>Save</button>
+            </div>
+          ) : <SheetButtons onCancel={close} onSave={() => save(close)} enabled={kg !== null} />}
+        </>}
       </div>
     )}</BottomSheet>
   );

@@ -48,13 +48,15 @@
 .phone .pg-range .p-segmented { height: 36px; }
 .phone .pg-range .p-segmented button { padding: 0 4px; font-size: 13px; }
 
-/* A small list in a card (rep bests, the pairs around runs). */
+/* A small list in a card (rep bests, the recent weigh-ins). */
 .phone .pg-mini .r { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; font-size: 15px; line-height: 20px; color: var(--text);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line) 60%, transparent); }
 .phone .pg-mini .pg-ct + .r { margin-top: 4px; box-shadow: none; }
 .phone .pg-mini .r > span:last-child { color: var(--muted); }
 .phone .pg-mini .r > span.big { font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .pg-mini .r small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-mini .r.tap { cursor: pointer; margin: 0 -8px; padding: 8px; border-radius: 8px; }
+.phone .pg-mini .r.tap:active { background: var(--p-sec-container); }
 
 /* The chart: hairline grid, axis text muted (never in a series colour), dots ringed in the card's colour. */
 .phone .pg-chart { margin: 4px -4px 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -65,10 +67,14 @@
 .phone .pg-chart .pg-fill { fill: var(--p-sc-low, var(--surface-2)); }
 .phone .pg-chart .pg-cursor { stroke: var(--muted); stroke-width: 1; }
 
-/* "+ Weigh in". */
+/* "+ Weigh in", and a weigh-in tapped: its day and time under the title, Delete or Hide at the left. */
 .phone .pg-weigh { padding: 0 16px; }
 .phone .pg-weigh .tr-sheet-title { padding: 4px 8px 8px; }
 .phone .pg-weigh .p-sheet-buttons { padding-left: 0; padding-right: 0; }
+.phone .pg-weigh-sub { padding: 0 8px 8px; margin-top: -6px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .pg-weigh-kg { padding: 16px 8px 4px; font-size: 32px; line-height: 40px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-weigh-kg small { margin-left: 4px; font-size: 16px; color: var(--muted); }
+.phone .pg-weigh .pg-left { margin-right: auto; }
 
 /* Wide: the card beside the list. */
 .wide .tr-split .pg-list { flex: 0 0 440px; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }

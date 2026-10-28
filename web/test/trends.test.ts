@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
-  type Run, type WeighIn, bodyWeights, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
+  type Hidden, type Run, type WeighIn, bodyWeights, hiddenId, hiddenWeighIns, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
   readRuns, readSleep, readWeights, rpeFor, sourceName,
   targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
@@ -388,6 +388,17 @@ test("body weights: a day keeps its best source's weigh-ins; the trend takes the
     ["f2", "fitnotes", "10:00"], ["f3", "fitnotes", "19:00"], ["p1", "planner", "08:00"], ["g2", "garmin", "10:00"],
   ]);
   assert.deepEqual(weightTrend(all).map((p) => [p.kg, p.count]), [[84, 2], [82, 1], [80, 1]]);
+});
+
+test("hidden imported weigh-ins are left out, before the day picks its best source; unhiding brings them back", () => {
+  const past = (id: string, day: string, kg: number, source: string) => ({ id, day: d(day), time: "10:00", kg, source, note: "" });
+  const list = [past("f1", "2026-10-27", 83, "fitnotes"), past("g1", "2026-10-27", 84, "garmin"), past("f2", "2026-10-28", 82, "fitnotes")];
+  const hide = (pastId: string, deletedAt: number | null = null): Hidden => ({ id: hiddenId(pastId), kind: "weighIn", pastId, hiddenAt: 1, updatedAt: 1, deletedAt });
+  const hidden = hiddenWeighIns([hide("f1"), hide("f2", 5)]);
+  assert.deepEqual([...hidden], ["f1"]);
+  assert.deepEqual(bodyWeights([], list, hidden).map((w) => w.id), ["g1", "f2"]);   // f1 hidden: Garmin's shows that day; f2 was unhidden
+  assert.deepEqual(bodyWeights([], list).map((w) => w.id), ["f1", "f2"]);
+  assert.equal(hiddenId("g2026-10-31T09:12"), "weighIn:g2026-10-31T09:12");
 });
 
 test("imported weigh-ins weights.json calls \"later\" count in the trend (the gap of 11 to 20 Oct)", () => {

@@ -41,14 +41,17 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
  * gets the index of the one nearest the finger, and null when it lets go. [rings]: pain, as a ring around the
  * point. [fmt] writes the value axis; [invert] puts low values at the top (pace: faster is higher). [zero]
  * starts the axis at 0 (bars always do). [labels]: the axis's first and last day, when not the domain's.
+ * [onTap]: a tap (a short press that hardly moves) on a point, by the index of its reading.
  */
-export function Chart({ series, domain, today, height = 150, fmt = String, invert = false, zero = false, rings = [], reads, onRead, labels }: {
+export function Chart({ series, domain, today, height = 150, fmt = String, invert = false, zero = false, rings = [], reads, onRead, labels, onTap }: {
   series: Series[]; domain: [number, number]; today: number; height?: number; fmt?: (v: number) => string; invert?: boolean; zero?: boolean;
-  rings?: Pt[]; reads: readonly number[]; onRead: (i: number | null) => void; labels?: [number, number];
+  rings?: Pt[]; reads: readonly number[]; onRead: (i: number | null) => void; labels?: [number, number]; onTap?: (i: number) => void;
 }) {
   const [box, w] = useWidth<HTMLDivElement>();
   const [at, setAt] = useState<number | null>(null);
   const atRef = useRef<number | null>(null);
+  /** Where and when the press started, and whether it has moved more than a tap does. */
+  const press = useRef<{ x: number; y: number; t: number; moved: boolean } | null>(null);
   const all = series.flatMap((s) => s.pts.map((p) => p.v)).concat(rings.map((p) => p.v));
   const bars = series.some((s) => s.kind === "bars");
   const lo = all.length ? Math.min(...all, ...(zero || bars ? [0] : [])) : 0, hi = all.length ? Math.max(...all) : 1;
@@ -70,6 +73,24 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
     onRead(i);
   };
   const leave = () => { if (atRef.current === null) return; atRef.current = null; setAt(null); onRead(null); };
+  const down = (e: React.PointerEvent<SVGSVGElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    press.current = { x: e.clientX, y: e.clientY, t: e.timeStamp, moved: false };
+    read(e);
+  };
+  const move = (e: React.PointerEvent<SVGSVGElement>) => {
+    const p = press.current;
+    if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) p.moved = true;
+    read(e);
+  };
+  const up = (e: React.PointerEvent<SVGSVGElement>) => {
+    const p = press.current, i = atRef.current;
+    press.current = null;
+    leave();
+    // A tap counts on a point: within 24 px of it across.
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
+    if (onTap && p && !p.moved && e.timeStamp - p.t < 500 && i !== null && Math.abs(x(reads[i]) - px) <= 24) onTap(i);
+  };
 
   const drawn: React.ReactNode[] = [];
   series.forEach((s, k) => {
@@ -110,8 +131,8 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   return (
     <div className="pg-chart" ref={box}>
       {w > 0 && (
-        <svg width={w} height={height} onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); read(e); }} onPointerMove={read}
-          onPointerUp={leave} onPointerCancel={leave} onPointerLeave={leave}>
+        <svg width={w} height={height} onPointerDown={down} onPointerMove={move}
+          onPointerUp={up} onPointerCancel={() => { press.current = null; leave(); }} onPointerLeave={leave}>
           {ticks.ticks.map((t) => <g key={t}>
             <line className="pg-grid" x1={L} x2={w - R} y1={y(t)} y2={y(t)} />
             <text x={L - 6} y={y(t) + 4} textAnchor="end">{fmt(t)}</text>
