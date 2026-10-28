@@ -196,7 +196,12 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-tick.done .name { color: var(--muted); text-decoration: line-through; }
 .phone .tr-ex { margin: 4px 12px 8px; padding: 10px 12px 8px; border-radius: 16px; background: var(--p-sc-low, var(--surface-2)); }
 .phone .tr-ex-head { display: flex; align-items: center; gap: 4px; }
-.phone .tr-ex-name { flex: 1; min-width: 0; padding: 4px 0; border: 0; background: none; text-align: left; font-size: 17px; line-height: 24px; font-weight: 500; color: var(--text); }
+.phone .tr-ex-name { flex: 1; min-width: 0; display: flex; align-items: center; padding: 4px 0; border: 0; background: none; text-align: left; font-size: 17px; line-height: 24px; font-weight: 500; color: var(--text); }
+/* The ⓘ by an exercise's name: the name and it open the guide (TrainingGuide.tsx). */
+.phone :is(.tr-ex-name, .tr-guidename) .nt { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.phone .tr-info { flex: none; display: inline-flex; margin-left: 5px; color: var(--muted); }
+.phone .tr-tick .tr-guidename { align-self: flex-start; max-width: 100%; display: inline-flex; align-items: center; padding: 0; border: 0; background: none; text-align: left; font: inherit; font-size: 15px; line-height: 21px; }
+.phone .tr-tick.done .tr-guidename .nt { text-decoration: line-through; }
 .phone .tr-ex-head .p-text-btn { gap: 4px; margin-right: -8px; }
 .phone .tr-ex-target { font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .tr-ex-sub { margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
@@ -241,8 +246,41 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-md table { border-collapse: collapse; font-size: 14px; }
 .phone .tr-md :is(th, td) { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .phone .tr-md .tr-flash { background: var(--p-sec-container); transition: none; }
-.phone .tr-exsheet-body { padding: 0 24px 8px; max-height: 70vh; overflow-y: auto; }
-.phone .tr-exsheet-body .tr-sheet-title { padding-left: 0; }
+
+/* An exercise's guide: a sheet that stops halfway, swiped up for the whole card (TrainingGuide.tsx). */
+.phone:not(.wide) .p-sheet.tr-guide { height: max(50%, 380px); transition: height .32s cubic-bezier(.2, 0, 0, 1); }
+.phone:not(.wide) .p-sheet.tr-guide.full { height: calc(100% - var(--sat) - 48px); }
+.phone:not(.wide) .tr-guide .p-sheet-top { height: 28px; }
+.phone .tr-guide .p-sheet-body { position: relative; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.phone .tr-guide-body { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 20px; overscroll-behavior: contain; }
+.phone .tr-guide.full .tr-guide-body { overflow-y: auto; }
+.phone .tr-guide-body.p-sheet-drag, .phone .tr-guide-head { touch-action: none; }
+.phone .tr-guide.full .tr-guide-body { touch-action: pan-y; }
+.phone .tr-guide-head { display: flex; align-items: flex-start; gap: 8px; padding: 0 16px 0 24px; }
+.phone .tr-guide-head .t { font-size: 22px; line-height: 28px; color: var(--text); }
+.phone .tr-guide-head .s { margin-top: 1px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .tr-guide-head .p-text-btn { gap: 4px; flex: none; }
+.phone .tr-watch { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 12px 16px 2px; padding: 8px 12px 8px 8px; border: 0; border-radius: 14px;
+  background: var(--p-sc-high, var(--surface-2)); color: var(--text); text-align: left; font: inherit; }
+.phone .tr-watch .tile { flex: none; width: 60px; height: 40px; border-radius: 8px; display: grid; place-items: center; background: linear-gradient(135deg, #3d2b2e, #2a2224); color: #ff6b6b; }
+.phone .tr-watch .wt { flex: 1; min-width: 0; }
+.phone .tr-watch b { display: block; font-size: 15px; line-height: 20px; font-weight: 500; }
+.phone .tr-watch .wt span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .tr-watch > .p-svg { color: var(--muted); }
+.phone .tr-guide-label { padding: 14px 24px 0; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--muted); }
+.phone .tr-guide-md { padding: 0 20px 0 24px; }
+.phone .tr-guide-md .tr-md > :first-child { margin-top: 4px; }
+.phone .tr-guide-md .tr-md li { margin: 5px 0; line-height: 22px; }
+.phone .tr-guide-swap { display: flex; align-items: flex-start; gap: 10px; width: calc(100% - 48px); margin: 2px 24px 0; padding: 6px 0; border: 0; background: none; text-align: left;
+  font: inherit; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-guide-swap > .p-svg { flex: none; margin-top: 1px; color: var(--p-primary); }
+.phone .tr-guide-swap b { font-weight: 500; color: var(--text); }
+.phone .tr-guide-swap:disabled { opacity: 1; }
+.phone .tr-guide-open { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 14px 16px 0; padding: 12px 8px; border: 0; border-top: 1px solid var(--line);
+  background: none; color: var(--p-primary); font: inherit; font-size: 14px; font-weight: 500; text-align: left; }
+.phone .tr-guide-open span { flex: 1; }
+.phone .tr-guide-more { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; align-items: flex-end; justify-content: center; gap: 4px;
+  padding: 0 0 10px; border: 0; background: linear-gradient(transparent, var(--p-sc-low) 55%); color: var(--muted); font: inherit; font-size: 12.5px; touch-action: none; }
 
 /* Bests. */
 .phone .tr-bests { display: flex; gap: 8px; padding: 4px 16px 8px; }

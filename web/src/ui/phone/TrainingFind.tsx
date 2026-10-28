@@ -12,7 +12,7 @@ import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, SectionHeader, TopAp
 import { useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 import { ListItem } from "./m3.tsx";
 import { docRoute } from "./TrainingDocs.tsx";
-import { ExerciseSheet } from "./TrainingSession.tsx";
+import { GuideSheet } from "./TrainingGuide.tsx";
 import { fmtKg, kindIcon, planQ } from "./trainingParts.tsx";
 
 type Only = "all" | "sessions" | "exercises" | "guides";
@@ -103,7 +103,7 @@ export function TrainingFind({ tr, lp, planId }: { tr: Training; lp: LoadedPlan;
         </>}
         <div className="p-endspace" />
       </div>
-      {guide && <ExerciseSheet lp={lp} id={guide.id} name={guide.name} onClose={() => setGuide(null)} />}
+      {guide && <GuideSheet tr={tr} lp={lp} id={guide.id} onClose={() => setGuide(null)} />}
     </div>
   );
 }

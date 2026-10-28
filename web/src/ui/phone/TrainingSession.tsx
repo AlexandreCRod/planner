@@ -18,6 +18,8 @@ import { feel } from "./haptics.ts";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
 import { MarkdownView, allExercises, docRoute } from "./TrainingDocs.tsx";
+import { GuideSheet } from "./TrainingGuide.tsx";
+import { isWide } from "../../platform.ts";
 import { KIND_LABEL, Scale, fmtKg, kindIcon, phaseNames, planQ, setsText } from "./trainingParts.tsx";
 
 /** Saves a session's entry: the latest copy, the plan's title and detail kept with it, then [patch]. */
@@ -183,7 +185,7 @@ function guideDocOf(lp: LoadedPlan, s: Session): string | null {
   return best ?? (s.card && lp.docs.has(s.card.doc) ? s.card.doc : null);
 }
 
-const GROUPS: [string, string][] =[["warm-up", "Warm-up"], ["main", "Main"], ["filler", "Fillers"]];
+const GROUPS: [string, string][] = [["warm-up", "Warm-up"], ["main", "Main"], ["filler", "Fillers"]];
 
 /** A gym session's exercises: warm-up, main work and fillers; ticks or sets as the plan says. */
 function GymLog({ tr, lp, s, e, day, t, readOnly }: { tr: Training; lp: LoadedPlan; s: Session; e: Entry; day: number | null; t: number; readOnly: boolean }) {
@@ -208,7 +210,7 @@ function GymLog({ tr, lp, s, e, day, t, readOnly }: { tr: Training; lp: LoadedPl
             const doing = lift?.exercise ?? x.exercise;
             const ex = exs.get(doing);
             return ex?.log === "tick" || (!ex && g !== "main")
-              ? <TickRow key={`${x.exercise}${k}`} name={ex?.name ?? doing} x={x} ticked={e.ticks.includes(x.exercise)} readOnly={readOnly} onTick={(on) => tick(x.exercise, on)} />
+              ? <TickRow key={`${x.exercise}${k}`} tr={tr} lp={lp} doing={doing} known={!!ex} name={ex?.name ?? doing} x={x} ticked={e.ticks.includes(x.exercise)} readOnly={readOnly} onTick={(on) => tick(x.exercise, on)} />
               : <SetsBlock key={`${x.exercise}${k}`} tr={tr} lp={lp} s={s} x={x} lift={lift} liftDay={liftDay} readOnly={readOnly} />;
           })}
         </div>
@@ -217,16 +219,32 @@ function GymLog({ tr, lp, s, e, day, t, readOnly }: { tr: Training; lp: LoadedPl
   </>;
 }
 
-function TickRow({ name, x, ticked, readOnly, onTick }: { name: string; x: SessionExercise; ticked: boolean; readOnly: boolean; onTick: (on: boolean) => void }) {
-  return (
-    <label className={`tr-tick ${ticked ? "done" : ""}`}>
+function TickRow({ tr, lp, doing, known, name, x, ticked, readOnly, onTick }: {
+  tr: Training; lp: LoadedPlan; doing: string; known: boolean; name: string; x: SessionExercise; ticked: boolean; readOnly: boolean; onTick: (on: boolean) => void;
+}) {
+  const [guide, setGuide] = useState(false);
+  const row = useRef<HTMLLabelElement>(null);
+  return <>
+    <label className={`tr-tick ${ticked ? "done" : ""}`} ref={row}>
       <input type="checkbox" className="p-checkbox" checked={ticked} disabled={readOnly} onChange={(ev) => onTick(ev.target.checked)} />
       <span className="text">
-        <span className="name">{name}</span>
+        {known
+          ? <button className="name tr-guidename" onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); showAbove(row.current); setGuide(true); }}>
+              <span className="nt">{name}</span><span className="tr-info"><MIcon name="oInfo" size={16} /></span>
+            </button>
+          : <span className="name">{name}</span>}
         <span className="sub">{[setsText(x.sets, x.reps), x.note].filter(Boolean).join(" · ")}</span>
       </span>
     </label>
-  );
+    {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onClose={() => setGuide(false)} />}
+  </>;
+}
+
+/** Scrolls the session so [el] sits in its top part, above a guide sheet that stops halfway. */
+function showAbove(el: Element | null) {
+  if (!el || isWide()) return;
+  const r = el.getBoundingClientRect();
+  if (r.top > innerHeight * 0.36 || r.top < 64) el.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 /** One weighted (or bodyweight) exercise: the target, the sets, then RPE and pain once its sets are done. */
@@ -244,6 +262,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
   const [swapOpen, setSwapOpen] = useState(false);
   const [showPain, setShowPain] = useState(false);
   const [guide, setGuide] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
 
   /** Writes the lift, made from what's shown when there isn't one yet. */
   const write = (patch: Partial<Lift>) => {
@@ -283,9 +302,11 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
   const bodyweight = ex?.type === "bodyweight";
 
   return (
-    <div className={`tr-ex ${allDone ? "done" : ""}`}>
+    <div className={`tr-ex ${allDone ? "done" : ""}`} ref={card}>
       <div className="tr-ex-head">
-        <button className="tr-ex-name" onClick={() => setGuide(true)}>{ex?.name ?? doing}</button>
+        <button className="tr-ex-name" onClick={() => { showAbove(card.current); setGuide(true); }}>
+          <span className="nt">{ex?.name ?? doing}</span><span className="tr-info"><MIcon name="oInfo" size={18} /></span>
+        </button>
         {x.swaps.length > 0 && !readOnly && (
           <div className="p-menu-anchor">
             <TextButton onClick={() => setSwapOpen(true)}><MIcon name="fSwapHoriz" size={18} />Swap</TextButton>
@@ -332,27 +353,8 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
           onSave={(v) => setNumber(editing.k, editing.what, v)}
           onRemove={() => write({ sets: sets.filter((_, j) => j !== editing.k) })} />
       )}
-      {guide && <ExerciseSheet lp={lp} id={doing} name={ex?.name ?? doing} onClose={() => setGuide(false)} />}
+      {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onSwap={readOnly ? undefined : swapTo} onClose={() => setGuide(false)} />}
     </div>
-  );
-}
-
-/** How to do an exercise (its card from the guide), and a way to its history. */
-export function ExerciseSheet({ lp, id, name, onClose }: { lp: LoadedPlan; id: string; name: string; onClose: () => void }) {
-  const ex = lp.plan.exercises.find((e) => e.id === id);
-  const md = ex?.card ? lp.docs.get(ex.card.doc) : undefined;
-  const section = md && ex?.card ? (ex.card.anchor ? sectionAt(md, ex.card.anchor) : md) : null;
-  return (
-    <BottomSheet onClose={onClose} className="tr-exsheet">{(close) => (
-      <div className="tr-exsheet-body">
-        <div className="tr-sheet-title t-title-medium">{name}</div>
-        {section ? <MarkdownView md={section} onDocLink={(f, a) => { close(); window.setTimeout(() => go(docRoute(f ?? ex!.card!.doc, a, null)), 210); }} />
-          : <div className="tr-hint">No guide for this one.</div>}
-        <div className="tr-sheet-actions">
-          <TextButton onClick={() => { close(); window.setTimeout(() => go(`training?view=ex&x=${encodeURIComponent(id)}`), 210); }}>History</TextButton>
-        </div>
-      </div>
-    )}</BottomSheet>
   );
 }
 
