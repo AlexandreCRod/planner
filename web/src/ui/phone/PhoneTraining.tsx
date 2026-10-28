@@ -34,6 +34,7 @@ import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { kindIcon, phaseNames, planQ, randomId } from "./trainingParts.tsx";
+import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
 import "./training.css";
 
 /** Held this long, a placed session lifts to be dragged to another day (as a note card does). */
@@ -129,6 +130,8 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     else showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
   };
   const drag = useDayDrag(scroller, place);
+  useWatchRunTicks(readOnly);
+  const watchAsks = useWatchRunAsks(tr, lp, t, readOnly);
 
   if (!plan.phases.length) return <Scaffold title="Training" back><EmptyHint>This plan has no phases yet.</EmptyHint></Scaffold>;
   const ph = plan.phases[phase];
@@ -215,6 +218,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           <div className="tr-dayhead"><span>{formatDate(day)}</span>{day === t && <span className="tr-todaytag">Today</span>}
             {day <= t && restingHrFlag(tr.sleep, day) && <span className="tr-hrflag" role="img" aria-label="Resting heart rate up 7 or more on your 7-day average, two mornings running"
               title="Resting heart rate up 7 or more on your 7-day average, two mornings running"><MIcon name="fFavorite" size={12} /></span>}</div>
+          <WatchRunChips lp={lp} asks={watchAsks.get(day)} />
           {items.length === 0 && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
             <div key={s.id}>

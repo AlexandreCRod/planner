@@ -430,6 +430,10 @@ export interface Entry {
   /** What it was logged against, kept so history reads right after the plan changes. */
   title: string;
   detail: string;
+  /** The watch run (Health Connect, "hc:…") that ticked this session, or was picked for it (domain/healthRuns.ts). */
+  watchRunId?: string | null;
+  /** Watch runs that ticked it and were unticked: they never tick it again. */
+  watchRunsDismissed?: string[];
   updatedAt: number;
   deletedAt: number | null;
 }

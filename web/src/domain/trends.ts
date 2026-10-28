@@ -14,6 +14,7 @@
 //   is stored.
 // Days are epoch-day numbers (domain/dates.ts); weeks start on Monday.
 import { startOfWeek } from "./dates.ts";
+import type { HealthSplit } from "./health.ts";
 import {
   type Entry, type Lift, type LiftSet, type Plan, type Raw, type Range, arr, countedDay, csv, dayOf, entryId, futsalDay, isoOf, num, obj, range, sessionsOf, str,
 } from "./training.ts";
@@ -58,6 +59,9 @@ export interface Run {
   maxHr: number | null;
   cadenceSpm: number | null;
   ascentM: number | null;
+  /** Health Connect's runs only (healthRuns.ts): the duration minus pauses, and the per-km splits. */
+  movingS?: number | null;
+  splits?: HealthSplit[];
 }
 
 export type MealKind = "breakfast" | "lunch" | "dinner" | "snack";
@@ -323,12 +327,13 @@ export interface WeighIn {
 /**
  * An imported weigh-in the user hid (records "trainingHidden"): one record per hidden one, so unhiding is a
  * soft delete and two devices never fight over one list. Its id is "weighIn:" + the weigh-in's id (runs.json's
- * ids could match weights.json's).
+ * ids could match weights.json's). A watch run the user said isn't a plan run is one too: kind "watchRun",
+ * id "watchRun:" + the run's id (domain/healthRuns.ts).
  */
 export interface Hidden {
   id: string;
-  kind: "weighIn";
-  /** The hidden weigh-in's id in weights.json. */
+  kind: "weighIn" | "watchRun";
+  /** The hidden weigh-in's id in weights.json, or the watch run's id. */
   pastId: string;
   hiddenAt: number;
   updatedAt: number;
