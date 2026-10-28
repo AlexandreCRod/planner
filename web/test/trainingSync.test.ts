@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyChanges, checkPlan, checkShared, fileChanges } from "../tools/training-sync.ts";
-import { planFileId } from "../src/domain/training.ts";
+import { KEPT_VERSION, applyChanges, checkPlan, checkShared, fileChanges, healthCsvs, keptKind, sinceOf } from "../tools/training-sync.ts";
+import { planFileId, readPlan } from "../src/domain/training.ts";
 import { MEALS_FILE, RUNS_FILE, SHARED_PLAN } from "../src/domain/trends.ts";
 
 const rec = (planId: string, file: string, text: string) => ({ id: `${planId}:${file}`, planId, file, text, updatedAt: 1 });
@@ -53,4 +53,38 @@ test("checkShared: the history files are checked and summed up like runs.json", 
   assert.deepEqual(r.ok, ["OK: weights.json: 1 weigh-in, 0 other measurements.", "OK: lift-history.json: 1 set."]);
   assert.equal(r.problems.length, 1);
   assert.match(r.problems[0], /^sleep\.json isn't valid JSON/);
+});
+
+test("pull keeps the training and watch kinds only, and receives everything again once for the watch's", () => {
+  assert.deepEqual(["trainingEntries", "trainingHidden", "healthSessions", "healthNights", "healthDays", "notes", "tasks"].map(keptKind), [true, true, true, true, true, false, false]);
+  assert.equal(sinceOf({ seq: 40, records: {} }), 0);
+  assert.equal(sinceOf({ seq: 40, records: {}, kept: KEPT_VERSION }), 40);
+});
+
+test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linked by the tick", () => {
+  const plan = readPlan({ version: 1, plan: { id: "p", start: "2026-10-26", end: "2026-11-01" },
+    phases: [{ name: "W1", start: "2026-10-26", end: "2026-11-01", sessions: [{ id: "long", kind: "run", title: "Long run" }] }] }).plan!;
+  const runsJson = (title: string) => JSON.stringify({ version: 1, runs: [
+    { id: "g1", date: "2026-10-28", start_time: "07:01", title, run_type: "easy", source: "garmin_export", distance_km: 8.1 },
+    { id: "g2", date: "2026-10-20", start_time: "07:00", title, run_type: "easy", source: "garmin_export", distance_km: 5 },
+  ] });
+  const session = { id: "hc:a", day: 20754, time: "07:00", endTime: "07:52", startMs: 1, durationS: 3120, movingS: 3000, exerciseType: "running", title: "",
+    source: "x", distanceKm: 8, ascentM: null, steps: null, kcal: null, avgHr: null, maxHr: null, cadenceSpm: null, laps: [], splits: [], hr: [], updatedAt: 1 };
+  const walk = { ...session, id: "hc:w", exerciseType: "walking" };
+  const records = {
+    [`trainingFiles/${planFileId(SHARED_PLAN, RUNS_FILE)}`]: rec(SHARED_PLAN, RUNS_FILE, runsJson("Pushed")),
+    "healthSessions/hc:a": session, "healthSessions/hc:w": walk,
+    "healthDays/hcd:2026-10-28": { id: "hcd:2026-10-28", day: 20754, steps: 100 },
+    "trainingEntries/p:long": { id: "p:long", planId: "p", sessionId: "long", kind: "session", status: "done", watchRunId: "hc:a", deletedAt: null },
+  };
+  const out = healthCsvs(records, plan, runsJson("Folder"));
+  assert.deepEqual([...out.keys()], ["runs.csv", "workouts.csv", "daily.csv"]);
+  const runs = out.get("runs.csv")!.trimEnd().split("\r\n");
+  assert.equal(runs.length, 3);
+  assert.match(runs[1], /^g2,2026-10-20,07:00,Pushed,,easy,garmin_export,5,/);
+  assert.match(runs[2], /^hc:a,2026-10-28,07:00,Run,long,easy,health_connect,8,3120,3000,375,/);
+  assert.match(out.get("workouts.csv")!, /hc:w,2026-10-28,07:00,walking/);
+  assert.match(out.get("daily.csv")!, /2026-10-28,100,/);
+  // Nothing pushed yet: the folder's runs.json.
+  assert.match(healthCsvs({}, plan, runsJson("Folder")).get("runs.csv")!, /Folder/);
 });

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { HealthSession } from "../src/domain/health.ts";
+import type { HealthDay, HealthSession } from "../src/domain/health.ts";
 import {
-  hiddenRunId, hiddenWatchRuns, isRunSession, mergedRuns, runOfSession, runTypeOf, sameRun, sourceRank, tickedEntry, typedRuns, untickedEntry,
-  watchLinks, watchRunSteps,
+  dailyCsv, hiddenRunId, hiddenWatchRuns, isRunSession, mergedRuns, runOfSession, runTypeOf, sameRun, sourceRank, tickedEntry, typedRuns, untickedEntry,
+  runsCsv, watchLinks, watchRunSteps, workoutsCsv,
 } from "../src/domain/healthRuns.ts";
 import { type Entry, dayOf, entryId, newEntry, readPlan } from "../src/domain/training.ts";
 import type { Run } from "../src/domain/trends.ts";
@@ -169,4 +169,41 @@ test("hidden watch runs: by kind, not deleted", () => {
   const h = (pastId: string, kind: "weighIn" | "watchRun", deletedAt: number | null = null) => ({ id: kind === "watchRun" ? hiddenRunId(pastId) : pastId, kind, pastId, hiddenAt: 1, updatedAt: 1, deletedAt });
   assert.equal(hiddenRunId("hc:x"), "watchRun:hc:x");
   assert.deepEqual(hiddenWatchRuns([h("hc:a", "watchRun"), h("hc:b", "watchRun", 5), h("w1", "weighIn")]), new Set(["hc:a"]));
+});
+
+// ---------- The pull's CSVs ----------
+
+test("runs.csv: every run once, the tick's session, splits as JSON", () => {
+  const runs = mergedRuns([run({ sessionId: "easy" }), run({ id: "g0", day: d("2026-10-25"), time: null, distanceKm: 5, durationS: 1800, paceSPerKm: 360, cadenceSpm: null })], [hc()], new Map([["hc:a", "tempo"]]));
+  const lines = runsCsv(runs).trimEnd().split("\r\n");
+  assert.equal(lines[0], "id,date,time,title,session_id,type,source,distance_km,duration_s,moving_s,pace_s_per_km,avg_hr,max_hr,cadence_spm,ascent_m,splits_json");
+  assert.equal(lines[1], "g0,2026-10-25,,Morning Run,,easy,garmin_export,5,1800,,360,151,170,,38,");
+  assert.equal(lines[2], `hc:a,2026-10-28,07:00,Run,tempo,easy,health_connect,8,3120,3000,375,150,171,168,40,"[{""km"":1,""s"":375,""hr"":140}]"`);
+  assert.equal(lines.length, 3);
+});
+
+test("workouts.csv: the watch's sessions that aren't runs", () => {
+  const lines = workoutsCsv([hc(), hc({ id: "hc:w", exerciseType: "walking", title: "Walk, park", distanceKm: 3.2, startMs: 5, time: "12:00" }),
+    hc({ id: "hc:g", exerciseType: "strength_training", distanceKm: null, avgHr: null, maxHr: null, startMs: 1, time: "06:00" })]).trimEnd().split("\r\n");
+  assert.deepEqual(lines, [
+    "id,date,time,type,title,duration_s,distance_km,kcal,avg_hr,max_hr",
+    "hc:g,2026-10-28,06:00,strength_training,,3120,,600,,",
+    `hc:w,2026-10-28,12:00,walking,"Walk, park",3120,3.2,600,150,171`,
+  ]);
+});
+
+test("daily.csv: one row per day, oldest first, blanks where Health Connect has nothing", () => {
+  const day = (iso: string, over: Partial<HealthDay> = {}): HealthDay => ({
+    id: `hcd:${iso}`, day: d(iso), steps: null, distanceKm: null, kcalTotal: null, kcalActive: null, floors: null, ascentM: null, restingHr: null, hrvMs: null,
+    spo2: null, respiration: null, hrMin: null, hrAvg: null, hrMax: null, vo2max: null, weighIns: [], extra: {}, updatedAt: 1, ...over,
+  });
+  const lines = dailyCsv([
+    day("2026-10-28", { steps: 12000, distanceKm: 9.1, kcalTotal: 2900, kcalActive: 900, floors: 12, ascentM: 40, restingHr: 51, hrvMs: 52, spo2: 96.5, respiration: 14.2, hrMin: 48, hrAvg: 70, hrMax: 171, vo2max: 48.5 }),
+    day("2026-10-27"),
+  ]).trimEnd().split("\r\n");
+  assert.deepEqual(lines, [
+    "date,steps,distance_km,kcal_total,kcal_active,floors,ascent_m,resting_hr,hrv_ms,avg_spo2,avg_respiration,hr_min,hr_avg,hr_max,vo2max",
+    "2026-10-27,,,,,,,,,,,,,,",
+    "2026-10-28,12000,9.1,2900,900,12,40,51,52,96.5,14.2,48,70,171,48.5",
+  ]);
 });

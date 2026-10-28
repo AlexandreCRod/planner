@@ -8,8 +8,8 @@
 //   not done yet, ticks it (and links it, Entry.watchRunId); with two run sessions that day or none, a chip asks
 //   which. An untick remembers the run on the entry (watchRunsDismissed), "Not a plan run" hides it (records
 //   "trainingHidden", kind "watchRun"), so neither comes back.
-import type { HealthSession } from "./health.ts";
-import { type Entry, type Plan, type Session, countedDay, dayOfSession, entryFor, entryId, phaseIndexAt, sessionsOf } from "./training.ts";
+import type { HealthDay, HealthSession } from "./health.ts";
+import { type Entry, type Plan, type Session, countedDay, csv, isoOf, dayOfSession, entryFor, entryId, phaseIndexAt, sessionsOf } from "./training.ts";
 import { type Hidden, type Run, type RunType, byMoment } from "./trends.ts";
 
 // ---------- Merging ----------
@@ -167,4 +167,45 @@ export function watchRunSteps(plan: Plan, entries: ReadonlyMap<string, Entry>, r
     out.push({ kind: "ask", run, choices });
   }
   return out;
+}
+
+// ---------- The pull's CSVs for the plan session (columns sent 2026-10-28; new ones only at the end) ----------
+
+/** runs.csv: every run once (mergedRuns), oldest first; session_id is the session it ticked, else runs.json's own. */
+export function runsCsv(runs: Iterable<Run>): string {
+  const rows: (string | number | null)[][] = [[
+    "id", "date", "time", "title", "session_id", "type", "source", "distance_km", "duration_s", "moving_s", "pace_s_per_km",
+    "avg_hr", "max_hr", "cadence_spm", "ascent_m", "splits_json",
+  ]];
+  for (const r of [...runs].sort(byMoment)) {
+    rows.push([
+      r.id, isoOf(r.day), r.time, r.title, r.sessionId, r.type, r.source, r.distanceKm, r.durationS, r.movingS ?? null, r.paceSPerKm,
+      r.avgHr, r.maxHr, r.cadenceSpm, r.ascentM, r.splits?.length ? JSON.stringify(r.splits) : null,
+    ]);
+  }
+  return csv(rows);
+}
+
+/** workouts.csv: the watch's other sessions (walks, gym, futsal...), oldest first. */
+export function workoutsCsv(sessions: Iterable<HealthSession>): string {
+  const rows: (string | number | null)[][] = [["id", "date", "time", "type", "title", "duration_s", "distance_km", "kcal", "avg_hr", "max_hr"]];
+  for (const s of [...sessions].filter((x) => !isRunSession(x)).sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id))) {
+    rows.push([s.id, isoOf(s.day), s.time, s.exerciseType, s.title, s.durationS, s.distanceKm, s.kcal, s.avgHr, s.maxHr]);
+  }
+  return csv(rows);
+}
+
+/** daily.csv: one row per day Health Connect has, oldest first. */
+export function dailyCsv(days: Iterable<HealthDay>): string {
+  const rows: (string | number | null)[][] = [[
+    "date", "steps", "distance_km", "kcal_total", "kcal_active", "floors", "ascent_m", "resting_hr", "hrv_ms", "avg_spo2", "avg_respiration",
+    "hr_min", "hr_avg", "hr_max", "vo2max",
+  ]];
+  for (const x of [...days].sort((a, b) => a.day - b.day)) {
+    rows.push([
+      isoOf(x.day), x.steps, x.distanceKm, x.kcalTotal, x.kcalActive, x.floors, x.ascentM, x.restingHr, x.hrvMs, x.spo2, x.respiration,
+      x.hrMin, x.hrAvg, x.hrMax, x.vo2max,
+    ]);
+  }
+  return csv(rows);
 }

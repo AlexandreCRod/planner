@@ -6,7 +6,9 @@
 // meals.json, weights.json, lift-history.json, sleep.json) when the folder has them. push: sends the files
 // that changed: the plan's, and the shared ones under the plan id "shared" (one taken out of the folder stays
 // on the server: the history files are pushed once, and meals.json may come from another session). pull: writes the
-// training CSVs from what the phone logged, and bodyweight.csv from the weigh-ins. Node built-ins only.
+// training CSVs from what the phone logged, bodyweight.csv from the weigh-ins, and from the watch's Health
+// Connect data runs.csv (every run once, runs.json's merged with the watch's), workouts.csv (its other
+// sessions) and daily.csv (its days). Node built-ins only.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -15,18 +17,26 @@ import { count } from "../src/domain/plural.ts";
 import {
   type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, logCsv, missingCards, planFileId, readPlan, setsCsv,
 } from "../src/domain/training.ts";
+import type { HealthDay, HealthSession } from "../src/domain/health.ts";
+import { dailyCsv, mergedRuns, runsCsv, typedRuns, watchLinks, workoutsCsv } from "../src/domain/healthRuns.ts";
 import {
-  LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
+  LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, type Run, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
   readLiftHistory, readMeals, readRuns, readSleep, readWeights, weighInsCsv,
 } from "../src/domain/trends.ts";
 
 type Rec = Record<string, unknown>;
 export interface Change { kind: string; id: string; data: Rec | null }
-/** What this script remembers between runs: where it is in the server's history, and the records it holds. */
-export interface State { seq: number; records: Record<string, Rec> }
+/**
+ * What this script remembers between runs: where it is in the server's history, the records it holds, and
+ * which kinds it keeps ([KEPT_VERSION]; a state from before the watch's kinds receives everything again).
+ */
+export interface State { seq: number; records: Record<string, Rec>; kept?: number }
 
 const KIND = "trainingFiles";
 const BODYWEIGHT_FILE = "bodyweight.csv";
+const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.csv";
+/** 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. */
+export const KEPT_VERSION = 2;
 
 // ---------- Pure helpers (tested in test/trainingSync.test.ts) ----------
 
@@ -55,6 +65,34 @@ export function applyChanges(records: Record<string, Rec>, ...lists: Change[][])
   const out = { ...records };
   for (const list of lists) for (const c of list) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete out[k]; else out[k] = c.data; }
   return out;
+}
+
+/**
+ * The kinds this script keeps: the training records and the watch's (Health Connect's) ones. The rest of the
+ * user's data (notes, tasks...) never lands in its file.
+ */
+export const keptKind = (kind: string) => kind.startsWith("training") || kind.startsWith("health");
+
+/** Where to sync from: the state's position, or the start when it was kept with fewer kinds. */
+export const sinceOf = (s: State) => (s.kept === KEPT_VERSION ? s.seq : 0);
+
+/**
+ * The pull's watch CSVs from the held records: runs.csv (runs.json as pushed under "shared", else
+ * [folderRuns], merged with the watch's runs and linked to the sessions they ticked), workouts.csv and daily.csv.
+ */
+export function healthCsvs(records: Record<string, Rec>, plan: Plan, folderRuns: string | null): Map<string, string> {
+  const pushed = records[`${KIND}/${planFileId(SHARED_PLAN, RUNS_FILE)}`] as unknown as PlanFile | undefined;
+  let fileRuns: Run[] = [];
+  const text = pushed?.text ?? folderRuns;
+  if (text) { try { fileRuns = readRuns(JSON.parse(text.replace(/^﻿/, ""))).runs; } catch { /* unreadable: the watch's runs alone */ } }
+  const sessions = recordsOfKind<HealthSession>(records, "healthSessions");
+  const entries = recordsOfKind<Entry>(records, "trainingEntries").filter((e) => e.planId === plan.id);
+  const runs = typedRuns(mergedRuns(fileRuns, sessions, watchLinks(entries)), [plan]);
+  return new Map([
+    [RUNS_CSV, runsCsv(runs)],
+    [WORKOUTS_CSV, workoutsCsv(sessions)],
+    [DAILY_CSV, dailyCsv(recordsOfKind<HealthDay>(records, "healthDays"))],
+  ]);
 }
 
 /** The held records of one kind. */
@@ -159,7 +197,7 @@ async function sync(changes: Change[]): Promise<{ state: State; received: number
     res = await fetch(`${server}/api/sync`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Device": "plan-script" },
-      body: JSON.stringify({ since: state.seq, changes }),
+      body: JSON.stringify({ since: sinceOf(state), changes }),
     });
   } catch { throw new Stop(`Can't reach the server at ${server}.`); }
   const text = await res.text();
@@ -170,9 +208,9 @@ async function sync(changes: Change[]): Promise<{ state: State; received: number
   if (!res.ok || typeof body.seq !== "number") throw new Stop(`Server error ${res.status}: ${body.error ?? text.slice(0, 200)}`);
   // Without this, the Worker would refuse (or ignore) our kinds: stop before saving anything.
   if (!(body.features ?? []).includes("anyKind")) throw new Stop("The server doesn't take training records yet: update the Worker first.");
-  // Only training records are kept: the rest of the user's data (notes, tasks...) never lands in this file.
-  const received = (body.changes ?? []).filter((c) => c.kind.startsWith("training"));
-  const next = { seq: body.seq, records: applyChanges(state.records, changes, received) };
+  // Only training records and the watch's are kept: the rest of the user's data (notes, tasks...) never lands in this file.
+  const received = (body.changes ?? []).filter((c) => keptKind(c.kind));
+  const next: State = { seq: body.seq, records: applyChanges(state.records, changes, received), kept: KEPT_VERSION };
   saveState(next);
   return { state: next, received: received.length };
 }
@@ -230,7 +268,10 @@ async function pull(folder: string) {
   writeFileSync(join(folder, log), logCsv(plan, recordsOfKind<Entry>(state.records, "trainingEntries")));
   writeFileSync(join(folder, sets), setsCsv(plan, recordsOfKind<Lift>(state.records, "trainingLifts")));
   writeFileSync(join(folder, BODYWEIGHT_FILE), weighInsCsv(recordsOfKind<WeighIn>(state.records, "trainingWeighIns")));
-  console.log(`Received ${received} record(s). Wrote ${log}, ${sets} and ${BODYWEIGHT_FILE} in ${folder}.`);
+  const runsFile = join(folder, RUNS_FILE);
+  const health = healthCsvs(state.records, plan, existsSync(runsFile) ? readFileSync(runsFile, "utf8") : null);
+  for (const [file, text] of health) writeFileSync(join(folder, file), text);
+  console.log(`Received ${received} record(s). Wrote ${log}, ${sets}, ${BODYWEIGHT_FILE}, ${[...health.keys()].join(", ")} in ${folder}.`);
 }
 
 async function main() {
