@@ -1,19 +1,36 @@
 // Small pieces the Training screens share: an icon per kind of session, a phase's short name, the
 // numbered scales (effort, pain, RPE), number formats, every exercise by id and the rep bests worth showing.
-import { type Exercise, type SessionKind, BEST_REPS } from "../../domain/training.ts";
+import { runTypeOf } from "../../domain/healthRuns.ts";
+import { type Exercise, type Session, type SessionKind, BEST_REPS } from "../../domain/training.ts";
+import type { RunType } from "../../domain/trends.ts";
 import type { Training } from "../../store/training.ts";
 import { feel } from "./haptics.ts";
+import { futsalColour, futsalIconLook, runIconSet, trainingColours } from "./looks.ts";
 
+/** A kind's icon; a run with its session gets its type's (sessionIcon). */
 export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
   switch (kind) {
     case "run": return "oDirectionsRun";
     case "gym": return "oFitnessCenter";
     case "bike": return "oDirectionsBike";
-    case "futsal": return "oSportsSoccer";
+    case "futsal": return FUTSAL_ICON[futsalIconLook];
     case "record": return "oEmojiEvents";
     default: return "oTaskAlt";
   }
 }
+
+/** A session's icon: a run's by its type (easy, long, quality, race), every other kind's by its kind. */
+export const sessionIcon = (s: Session) => (s.kind === "run" ? runIcon(runTypeOf(s)) : kindIcon(s.kind));
+
+// The looks to try (looks.ts), each read here only.
+const FUTSAL_ICON = { now: "oSportsSoccer", 1: "tBallMoving", 2: "tPlayerKick", 3: "tBallGoal", 4: "tBootBall", 5: "tCourt", 6: "tBallSolid" } as const;
+const RUN_ICONS: Record<1 | 2, Record<RunType, string>> = {
+  1: { easy: "tRunner", long: "tRunnerLong", quality: "tSprint", race: "tRunnerTape", other: "tRunnerTreadmill" },
+  2: { easy: "tShoe", long: "tRoute", quality: "tStopwatchFast", race: "tFinishFlag", other: "tTreadmill" },
+};
+export const runIcon = (type: RunType) => RUN_ICONS[runIconSet][type];
+/** The Training week's classes for its kind colours and futsal's colour (training.css). */
+export const trainingLookClass = `tr-col-${trainingColours.toLowerCase()} tr-fut-${futsalColour}`;
 
 export const KIND_LABEL: Record<SessionKind, string> = { run: "Run", gym: "Gym", bike: "Bike", physio: "Physio", other: "Session" };
 

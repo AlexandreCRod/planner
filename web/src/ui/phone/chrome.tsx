@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { go } from "../shared/common.tsx";
-import { ICONS } from "./icons.ts";
+import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 
@@ -14,11 +14,16 @@ const ALIAS: Record<string, string> = {
   search: "oSearch", settings: "oSettings", today: "oToday", add: "fAdd", editNote: "oEditNote",
 };
 
-/** A Material icon (Compose's own path data), 24 dp unless told otherwise, in the current text colour. */
+/**
+ * A Material icon (Compose's own path data), 24 dp unless told otherwise, in the current text colour; a few
+ * drawn ones add round-capped lines (ICON_STROKES).
+ */
 export function MIcon({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
+  const key = ALIAS[name] ?? name;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="p-svg" style={color ? { color } : undefined}>
-      <path d={ICONS[ALIAS[name] ?? name] ?? ""} fill="currentColor" />
+      <path d={ICONS[key] ?? ""} fill="currentColor" />
+      {ICON_STROKES[key]?.map(([d, w], i) => <path key={i} d={d} fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />)}
     </svg>
   );
 }

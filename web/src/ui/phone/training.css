@@ -12,14 +12,22 @@
 .phone .tr-hint { padding: 4px 16px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .tr-oldplan { margin: 8px 16px 0; font-size: 13px; color: var(--muted); }
 
-/* A colour per kind (item 207): runs teal, gym amber, futsal grey-blue; deeper shades on the light theme.
-   An element with k-run, k-gym or k-futsal gets its kind's colour as --k. */
-html.phone { --k-run: #23806f; --k-gym: #9a6c12; --k-futsal: #557089; }
-@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: #9fb3c8; } }
-html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: #9fb3c8; }
-.phone .k-run { --k: var(--k-run); }
-.phone .k-gym { --k: var(--k-gym); }
-.phone .k-futsal { --k: var(--k-futsal); }
+/* A colour per kind (items 207, 239): runs teal, gym amber, futsal grey-blue (or blue, or violet: the week's
+   tr-fut-… class, looks.ts); deeper shades on the light theme. An element with k-run, k-gym or k-futsal gets
+   its kind's colour as --k and the colour drawn on it (C's filled circles) as --k-on. --k-mix is how strong
+   a kind's circle is, --k-row and --k-row-done B's row tints. */
+html.phone { --k-run: #1b7d6c; --k-gym: #9c6503; --k-fut-now: #557089; --k-fut-blue: #266ea4; --k-fut-violet: #734fa9;
+  --k-on-run: #fff; --k-on-gym: #fff; --k-on-fut-now: #fff; --k-on-fut-blue: #fff; --k-on-fut-violet: #fff; --k-mix: 15%; --k-row: 9%; --k-row-done: 14%; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now: #9fb3c8; --k-fut-blue: #71bae9; --k-fut-violet: #b79eed;
+  --k-on-run: #042520; --k-on-gym: #2b1c03; --k-on-fut-now: #0b2230; --k-on-fut-blue: #0b2230; --k-on-fut-violet: #231a31; --k-mix: 24%; --k-row: 10%; --k-row-done: 16%; } }
+html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now: #9fb3c8; --k-fut-blue: #71bae9; --k-fut-violet: #b79eed;
+  --k-on-run: #042520; --k-on-gym: #2b1c03; --k-on-fut-now: #0b2230; --k-on-fut-blue: #0b2230; --k-on-fut-violet: #231a31; --k-mix: 24%; --k-row: 10%; --k-row-done: 16%; }
+.phone .tr-fut-now { --k-futsal: var(--k-fut-now); --k-on-futsal: var(--k-on-fut-now); }
+.phone .tr-fut-blue { --k-futsal: var(--k-fut-blue); --k-on-futsal: var(--k-on-fut-blue); }
+.phone .tr-fut-violet { --k-futsal: var(--k-fut-violet); --k-on-futsal: var(--k-on-fut-violet); }
+.phone .k-run { --k: var(--k-run); --k-on: var(--k-on-run); }
+.phone .k-gym { --k: var(--k-gym); --k-on: var(--k-on-gym); }
+.phone .k-futsal { --k: var(--k-futsal); --k-on: var(--k-on-futsal); }
 
 /* The phases, the one shown, its notes and rules. */
 .phone .tr-phases { padding-top: 8px; padding-bottom: 4px; }
@@ -31,6 +39,8 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
 .phone .tr-bar { display: flex; gap: 4px; margin-top: 10px; }
 .phone .tr-bar i { flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: var(--p-sc-high); transition: background-color .3s; }
 .phone .tr-bar i.done { background: var(--k, var(--p-primary)); }
+/* A session still to do hints at its kind (239). */
+.phone .tr-bar i[class*="k-"]:not(.done) { background: color-mix(in srgb, var(--k) 30%, var(--p-sc-high)); }
 .phone .tr-bar-text { display: flex; justify-content: space-between; gap: 8px; margin: 5px 0 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .tr-phase-note { position: relative; margin-top: 6px; padding-left: 14px; font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .tr-phase-note::before { content: ""; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--p-tertiary, var(--p-primary)); }
@@ -73,9 +83,19 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
 .phone .tr-row.done .title, .phone .tr-row.skipped .title { color: var(--muted); }
 .phone .tr-row.skipped .title { text-decoration: line-through; }
 .phone :is(.tr-row.done.k-run, .tr-row.done.k-gym) .title { color: var(--k); }
-/* The kind's icon in a 30 dp circle of its colour. */
+/* The kind's icon in a 30 dp circle of its colour; other kinds (physio) in a grey one. */
 .phone .tr-bub { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; }
-.phone .tr-bub:is(.k-run, .k-gym, .k-futsal) { background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); }
+.phone .tr-bub:is(.k-run, .k-gym, .k-futsal) { background: color-mix(in srgb, var(--k) var(--k-mix), transparent); color: var(--k); }
+.phone .tr-bub:not([class*="k-"]) { background: var(--p-sc-high); }
+/* The looks to try (looks.ts, trainingColours): A is the above; B tints each row with its kind; C fills the
+   circle in the kind's colour with a dark icon (white on the light theme). */
+.phone .tr-col-b .tr-row { margin: 2px 0; padding-left: 2px; }
+.phone .tr-col-b .tr-row:is(.k-run, .k-gym, .k-futsal) { background: color-mix(in srgb, var(--k) var(--k-row), transparent); }
+.phone .tr-col-b .tr-row.done:is(.k-run, .k-gym, .k-futsal) { background: color-mix(in srgb, var(--k) var(--k-row-done), transparent); }
+.phone .tr-col-b .tr-row:not([class*="k-"]) { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.phone .tr-col-b .tr-row.sel { background: var(--p-sec-container); }
+.phone .tr-col-c .tr-bub:is(.k-run, .k-gym, .k-futsal) { background: var(--k); color: var(--k-on); }
+.phone .tr-col-c .tr-bub:not([class*="k-"]) { background: var(--p-sc-highest); color: var(--text); }
 /* "⚠ 1 rule": a placement rule broken now. Its touch target reaches past the small chip. */
 .phone .tr-warn { position: relative; flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 6px; border: 0; border-radius: 10px;
   background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 11px; line-height: 20px; }

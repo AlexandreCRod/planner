@@ -20,7 +20,7 @@ import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx"
 import { MarkdownView, allExercises, docRoute } from "./TrainingDocs.tsx";
 import { GuideSheet } from "./TrainingGuide.tsx";
 import { isWide } from "../../platform.ts";
-import { KIND_LABEL, Scale, fmtKg, kindIcon, phaseNames, planQ, setsText } from "./trainingParts.tsx";
+import { KIND_LABEL, Scale, fmtKg, phaseNames, planQ, sessionIcon, setsText } from "./trainingParts.tsx";
 
 /** Saves a session's entry: the latest copy, the plan's title and detail kept with it, then [patch]. */
 export function patchEntry(lp: LoadedPlan, s: Session, patch: Partial<Entry>) {
@@ -103,7 +103,7 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
     </>}>
       <div className="p-content tr-session">
         <div className="tr-shead">
-          <div className="tr-kindline"><MIcon name={kindIcon(s.kind)} size={18} /><span>{KIND_LABEL[s.kind]} · {long ? `${short}, ${long}` : short}</span></div>
+          <div className="tr-kindline"><MIcon name={sessionIcon(s)} size={18} /><span>{KIND_LABEL[s.kind]} · {long ? `${short}, ${long}` : short}</span></div>
           {s.detail && <div className="tr-detail">{s.detail}</div>}
           <div className="tr-dayline">
             <span>{s.locked ? `${formatDate(day ?? s.defaultDay ?? ph.start)} · fixed` : day !== null ? formatDate(day) : "No day yet"}{s.optional ? " · optional" : ""}</span>

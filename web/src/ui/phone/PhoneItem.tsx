@@ -33,6 +33,7 @@ import { HeldTime } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
+import { kindIcon } from "./trainingParts.tsx";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
@@ -772,7 +773,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
         {/* A futsal event says so (it's on Training); the editor has the switch for any event. */}
         {isEvent && isFutsal(item) && (
-          <InfoRow icon="oSportsSoccer" tint={color} text="Counts as futsal · on Training"
+          <InfoRow icon={kindIcon("futsal")} tint={color} text="Counts as futsal · on Training"
             onClick={() => commit({ ...item, futsal: false })}
             trailing={<Switch checked={isFutsal(item)} onChange={(v) => commit({ ...item, futsal: v })} label="Counts as futsal" />} />
         )}
@@ -1116,7 +1117,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         )}
         {/* An event can count as futsal on Training (item 240): by its title until switched. */}
         {isEvent && (
-          <FieldRow icon="oSportsSoccer" onClick={() => set({ futsal: !isFutsal(d) })}>
+          <FieldRow icon={kindIcon("futsal")} onClick={() => set({ futsal: !isFutsal(d) })}>
             <span className="pe-label grow">Counts as futsal<span className="pe-sublabel">Shows on Training as a futsal game</span></span>
             <Switch checked={isFutsal(d)} onChange={(v) => set({ futsal: v })} label="Counts as futsal" />
           </FieldRow>

@@ -37,7 +37,7 @@ import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingFind } from "./TrainingFind.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
-import { kindIcon, phaseNames, planQ } from "./trainingParts.tsx";
+import { kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
 import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
 import "./training.css";
 
@@ -166,7 +166,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const showToPlace = v.toPlace.length > 0 || drag.lifted !== null;
 
   const week = (
-    <div className="p-content tr-week" ref={scroller}>
+    <div className={`p-content tr-week ${trainingLookClass}`} ref={scroller}>
       <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
       {!readOnly && <HealthCard />}
       <SleepLine nights={tr.sleep} t={t} onOpen={() => { feel("tick"); go(`training?view=progress&tab=sleep${planQ(planId)}`); }} />
@@ -205,7 +205,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
               return (
                 <div key={s.id} className={`tr-card-place ${picked === s.id ? "on" : ""} ${picked && picked !== s.id ? "dim" : ""} ${e.status}`}>
                   <button className="main" onClick={() => { if (readOnly || e.status !== "planned") open(s.id); else { feel("tick"); setPicked(picked === s.id ? null : s.id); } }}>
-                    <KindIcon kind={colourKind({ session: s, entry: e })} icon={kindIcon(s.kind)} />
+                    <KindIcon kind={colourKind({ session: s, entry: e })} icon={sessionIcon(s)} />
                     <span className="text"><span className="title">{s.title}</span>
                       <span className="detail">{[s.detail, s.optional ? "optional" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span></span>
                   </button>
@@ -241,7 +241,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
       ))}
       {!readOnly && (
         <div className="tr-actions">
-          <button className="p-assist" onClick={() => setFutsal("new")}><MIcon name="oSportsSoccer" size={18} /><span>Futsal</span></button>
+          <button className="p-assist" onClick={() => setFutsal("new")}><MIcon name={kindIcon("futsal")} size={18} /><span>Futsal</span></button>
         </div>
       )}
       <div className="p-endspace" />
@@ -360,7 +360,7 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
   return (
     <div className={`tr-row ${e.status} ${kind ? `k-${kind}` : ""} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind={kind} done={e.status === "done"} label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`} onTick={onTick} />
-      <KindIcon kind={kind} icon={kindIcon(s.kind)} />
+      <KindIcon kind={kind} icon={sessionIcon(s)} />
       <span className="tr-row-text">
         <span className="title">{s.title}</span>
         <span className="detail">{ran || [s.detail, s.optional ? "optional" : "", s.locked ? "fixed" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span>
@@ -378,7 +378,7 @@ function FutsalRow({ e, warn, onWarn, onTick, onOpen }: { e: Entry; warn: number
   return (
     <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
-      <KindIcon kind="futsal" icon="oSportsSoccer" />
+      <KindIcon kind="futsal" icon={kindIcon("futsal")} />
       <span className="tr-row-text">
         <span className="title">{e.title}</span>
         <span className="detail">{[at, e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
@@ -704,7 +704,7 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
   let text: string, icon = "oDirectionsRun", target = `training?d=${day}`, rest = false;
   if (on.length) {
     text = on.length === 1 ? [on[0].session.title, on[0].session.detail].filter(Boolean).join(" · ") : on.map((x) => x.session.title).join(" + ");
-    icon = kindIcon(on[0].session.kind);
+    icon = sessionIcon(on[0].session);
     if (on.length === 1) target = `training?s=${encodeURIComponent(on[0].session.id)}&d=${day}`;
   } else {
     const left = day >= t ? leftToPlace(plan, day, tr.entries) : [];
@@ -734,7 +734,7 @@ export function useTrainingDays(): Map<number, string> {
     for (const s of sessionsOf(lp.plan)) {
       const e = tr.entries.get(entryId(lp.plan.id, s.id));
       const day = dayOfSession(s, e);
-      if (day !== null && e?.status !== "skipped" && !out.has(day)) out.set(day, kindIcon(s.kind));
+      if (day !== null && e?.status !== "skipped" && !out.has(day)) out.set(day, sessionIcon(s));
     }
     return out;
   }, [tr]);

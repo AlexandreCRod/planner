@@ -13,7 +13,7 @@ import { useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 import { ListItem } from "./m3.tsx";
 import { docRoute } from "./TrainingDocs.tsx";
 import { GuideSheet } from "./TrainingGuide.tsx";
-import { fmtKg, kindIcon, planQ } from "./trainingParts.tsx";
+import { fmtKg, kindIcon, planQ, sessionIcon } from "./trainingParts.tsx";
 
 type Only = "all" | "sessions" | "exercises" | "guides";
 const CHIPS: [Only, string][] = [["all", "All"], ["sessions", "Sessions"], ["exercises", "Exercises"], ["guides", "Guides"]];
@@ -77,7 +77,7 @@ export function TrainingFind({ tr, lp, planId }: { tr: Training; lp: LoadedPlan;
             const day = s ? dayOfSession(s, tr.entries.get(entryId(plan.id, s.id))) : null;
             const what = h.matched.length ? h.matched.join(", ") : s?.detail ?? "";
             return (
-              <ListItem key={h.id} className="tr-findrow" leading={<span className="tr-findic"><MIcon name={kindIcon(s?.kind ?? "other")} size={20} /></span>}
+              <ListItem key={h.id} className="tr-findrow" leading={<span className="tr-findic"><MIcon name={s ? sessionIcon(s) : kindIcon("other")} size={20} /></span>}
                 headline={<Marked text={h.title} q={t} />}
                 supporting={<>{day !== null ? formatDate(day) : plan.phases[h.phase]?.name ?? ""}{what ? " · " : ""}<Marked text={what} q={t} /></>}
                 onClick={() => go(`training?s=${encodeURIComponent(h.id)}${planQ(planId)}`)} />
