@@ -78,13 +78,21 @@ test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linke
     "trainingEntries/p:long": { id: "p:long", planId: "p", sessionId: "long", kind: "session", status: "done", watchRunId: "hc:a", deletedAt: null },
   };
   const out = healthCsvs(records, plan, runsJson("Folder"));
-  assert.deepEqual([...out.keys()], ["runs.csv", "workouts.csv", "daily.csv"]);
+  assert.deepEqual([...out.keys()], ["runs.csv", "workouts.csv", "daily.csv", "sleep.csv"]);
   const runs = out.get("runs.csv")!.trimEnd().split("\r\n");
   assert.equal(runs.length, 3);
   assert.match(runs[1], /^g2,2026-10-20,07:00,Pushed,,easy,garmin_export,5,/);
   assert.match(runs[2], /^hc:a,2026-10-28,07:00,Run,long,easy,health_connect,8,3120,3000,375,/);
   assert.match(out.get("workouts.csv")!, /hc:w,2026-10-28,07:00,walking/);
   assert.match(out.get("daily.csv")!, /2026-10-28,100,/);
+  assert.match(out.get("sleep.csv")!, /^date,bed,wake,total_min,awake_min,deep_min,light_min,rem_min,score,resting_hr,hrv_ms,avg_spo2,avg_respiration,source\r\n/);
+  // sleep.json from the folder, a watch night on the same morning wins and sleep.json fills the score.
+  const sleepJson = JSON.stringify({ version: 1, nights: [{ date: "2026-10-28", bed: "2026-10-27T23:00", wake: "2026-10-28T06:00", total_min: 400, score: 80, resting_hr: 50 }] });
+  const night = { id: "hc:n", day: 20754, bed: "2026-10-27T23:10", wake: "2026-10-28T06:50", totalMin: 450, awakeMin: 10, deepMin: 150, lightMin: 210, remMin: 90, stages: [], source: "w" };
+  const s2 = healthCsvs({ "healthNights/hc:n": night }, plan, null, sleepJson).get("sleep.csv")!.trimEnd().split("\r\n");
+  assert.equal(s2.length, 2);
+  assert.match(s2[1], /^2026-10-28,2026-10-27T23:10,2026-10-28T06:50,450,10,150,210,90,80,50,/);
+  assert.match(s2[1], /health_connect$/);
   // Nothing pushed yet: the folder's runs.json.
   assert.match(healthCsvs({}, plan, runsJson("Folder")).get("runs.csv")!, /Folder/);
 });

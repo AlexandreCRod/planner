@@ -9,6 +9,7 @@
 // Training page shows (under 6 h before a key run, resting HR up two mornings in a row). Nothing is stored.
 // Days are epoch-day numbers (domain/dates.ts).
 import type { HealthDay, HealthNight } from "./health.ts";
+import { csv, isoOf } from "./training.ts";
 import type { Night } from "./trends.ts";
 
 /** Where a number came from: sleep.json ("garmin", shown "from Garmin") or the watch ("health_connect"). */
@@ -152,3 +153,24 @@ export function fmtSleep(min: number): string {
 
 /** "23:10" from a local "YYYY-MM-DDTHH:MM"; null passes through. */
 export const clockOfMoment = (t: string | null) => (t ? t.slice(11, 16) : null);
+
+/**
+ * sleep.csv for the plan session: sleep.json's columns plus source, one row per merged morning. SpO2 and
+ * respiration come from the watch's day when it has them, else from sleep.json.
+ */
+export function sleepCsv(sleepJson: readonly Night[], hc: readonly HealthNight[], days: readonly HealthDay[]): string {
+  const garmin = new Map(sleepJson.map((n) => [n.day, n]));
+  const daily = new Map(days.map((d) => [d.day, d]));
+  const rows: (string | number | null)[][] = [[
+    "date", "bed", "wake", "total_min", "awake_min", "deep_min", "light_min", "rem_min", "score", "resting_hr", "hrv_ms",
+    "avg_spo2", "avg_respiration", "source",
+  ]];
+  for (const n of mergedNights(sleepJson, hc, days)) {
+    const g = garmin.get(n.day), d = daily.get(n.day);
+    rows.push([
+      isoOf(n.day), n.bed, n.wake, n.totalMin, n.awakeMin, n.deepMin, n.lightMin, n.remMin, n.score, n.restingHr, n.hrvMs,
+      d?.spo2 ?? g?.avgSpo2 ?? null, d?.respiration ?? g?.avgRespiration ?? null, n.source,
+    ]);
+  }
+  return csv(rows);
+}

@@ -17,10 +17,11 @@ import { count } from "../src/domain/plural.ts";
 import {
   type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, logCsv, missingCards, planFileId, readPlan, setsCsv,
 } from "../src/domain/training.ts";
-import type { HealthDay, HealthSession } from "../src/domain/health.ts";
+import type { HealthDay, HealthNight, HealthSession } from "../src/domain/health.ts";
 import { dailyCsv, mergedRuns, runsCsv, typedRuns, watchLinks, workoutsCsv } from "../src/domain/healthRuns.ts";
+import { sleepCsv } from "../src/domain/sleep.ts";
 import {
-  LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, type Run, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
+  LIFT_HISTORY_FILE, MEALS_FILE, type Night, RUNS_FILE, type Run, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
   readLiftHistory, readMeals, readRuns, readSleep, readWeights, weighInsCsv,
 } from "../src/domain/trends.ts";
 
@@ -34,7 +35,7 @@ export interface State { seq: number; records: Record<string, Rec>; kept?: numbe
 
 const KIND = "trainingFiles";
 const BODYWEIGHT_FILE = "bodyweight.csv";
-const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.csv";
+const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.csv", SLEEP_CSV = "sleep.csv";
 /** 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. */
 export const KEPT_VERSION = 2;
 
@@ -78,9 +79,10 @@ export const sinceOf = (s: State) => (s.kept === KEPT_VERSION ? s.seq : 0);
 
 /**
  * The pull's watch CSVs from the held records: runs.csv (runs.json as pushed under "shared", else
- * [folderRuns], merged with the watch's runs and linked to the sessions they ticked), workouts.csv and daily.csv.
+ * [folderRuns], merged with the watch's runs and linked to the sessions they ticked), workouts.csv, daily.csv,
+ * and sleep.csv (sleep.json, pushed else [folderSleep], merged with the watch's nights).
  */
-export function healthCsvs(records: Record<string, Rec>, plan: Plan, folderRuns: string | null): Map<string, string> {
+export function healthCsvs(records: Record<string, Rec>, plan: Plan, folderRuns: string | null, folderSleep: string | null = null): Map<string, string> {
   const pushed = records[`${KIND}/${planFileId(SHARED_PLAN, RUNS_FILE)}`] as unknown as PlanFile | undefined;
   let fileRuns: Run[] = [];
   const text = pushed?.text ?? folderRuns;
@@ -88,10 +90,16 @@ export function healthCsvs(records: Record<string, Rec>, plan: Plan, folderRuns:
   const sessions = recordsOfKind<HealthSession>(records, "healthSessions");
   const entries = recordsOfKind<Entry>(records, "trainingEntries").filter((e) => e.planId === plan.id);
   const runs = typedRuns(mergedRuns(fileRuns, sessions, watchLinks(entries)), [plan]);
+  const days = recordsOfKind<HealthDay>(records, "healthDays");
+  const sleepFile = records[`${KIND}/${planFileId(SHARED_PLAN, SLEEP_FILE)}`] as unknown as PlanFile | undefined;
+  let fileNights: Night[] = [];
+  const sleepText = sleepFile?.text ?? folderSleep;
+  if (sleepText) { try { fileNights = readSleep(JSON.parse(sleepText.replace(/^﻿/, ""))).nights; } catch { /* unreadable: the watch's nights alone */ } }
   return new Map([
     [RUNS_CSV, runsCsv(runs)],
     [WORKOUTS_CSV, workoutsCsv(sessions)],
-    [DAILY_CSV, dailyCsv(recordsOfKind<HealthDay>(records, "healthDays"))],
+    [DAILY_CSV, dailyCsv(days)],
+    [SLEEP_CSV, sleepCsv(fileNights, recordsOfKind<HealthNight>(records, "healthNights"), days)],
   ]);
 }
 
@@ -269,7 +277,9 @@ async function pull(folder: string) {
   writeFileSync(join(folder, sets), setsCsv(plan, recordsOfKind<Lift>(state.records, "trainingLifts")));
   writeFileSync(join(folder, BODYWEIGHT_FILE), weighInsCsv(recordsOfKind<WeighIn>(state.records, "trainingWeighIns")));
   const runsFile = join(folder, RUNS_FILE);
-  const health = healthCsvs(state.records, plan, existsSync(runsFile) ? readFileSync(runsFile, "utf8") : null);
+  const sleepFile = join(folder, SLEEP_FILE);
+  const health = healthCsvs(state.records, plan, existsSync(runsFile) ? readFileSync(runsFile, "utf8") : null,
+    existsSync(sleepFile) ? readFileSync(sleepFile, "utf8") : null);
   for (const [file, text] of health) writeFileSync(join(folder, file), text);
   console.log(`Received ${received} record(s). Wrote ${log}, ${sets}, ${BODYWEIGHT_FILE}, ${[...health.keys()].join(", ")} in ${folder}.`);
 }
