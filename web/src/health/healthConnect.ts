@@ -14,6 +14,7 @@ import {
 import { isNative } from "../platform.ts";
 import { logProblem } from "../problems.ts";
 import { type Kind, listOf, putRecords } from "../store/store.ts";
+import { applyWatchRuns } from "../store/training.ts";
 
 type Status = "available" | "update" | "unavailable";
 interface Permissions { granted: string[]; all: boolean; history: boolean; historyAvailable: boolean }
@@ -175,6 +176,9 @@ export async function readNow(): Promise<void> {
     }
     if (failed.size === types.length) throw new Error("Health Connect didn't answer");
     localStorage.setItem(LAST_KEY, String(started));
+    // A new watch run ticks its session (one run session that day, not done).
+    const ticked = applyWatchRuns();
+    if (ticked) console.info(`health: a watch run ticked ${ticked} session(s)`);
     set({ lastRead: started });
     console.info(`health: read ${windows.length} window(s), saved ${saved} record(s)${failed.size ? `; couldn't read ${[...failed].join(", ")}` : ""}`);
   } catch (e) {

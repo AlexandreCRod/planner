@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { sectionAt } from "../../domain/markdown.ts";
+import { untickedEntry } from "../../domain/healthRuns.ts";
 import {
   type Entry, type Lift, type Session, type SessionExercise, dayOfSession, entryFor, entryId, lastLift, liftId,
   newBestsIn, prefillSets, sessionsOf, targetLine,
@@ -32,7 +33,7 @@ export function setSessionStatus(lp: LoadedPlan, s: Session, status: Entry["stat
   if (status === "done") {
     const doneDay = day !== null && day <= t ? day : t;
     patchEntry(lp, s, { status, doneDay, day: s.locked ? e.day : doneDay });
-  } else patchEntry(lp, s, { status, doneDay: null });
+  } else patchEntry(lp, s, { status, doneDay: null, ...untickedEntry(e) });   // a watch run that ticked it never does again
 }
 
 /** The phase's days to move a session to, with what's on each, and To place. */

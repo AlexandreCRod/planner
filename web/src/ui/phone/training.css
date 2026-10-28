@@ -266,3 +266,8 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
   }
 }
 @media (prefers-reduced-motion: reduce) { .phone :is(.tr-layer, .tr-ask, .tr-ring.pop) { animation: none; } }
+
+/* A watch run with no session to tick: the chip that asks which (WatchRuns.tsx). */
+.phone .tr-watchchip { display: inline-flex; align-items: center; gap: 4px; height: 28px; margin: 2px 8px 4px; padding: 0 10px; border: 1px solid var(--p-outline); border-radius: 8px;
+  background: none; color: var(--text); font-size: 13px; }
+.phone .tr-watchchip > :first-child { color: var(--p-primary); }

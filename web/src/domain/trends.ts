@@ -327,12 +327,13 @@ export interface WeighIn {
 /**
  * An imported weigh-in the user hid (records "trainingHidden"): one record per hidden one, so unhiding is a
  * soft delete and two devices never fight over one list. Its id is "weighIn:" + the weigh-in's id (runs.json's
- * ids could match weights.json's).
+ * ids could match weights.json's). A watch run the user said isn't a plan run is one too: kind "watchRun",
+ * id "watchRun:" + the run's id (domain/healthRuns.ts).
  */
 export interface Hidden {
   id: string;
-  kind: "weighIn";
-  /** The hidden weigh-in's id in weights.json. */
+  kind: "weighIn" | "watchRun";
+  /** The hidden weigh-in's id in weights.json, or the watch run's id. */
   pastId: string;
   hiddenAt: number;
   updatedAt: number;

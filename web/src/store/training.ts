@@ -13,7 +13,7 @@ import {
   SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts";
-import { mergedRuns, typedRuns } from "../domain/healthRuns.ts";
+import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -45,6 +45,8 @@ export interface Training {
   pastWeighIns: PastWeighIn[];
   /** The ids of the imported weigh-ins the user hid (bodyWeights leaves them out). */
   hiddenWeighIns: Set<string>;
+  /** The ids of the watch runs the user said aren't plan runs (domain/healthRuns.ts). */
+  hiddenWatchRuns: Set<string>;
   pastSets: PastSet[];
   nights: Night[];
   /** What was wrong in those three files, in plain words. */
@@ -115,10 +117,11 @@ export function training(): Training {
     lifts,
     liftById: new Map(lifts.map((l) => [l.id, l])),
     seen: new Map(listOf<SeenPlan>("trainingState").map((s) => [s.id, s])),
-    runs: typedRuns(mergedRuns(runs.runs, healthSessions), plans.map((p) => p.plan)), runProblems: runs.problems,
+    runs: typedRuns(mergedRuns(runs.runs, healthSessions, watchLinks(entries)), plans.map((p) => p.plan)), runProblems: runs.problems,
     meals: meals.meals, mealProblems: meals.problems, plateCm: meals.plateCm,
     weighIns: listOf<WeighIn>("trainingWeighIns").sort(byMoment),
     hiddenWeighIns: hiddenWeighIns(listOf<Hidden>("trainingHidden")),
+    hiddenWatchRuns: hiddenWatchRuns(listOf<Hidden>("trainingHidden")),
     pastWeighIns: weights.weighIns, pastSets: pastLifts.sets, nights: sleep.nights,
     historyProblems: [...weights.problems, ...pastLifts.problems, ...sleep.problems],
     healthSessions,
@@ -145,3 +148,20 @@ export function saveLift(l: Lift) { putRecords("trainingLifts", [{ ...l, updated
 export function saveSeen(s: SeenPlan) { putRecords("trainingState", [{ ...s, updatedAt: Date.now() }]); }
 export function saveWeighIn(w: WeighIn) { putRecords("trainingWeighIns", [{ ...w, updatedAt: Date.now() }]); }
 export function saveHidden(h: Hidden) { putRecords("trainingHidden", [{ ...h, updatedAt: Date.now() }]); }
+
+/**
+ * The phone, after each Health Connect read and when Training opens: each new watch run on a day with one
+ * run session not done ticks it (domain/healthRuns.ts). Returns how many it ticked.
+ */
+export function applyWatchRuns(day = today()): number {
+  const t = training();
+  const lp = activeOf(t, day);
+  if (!lp) return 0;
+  const ticks = watchRunSteps(lp.plan, t.entries, t.runs, t.hiddenWatchRuns, day).filter((x) => x.kind === "tick");
+  if (!ticks.length) return 0;
+  const work = new Map(t.entries);
+  const out: Entry[] = [];
+  for (const x of ticks) { const e = { ...tickedEntry(lp.plan, x.session, work, x.run), updatedAt: Date.now() }; work.set(e.id, e); out.push(e); }
+  putRecords("trainingEntries", out);
+  return out.length;
+}

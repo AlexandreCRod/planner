@@ -9,8 +9,8 @@
 //   which. An untick remembers the run on the entry (watchRunsDismissed), "Not a plan run" hides it (records
 //   "trainingHidden", kind "watchRun"), so neither comes back.
 import type { HealthSession } from "./health.ts";
-import { type Plan, type Session, sessionsOf } from "./training.ts";
-import { type Run, type RunType, byMoment } from "./trends.ts";
+import { type Entry, type Plan, type Session, countedDay, dayOfSession, entryFor, entryId, phaseIndexAt, sessionsOf } from "./training.ts";
+import { type Hidden, type Run, type RunType, byMoment } from "./trends.ts";
 
 // ---------- Merging ----------
 
@@ -89,4 +89,82 @@ export function typedRuns(runs: Run[], plans: readonly Plan[]): Run[] {
     const s = r.type === "other" && r.sessionId ? byId.get(r.sessionId) : undefined;
     return s && s.kind === "run" ? { ...r, type: runTypeOf(s) } : r;
   });
+}
+
+// ---------- The watch run ticks its session ----------
+
+/** The watch runs the entries link to their sessions (run id → session id): done, not deleted. */
+export function watchLinks(entries: Iterable<Entry>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const e of entries) if (e.watchRunId && e.sessionId && e.deletedAt === null && e.status === "done") out.set(e.watchRunId, e.sessionId);
+  return out;
+}
+
+/** The "trainingHidden" id of a watch run that isn't a plan run. */
+export const hiddenRunId = (runId: string) => `watchRun:${runId}`;
+/** The ids of the watch runs said not to be plan runs. */
+export const hiddenWatchRuns = (list: Iterable<Hidden>): Set<string> =>
+  new Set([...list].filter((h) => h.kind === "watchRun" && h.deletedAt === null).map((h) => h.pastId));
+
+/** What a watch run does: tick its one run session that day, or ask which (the phase's run sessions not done, nearest first). */
+export type WatchRunStep =
+  | { kind: "tick"; run: Run; session: Session }
+  | { kind: "ask"; run: Run; choices: Session[] };
+
+/** Session [s] done by [run]: on the run's day, as long as it moved, linked to it. */
+export function tickedEntry(plan: Plan, s: Session, entries: ReadonlyMap<string, Entry>, run: Run): Entry {
+  const e = entryFor(plan, s, entries);
+  const moving = run.movingS || run.durationS;
+  return {
+    ...e, title: s.title, detail: s.detail, status: "done", doneDay: run.day, day: s.locked ? e.day : run.day,
+    durationMin: moving ? Math.round(moving / 60) : e.durationMin, watchRunId: run.id,
+  };
+}
+
+/** Session [s] unticked: back to planned, and the watch run that ticked it never does again. */
+export function untickedEntry(e: Entry): Partial<Entry> {
+  if (!e.watchRunId) return {};
+  return { watchRunId: null, watchRunsDismissed: [...new Set([...(e.watchRunsDismissed ?? []), e.watchRunId])] };
+}
+
+/**
+ * What each watch run not yet used does, oldest first: Health Connect's runs within the plan, up to [today],
+ * not linked to a session (by a tick or by the plan session), not unticked and not said to be no plan run.
+ * Exactly one run session on its day (placed, or the plan's day), not done: it's ticked. One already done:
+ * nothing. None, or two or more with one not done: ask. A tick counts for the runs after it (a second run that day finds the
+ * session done).
+ */
+export function watchRunSteps(plan: Plan, entries: ReadonlyMap<string, Entry>, runs: readonly Run[], hidden: ReadonlySet<string>, today: number): WatchRunStep[] {
+  const used = new Set<string>();
+  for (const e of entries.values()) {
+    if (e.planId !== plan.id) continue;
+    if (e.watchRunId) used.add(e.watchRunId);
+    for (const id of e.watchRunsDismissed ?? []) used.add(id);
+  }
+  const work = new Map(entries);
+  const runSessions = sessionsOf(plan).filter((s) => s.kind === "run");
+  const out: WatchRunStep[] = [];
+  for (const run of [...runs].sort(byMoment)) {
+    if (run.source !== "health_connect" || !run.id.startsWith("hc:") || run.sessionId !== null || used.has(run.id) || hidden.has(run.id)) continue;
+    if (run.day < plan.start || run.day > plan.end || run.day > today) continue;
+    const onDay = runSessions.filter((s) => countedDay(s, work.get(entryId(plan.id, s.id))) === run.day);
+    if (onDay.length === 1) {
+      const s = onDay[0];
+      if ((work.get(entryId(plan.id, s.id))?.status ?? "planned") !== "planned") continue;
+      const e = tickedEntry(plan, s, work, run);
+      work.set(e.id, e);
+      out.push({ kind: "tick", run, session: s });
+      continue;
+    }
+    // Two or more, all done or skipped already: nothing left to tick.
+    if (onDay.length > 1 && onDay.every((s) => (work.get(entryId(plan.id, s.id))?.status ?? "planned") !== "planned")) continue;
+    const ph = phaseIndexAt(plan, run.day);
+    const choices = runSessions
+      .filter((s) => s.phase === ph && (work.get(entryId(plan.id, s.id))?.status ?? "planned") === "planned")
+      .map((s, i) => ({ s, i, day: dayOfSession(s, work.get(entryId(plan.id, s.id))) }))
+      .sort((a, b) => (a.day === null ? Infinity : Math.abs(a.day - run.day)) - (b.day === null ? Infinity : Math.abs(b.day - run.day)) || a.i - b.i)
+      .map((x) => x.s);
+    out.push({ kind: "ask", run, choices });
+  }
+  return out;
 }
