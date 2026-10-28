@@ -2,8 +2,10 @@
 // the range switch. Drawn as SVG at the card's real width, so text and dots keep their size in a wide window.
 // The chart rules (handover, 2.8): 2 px lines, dots of at least 8 px with a ring of the card's colour, bars
 // at most 24 px wide with 4 px rounded tops, hairline grid, one value axis, text never in a series colour.
-// Touching or sliding on a chart reads the point nearest the finger, one tick for each new point.
-import { useLayoutEffect, useRef, useState } from "react";
+// Touching or sliding on a chart reads the point nearest the finger, one tick for each new point; the reading
+// stays where the finger lifts, until a tap anywhere off the chart (the headline too) goes back to the latest.
+// A mouse reads on hover and keeps the reading where it clicks.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Segmented } from "./chrome.tsx";
 import { type RangeKey, RANGES, dayMonth, nearestIndex, niceTicks, scale } from "./chartMath.ts";
 import { feel } from "./haptics.ts";
@@ -38,10 +40,11 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
 
 /**
  * A chart over the days [domain] (first, last). [reads] are the days a finger can read, ascending; [onRead]
- * gets the index of the one nearest the finger, and null when it lets go. [rings]: pain, as a ring around the
- * point. [fmt] writes the value axis; [invert] puts low values at the top (pace: faster is higher). [zero]
- * starts the axis at 0 (bars always do). [labels]: the axis's first and last day, when not the domain's.
- * [onTap]: a tap (a short press that hardly moves) on a point, by the index of its reading.
+ * gets the index of the one nearest the finger, which stays when it lifts, and null when a tap off the chart
+ * goes back to the latest (or [reads] change). [rings]: pain, as a ring around the point. [fmt] writes the
+ * value axis; [invert] puts low values at the top (pace: faster is higher). [zero] starts the axis at 0 (bars
+ * always do). [labels]: the axis's first and last day, when not the domain's. [onTap]: a tap (a short press
+ * that hardly moves) on a point, by the index of its reading.
  */
 export function Chart({ series, domain, today, height = 150, fmt = String, invert = false, zero = false, rings = [], reads, onRead, labels, onTap }: {
   series: Series[]; domain: [number, number]; today: number; height?: number; fmt?: (v: number) => string; invert?: boolean; zero?: boolean;
@@ -50,8 +53,13 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   const [box, w] = useWidth<HTMLDivElement>();
   const [at, setAt] = useState<number | null>(null);
   const atRef = useRef<number | null>(null);
+  /** The reading kept after the finger lifted (or the mouse clicked); a mouse's hover goes back to it. */
+  const kept = useRef<number | null>(null);
+  const [holding, setHolding] = useState(false);
   /** Where and when the press started, and whether it has moved more than a tap does. */
   const press = useRef<{ x: number; y: number; t: number; moved: boolean } | null>(null);
+  const onReadRef = useRef(onRead);
+  onReadRef.current = onRead;
   const all = series.flatMap((s) => s.pts.map((p) => p.v)).concat(rings.map((p) => p.v));
   const bars = series.some((s) => s.kind === "bars");
   const lo = all.length ? Math.min(...all, ...(zero || bars ? [0] : [])) : 0, hi = all.length ? Math.max(...all) : 1;
@@ -61,18 +69,21 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   const y = scale(ticks.lo, ticks.hi, ...(invert ? [T, height - B] : [height - B, T]) as [number, number]);
   const base = y(invert ? ticks.hi : ticks.lo);
 
+  /** Shows reading [i] (null: none, the card shows its latest); a tick when a finger reaches a new point. */
+  const show = (i: number | null, tick = false) => {
+    if (i === atRef.current) return;
+    atRef.current = i;
+    setAt(i);
+    if (tick && i !== null) feel("tick");
+    onReadRef.current(i);
+  };
+  const forget = () => { kept.current = null; setHolding(false); show(null); };
   const read = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!reads.length || w === 0) return;
     const r = e.currentTarget.getBoundingClientRect();
     const day = d0 + ((e.clientX - r.left - L) / Math.max(1, w - L - R)) * (d1 - d0);
-    const i = nearestIndex(reads, day);
-    if (i === atRef.current) return;
-    atRef.current = i;
-    setAt(i);
-    feel("tick");
-    onRead(i);
+    show(nearestIndex(reads, day), true);
   };
-  const leave = () => { if (atRef.current === null) return; atRef.current = null; setAt(null); onRead(null); };
   const down = (e: React.PointerEvent<SVGSVGElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     press.current = { x: e.clientX, y: e.clientY, t: e.timeStamp, moved: false };
@@ -85,12 +96,29 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   };
   const up = (e: React.PointerEvent<SVGSVGElement>) => {
     const p = press.current, i = atRef.current;
+    if (!p) return; // a press that started off the chart
     press.current = null;
-    leave();
+    // The reading stays where the finger lifted (it's already on the nearest point).
+    kept.current = i;
+    setHolding(i !== null);
     // A tap counts on a point: within 24 px of it across.
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
-    if (onTap && p && !p.moved && e.timeStamp - p.t < 500 && i !== null && Math.abs(x(reads[i]) - px) <= 24) onTap(i);
+    if (onTap && !p.moved && e.timeStamp - p.t < 500 && i !== null && Math.abs(x(reads[i]) - px) <= 24) onTap(i);
   };
+  // A mouse leaving (or a touch that ends after lifting) goes back to the kept reading, not to none.
+  const leave = () => { if (!press.current) show(kept.current); };
+  const cancel = () => { press.current = null; show(kept.current); };
+
+  // While a reading is kept, a press anywhere off the chart goes back to the latest.
+  useEffect(() => {
+    if (!holding) return;
+    const off = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) forget(); };
+    document.addEventListener("pointerdown", off, true);
+    return () => document.removeEventListener("pointerdown", off, true);
+  }, [holding]); // eslint-disable-line react-hooks/exhaustive-deps
+  // New readings (another range, a weigh-in added): the old index means nothing, so back to the latest.
+  const readsKey = reads.join(",");
+  useEffect(() => { if (kept.current !== null || atRef.current !== null) forget(); }, [readsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawn: React.ReactNode[] = [];
   series.forEach((s, k) => {
@@ -132,7 +160,7 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
     <div className="pg-chart" ref={box}>
       {w > 0 && (
         <svg width={w} height={height} onPointerDown={down} onPointerMove={move}
-          onPointerUp={up} onPointerCancel={() => { press.current = null; leave(); }} onPointerLeave={leave}>
+          onPointerUp={up} onPointerCancel={cancel} onPointerLeave={leave}>
           {ticks.ticks.map((t) => <g key={t}>
             <line className="pg-grid" x1={L} x2={w - R} y1={y(t)} y2={y(t)} />
             <text x={L - 6} y={y(t) + 4} textAnchor="end">{fmt(t)}</text>

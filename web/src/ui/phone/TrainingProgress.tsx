@@ -2,10 +2,11 @@
 // are moving. Tabs Lifts · Runs · Weight · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
-// weigh-ins). Touching a chart reads a day, and the headline shows that day's reading, naming where it came
-// from when it's history (FitNotes, Strava, Garmin). On the phone a card opens over the list (back closes
-// it); in a wide window the list and the card sit side by side. Weight's top bar has "+ Weigh in", and a
-// weigh-in tapped (a dot, or a row of the recent ones) opens to change or delete it, or hide an imported one.
+// weigh-ins). Touching a chart reads a day, and the headline shows that day's reading (it stays when the
+// finger lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
+// opens over the list (back closes it); in a wide window the list and the card sit side by side. Weight's
+// top bar has "+ Weigh in", and a weigh-in tapped (a dot, or a row of the recent ones) opens to change or
+// delete it, or hide an imported one.
 // The numbers come from domain/trends.ts; nothing here is stored but the user's weigh-ins and what they hid.
 import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
@@ -143,8 +144,8 @@ function rowsOf(tr: Training, lp: LoadedPlan, tab: Tab, t: number): Row[] {
 // ---------- A card and its headline ----------
 
 /**
- * A chart card: its title, the headline (its number, or while a finger is on the chart, that day's reading:
- * [read] gives its two lines), the chart and what's under it.
+ * A chart card: its title, the headline (its number, or the day a finger read on the chart, kept after it lifts
+ * until a tap off the chart: [read] gives its two lines), the chart and what's under it.
  */
 function ChartCard({ title, head, read, children, foot }: {
   title: string; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode;
