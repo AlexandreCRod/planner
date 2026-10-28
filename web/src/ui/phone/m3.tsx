@@ -6,7 +6,7 @@ import { cssColor } from "../../domain/types.ts";
 import { Dialog, MIcon } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { spring } from "./pager.ts";
-import { sheetCloses } from "./sheet.ts";
+import { SHEET_DISTANCE, SHEET_FLING, sheetCloses } from "./sheet.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { frameWriter } from "./motion.ts";
 import { isWide } from "../../platform.ts";
@@ -151,13 +151,22 @@ export function contentColor(c: string): string {
  * by its top it follows the finger and closes when let go far enough down (or flung); back, a tap on
  * the scrim and the content's own buttons (through the `close` it is given) close it with the slide.
  * In a wide window it's a dialog in the middle instead (wide.css): it fades out, and has no drag.
+ * A sheet that stops halfway (an exercise's guide) takes [onPullUp] (pushed up from its top, or from any
+ * .p-sheet-drag part: it grows) and [onPullDown] (let go far enough down: true keeps it open, smaller).
  */
-export function BottomSheet({ onClose, children, className = "" }: { onClose: () => void; children: (close: () => void) => ReactNode; className?: string }) {
+export function BottomSheet({ onClose, children, className = "", onPullUp, onPullDown }: {
+  onClose: () => void; children: (close: () => void) => ReactNode; className?: string;
+  onPullUp?: () => void; onPullDown?: () => boolean;
+}) {
   const sheet = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
   const closing = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const pullUp = useRef(onPullUp);
+  pullUp.current = onPullUp;
+  const pullDown = useRef(onPullDown);
+  pullDown.current = onPullDown;
   const close = useRef(() => {
     if (closing.current) return;
     closing.current = true;
@@ -194,7 +203,7 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
     // Moves come faster than frames: the sheet is moved once a frame, to the latest.
     const write = frameWriter(place);
     const onDown = (e: PointerEvent) => {
-      if (closing.current || g || isWide() || !(e.target as Element).closest(".p-sheet-top")) return;
+      if (closing.current || g || isWide() || !(e.target as Element).closest(".p-sheet-top, .p-sheet-drag")) return;
       stop?.(); stop = null;
       el.style.transition = "";
       g = { id: e.pointerId, y0: e.clientY, dy: 0, v: 0, lastY: e.clientY, lastT: e.timeStamp, moving: false };
@@ -211,6 +220,15 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
         if (scrim.current) scrim.current.style.transition = "none";
         try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
       }
+      // Pushed up: a sheet that can grow does (its own height animates); the drag ends there.
+      if (pullUp.current && e.clientY - g.y0 < -24) {
+        g = null;
+        write.cancel();
+        place(0);
+        if (scrim.current) scrim.current.style.transition = "";
+        pullUp.current();
+        return;
+      }
       g.dy = Math.max(0, e.clientY - g.y0);
       write(g.dy);
     };
@@ -221,6 +239,9 @@ export function BottomSheet({ onClose, children, className = "" }: { onClose: ()
       if (!cur.moving) return;
       write.cancel();
       const v = e.type === "pointercancel" ? 0 : cur.v;
+      const settle = () => { stop = spring(cur.dy, 0, v, place, () => { stop = null; if (scrim.current) scrim.current.style.transition = ""; }); };
+      if (pullUp.current && v < -SHEET_FLING && cur.dy < SHEET_DISTANCE) { settle(); pullUp.current(); return; }
+      if (sheetCloses(cur.dy, h - 24, v) && pullDown.current?.()) { settle(); return; }
       if (sheetCloses(cur.dy, h - 24, v)) {
         // Off it goes, carrying on at the finger's speed; it's closed once it's out of sight.
         closing.current = true;

@@ -34,6 +34,7 @@ import { TimePickerDialog } from "./pickers.tsx";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
+import { TrainingFind } from "./TrainingFind.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { kindIcon, phaseNames, planQ } from "./trainingParts.tsx";
@@ -86,6 +87,7 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
         {view === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
           : view === "progress" || view === "bests" ? <TrainingProgress tr={tr} lp={lp} query={query} planId={planId} />
           : view === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
+          : view === "find" ? <TrainingFind tr={tr} lp={lp} planId={planId} />
           : null}
       </div>
     )}
@@ -248,6 +250,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
   return (
     <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} back flush actions={<>
+      <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
     </>}>
