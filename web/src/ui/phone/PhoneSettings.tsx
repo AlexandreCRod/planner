@@ -338,7 +338,7 @@ function useProblems(): Problem[] {
 }
 
 function ProblemsRow() {
-  const list = useProblems();
+  const list = useProblems().filter((p) => !p.note);
   return <ListItem headline="Problem log" supporting={list.length ? `${count(list.length, "problem")} · last ${formatDateTime(list[0].at)}` : "Nothing has gone wrong"}
     onClick={() => go("settings/problems")} />;
 }

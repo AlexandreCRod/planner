@@ -2,7 +2,7 @@
 // save that failed), kept in a short list so it can be read and copied from Settings → Problem log.
 // The phone can't be inspected over adb (the Xiaomi blocks it), so this is how a problem gets reported.
 
-export interface Problem { at: number; kind: string; message: string; detail: string }
+export interface Problem { at: number; kind: string; message: string; detail: string; /** A note (logLatest), not counted as a problem. */ note?: true }
 
 const KEY = "problemLog";
 const MAX = 50;
@@ -31,7 +31,7 @@ export function logProblem(kind: string, message: string, detail = "") {
 export function logLatest(kind: string, message: string, detail = "") {
   try {
     const list = problems().filter((p) => p.kind !== kind);
-    list.unshift({ at: Date.now(), kind, message: message.slice(0, 500), detail: detail.slice(0, 4000) });
+    list.unshift({ at: Date.now(), kind, message: message.slice(0, 500), detail: detail.slice(0, 4000), note: true });
     localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)));
     listeners.forEach((l) => l());
   } catch { /* the log itself must never throw */ }
