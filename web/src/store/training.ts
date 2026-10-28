@@ -13,6 +13,7 @@ import {
   SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts";
+import { mergedRuns, typedRuns } from "../domain/healthRuns.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -26,7 +27,10 @@ export interface Training {
   lifts: Lift[];
   liftById: Map<string, Lift>;
   seen: Map<string, SeenPlan>;
-  /** Oldest first; none until the plan session pushes runs.json. */
+  /**
+   * Every run, oldest first: runs.json's and the watch's from Health Connect, the same run once
+   * (domain/healthRuns.ts), each watch run with the session it ticked.
+   */
   runs: Run[];
   /** What was wrong in runs.json, in plain words (the entries that could be read are in [runs]). */
   runProblems: string[];
@@ -103,19 +107,21 @@ export function training(): Training {
   const weights = readShared(readWeightsOf, shared.find((f) => f.file === WEIGHTS_FILE), readWeights, { weighIns: [], measurements: [], problems: [] });
   const pastLifts = readShared(readLiftHistoryOf, shared.find((f) => f.file === LIFT_HISTORY_FILE), readLiftHistory, { sets: [], problems: [] });
   const sleep = readShared(readSleepOf, shared.find((f) => f.file === SLEEP_FILE), readSleep, { nights: [], problems: [] });
+  const entries = listOf<Entry>("trainingEntries");
+  const healthSessions = listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs);
   const data: Training = {
     plans,
-    entries: new Map(listOf<Entry>("trainingEntries").map((e) => [e.id, e])),
+    entries: new Map(entries.map((e) => [e.id, e])),
     lifts,
     liftById: new Map(lifts.map((l) => [l.id, l])),
     seen: new Map(listOf<SeenPlan>("trainingState").map((s) => [s.id, s])),
-    runs: runs.runs, runProblems: runs.problems,
+    runs: typedRuns(mergedRuns(runs.runs, healthSessions), plans.map((p) => p.plan)), runProblems: runs.problems,
     meals: meals.meals, mealProblems: meals.problems, plateCm: meals.plateCm,
     weighIns: listOf<WeighIn>("trainingWeighIns").sort(byMoment),
     hiddenWeighIns: hiddenWeighIns(listOf<Hidden>("trainingHidden")),
     pastWeighIns: weights.weighIns, pastSets: pastLifts.sets, nights: sleep.nights,
     historyProblems: [...weights.problems, ...pastLifts.problems, ...sleep.problems],
-    healthSessions: listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs),
+    healthSessions,
     healthNights: listOf<HealthNight>("healthNights").sort((a, b) => a.day - b.day || a.bed.localeCompare(b.bed)),
     healthDays: listOf<HealthDay>("healthDays").sort((a, b) => a.day - b.day),
   };

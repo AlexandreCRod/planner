@@ -14,6 +14,7 @@
 //   is stored.
 // Days are epoch-day numbers (domain/dates.ts); weeks start on Monday.
 import { startOfWeek } from "./dates.ts";
+import type { HealthSplit } from "./health.ts";
 import {
   type Entry, type Lift, type LiftSet, type Plan, type Raw, type Range, arr, countedDay, csv, dayOf, entryId, futsalDay, isoOf, num, obj, range, sessionsOf, str,
 } from "./training.ts";
@@ -58,6 +59,9 @@ export interface Run {
   maxHr: number | null;
   cadenceSpm: number | null;
   ascentM: number | null;
+  /** Health Connect's runs only (healthRuns.ts): the duration minus pauses, and the per-km splits. */
+  movingS?: number | null;
+  splits?: HealthSplit[];
 }
 
 export type MealKind = "breakfast" | "lunch" | "dinner" | "snack";
