@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { KEPT_VERSION, applyChanges, checkPlan, checkShared, fileChanges, healthCsvs, keptKind, sinceOf } from "../tools/training-sync.ts";
+import { KEPT_VERSION, applyChanges, checkPlan, checkShared, fileChanges, healthCsvs, keptChanges, keptKind, sinceOf } from "../tools/training-sync.ts";
 import { planFileId, readPlan } from "../src/domain/training.ts";
 import { MEALS_FILE, RUNS_FILE, SHARED_PLAN } from "../src/domain/trends.ts";
 
@@ -59,6 +59,25 @@ test("pull keeps the training and watch kinds only, and receives everything agai
   assert.deepEqual(["trainingEntries", "trainingHidden", "healthSessions", "healthNights", "healthDays", "notes", "tasks"].map(keptKind), [true, true, true, true, true, false, false]);
   assert.equal(sinceOf({ seq: 40, records: {} }), 0);
   assert.equal(sinceOf({ seq: 40, records: {}, kept: KEPT_VERSION }), 40);
+});
+
+test("pull keeps the ticks and only the futsal events, cut to what the log needs (240)", () => {
+  const ev = (id: number, title: string, more: Record<string, unknown> = {}) => ({ id, type: "EVENT", title, content: "<p>private</p>", location: "Home", startDay: 1, freq: "NONE", ...more });
+  const out = keptChanges([
+    { kind: "items", id: "1", data: ev(1, "Futsal") },
+    { kind: "items", id: "2", data: ev(2, "Dentist") },
+    { kind: "items", id: "3", data: ev(3, "Football", { futsal: true }) },
+    { kind: "items", id: "4", data: null },
+    { kind: "completions", id: "1:5", data: { itemId: 1, day: 5, completedAt: 9 } },
+    { kind: "tags", id: "7", data: { id: 7, name: "x" } },
+  ]);
+  assert.deepEqual(out.map((c) => [c.kind, c.id, c.data === null ? null : Object.keys(c.data).sort().join(",")]), [
+    ["items", "1", "freq,id,startDay,title,type"],
+    ["items", "2", null],
+    ["items", "3", "freq,futsal,id,startDay,title,type"],
+    ["items", "4", null],
+    ["completions", "1:5", "completedAt,day,itemId"],
+  ]);
 });
 
 test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linked by the tick", () => {

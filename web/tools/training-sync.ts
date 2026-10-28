@@ -15,8 +15,9 @@ import { basename, dirname, join } from "node:path";
 import { anchorsIn } from "../src/domain/markdown.ts";
 import { count } from "../src/domain/plural.ts";
 import {
-  type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, logCsv, missingCards, planFileId, readPlan, setsCsv,
+  type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, entriesWithGames, isFutsal, logCsv, missingCards, planFileId, readPlan, setsCsv,
 } from "../src/domain/training.ts";
+import type { Completion, Item } from "../src/domain/types.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../src/domain/health.ts";
 import { dailyCsv, mergedRuns, runsCsv, typedRuns, watchLinks, workoutsCsv } from "../src/domain/healthRuns.ts";
 import { sleepCsv } from "../src/domain/sleep.ts";
@@ -36,8 +37,8 @@ export interface State { seq: number; records: Record<string, Rec>; kept?: numbe
 const KIND = "trainingFiles";
 const BODYWEIGHT_FILE = "bodyweight.csv";
 const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.csv", SLEEP_CSV = "sleep.csv";
-/** 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. */
-export const KEPT_VERSION = 2;
+/** 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. 3: futsal events and the ticks (item 240). */
+export const KEPT_VERSION = 3;
 
 // ---------- Pure helpers (tested in test/trainingSync.test.ts) ----------
 
@@ -73,6 +74,29 @@ export function applyChanges(records: Record<string, Rec>, ...lists: Change[][])
  * user's data (notes, tasks...) never lands in its file.
  */
 export const keptKind = (kind: string) => kind.startsWith("training") || kind.startsWith("health");
+
+/** The fields of a futsal event the log needs (its days and its title), nothing else of it. */
+const FUTSAL_FIELDS = [
+  "id", "type", "title", "startDay", "endDay", "startMin", "endMin", "allDay", "freq", "interval", "weekDays", "monthDays", "months",
+  "untilDay", "excludedDays", "deletedAt", "updatedAt", "futsal",
+] as const;
+
+/**
+ * What of the received changes this script keeps: the kinds above, the ticks (completions: an item id and
+ * a day), and of the calendar only the futsal events (item 240), cut to FUTSAL_FIELDS. An event that
+ * stops being futsal is dropped (kept as a delete).
+ */
+export function keptChanges(received: Change[]): Change[] {
+  const out: Change[] = [];
+  for (const c of received) {
+    if (keptKind(c.kind) || c.kind === "completions") out.push(c);
+    else if (c.kind === "items") {
+      const it = c.data as unknown as Item | null;
+      out.push(it && isFutsal(it) ? { ...c, data: Object.fromEntries(FUTSAL_FIELDS.filter((f) => f in it).map((f) => [f, it[f]])) } : { ...c, data: null });
+    }
+  }
+  return out;
+}
 
 /** Where to sync from: the state's position, or the start when it was kept with fewer kinds. */
 export const sinceOf = (s: State) => (s.kept === KEPT_VERSION ? s.seq : 0);
@@ -216,11 +240,11 @@ async function sync(changes: Change[]): Promise<{ state: State; received: number
   if (!res.ok || typeof body.seq !== "number") throw new Stop(`Server error ${res.status}: ${body.error ?? text.slice(0, 200)}`);
   // Without this, the Worker would refuse (or ignore) our kinds: stop before saving anything.
   if (!(body.features ?? []).includes("anyKind")) throw new Stop("The server doesn't take training records yet: update the Worker first.");
-  // Only training records and the watch's are kept: the rest of the user's data (notes, tasks...) never lands in this file.
-  const received = (body.changes ?? []).filter((c) => keptKind(c.kind));
+  // Only training records, the watch's, ticks and futsal events are kept: the rest of the user's data (notes, tasks...) never lands in this file.
+  const received = keptChanges(body.changes ?? []);
   const next: State = { seq: body.seq, records: applyChanges(state.records, changes, received), kept: KEPT_VERSION };
   saveState(next);
-  return { state: next, received: received.length };
+  return { state: next, received: received.filter((c) => c.kind !== "items" || c.data).length };
 }
 
 // ---------- Commands ----------
@@ -273,7 +297,10 @@ async function pull(folder: string) {
   if (!plan) throw new Stop(`Can't read the plan in ${folder}: ${problems.join(" ")}`);
   const { state, received } = await sync([]);
   const log = `training-log-${plan.id}.csv`, sets = `training-sets-${plan.id}.csv`;
-  writeFileSync(join(folder, log), logCsv(plan, recordsOfKind<Entry>(state.records, "trainingEntries")));
+  // Futsal from the calendar's futsal events; old futsal entries not converted yet are converted here first (not saved).
+  const entries = entriesWithGames([plan], recordsOfKind<Entry>(state.records, "trainingEntries"),
+    recordsOfKind<Item>(state.records, "items"), recordsOfKind<Completion>(state.records, "completions"));
+  writeFileSync(join(folder, log), logCsv(plan, entries.values()));
   writeFileSync(join(folder, sets), setsCsv(plan, recordsOfKind<Lift>(state.records, "trainingLifts")));
   writeFileSync(join(folder, BODYWEIGHT_FILE), weighInsCsv(recordsOfKind<WeighIn>(state.records, "trainingWeighIns")));
   const runsFile = join(folder, RUNS_FILE);

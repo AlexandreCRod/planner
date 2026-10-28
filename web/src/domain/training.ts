@@ -11,6 +11,9 @@
 // bests carry on from one plan to the next. Session ids are per plan.
 // Runs, meals, body weight and the lift and run trends are in trends.ts (same two owners).
 import { epochOf, ymd } from "./dates.ts";
+import { futsalItemId } from "./ids.ts";
+import { occurrences } from "./recurrence.ts";
+import { type Completion, type Item, newItem } from "./types.ts";
 
 /** The planner.json format versions this app reads; a newer one is still shown as far as it goes. */
 export const PLAN_VERSION = 1;
@@ -430,10 +433,14 @@ export interface Entry {
   /** What it was logged against, kept so history reads right after the plan changes. */
   title: string;
   detail: string;
-  /** The watch run (Health Connect, "hc:…") that ticked this session, or was picked for it (domain/healthRuns.ts). */
+  /** The watch run (Health Connect, "hc:ï¿½") that ticked this session, or was picked for it (domain/healthRuns.ts). */
   watchRunId?: string | null;
   /** Watch runs that ticked it and were unticked: they never tick it again. */
   watchRunsDismissed?: string[];
+  /** A futsal game's log (item 240): the event it's about. Its id is futsalLogId(itemId, day); its own day is null. */
+  itemId?: number;
+  /** An old futsal entry (from before 240), once converted: the event it became, 0 for none (it was skipped). Kept so a 2.8 phone still shows it. */
+  convertedTo?: number;
   updatedAt: number;
   deletedAt: number | null;
 }
@@ -509,6 +516,142 @@ export function futsalDay(e: Entry): number | null {
   return e.status === "done" ? e.doneDay ?? e.day : e.day;
 }
 
+// ---------- Futsal: calendar events (item 240) ----------
+// A futsal game is a normal calendar event: one counts when it's marked (isFutsal), on every day it occurs.
+// Done is a Completion {itemId, day}, as for routines. What was logged (how long, pain, effort, a note) is an
+// Entry with the id futsalLogId(itemId, day), made only when something is logged. The views (phaseView,
+// the placement rules, the week bar, logCsv, the day's type) read games as Entries made by gameEntry, put
+// in place of every stored futsal entry by trainingEntries. Old futsal entries convert once (convertFutsal).
+
+/** Whether an event counts as futsal: its own switch when set, else a title with "futsal" in it (any case). Only events. */
+export function isFutsal(item: Item): boolean {
+  if (item.type !== "EVENT") return false;
+  return item.futsal ?? /futsal/i.test(item.title);
+}
+
+/** The id of a game's log: one per event and day. */
+export const futsalLogId = (itemId: number, day: number) => `futsal:${itemId}:${day}`;
+
+export interface FutsalGame {
+  itemId: number;
+  day: number;
+  /** Ticked: a Completion on that day. */
+  done: boolean;
+  /** What was logged, when anything was. */
+  log: Entry | null;
+  /** The event. */
+  item: Item;
+}
+
+/**
+ * Every futsal game from [range.start] to [range.end] (a phase, a plan): each day a futsal event that isn't
+ * in the trash occurs on (repeats expanded, days taken out left out), by day, then time, then id.
+ */
+export function futsalGames(
+  range: { start: number; end: number }, items: Iterable<Item>, completions: Iterable<Completion>, entries: ReadonlyMap<string, Entry>,
+): FutsalGame[] {
+  const done = new Set<string>();
+  for (const c of completions) done.add(`${c.itemId}:${c.day}`);
+  const out: FutsalGame[] = [];
+  for (const item of items) {
+    if (item.deletedAt !== null || !isFutsal(item)) continue;
+    for (const day of occurrences(item, range.start, range.end)) {
+      const log = entries.get(futsalLogId(item.id, day));
+      out.push({ itemId: item.id, day, done: done.has(`${item.id}:${day}`), log: log && log.deletedAt === null ? log : null, item });
+    }
+  }
+  return out.sort((a, b) => a.day - b.day || (a.item.startMin ?? -1) - (b.item.startMin ?? -1) || a.itemId - b.itemId);
+}
+
+/** A game as the views read it: a futsal Entry with the log's id, on its day, done or planned. */
+export function gameEntry(g: FutsalGame, planId: string): Entry {
+  const l = g.log;
+  return {
+    id: futsalLogId(g.itemId, g.day), planId, sessionId: null, kind: "futsal", status: g.done ? "done" : "planned",
+    day: g.day, doneDay: g.done ? g.day : null, durationMin: l?.durationMin ?? null, pain: l?.pain ?? null, effort: l?.effort ?? null,
+    note: l?.note ?? "", ticks: [], title: g.item.title.trim() || "Futsal", detail: "", itemId: g.itemId, updatedAt: l?.updatedAt ?? 0, deletedAt: null,
+  };
+}
+
+/**
+ * The entries the Training views read: every stored one except futsal (old entries, converted or not, and
+ * the games' logs), plus each plan's games as Entries (gameEntry). A day in two plans' ranges goes to the
+ * one that starts later, as the page shows.
+ */
+export function trainingEntries(
+  plans: readonly Pick<Plan, "id" | "start" | "end">[], entries: Iterable<Entry>, items: Iterable<Item>, completions: Iterable<Completion>,
+): Map<string, Entry> {
+  const out = new Map<string, Entry>();
+  const stored = new Map<string, Entry>();
+  for (const e of entries) { stored.set(e.id, e); if (e.kind !== "futsal") out.set(e.id, e); }
+  const sorted = [...plans].sort((a, b) => a.start - b.start);
+  if (!sorted.length) return out;
+  const games = futsalGames({ start: Math.min(...sorted.map((p) => p.start)), end: Math.max(...sorted.map((p) => p.end)) }, items, completions, stored);
+  const latestFirst = [...sorted].reverse();
+  for (const g of games) {
+    const plan = latestFirst.find((p) => g.day >= p.start && g.day <= p.end);
+    if (plan) { const e = gameEntry(g, plan.id); out.set(e.id, e); }
+  }
+  return out;
+}
+
+/**
+ * trainingEntries with the old futsal entries converted in memory first (nothing saved): for the plan
+ * session's pull, which may run before any app has converted them.
+ */
+export function entriesWithGames(
+  plans: readonly Pick<Plan, "id" | "start" | "end">[], entries: Iterable<Entry>, items: Iterable<Item>, completions: Iterable<Completion>,
+): Map<string, Entry> {
+  const es = [...entries], is = [...items];
+  const c = convertFutsal(es, is);
+  const byId = new Map(es.map((e) => [e.id, e]));
+  for (const e of c.entries) byId.set(e.id, e);
+  return trainingEntries(plans, byId.values(), [...is, ...c.items], [...completions, ...c.completions]);
+}
+
+/** What converting the old futsal entries writes. */
+export interface FutsalConversion { items: Item[]; completions: Completion[]; entries: Entry[] }
+
+/** An old futsal entry not yet converted (not a game's log, not in the trash). */
+const unconverted = (e: Entry) => e.kind === "futsal" && e.deletedAt === null && e.convertedTo === undefined && e.itemId === undefined && !e.id.startsWith("futsal:");
+
+/**
+ * The old futsal entries (from before 240) as events, once: each becomes an untimed event "Futsal" (or its
+ * title) on the day it counts on (futsalDay: the day it was done, else its day), with the id
+ * futsalItemId(entry id); a Completion that day if it was done; its duration, pain, effort and note in the
+ * game's log. The old entry is kept, marked convertedTo (0 for a skipped one, which becomes nothing), so a
+ * 2.8 phone still shows it and this app doesn't convert it again. Every record is made from the entry alone
+ * (its edit time included), so two devices converting the same entry write the same records; an event
+ * already there (from another device) isn't written again, nor its tick or log, so edits made since stay.
+ */
+export function convertFutsal(entries: Iterable<Entry>, items: Iterable<Item>): FutsalConversion {
+  const have = new Set<number>();
+  for (const i of items) have.add(i.id);
+  const out: FutsalConversion = { items: [], completions: [], entries: [] };
+  for (const e of entries) {
+    if (!unconverted(e)) continue;
+    const day = futsalDay(e);
+    const at = e.updatedAt;
+    if (day === null) { out.entries.push({ ...e, convertedTo: 0, updatedAt: at + 1 }); continue; }
+    const id = futsalItemId(e.id);
+    const title = e.title.trim() || "Futsal";
+    if (!have.has(id)) {
+      out.items.push(newItem({
+        id, type: "EVENT", title, startDay: day, endDay: day, allDay: true, createdAt: at, updatedAt: at, ...(isFutsal({ type: "EVENT", title } as Item) ? {} : { futsal: true }),
+      }));
+      if (e.status === "done") out.completions.push({ itemId: id, day, completedAt: at });
+    }
+    if (!have.has(id) && (e.durationMin !== null || e.pain !== null || e.effort !== null || e.note.trim())) {
+      out.entries.push(newEntry({
+        id: futsalLogId(id, day), planId: e.planId, kind: "futsal", itemId: id, durationMin: e.durationMin, pain: e.pain, effort: e.effort,
+        note: e.note, title, updatedAt: at,
+      }));
+    }
+    out.entries.push({ ...e, convertedTo: id, updatedAt: at + 1 });
+  }
+  return out;
+}
+
 export interface WeekItem { session: Session | null; entry: Entry }
 export interface PhaseView {
   /** Sessions with no day yet, in the plan's order. */
@@ -517,7 +660,10 @@ export interface PhaseView {
   days: { day: number; items: WeekItem[] }[];
 }
 
-/** A phase as the page shows it: what's left to place, and each day with its sessions and futsal. */
+/**
+ * A phase as the page shows it: what's left to place, and each day with its sessions and futsal. Futsal is
+ * read from [allEntries] as trainingEntries gives them: the calendar's futsal events.
+ */
 export function phaseView(plan: Plan, phase: number, entries: ReadonlyMap<string, Entry>, allEntries: Iterable<Entry>): PhaseView {
   const ph = plan.phases[phase];
   const toPlace: Session[] = [];
@@ -713,7 +859,8 @@ const isoOrEmpty = (d: number | null) => (d === null ? "" : isoOf(d));
 
 /**
  * training-log-<plan id>.csv: one row per session that's on a day, done or skipped, then futsal and
- * records. New columns only ever go at the end (the plan session reads them by name).
+ * records. New columns only ever go at the end (the plan session reads them by name). [entries] as
+ * trainingEntries (or entriesWithGames) gives them: futsal rows are the calendar's games, with no session id.
  */
 export function logCsv(plan: Plan, entries: Iterable<Entry>): string {
   const mine = [...entries].filter((e) => e.planId === plan.id && e.deletedAt === null);

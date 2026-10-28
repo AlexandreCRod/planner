@@ -2,7 +2,8 @@
 // session or a futsal game breaks on a day. Nothing is ever blocked: the page asks before placing it
 // anyway, and marks what breaks a rule now.
 // - Only what's on a day counts: a session on the day it was done, else the day it's placed, never if
-//   skipped (countedDay); futsal the same way (futsalDay). Unplaced sessions, optional or not, never count.
+//   skipped (countedDay); futsal the same way (futsalDay), its games being the calendar's futsal events as
+//   trainingEntries gives them (item 240). Unplaced sessions, optional or not, never count.
 // - A rule is its phase's. Rules between two items (the day before, the same day, days before) count when
 //   either item's day is in a phase with the rule, so they see across a phase's edge. gap, max_count,
 //   rest_days, weekdays, not_after and none look at the phase's own days. max_in_a_row counts days in a
@@ -15,7 +16,7 @@ import {
   type Entry, type Plan, type PlacementRule, type Selector, type Session, countedDay, entryId, futsalDay, sessionsOf,
 } from "./training.ts";
 
-/** A session (by its id), or a futsal game (by its entry id; null for a new one). */
+/** A session (by its id), or a futsal game (by its entry id, futsalLogId(event, day); null for a new one). */
 export type ItemRef = { session: string } | { futsal: string | null };
 
 /** A session or a futsal game on a day. */

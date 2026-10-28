@@ -66,6 +66,9 @@ export interface Item {
   /** An unpinned note's place on the Notes page once dragged there, on the scale of edit times (higher
    *  first, among the others' last edits); missing = where its last edit puts it. */
   listOrder?: number;
+  /** Counts as a futsal game on Training (domain/training.ts isFutsal): missing = by its title ("futsal", any case),
+   *  true or false = the editor's "Counts as futsal" switch. Events only. */
+  futsal?: boolean;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }
