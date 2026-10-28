@@ -37,6 +37,7 @@ import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
+import { isFutsal } from "../../domain/training.ts";
 
 // ---------- Shared bits ----------
 
@@ -769,6 +770,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
             onClick={() => setRoutine(item, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(item, v)} label="Routine" />} />
         )}
+        {/* A futsal event says so (it's on Training); the editor has the switch for any event. */}
+        {isEvent && isFutsal(item) && (
+          <InfoRow icon="oSportsSoccer" tint={color} text="Counts as futsal · on Training"
+            onClick={() => commit({ ...item, futsal: false })}
+            trailing={<Switch checked={isFutsal(item)} onChange={(v) => commit({ ...item, futsal: v })} label="Counts as futsal" />} />
+        )}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
             <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
@@ -1105,6 +1112,13 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           <FieldRow icon="oTaskAlt" onClick={() => setRoutineDraft(!routine)}>
             <span className="pe-label grow">Routine<span className="pe-sublabel">On Today's checklist; a missed day ends the streak instead of piling up</span></span>
             <Switch checked={routine} onChange={setRoutineDraft} label="Routine" />
+          </FieldRow>
+        )}
+        {/* An event can count as futsal on Training (item 240): by its title until switched. */}
+        {isEvent && (
+          <FieldRow icon="oSportsSoccer" onClick={() => set({ futsal: !isFutsal(d) })}>
+            <span className="pe-label grow">Counts as futsal<span className="pe-sublabel">Shows on Training as a futsal game</span></span>
+            <Switch checked={isFutsal(d)} onChange={(v) => set({ futsal: v })} label="Counts as futsal" />
           </FieldRow>
         )}
         <div className="p-divider" />

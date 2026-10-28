@@ -9,6 +9,7 @@ import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/sto
 import { logProblem, startProblemLog } from "./problems.ts";
 import { OtherTab, StartFailed } from "./ui/Notice.tsx";
 import { migrateLocalRoutines } from "./store/routines.ts";
+import { convertOldFutsal } from "./store/futsal.ts";
 import { getToken, onStatus, requestSync, signOut, startAutoSync, syncNow } from "./store/sync.ts";
 import { App as CapApp } from "@capacitor/app";
 import { App } from "./ui/App.tsx";
@@ -66,7 +67,9 @@ async function start() {
   tidy();
   // The phone's old device-only routine marks move into the synced field once (when there are items).
   migrateLocalRoutines();
-  onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) { tidy(); migrateLocalRoutines(); } });
+  // The old futsal entries become calendar events (item 240), only once a sync has finished: the same records
+  // on every device, so the phone and the PC can both do it; a no-op once they're converted.
+  onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) { tidy(); migrateLocalRoutines(); convertOldFutsal(); } });
   window.setInterval(() => tidy(), 3_600_000);
   if (getToken()) startAutoSync();
   else signOut();

@@ -6,8 +6,9 @@
 import { useSyncExternalStore } from "react";
 import { today } from "../domain/dates.ts";
 import {
-  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan,
+  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan, trainingEntries,
 } from "../domain/training.ts";
+import type { Completion, Item } from "../domain/types.ts";
 import {
   type Hidden, type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
   SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
@@ -23,8 +24,13 @@ export interface LoadedPlan { plan: Plan; problems: string[]; docs: Map<string, 
 export interface Training {
   /** Oldest first. */
   plans: LoadedPlan[];
-  /** Every entry by id, deleted futsal included (views skip them). */
+  /**
+   * The entries the views read, by id: the stored ones but futsal, and each futsal game (a futsal event's day,
+   * item 240) as an Entry with the id futsalLogId(event, day) (domain/training.ts trainingEntries).
+   */
   entries: Map<string, Entry>;
+  /** Every stored entry by id, the old futsal ones and the games' logs included. */
+  stored: Map<string, Entry>;
   lifts: Lift[];
   liftById: Map<string, Lift>;
   seen: Map<string, SeenPlan>;
@@ -116,7 +122,8 @@ export function training(): Training {
   const healthSessions = listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs);
   const data: Training = {
     plans,
-    entries: new Map(entries.map((e) => [e.id, e])),
+    entries: trainingEntries(plans.map((p) => p.plan), entries, listOf<Item>("items"), listOf<Completion>("completions")),
+    stored: new Map(entries.map((e) => [e.id, e])),
     lifts,
     liftById: new Map(lifts.map((l) => [l.id, l])),
     seen: new Map(listOf<SeenPlan>("trainingState").map((s) => [s.id, s])),

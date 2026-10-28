@@ -11,29 +11,32 @@
 // heart on a day whose resting HR is up 7+ on its 7-day average two mornings running (domain/sleep.ts).
 // Also here: Today's training line and the calendar's light marks.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { dayShort, formatDate, today as todayEpoch, weekday } from "../../domain/dates.ts";
+import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
 import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
 import {
-  type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, leftToPlace, newEntry, phaseIndexAt,
+  type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, futsalLogId, leftToPlace, phaseIndexAt,
   phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
 } from "../../domain/training.ts";
 import { type ColourKind, type WeekBar, colourKind, fmtKm, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
 import { type SleepNight, fmtSleep, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
+import { type GameRef, addGame, moveGame, removeGame, saveGameLog, tickGame } from "../../store/futsal.ts";
+import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
 import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
+import { TimePickerDialog } from "./pickers.tsx";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
-import { kindIcon, phaseNames, planQ, randomId } from "./trainingParts.tsx";
+import { kindIcon, phaseNames, planQ } from "./trainingParts.tsx";
 import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
 import "./training.css";
 
@@ -151,10 +154,11 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     if (next === "done") { feel("confirm"); setAsked(entryId(plan.id, s.id)); } else setAsked(null);
     setSessionStatus(lp, s, next, t);
   };
+  // A game is a futsal event's day (item 240): ticking it ticks that day of the event.
   const tickFutsal = (e: Entry) => {
-    if (readOnly) return;
+    if (readOnly || e.itemId === undefined || e.day === null) return;
     if (e.status !== "done") feel("confirm");
-    saveEntry({ ...e, status: e.status === "done" ? "planned" : "done", doneDay: e.status === "done" ? null : e.day });
+    tickGame({ itemId: e.itemId, day: e.day }, e.status !== "done");
   };
   const pickedSession = picked ? sessions.get(picked) : undefined;
   const showToPlace = v.toPlace.length > 0 || drag.lifted !== null;
@@ -260,7 +264,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
         </div>
       ) : week}
       {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t}
-        onPlaced={(e, before) => { warnNext.current = check({ futsal: e.id }, e.day!, () => saveEntry(before ?? { ...e, deletedAt: Date.now() })); }}
+        onPlaced={(g, undo) => { warnNext.current = check({ futsal: futsalLogId(g.itemId, g.day) }, g.day, undo); }}
         onClose={() => { setFutsal(null); if (warnNext.current) { setWarn(warnNext.current); warnNext.current = null; } }} />}
       {warn && <PlacementSheet tr={tr} lp={lp} warn={warn} onMoved={setWarn} onClose={() => setWarn(null)} />}
     </Scaffold>
@@ -364,14 +368,17 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
   );
 }
 
+/** A futsal game: its event's title, then its time, how long it was and the note. */
 function FutsalRow({ e, warn, onWarn, onTick, onOpen }: { e: Entry; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
+  const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
+  const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
   return (
     <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
-      <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? "Futsal: done. Tap to undo" : "Mark futsal done"} onTick={onTick} />
+      <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
       <KindIcon kind="futsal" icon="oSportsSoccer" />
       <span className="tr-row-text">
-        <span className="title">Futsal</span>
-        <span className="detail">{[e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
+        <span className="title">{e.title}</span>
+        <span className="detail">{[at, e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
       </span>
       {warn > 0 && <RuleMark n={warn} onOpen={onWarn} />}
     </div>
@@ -392,38 +399,55 @@ function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; on
   );
 }
 
-/** Adds or changes a futsal game: its day (in the phase shown), how long, a note. */
+/**
+ * Adds or changes a futsal game (a futsal event's day, item 240): its day (in the phase shown), its time
+ * when the event has one, how long, a note. A new one is an untimed event "Futsal"; Event opens the event
+ * itself (its place, reminders, repeat). Remove takes that day off (the event, if it doesn't repeat).
+ */
 function FutsalSheet({ plan, ph, entry, t, onPlaced, onClose }: {
-  plan: Plan; ph: Phase; entry: Entry | null; t: number; onPlaced: (e: Entry, before: Entry | null) => void; onClose: () => void;
+  plan: Plan; ph: Phase; entry: Entry | null; t: number; onPlaced: (g: GameRef, undo: () => void) => void; onClose: () => void;
 }) {
-  const [day, setDay] = useState(entry?.day ?? Math.min(ph.end, Math.max(ph.start, t)));
+  const game: GameRef | null = entry && entry.itemId !== undefined && entry.day !== null ? { itemId: entry.itemId, day: entry.day } : null;
+  const item = game ? snapshot().byId.get(game.itemId) : undefined;
+  const timed = !!item && !item.allDay && item.startMin !== null;
+  const [day, setDay] = useState(game?.day ?? Math.min(ph.end, Math.max(ph.start, t)));
+  const [min, setMin] = useState<number | null>(timed ? item.startMin : null);
+  const [picking, setPicking] = useState(false);
   const [dur, setDur] = useState<number | null>(entry ? entry.durationMin : 60);
   const [note, setNote] = useState(entry?.note ?? "");
   const days = Array.from({ length: ph.end - ph.start + 1 }, (_, k) => ph.start + k);
   if (!days.includes(day)) days.unshift(day);
   const save = (close: () => void) => {
-    const base = entry ?? newEntry({ id: `futsal-${randomId()}`, planId: plan.id, kind: "futsal", title: "Futsal" });
-    const saved = { ...base, day, durationMin: dur, note: note.trim(), doneDay: base.status === "done" ? day : null };
-    saveEntry(saved);
+    let now: GameRef = game ?? { itemId: 0, day };
+    const undo = withUndo(() => {
+      now = game ? moveGame(game, day, min ?? undefined) : addGame(day);
+      saveGameLog(now, plan.id, { durationMin: dur, note: note.trim() });
+    });
     feel("settle");
-    if (!entry || entry.day !== day) onPlaced(saved, entry);
+    if (!game || game.day !== day) onPlaced(now, undo);
     close();
   };
   return (
     <BottomSheet onClose={onClose}>{(close) => (
       <div className="tr-futsal">
-        <div className="tr-sheet-title t-title-medium">{entry ? "Futsal" : "Add futsal"}</div>
+        <div className="tr-sheet-title t-title-medium">{entry ? entry.title : "Add futsal"}</div>
         <div className="tr-label">Day</div>
         <ChipRow>{days.map((d) => <FilterChip key={d} selected={d === day} onClick={() => setDay(d)}>{formatDate(d)}</FilterChip>)}</ChipRow>
+        {timed && min !== null && <>
+          <div className="tr-label">Time</div>
+          <ChipRow><FilterChip selected onClick={() => setPicking(true)}>{formatTime(min)}</FilterChip></ChipRow>
+        </>}
         <div className="tr-label">How long</div>
         <ChipRow>{[45, 60, 75, 90, 120].map((m) => <FilterChip key={m} selected={dur === m} onClick={() => setDur(dur === m ? null : m)}>{m} min</FilterChip>)}</ChipRow>
         <div className="tr-futsal-note"><OutlinedTextField label="Note" value={note} onChange={setNote} onEnter={() => save(close)} /></div>
         <div className="p-sheet-buttons">
-          {entry && <TextButton onClick={() => { saveEntry({ ...entry, deletedAt: Date.now() }); close(); showSnackbar("Futsal removed", "Undo", () => saveEntry({ ...entry, deletedAt: null })); }}>Remove</TextButton>}
+          {game && <TextButton onClick={() => { const undo = withUndo(() => removeGame(game)); close(); showSnackbar(`${entry!.title} removed`, "Undo", undo); }}>Remove</TextButton>}
+          {game && <TextButton onClick={() => { close(); go(`item/${game.itemId}?occ=${game.day}`); }}>Event</TextButton>}
           <span className="grow" />
           <TextButton onClick={close}>Cancel</TextButton>
           <button className="p-filled-btn" onClick={() => save(close)}>Save</button>
         </div>
+        {picking && <TimePickerDialog value={min} onClose={() => setPicking(false)} onPick={(m) => { setMin(m); setPicking(false); }} />}
       </div>
     )}</BottomSheet>
   );
@@ -452,19 +476,24 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
     if (to === null) return;
     // Taking it back goes to where it was before the first placement, or before this move from a marker.
     let undo = warn.undo;
+    let moved = item;
     if (s) {
       const before = entryFor(plan, s, training().entries);
       undo ??= () => saveEntry(before);
       patchEntry(lp, s, { day: to });
     } else {
+      // A futsal game: its event moves (one day of a repeating one becomes its own), so its key changes.
       const e = "futsal" in item && item.futsal ? training().entries.get(item.futsal) : undefined;
-      if (!e) return;
-      undo ??= () => saveEntry(e);
-      saveEntry({ ...e, day: to, doneDay: e.status === "done" ? to : null });
+      if (!e || e.itemId === undefined || e.day === null) return;
+      let now: GameRef = { itemId: e.itemId, day: e.day };
+      const back = withUndo(() => { now = moveGame(now, to); });
+      const first = undo;
+      undo = first ? () => { back(); first(); } : back;
+      moved = { futsal: futsalLogId(now.itemId, now.day) };
     }
     feel("settle");
     setTo(null);
-    if (breachesOnly(brokenRules(plan, training().entries, item, to)).length) onMoved({ item, day: to, undo });
+    if (breachesOnly(brokenRules(plan, training().entries, moved, to)).length) onMoved({ item: moved, day: to, undo });
     else { close(); showSnackbar(`${title} on ${formatDate(to)}`, "Undo", undo); }
   };
   return (

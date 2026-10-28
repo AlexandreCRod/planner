@@ -66,6 +66,33 @@ export function putRecords(kind: Kind, rs: object[]) {
   changed();
 }
 
+/** Deletes records of [kind] (each by its key), then saves, redraws and syncs as for any change. */
+export function removeRecords(kind: Kind, rs: object[]) {
+  for (const r of rs) del(kind, r);
+  changed();
+}
+
+/**
+ * Runs [fn] and returns how to take back what it changed: every record it added, changed or deleted is put
+ * back as it was (those with an edit time get a new one, so the undo wins over the change on the server).
+ */
+export function withUndo(fn: () => void): () => void {
+  const before = new Map(records);
+  fn();
+  const keys = new Set<string>();
+  for (const [k, v] of records) if (before.get(k) !== v) keys.add(k);
+  for (const k of before.keys()) if (!records.has(k)) keys.add(k);
+  return () => {
+    const now = Date.now();
+    for (const k of keys) {
+      const v = before.get(k);
+      if (v === undefined) records.delete(k);
+      else records.set(k, typeof v.updatedAt === "number" ? { ...v, updatedAt: now } : v);
+    }
+    changed();
+  };
+}
+
 let saveTimer: number | undefined;
 let unsaved = false;
 /** A save that failed (the device's storage full...): kept in the problem log and shown, never swallowed. */
