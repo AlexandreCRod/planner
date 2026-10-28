@@ -18,7 +18,7 @@ import { feel } from "./haptics.ts";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
 import { MarkdownView, allExercises, docRoute } from "./TrainingDocs.tsx";
-import { KIND_LABEL, Scale, fmtKg, kindIcon, phaseNames, setsText } from "./trainingParts.tsx";
+import { KIND_LABEL, Scale, fmtKg, kindIcon, phaseNames, planQ, setsText } from "./trainingParts.tsx";
 
 /** Saves a session's entry: the latest copy, the plan's title and detail kept with it, then [patch]. */
 export function patchEntry(lp: LoadedPlan, s: Session, patch: Partial<Entry>) {
@@ -95,7 +95,10 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
     setSessionStatus(lp, s, st, t);
   };
   return (
-    <Scaffold title={s.title} back={!closeIcon} flush actions={nav}>
+    <Scaffold title={s.title} back={!closeIcon} flush actions={<>
+      <IconButton icon="oMenuBook" label="Guides" onClick={() => { const f = guideDocOf(lp, s); go(f ? docRoute(f, null, plan.id) : `training?view=docs${planQ(plan.id)}`); }} />
+      {nav}
+    </>}>
       <div className="p-content tr-session">
         <div className="tr-shead">
           <div className="tr-kindline"><MIcon name={kindIcon(s.kind)} size={18} /><span>{KIND_LABEL[s.kind]} · {long ? `${short}, ${long}` : short}</span></div>
@@ -169,7 +172,18 @@ function CardSection({ lp, card, openAtStart }: { lp: LoadedPlan; card: { doc: s
   </>;
 }
 
-const GROUPS: [string, string][] = [["warm-up", "Warm-up"], ["main", "Main"], ["filler", "Fillers"]];
+/** The document the session's exercises are explained in (the one most of their cards are in), else its own card's. */
+function guideDocOf(lp: LoadedPlan, s: Session): string | null {
+  const n = new Map<string, number>();
+  for (const x of s.exercises) {
+    const doc = lp.plan.exercises.find((e) => e.id === x.exercise)?.card?.doc;
+    if (doc && lp.docs.has(doc)) n.set(doc, (n.get(doc) ?? 0) + 1);
+  }
+  const best = [...n].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return best ?? (s.card && lp.docs.has(s.card.doc) ? s.card.doc : null);
+}
+
+const GROUPS: [string, string][] =[["warm-up", "Warm-up"], ["main", "Main"], ["filler", "Fillers"]];
 
 /** A gym session's exercises: warm-up, main work and fillers; ticks or sets as the plan says. */
 function GymLog({ tr, lp, s, e, day, t, readOnly }: { tr: Training; lp: LoadedPlan; s: Session; e: Entry; day: number | null; t: number; readOnly: boolean }) {
@@ -324,7 +338,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
 }
 
 /** How to do an exercise (its card from the guide), and a way to its history. */
-function ExerciseSheet({ lp, id, name, onClose }: { lp: LoadedPlan; id: string; name: string; onClose: () => void }) {
+export function ExerciseSheet({ lp, id, name, onClose }: { lp: LoadedPlan; id: string; name: string; onClose: () => void }) {
   const ex = lp.plan.exercises.find((e) => e.id === id);
   const md = ex?.card ? lp.docs.get(ex.card.doc) : undefined;
   const section = md && ex?.card ? (ex.card.anchor ? sectionAt(md, ex.card.anchor) : md) : null;
