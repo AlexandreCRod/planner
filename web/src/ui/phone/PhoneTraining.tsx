@@ -65,7 +65,7 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const lp = (planId && tr.plans.find((p) => p.plan.id === planId)) || active;
   if (!lp) {
     return (
-      <Scaffold title="Training" back>
+      <Scaffold title="Training">
         <EmptyHint>No training plan on this device yet. The plan session sends it from the PC, and it arrives with the next sync.</EmptyHint>
       </Scaffold>
     );
@@ -138,7 +138,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   useWatchRunTicks(readOnly);
   const watchAsks = useWatchRunAsks(tr, lp, t, readOnly);
 
-  if (!plan.phases.length) return <Scaffold title="Training" back><EmptyHint>This plan has no phases yet.</EmptyHint></Scaffold>;
+  if (!plan.phases.length) return <Scaffold title="Training"><EmptyHint>This plan has no phases yet.</EmptyHint></Scaffold>;
   const ph = plan.phases[phase];
   const v = phaseView(plan, phase, tr.entries, tr.entries.values());
   const [short, long] = phaseNames(ph.name);
@@ -249,7 +249,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   );
 
   return (
-    <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} back flush actions={<>
+    <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
       <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />

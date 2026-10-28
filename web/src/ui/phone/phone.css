@@ -672,7 +672,9 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-tp-dial .num.inner { font-size: 14px; color: var(--muted); }
 .phone .p-tp-dial .num.on { color: var(--p-on-primary); }
 /* The + button moves up out of the snackbar's way, as Scaffold does it. */
-.phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
+.phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1), opacity .15s; }
+/* Training (a tab since 241) adds nothing with the + button: on the phone it fades away there. */
+html:not(.wide) .p-root.on-training > .p-fab { opacity: 0; transform: scale(.6); pointer-events: none; }
 .phone .p-root:has(> .p-snackbar:not(.raised)) > .p-fab { transform: translateY(-64px); }
 .phone .p-snack-close { width: 40px; height: 40px; margin-right: -4px; color: var(--p-inverse-on-surface); }
 .phone .p-icon.primary { color: var(--p-primary); }

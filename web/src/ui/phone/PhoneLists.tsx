@@ -59,7 +59,8 @@ export function openTodoTab() {
 let todoListener: (() => void) | null = null;
 const savedTab = () => { try { return localStorage.getItem("tasksTab") === "todo"; } catch { return false; } };
 
-export const PhoneTasks = memo(function PhoneTasks() {
+/** [back]: opened full-screen (Tasks not in the bottom bar, 241), with a back arrow. */
+export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: boolean }) {
   const [todo, setTodo] = useState(savedTab);
   const [menu, setMenu] = useState(false);
   const [streaksOpen, setStreaksOpen] = useState(false);
@@ -95,7 +96,7 @@ export const PhoneTasks = memo(function PhoneTasks() {
     allow: (t) => !t.closest("input, textarea, .p-chiprow"),
   });
   return (
-    <Scaffold title="Tasks" flush actions={<>
+    <Scaffold title="Tasks" flush back={back} actions={<>
       <AppBarActions />
       <span className="p-menu-anchor">
         <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />

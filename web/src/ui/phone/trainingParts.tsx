@@ -29,6 +29,8 @@ const RUN_ICONS: Record<1 | 2, Record<RunType, string>> = {
   2: { easy: "tShoe", long: "tRoute", quality: "tStopwatchFast", race: "tFinishFlag", other: "tTreadmill" },
 };
 export const runIcon = (type: RunType) => RUN_ICONS[runIconSet][type];
+/** Training's icon in the bottom bar (241): the easy run's (Set 2's shoe, Set 1's runner). */
+export const trainingTabIcon = RUN_ICONS[runIconSet].easy;
 /** The Training week's classes for its kind colours and futsal's colour (training.css). */
 export const trainingLookClass = `tr-col-${trainingColours.toLowerCase()} tr-fut-${futsalColour}`;
 

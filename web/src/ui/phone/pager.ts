@@ -5,7 +5,7 @@
 // Nothing moves until the finger has gone past the 8 dp touch slop sideways, so taps still win, and a
 // mostly-vertical move is left to the browser's scrolling (touch-action: pan-y). Moves are written once
 // per frame, at sub-pixel offsets, through the layers' style (no React render during the drag).
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
@@ -178,6 +178,21 @@ export const BAR_FLING = FLICK;
 /** Settings > "Reverse bottom bar swipe": a slide along the bar turns the pages the other way. */
 export const BAR_REVERSED_KEY = "barSwipeReversed";
 export const barSwipeReversed = () => { try { return localStorage.getItem(BAR_REVERSED_KEY) === "true"; } catch { return false; } };
+
+/**
+ * Settings > "Keep Tasks in the bottom bar" (241): off, Training has Tasks' place and the Tasks page opens
+ * from Today's "No date" list; on, the bar has both (Tasks after Training), so a swipe still reaches it.
+ */
+export const KEEP_TASKS_KEY = "keepTasksTab";
+export const keepTasksTab = () => { try { return localStorage.getItem(KEEP_TASKS_KEY) === "true"; } catch { return false; } };
+const keepTasksListeners = new Set<() => void>();
+export function setKeepTasksTab(v: boolean) {
+  try { localStorage.setItem(KEEP_TASKS_KEY, String(v)); } catch { /* private mode */ }
+  keepTasksListeners.forEach((l) => l());
+}
+const onKeepTasks = (l: () => void) => { keepTasksListeners.add(l); return () => { keepTasksListeners.delete(l); }; };
+/** The setting, kept current (the side rail beside Settings changes at once). */
+export const useKeepTasksTab = (): boolean => useSyncExternalStore(onKeepTasks, keepTasksTab);
 
 /**
  * Where the pager settles after a slide along the bottom bar: from page [from], the pages now at [pos]

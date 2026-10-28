@@ -3,7 +3,7 @@
 // Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
 // In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
 // top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
-import { memo, startTransition, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
@@ -31,22 +31,30 @@ import { isNative, useWide } from "../../platform.ts";
 import { setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { BAR_GAIN, barSwipeReversed, barTarget } from "./pager.ts";
+import { BAR_GAIN, barSwipeReversed, barTarget, useKeepTasksTab } from "./pager.ts";
 import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
-// Links section. Alarms is the fifth where the alarm engine is (the phone build), not in a browser.
-const TABS: { key: string; label: string }[] = [
+// Links section. Alarms is the last where the alarm engine is (the phone build), not in a browser.
+// Training has Tasks' old place (241); Tasks comes back after it when Settings keeps it in the bar, and is
+// otherwise a full-screen page (from Today's "No date" list).
+type Tab = { key: string; label: string };
+const tabsFor = (keepTasks: boolean): Tab[] => [
   { key: "today", label: "Today" },
   { key: "calendar", label: "Calendar" },
-  { key: "tasks", label: "Tasks" },
+  { key: "training", label: "Training" },
+  ...(keepTasks ? [{ key: "tasks", label: "Tasks" }] : []),
   { key: "notes", label: "Notes" },
   ...(hasAlarms ? [{ key: "alarms", label: "Alarms" }] : []),
 ];
-const LAST = TABS.length - 1;
+/** The Training page's route ("#/training?s=…"), kept while another tab shows, so coming back finds it as it was. */
+let trainingHash = "#/training";
+const tabHash = (key: string) => (key === "training" ? trainingHash : `#/${key}`);
+/** A session or a document open on the Training page: back closes it before leaving the page. */
+const trainingSub = (q: URLSearchParams) => q.has("s") || q.has("view");
 /**
  * Going back to today (a tap on the tab already shown): the old view slides out as today's slides in, both
  * together, on a quick ease-out with no overshoot, as Google Calendar's Today does.
@@ -78,6 +86,8 @@ class ShellPos {
   target: number;
   /** The side rail of a wide window: its indicator moves down the rail. */
   rail = false;
+  /** The last page's index (the tabs can change with Settings). */
+  last = 0;
   private moving = false;
   private anim: Animation | null = null;
   private chase: { target: number; v: number; raf: number; last: number } | null = null;
@@ -88,7 +98,7 @@ class ShellPos {
   draw(p: number) {
     this.p = p;
     this.paint();
-    const r = clamp(Math.round(p), 0, LAST);
+    const r = clamp(Math.round(p), 0, this.last);
     // While moving, the chosen tab changes only once the pages are well past halfway, so a finger
     // wavering about the middle of a fast slide doesn't flick the tabs back and forth.
     if (r !== this.shown && (!this.moving || Math.abs(p - this.shown) > 0.6)) { this.shown = r; this.onShown(r); }
@@ -145,17 +155,24 @@ class ShellPos {
 export function PhoneApp() {
   const [path, query] = useRoute();
   const route = path[0] ?? "today";
+  const keepTasks = useKeepTasksTab();
+  const TABS = useMemo(() => tabsFor(keepTasks), [keepTasks]);
+  const LAST = TABS.length - 1;
+  const tabsRef = useRef(TABS);
   const routeTab = TABS.findIndex((t) => t.key === route);
+  // The Training page reads its route (a session, a document...); while another tab shows, it keeps the last.
+  const trainingQ = useRef(new URLSearchParams());
+  if (route === "training") { trainingQ.current = query; trainingHash = location.hash || "#/training"; }
   const [tab, setTab] = useState(routeTab >= 0 ? routeTab : 0);
   const tabRef = useRef(tab);
-  // Pages already shown stay mounted, so sliding back to them is instant. The rest arrive once the
+  // Pages already shown stay mounted (by key), so sliding back to them is instant. The rest arrive once the
   // app has settled, so a first slide across them doesn't build them mid-gesture: one page at a time,
   // when the phone is idle and no finger (or mouse button) is down or has just lifted. Building them
   // all at once, on a timer, was one long stall that landed on the first swipes after opening the app.
-  const [mounted, setMounted] = useState(() => new Set([tab, 0, 1]));
+  const [mounted, setMounted] = useState(() => new Set([TABS[tab].key, TABS[0].key, TABS[1].key]));
   useEffect(() => {
     let down = 0, lastUp = 0, timer = 0, idle = 0, alive = true;
-    let left = TABS.length - new Set([tab, 0, 1]).size;
+    let left = TABS.length;
     const onDown = () => { down++; };
     const onUp = () => { down = Math.max(0, down - 1); lastUp = performance.now(); };
     window.addEventListener("pointerdown", onDown, { capture: true, passive: true });
@@ -173,8 +190,8 @@ export function PhoneApp() {
       if (left <= 0) return;
       left--;
       startTransition(() => setMounted((m) => {
-        const i = TABS.findIndex((_, k) => !m.has(k));
-        return i < 0 ? m : new Set([...m, i]);
+        const next = tabsRef.current.find((x) => !m.has(x.key));
+        return next ? new Set([...m, next.key]) : m;
       }));
       if (left > 0) next(400);
     };
@@ -196,6 +213,19 @@ export function PhoneApp() {
   const [pos] = useState(() => new ShellPos(tab, () => pagerEl.current?.clientWidth ?? window.innerWidth, (r) => selectListeners.current.forEach((l) => l(r))));
   const wide = useWide();
   pos.rail = wide;
+  pos.last = LAST;
+  // Tasks put in or taken out of the bar (Settings): the page shown keeps its place by its key.
+  useLayoutEffect(() => {
+    const before = tabsRef.current;
+    if (before === TABS) return;
+    tabsRef.current = TABS;
+    const key = before[tabRef.current]?.key;
+    const i = Math.max(0, TABS.findIndex((x) => x.key === key));
+    tabRef.current = i;
+    pos.jump(i);
+    setTab(i);
+    setMounted((m) => (m.has(TABS[i].key) ? m : new Set([...m, TABS[i].key])));
+  }, [TABS, pos]);
   useLayoutEffect(() => pos.paint(), [wide, pos]);
   const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
@@ -230,9 +260,9 @@ export function PhoneApp() {
     } else pos.settle(i, velocity);
     startTransition(() => {
       setTab(i);
-      setMounted((m) => (m.has(i) ? m : new Set([...m, i])));
+      setMounted((m) => (m.has(TABS[i].key) ? m : new Set([...m, TABS[i].key])));
     });
-    if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", `#/${TABS[i].key}`);
+    if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", tabHash(TABS[i].key));
   };
 
   /**
@@ -250,6 +280,11 @@ export function PhoneApp() {
     const ghost = old && page ? stillCopy(old, page) : null;
     if (key === "today") resetToday();
     if (key === "calendar") resetCalendar();
+    // Training: back to its week, with any session or document put away.
+    if (key === "training" && trainingQ.current.toString()) {
+      history.replaceState(null, "", "#/training");
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
     flushSync(() => setResets((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 })));
     const area = page?.querySelector<HTMLElement>(AREA);
     if (!ghost || !area) { ghost?.remove(); return; }
@@ -271,14 +306,14 @@ export function PhoneApp() {
       // Wide, the note sits beside the Notes list: Notes again leaves it there.
       if (wide && key === "notes" && tabRef.current === i) return;
       minimizing.current = true;
-      history.replaceState(null, "", `#/${TABS[i].key}`);
+      history.replaceState(null, "", tabHash(TABS[i].key));
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       if (i === tabRef.current) popBar.current?.();
       return;
     }
     // Wide, the rail stays beside full-screen pages: a tab puts the page away and shows that tab.
     if (overlay && wide) {
-      history.replaceState(null, "", `#/${key}`);
+      history.replaceState(null, "", tabHash(key));
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       return;
     }
@@ -324,6 +359,7 @@ export function PhoneApp() {
   useEffect(() => {
     setShellBack(() => {
       if (overlay) history.back();
+      else if (TABS[tabRef.current].key === "training" && trainingSub(trainingQ.current)) history.back();
       else if (tabRef.current !== 0) settle(0, 0, true);
       else minimizeApp();
     });
@@ -349,7 +385,11 @@ export function PhoneApp() {
   // T the page's "today", Ctrl+F the search (a note's own find bar is the note's).
   useEffect(() => {
     setDeskHandlers({
-      back: () => { if (!overlay) return false; history.back(); return true; },
+      back: () => {
+        if (!overlay && !(TABS[tabRef.current].key === "training" && trainingSub(trainingQ.current))) return false;
+        history.back();
+        return true;
+      },
       add: () => { if (!adding && (!overlay || wide)) fabTap(); },
       today: () => {
         if (overlay) return;
@@ -367,12 +407,13 @@ export function PhoneApp() {
   useEffect(() => () => setDeskHandlers(null), []);
 
   return (
-    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[tab].key === "notes" ? "notes-split" : ""}`}>
+    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[tab].key === "notes" ? "notes-split" : ""} ${TABS[tab].key === "training" ? "on-training" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
         <div className="p-track" ref={(el) => { pos.track = el; if (el) pos.paint(); }}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" data-tab={t.key} ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
-              {mounted.has(i) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay} />}
+              {mounted.has(t.key) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay}
+                query={t.key === "training" ? trainingQ.current : null} />}
               {/* Wide, the open note shows beside the list; with none open, a word on where it goes. */}
               {wide && t.key === "notes" && (
                 <div className="p-notes-pane" aria-hidden="true">
@@ -385,9 +426,10 @@ export function PhoneApp() {
           ))}
         </div>
       </div>
-      <BottomBar pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
+      <BottomBar tabs={TABS} pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
       {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what
-          to add. Wide, it heads the rail, which stays beside full-screen pages. */}
+          to add. Wide, it heads the rail, which stays beside full-screen pages. On the phone it fades away over
+          Training, which adds nothing with it (phone.css, on-training). */}
       {(!overlay || wide) && (
         <button className="p-fab" aria-label="Add" onClick={fabTap}>
           <MIcon name="fAdd" />
@@ -427,14 +469,18 @@ function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview
 }
 
 /** One page of the pager. Memoised: the shell re-rendering (panel open, tab change) doesn't redo pages. */
-const Page = memo(function Page({ tabKey, onNewAt, pending, active }: { tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; active: boolean }) {
-  return <ErrorBoundary where={tabKey}>{pageOf(tabKey, onNewAt, pending, active)}</ErrorBoundary>;
-}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active));
+const Page = memo(function Page({ tabKey, onNewAt, pending, active, query }: {
+  tabKey: string; onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; active: boolean; query: URLSearchParams | null;
+}) {
+  return <ErrorBoundary where={tabKey}>{pageOf(tabKey, onNewAt, pending, active, query)}</ErrorBoundary>;
+}, (a, b) => a.tabKey === b.tabKey && (a.tabKey !== "calendar" || a.pending === b.pending) && (a.tabKey !== "alarms" || a.active === b.active)
+  && (a.tabKey !== "training" || a.query?.toString() === b.query?.toString()));
 
-function pageOf(tabKey: string, onNewAt: (day: number, min: number) => void, pending: SlotPreview | null, active: boolean) {
+function pageOf(tabKey: string, onNewAt: (day: number, min: number) => void, pending: SlotPreview | null, active: boolean, query: URLSearchParams | null) {
   switch (tabKey) {
     case "today": return <PhoneToday />;
     case "calendar": return <PhoneCalendar onNewAt={onNewAt} pending={pending} />;
+    case "training": return <PhoneTraining query={query ?? new URLSearchParams()} />;
     case "tasks": return <PhoneTasks />;
     case "notes": return <PhoneNotes />;
     case "alarms": return <PhoneAlarms active={active} />;
@@ -456,10 +502,10 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
     body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : <PhoneSettings />;
-  } else if (route === "training") {
-    body = <PhoneTraining query={query} />;
+  } else if (route === "tasks") {
+    body = <PhoneTasks back />;
   }
-  return <div className={`p-overlay ${route === "graph" || route === "training" ? route : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
+  return <div className={`p-overlay ${route === "graph" ? route : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
 }
 
 /**
@@ -470,8 +516,8 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
  * and their colour follows the selection, like the native bar. The slide is watched before the
  * buttons see it, and a tap that wobbles less than the slop stays a tap.
  */
-function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
-  pos: ShellPos; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
+function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
+  tabs: Tab[]; pos: ShellPos; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
   onTap: (i: number) => void; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
 }) {
   const [selected, setSelected] = useState(start);
@@ -480,6 +526,8 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   const pill = useRef<HTMLSpanElement>(null);
   const settleRef = useRef(onSettle);
   settleRef.current = onSettle;
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
   const tapRef = useRef(onTap);
   tapRef.current = onTap;
   const day = ymd(todayEpoch()).d;
@@ -499,7 +547,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     // dir: 1 when the pages follow the finger along the bar (the indicator under it), -1 when reversed
     // in Settings (a slide to the right goes back, as a swipe on the pages does).
     let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1 } | null = null;
-    const tabW = () => g?.w ?? el.clientWidth / TABS.length;
+    const tabW = () => g?.w ?? el.clientWidth / tabsRef.current.length;
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -515,7 +563,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       if (!g.sliding) { pill.current?.classList.remove("pop"); g.x0 += Math.sign(dx) * TOUCH_SLOP; }
       g.sliding = true;
       // The pages go a little further than the finger, so a short slide turns a page.
-      pos.follow(clamp(g.from + (g.dir * BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, LAST));
+      pos.follow(clamp(g.from + (g.dir * BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, pos.last));
     };
     // Whatever happens in [up], the slide ends: a throw mustn't leave the bar ignoring every touch.
     const onUp = (e: PointerEvent) => {
@@ -526,10 +574,10 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
       if (!g) return;
       if (g.sliding) {
         swallowNextClick();
-        const at = clamp(g.from + (g.dir * BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, LAST);
+        const at = clamp(g.from + (g.dir * BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, pos.last);
         const vx = g.dir * g.vt.velocity(e.timeStamp);
         // A flick turns a page whatever the distance; otherwise the nearest one.
-        settleRef.current(barTarget(g.from, at, vx, LAST), (BAR_GAIN * vx) / tabW());
+        settleRef.current(barTarget(g.from, at, vx, pos.last), (BAR_GAIN * vx) / tabW());
       } else {
         // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
         const tabEl = e.type === "pointerup" ? document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab") : null;
@@ -541,7 +589,7 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       pos.grab();
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / TABS.length, dir: barSwipeReversed() ? -1 : 1 };
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: barSwipeReversed() ? -1 : 1 };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });
@@ -554,10 +602,10 @@ function BottomBar({ pos, start, listeners, pop, onTap, onSettle }: {
   return (
     <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
-      <span className="p-pill-track" style={{ ["--tabs" as string]: TABS.length }} ref={(el) => { pos.pill = el; if (el) pos.paint(); }}>
+      <span className="p-pill-track" style={{ ["--tabs" as string]: tabs.length }} ref={(el) => { pos.pill = el; if (el) pos.paint(); }}>
         <span className="p-pill" ref={pill} />
       </span>
-      {TABS.map((t, i) => (
+      {tabs.map((t, i) => (
         <button key={t.key} data-i={i} className={`p-tab ${selected === i ? "on" : ""}`} aria-label={t.label} aria-current={selected === i ? "page" : undefined}
           onClick={(e) => { if (e.detail === 0) onTap(i); }}>
           <span className="p-tab-icon">

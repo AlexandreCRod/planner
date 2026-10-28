@@ -325,7 +325,7 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .pg-dh .tr-mark { display: flex; color: var(--p-primary); opacity: .75; height: 12px; }
 
 /* Wide: the week on the left, the open session beside it. */
-.wide .p-overlay.training > .p-scaffold { max-width: 1160px; }
+.wide .p-page[data-tab=training] > .p-scaffold { max-width: 1160px; margin: 0 auto; position: relative; }
 .wide .tr-layer > .p-scaffold { max-width: var(--page-w); margin: 0 auto; }
 .wide .tr-layer.full .tr-doc .tr-md { max-width: 720px; margin: 0 auto; }
 .phone .tr-split { flex: 1; min-height: 0; display: flex; }

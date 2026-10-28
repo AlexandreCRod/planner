@@ -7,6 +7,7 @@ import { go } from "../shared/common.tsx";
 import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
+import { trainingTabIcon } from "./trainingParts.tsx";
 
 /** Older short names used around the phone code, mapped to the Compose icons. */
 const ALIAS: Record<string, string> = {
@@ -302,6 +303,8 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
         : <path d={ICONS.oAlarm} fill="currentColor" />;
       break;
     case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
+    // The run icons have no outlined kind: the same one, its colour following the selection.
+    case "training": body = <path d={ICONS[trainingTabIcon]} fill="currentColor" />; break;
     default: body = <path d={ICONS.oConstellation} fill="currentColor" />;
   }
   return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="p-svg">{body}</svg>;

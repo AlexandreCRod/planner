@@ -19,7 +19,7 @@ import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
-import { BAR_REVERSED_KEY, barSwipeReversed } from "./pager.ts";
+import { BAR_REVERSED_KEY, barSwipeReversed, setKeepTasksTab, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
@@ -169,6 +169,7 @@ export function PhoneSettings() {
   const [accent, setAccent] = useState((localStorage.getItem("accent") ?? "#1a73e8").toLowerCase());
   const [pureBlack, setPureBlack] = useState(localStorage.getItem("pureBlack") === "true");
   const [barReversed, setBarReversed] = useState(barSwipeReversed());
+  const keepTasks = useKeepTasksTab();
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
@@ -217,6 +218,10 @@ export function PhoneSettings() {
         {!wide && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
           : "Sliding right along the bar goes to the page on the right, the indicator under the finger"} checked={barReversed}
           onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
+        <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
+          supporting={keepTasks ? "Tasks sits beside Training, so a swipe along the bar still reaches it"
+            : "Off: to-dos without a date are on Today, dated tasks in the Calendar's Agenda"} checked={keepTasks}
+          onChange={setKeepTasksTab} />
 
         <div className="p-hr" />
         <SectionHeader>Calendar</SectionHeader>
