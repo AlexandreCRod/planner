@@ -181,10 +181,11 @@ const clockField = (e: Raw, field: string, problem: (text: string) => void) => {
   return t;
 };
 
-/** "morning" (soon after waking), "later", or null: not known, counted as morning. */
-export type PastWhen = "morning" | "later" | null;
-/** A weigh-in from before Planner (weights.json): FitNotes, or Garmin on days FitNotes doesn't cover. */
-export interface PastWeighIn { id: string; day: number; time: string | null; kg: number; when: PastWhen; source: string; note: string }
+/**
+ * A weigh-in from before Planner (weights.json): FitNotes, or Garmin on days FitNotes doesn't cover. Its
+ * "when" (morning, later) isn't read: every weigh-in counts the same (user, 2026-10-28).
+ */
+export interface PastWeighIn { id: string; day: number; time: string | null; kg: number; source: string; note: string }
 /** Another FitNotes body measurement (weights.json's "measurements"): kept, not shown. */
 export interface Measurement { day: number; time: string | null; name: string; value: number | null; unit: string; note: string; source: string }
 
@@ -193,12 +194,7 @@ export function readWeights(raw: unknown): { weighIns: PastWeighIn[]; measuremen
   const { list, root, problems } = readList(raw, WEIGHTS_FILE, "weights", WEIGHTS_VERSION, "Weigh-in", (e, id, day, problem) => {
     const kg = numField(e, "kg", problem);
     if (kg === null || kg <= 0) problem("has no weight; skipped.");
-    const when = e.when ?? null;
-    if (when !== null && when !== "morning" && when !== "later") problem(`has when "${str(when)}", which isn't morning, later or null; read as null.`);
-    return {
-      id, day, time: clockField(e, "time", problem), kg: kg ?? 0, when: (when === "morning" || when === "later" ? when : null) as PastWhen,
-      source: str(e.source).trim(), note: str(e.note),
-    };
+    return { id, day, time: clockField(e, "time", problem), kg: kg ?? 0, source: str(e.source).trim(), note: str(e.note) };
   });
   const measurements: Measurement[] = [];
   for (const x of arr(root.measurements)) {
@@ -308,25 +304,26 @@ export function kcalTarget(plan: Plan, day: number, entries: ReadonlyMap<string,
 
 // ---------- Body weight ----------
 
-export type WeighWhen = "morning" | "pre-run" | "post-run";
 /** One weigh-in. Soft-deleted (not removed) so the delete syncs. */
 export interface WeighIn {
   /** Random. */
   id: string;
   day: number;
-  /** "07:10". */
+  /** "07:10": when it was entered. */
   time: string | null;
   kg: number;
-  when: WeighWhen;
+  /** Legacy: morning, before or after a run, from before 2.8.1. Still on old records, read by nothing. */
+  when?: string;
   note: string;
   updatedAt: number;
   deletedAt: number | null;
 }
 
-export interface WeightPoint { day: number; kg: number; trend: number }
+/** A day of the trend: the day's weight (the average of its weigh-ins), how many there were, and the trend. */
+export interface WeightPoint { day: number; kg: number; count: number; trend: number }
 
-/** A weigh-in to show: the user's own (source "planner") or one from the history. "later" is history only. */
-export interface BodyWeight { id: string; day: number; time: string | null; kg: number; when: WeighWhen | "later"; note: string; source: string }
+/** A weigh-in to show: the user's own (source "planner") or one from the history. */
+export interface BodyWeight { id: string; day: number; time: string | null; kg: number; note: string; source: string }
 
 /** Which source's weigh-ins count on a day that has several: the user's own first (user, 2026-10-27). */
 const WEIGHT_SOURCES = ["planner", "fitnotes", "health_connect", "garmin"];
@@ -334,29 +331,33 @@ const sourceRank = (s: string) => { const i = WEIGHT_SOURCES.indexOf(s); return 
 
 /**
  * Every weigh-in to show, oldest first: the user's own (not deleted) and the history's, where a day keeps
- * only the weigh-ins of its best source (Planner, then FitNotes, Health Connect, Garmin). A history weigh-in
- * whose time of day isn't known counts as morning.
+ * only the weigh-ins of its best source (Planner, then FitNotes, Health Connect, Garmin).
  */
 export function bodyWeights(own: Iterable<WeighIn>, past: Iterable<PastWeighIn> = []): BodyWeight[] {
   const all: BodyWeight[] = [];
-  for (const w of own) if (w.deletedAt === null) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, when: w.when, note: w.note, source: "planner" });
-  for (const w of past) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, when: w.when ?? "morning", note: w.note, source: w.source });
+  for (const w of own) if (w.deletedAt === null) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, note: w.note, source: "planner" });
+  for (const w of past) all.push({ id: w.id, day: w.day, time: w.time, kg: w.kg, note: w.note, source: w.source });
   const best = new Map<number, number>();
   for (const w of all) best.set(w.day, Math.min(best.get(w.day) ?? Infinity, sourceRank(w.source)));
   return all.filter((w) => sourceRank(w.source) === best.get(w.day)).sort(byMoment);
 }
 
 /**
- * The weight trend, from the morning weigh-ins only (before-run and after-run weights swing with water):
- * the first of each day, as an exponentially weighted average that gives 10% of the gap to each new day's
- * weight, more after days without one (1 − 0.9 ^ days since the last). The first weigh-in starts it.
+ * The weight trend from every weigh-in, whatever the time of day: one point a day, its weight the average
+ * of the day's weigh-ins, as an exponentially weighted average that gives 10% of the gap to each new day's
+ * weight, more after days without one (1 − 0.9 ^ days since the last). The first day starts it.
  */
-export function weightTrend(weighIns: Iterable<Moment & { kg: number; when: string; deletedAt?: number | null }>): WeightPoint[] {
+export function weightTrend(weighIns: Iterable<{ day: number; kg: number; deletedAt?: number | null }>): WeightPoint[] {
+  const days = new Map<number, { sum: number; count: number }>();
+  for (const w of weighIns) {
+    if ((w.deletedAt ?? null) !== null) continue;
+    const d = days.get(w.day);
+    if (d) { d.sum += w.kg; d.count++; } else days.set(w.day, { sum: w.kg, count: 1 });
+  }
   const out: WeightPoint[] = [];
-  for (const w of [...weighIns].filter((w) => w.when === "morning" && (w.deletedAt ?? null) === null).sort(byMoment)) {
-    const prev = out[out.length - 1];
-    if (prev && prev.day === w.day) continue;
-    out.push({ day: w.day, kg: w.kg, trend: prev ? prev.trend + (1 - 0.9 ** (w.day - prev.day)) * (w.kg - prev.trend) : w.kg });
+  for (const [day, { sum, count }] of [...days].sort((a, b) => a[0] - b[0])) {
+    const prev = out[out.length - 1], kg = sum / count;
+    out.push({ day, kg, count, trend: prev ? prev.trend + (1 - 0.9 ** (day - prev.day)) * (kg - prev.trend) : kg });
   }
   return out;
 }
@@ -374,36 +375,6 @@ export function weeklyChange(points: readonly WeightPoint[], day = points[points
   return now === null || before === null ? null : now - before;
 }
 
-/** A run between two weigh-ins: the weight before and after it, and the weight lost on it (positive). */
-export interface RunWeights { day: number; before: number; after: number; lost: number; run: Run | null }
-
-/**
- * Each before-run weigh-in followed, the same day, by an after-run one, oldest first: the weight lost on that
- * run, for the plan session's sweat rate. Within a day, an after-run weigh-in pairs with the last before-run
- * one not yet paired (a second before-run one replaces it). [run] is the day's run done after the before-run
- * weigh-in when both times are known, else the day's first; null when runs.json has none that day.
- */
-export function runWeights(weighIns: Iterable<{ day: number; time: string | null; id: string; kg: number; when: string; deletedAt?: number | null }>, runs: readonly Run[] = []): RunWeights[] {
-  const out: RunWeights[] = [];
-  let open: { day: number; time: string | null; kg: number } | null = null;
-  // At the same minute (or both without a time), a before-run weigh-in comes first.
-  const order = (when: string) => (when === "pre-run" ? 0 : when === "post-run" ? 2 : 1);
-  const list = [...weighIns].filter((w) => (w.deletedAt ?? null) === null)
-    .sort((a, b) => a.day - b.day || (a.time ?? "99:99").localeCompare(b.time ?? "99:99") || order(a.when) - order(b.when) || a.id.localeCompare(b.id));
-  for (const w of list) {
-    if (open && open.day !== w.day) open = null;
-    if (w.when === "pre-run") open = w;
-    else if (w.when === "post-run" && open) {
-      const start = open.time;
-      const sameDay = runs.filter((r) => r.day === w.day);
-      const run = sameDay.find((r) => start !== null && r.time !== null && r.time >= start) ?? sameDay[0] ?? null;
-      out.push({ day: w.day, before: open.kg, after: w.kg, lost: Math.round((open.kg - w.kg) * 10) / 10, run });
-      open = null;
-    }
-  }
-  return out;
-}
-
 /** The name to give a source in "from …" ("FitNotes", "Garmin", "Strava"); null for the user's own (Planner) or none. */
 export function sourceName(source: string | null): string | null {
   if (!source || source === "planner") return null;
@@ -413,8 +384,8 @@ export function sourceName(source: string | null): string | null {
 
 /** bodyweight.csv for the plan session: one row per weigh-in not deleted. */
 export function weighInsCsv(list: Iterable<WeighIn>): string {
-  const rows: (string | number | null)[][] = [["date", "kg", "when", "note"]];
-  for (const w of [...list].filter((w) => w.deletedAt === null).sort(byMoment)) rows.push([isoOf(w.day), w.kg, w.when, w.note]);
+  const rows: (string | number | null)[][] = [["date", "time", "kg", "note"]];
+  for (const w of [...list].filter((w) => w.deletedAt === null).sort(byMoment)) rows.push([isoOf(w.day), w.time, w.kg, w.note]);
   return csv(rows);
 }
 

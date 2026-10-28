@@ -1,8 +1,7 @@
 // Progress (#/training?view=progress), in place of the old Bests page: how the lifts, runs and body weight
 // are moving. Tabs Lifts · Runs · Weight · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
-// headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the pairs
-// around runs). Touching a chart reads a day, and the headline shows that day's reading, naming where it came
+// headline number, a chart with the range switch, and what goes with it (hard sets, rep bests). Touching a chart reads a day, and the headline shows that day's reading, naming where it came
 // from when it's history (FitNotes, Strava, Garmin). On the phone a card opens over the list (back closes
 // it); in a wide window the list and the card sit side by side. Weight's top bar has "+ Weigh in".
 // The numbers come from domain/trends.ts; nothing here is stored but the user's weigh-ins.
@@ -10,7 +9,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
 import {
-  type LiftPoint, type Run, type WeighWhen, bodyWeights, easyRuns, liftPoints, longRuns, runWeights, sourceName, targetRpeOf, weeklyChange,
+  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
 } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, saveWeighIn } from "../../store/training.ts";
@@ -73,7 +72,7 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   const cardView = card ? <CardView tr={tr} lp={lp} tab={tab} id={card} t={t} /> : null;
 
   if (!wide && card) {
-    return <Scaffold title={cardTitle(tr, tab, card)} back flush actions={card === "w" || card === "ar" ? weighIn : null}>
+    return <Scaffold title={cardTitle(tr, tab, card)} back flush actions={card === "w" ? weighIn : null}>
       <div className="p-content pg-page">{cardView}<div className="p-endspace" /></div>{sheet}
     </Scaffold>;
   }
@@ -121,13 +120,13 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
 
 function cardTitle(tr: Training, tab: Tab, id: string): string {
   if (tab === "lifts") return liftName(tr, id);
-  return ({ km: "Distance per week", long: "Long run", easy: "Easy pace", q: "Quality runs", w: "Weight", ar: "Around runs" } as Record<string, string>)[id] ?? "Progress";
+  return ({ km: "Distance per week", long: "Long run", easy: "Easy pace", q: "Quality runs", w: "Weight" } as Record<string, string>)[id] ?? "Progress";
 }
 
 function CardView({ tr, lp, tab, id, t }: { tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number }) {
   if (tab === "lifts") return <LiftCards tr={tr} lp={lp} id={id} />;
   if (tab === "runs") return <RunCards tr={tr} id={id} t={t} />;
-  if (tab === "weight") return id === "ar" ? <AroundRuns tr={tr} /> : <WeightCards tr={tr} t={t} />;
+  if (tab === "weight") return <WeightCards tr={tr} t={t} />;
   return null;
 }
 
@@ -444,24 +443,22 @@ function weightData(tr: Training) {
 }
 
 function weightRows(tr: Training, since: number | null): Row[] {
-  const { trend } = weightData(tr);
+  const { all, trend } = weightData(tr);
   const rows: Row[] = [];
   if (trend.length) {
-    const recent = inRange(trend, since), last = trend[trend.length - 1], wk = weeklyChange(trend);
+    const recent = inRange(trend, since), last = trend[trend.length - 1], wk = weeklyChange(trend), n = inRange(all, since).length;
     rows.push({
-      id: "w", group: "Weight", name: "Morning trend", sub: `from ${recent.length === 1 ? "1 weigh-in" : `${recent.length} weigh-ins`}`,
+      id: "w", group: "Weight", name: "Trend", sub: `from ${n === 1 ? "1 weigh-in" : `${n} weigh-ins`}`,
       spark: <Spark values={recent.map((p) => p.trend)} color={WEIGHT} />, value: last.trend.toFixed(1), valueSub: wk !== null ? `${signed1(wk)} kg/wk` : "",
     });
   }
-  const pairs = runWeights(tr.weighIns, tr.runs);
-  const last = pairs[pairs.length - 1];
-  rows.push({
-    id: "ar", group: "Weight", name: "Around runs",
-    sub: last ? join(formatDate(last.day), last.run?.distanceKm != null && `${km1(last.run.distanceKm)} km`) : "Weigh in before and after a run",
-    spark: <Spark bars values={pairs.slice(-6).map((p) => Math.max(0, p.lost))} color={WEIGHT} />,
-    value: last ? signed1(-last.lost) : "–", valueSub: last ? "kg on the run" : "",
-  });
   return rows;
+}
+
+/** A day's weigh-in times for its reading: "08:12", "08:12 & 19:40", else "3 weigh-ins". Blank when none has a time. */
+function timesOf(list: readonly BodyWeight[]): string {
+  if (list.length > 2) return `${list.length} weigh-ins`;
+  return list.map((w) => w.time).filter(Boolean).join(" & ");
 }
 
 function WeightCards({ tr, t }: { tr: Training; t: number }) {
@@ -475,16 +472,19 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
   const p = at !== null ? shown[at] : null;
   let read: [string, ReactNode] | null = null;
   if (p) {
-    const w = all.find((x) => x.day === p.day && x.when === "morning");
-    read = [join(formatDate(p.day), w && from(w.source)), <>{p.trend.toFixed(1)} kg <small>trend · weighed {p.kg.toFixed(1)}</small></>];
+    const day = all.filter((x) => x.day === p.day);
+    read = [
+      join(formatDate(p.day), timesOf(day), `${p.count > 1 ? "average " : ""}${p.kg.toFixed(1)} kg`, day[0] && from(day[0].source)),
+      <>{p.trend.toFixed(1)} kg <small>trend</small></>,
+    ];
   }
   return <>
     <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />
-    <ChartCard title="Morning weight" read={read}
+    <ChartCard title="Weight" read={read}
       head={last ? <Head value={last.trend.toFixed(1)} unit="kg trend" chip={wk !== null ? `${signed1(wk)} kg / week` : null} /> : <Head value="–" unit="kg" />}
       foot={<>
         <div className="pg-leg"><span><i className="ln" style={{ background: WEIGHT }} />Trend</span><span><i className="dt" style={{ background: WEIGHT_DIM }} />Each weigh-in</span></div>
-        <div className="pg-foot">One weigh-in can swing 1–2 kg with water; follow the line. Weigh-ins later in the day or around a run are dots only.</div>
+        <div className="pg-foot">One weigh-in can swing 1–2 kg with water; follow the line. A day with several weigh-ins counts their average.</div>
       </>}>
       {shown.length
         ? <Chart series={[
@@ -496,36 +496,15 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
   </>;
 }
 
-/** The before- and after-run pairs, newest first: the weight lost on each run. */
-function AroundRuns({ tr }: { tr: Training }) {
-  const pairs = runWeights(tr.weighIns, tr.runs).reverse();
-  return (
-    <div className="pg-card pg-mini">
-      <div className="pg-ct"><span>Weight lost on the run</span></div>
-      {pairs.length === 0 && <div className="pg-none">Weigh in before a run and again after it (+ Weigh in, then Before a run / After a run), and each run shows here.</div>}
-      {pairs.map((p, i) => (
-        <div key={i} className="r">
-          <span>{join(formatDate(p.day), p.run && (p.run.distanceKm !== null ? `${km1(p.run.distanceKm)} km` : p.run.title))}<small>{p.before.toFixed(1)} → {p.after.toFixed(1)}</small></span>
-          <span className="big">{signed1(-p.lost)}</span>
-        </div>
-      ))}
-      <div className="pg-foot">The plan session works out your sweat rate from these.</div>
-    </div>
-  );
-}
-
-const WHENS: [WeighWhen, string][] = [["morning", "Morning"], ["pre-run", "Before a run"], ["post-run", "After a run"]];
-
-/** "+ Weigh in": the weight by the slide stepper (0.1 kg a step), and when. Saved for today, at the time now. */
+/** "+ Weigh in": the weight by the slide stepper (0.1 kg a step). Saved for today, at the time now. */
 function WeighInSheet({ tr, t, onClose }: { tr: Training; t: number; onClose: () => void }) {
   const lastKg = useMemo(() => { const all = bodyWeights(tr.weighIns, tr.pastWeighIns); return all[all.length - 1]?.kg ?? 75; }, [tr]);
   const [kg, setKg] = useState<number | null>(Math.round(lastKg * 10) / 10);
-  const [when, setWhen] = useState<WeighWhen>("morning");
   const save = (close: () => void) => {
     if (kg === null) return;
     const now = new Date();
     const w = {
-      id: randomId(), day: t, time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, kg, when, note: "",
+      id: randomId(), day: t, time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, kg, note: "",
       updatedAt: Date.now(), deletedAt: null,
     };
     saveWeighIn(w);
@@ -538,7 +517,6 @@ function WeighInSheet({ tr, t, onClose }: { tr: Training; t: number; onClose: ()
       <div className="pg-weigh">
         <div className="tr-sheet-title t-title-medium">Weigh in</div>
         <SlideStepper value={kg} onChange={setKg} step={0.1} min={30} max={250} format={(v) => v.toFixed(1)} unit="kg" decimal label="Weight" />
-        <div className="pg-when"><Segmented value={when} options={WHENS} onChange={(k) => { feel("tick"); setWhen(k); }} /></div>
         <SheetButtons onCancel={close} onSave={() => save(close)} enabled={kg !== null} />
       </div>
     )}</BottomSheet>

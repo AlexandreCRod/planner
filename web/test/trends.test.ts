@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
   type Run, type WeighIn, bodyWeights, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
-  readRuns, readSleep, readWeights, rpeFor, runWeights, sourceName,
+  readRuns, readSleep, readWeights, rpeFor, sourceName,
   targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
@@ -139,23 +139,22 @@ test("long runs, easy runs for pace against heart rate, and the longest in the l
 // ---------- Weight ----------
 
 const w = (day: number, kg: number, extra: Partial<WeighIn> = {}): WeighIn => ({
-  id: `w${++n}`, day, time: null, kg, when: "morning", note: "", updatedAt: 1, deletedAt: null, ...extra,
+  id: `w${++n}`, day, time: null, kg, note: "", updatedAt: 1, deletedAt: null, ...extra,
 });
 
-test("the weight trend: mornings only, the first of each day, gaps count for more", () => {
+test("the weight trend: every weigh-in, a day's average, gaps count for more", () => {
   const list = [
-    w(10, 80), w(11, 79, { time: "07:00" }), w(11, 70, { time: "08:00" }),    // the second on a day is ignored
-    w(11, 90, { when: "pre-run", time: "06:00" }), w(12, 100, { when: "post-run" }), // so are the other times of day
-    w(13, 50, { deletedAt: 5 }),                                                // and deleted ones
+    w(10, 80), w(11, 79, { time: "07:00" }), w(11, 80, { time: "19:00" }),    // a day with two counts their average
+    w(11, 81, { time: "12:00", when: "post-run" }),                             // an old record's time of day is ignored
+    w(13, 50, { deletedAt: 5 }),                                                // deleted ones aren't counted
     w(14, 78),
   ];
   const t = weightTrend(list);
-  assert.deepEqual(t.map((p) => [p.day, p.kg]), [[10, 80], [11, 79], [14, 78]]);
-  close(t[0].trend, 80);                                  // the first weigh-in starts it
-  close(t[1].trend, 79.9);                                // 10% of the way after a day
-  close(t[2].trend, 79.9 + (1 - 0.9 ** 3) * (78 - 79.9)); // 3 days since: 27.1% of the way
+  assert.deepEqual(t.map((p) => [p.day, p.kg, p.count]), [[10, 80, 1], [11, 80, 3], [14, 78, 1]]);
+  close(t[0].trend, 80);                                  // the first day starts it
+  close(t[1].trend, 80);                                  // 10% of the way to the day's average (80)
+  close(t[2].trend, 80 + (1 - 0.9 ** 3) * (78 - 80));     // 3 days since: 27.1% of the way
   assert.deepEqual(weightTrend([]), []);
-  assert.deepEqual(weightTrend([w(5, 80, { when: "pre-run" })]), []);
 });
 
 test("trend at a day, and its change over a week", () => {
@@ -175,18 +174,20 @@ test("trend at a day, and its change over a week", () => {
 test("bodyweight.csv: sorted, deleted ones left out, notes quoted like the other CSVs", () => {
   const list = [
     w(d("2026-10-27"), 80.2, { time: "07:10", note: 'felt "heavy", ok' }),
-    w(d("2026-10-26"), 81, { when: "post-run", time: "11:00" }),
+    w(d("2026-10-26"), 81, { when: "post-run", time: "11:00" }),               // an old record's when isn't written
     w(d("2026-10-26"), 80.5, { time: "07:05" }),
+    w(d("2026-10-28"), 79.9),                                                   // no time: blank
     w(d("2026-10-25"), 99, { deletedAt: 9 }),
   ];
   assert.equal(weighInsCsv(list), [
-    "date,kg,when,note",
-    "2026-10-26,80.5,morning,",
-    "2026-10-26,81,post-run,",
-    '2026-10-27,80.2,morning,"felt ""heavy"", ok"',
+    "date,time,kg,note",
+    "2026-10-26,07:05,80.5,",
+    "2026-10-26,11:00,81,",
+    '2026-10-27,07:10,80.2,"felt ""heavy"", ok"',
+    "2026-10-28,,79.9,",
     "",
   ].join("\r\n"));
-  assert.equal(weighInsCsv([]), "date,kg,when,note\r\n");
+  assert.equal(weighInsCsv([]), "date,time,kg,note\r\n");
 });
 
 // ---------- runs.json and meals.json ----------
@@ -353,7 +354,7 @@ test("runs.json: each run's source, null when it doesn't say", () => {
   assert.deepEqual(runs.map((r) => r.source), ["strava", null]);
 });
 
-test("weights.json: weigh-ins with their source and when, the other measurements kept, bad ones skipped", () => {
+test("weights.json: weigh-ins with their source and time (when is ignored), the other measurements kept, bad ones skipped", () => {
   const { weighIns, measurements, problems } = readWeights({
     version: 1,
     weights: [
@@ -364,30 +365,40 @@ test("weights.json: weigh-ins with their source and when, the other measurements
     ],
     measurements: [{ date: "2024-02-01", time: "13:28", name: "Cold Shower Day", value: 1, unit: "kgs", note: "1st day", source: "fitnotes" }, { name: "no date" }],
   });
-  assert.deepEqual(weighIns.map((w) => [w.id, w.kg, w.when, w.source, w.time]), [
-    ["f2024-01-31T10:49", 85.9, null, "fitnotes", "10:49"], ["g2025-09-10T14:00", 84.1, "later", "garmin", "14:00"], ["odd", 84, null, "fitnotes", null],
+  assert.deepEqual(weighIns.map((w) => [w.id, w.kg, w.source, w.time]), [
+    ["f2024-01-31T10:49", 85.9, "fitnotes", "10:49"], ["g2025-09-10T14:00", 84.1, "garmin", "14:00"], ["odd", 84, "fitnotes", null],
   ]);
   assert.deepEqual(measurements, [{ day: d("2024-02-01"), time: "13:28", name: "Cold Shower Day", value: 1, unit: "kgs", note: "1st day", source: "fitnotes" }]);
+  assert.equal(problems.length, 2);
   assert.ok(problems.some((p) => p.includes("nokg") && p.includes("no weight")));
-  assert.ok(problems.some((p) => p.includes("odd") && p.includes("evening")));
-  assert.ok(problems.some((p) => p.includes("odd") && p.includes("time")));
+  assert.ok(problems.some((p) => p.includes("odd") && p.includes("time")));    // "evening" says nothing: when isn't read
   assert.match(readWeights({ weights: "x" }).problems[0], /weights\.json must look like/);
 });
 
-test("body weights: a day keeps its best source's weigh-ins; unknown times count as morning; the trend takes them", () => {
+test("body weights: a day keeps its best source's weigh-ins; the trend takes them all, a day's average", () => {
   const own = (id: string, day: string, kg: number, extra: Partial<WeighIn> = {}): WeighIn =>
-    ({ id, day: d(day), time: "08:00", kg, when: "morning", note: "", updatedAt: 1, deletedAt: null, ...extra });
-  const past = (id: string, day: string, kg: number, source: string, when: "morning" | "later" | null = null) =>
-    ({ id, day: d(day), time: "10:00", kg, when, source, note: "" });
+    ({ id, day: d(day), time: "08:00", kg, note: "", updatedAt: 1, deletedAt: null, ...extra });
+  const past = (id: string, day: string, kg: number, source: string, time = "10:00") => ({ id, day: d(day), time, kg, source, note: "" });
   const all = bodyWeights(
     [own("p1", "2026-10-28", 82), own("p2", "2026-10-29", 81, { deletedAt: 5 })],
     [past("f1", "2026-10-28", 83, "fitnotes"), past("g1", "2026-10-27", 84, "garmin"), past("f2", "2026-10-27", 83.5, "fitnotes"),
-      past("f3", "2026-10-27", 83.9, "fitnotes", "later"), past("g2", "2026-10-29", 80, "garmin")],
+      past("f3", "2026-10-27", 84.5, "fitnotes", "19:00"), past("g2", "2026-10-29", 80, "garmin")],
   );
-  assert.deepEqual(all.map((w) => [w.id, w.source, w.when]), [
-    ["f2", "fitnotes", "morning"], ["f3", "fitnotes", "later"], ["p1", "planner", "morning"], ["g2", "garmin", "morning"],
+  assert.deepEqual(all.map((w) => [w.id, w.source, w.time]), [
+    ["f2", "fitnotes", "10:00"], ["f3", "fitnotes", "19:00"], ["p1", "planner", "08:00"], ["g2", "garmin", "10:00"],
   ]);
-  assert.deepEqual(weightTrend(all).map((p) => p.kg), [83.5, 82, 80]);   // "later" stays out of the trend
+  assert.deepEqual(weightTrend(all).map((p) => [p.kg, p.count]), [[84, 2], [82, 1], [80, 1]]);
+});
+
+test("imported weigh-ins weights.json calls \"later\" count in the trend (the gap of 11 to 20 Oct)", () => {
+  const { weighIns } = readWeights({ version: 1, weights: [
+    { id: "g1", date: "2026-10-10", time: "08:00", kg: 83, when: "morning", source: "garmin" },
+    { id: "g2", date: "2026-10-12", time: "18:30", kg: 82.6, when: "later", source: "garmin" },
+    { id: "g3", date: "2026-10-16", time: "21:10", kg: 82.4, when: "later", source: "garmin" },
+    { id: "g4", date: "2026-10-20", time: "07:50", kg: 82, when: null, source: "garmin" },
+  ] });
+  const t = weightTrend(bodyWeights([], weighIns));
+  assert.deepEqual(t.map((p) => isoOf(p.day)), ["2026-10-10", "2026-10-12", "2026-10-16", "2026-10-20"]);
 });
 
 test("lift-history.json: sets with their exercise, bad ones skipped", () => {
@@ -431,30 +442,7 @@ test("sleep.json: one night per date, blanks where Garmin had nothing", () => {
   assert.ok(problems.some((p) => p.includes("2025-09-10") && p.includes("bed")));
 });
 
-// ---------- Progress: around runs, sources, history in the hard sets ----------
-
-test("around runs: a before-run weigh-in pairs with the next after-run one the same day", () => {
-  const w = (id: string, day: string, time: string | null, kg: number, when: WeighIn["when"], deletedAt: number | null = null): WeighIn =>
-    ({ id, day: d(day), time, kg, when, note: "", updatedAt: 1, deletedAt });
-  const runs = [run("r1", "2026-11-15", { time: "09:00", distanceKm: 16 }), run("r2", "2026-11-17", { time: "07:00" }), run("r3", "2026-11-17", { time: "18:30" })];
-  const pairs = runWeights([
-    w("a", "2026-11-15", "08:40", 78.9, "pre-run"), w("b", "2026-11-15", "11:00", 77.5, "post-run"),
-    w("c", "2026-11-16", "08:00", 79.0, "pre-run"),                                                   // no after-run that day
-    w("d", "2026-11-17", "07:05", 78.0, "post-run"),                                                  // after-run with nothing open
-    w("e", "2026-11-17", "18:00", 79.2, "pre-run"), w("f", "2026-11-17", "18:10", 79.1, "pre-run"),   // the second one replaces the first
-    w("g", "2026-11-17", "19:40", 78.3, "post-run"),
-    w("h", "2026-11-18", null, 79.0, "pre-run"), w("i", "2026-11-18", null, 78.6, "post-run", 5),    // deleted: no pair
-    w("j", "2026-11-19", null, 79.0, "pre-run"), w("k", "2026-11-19", null, 78.0, "morning"), w("l", "2026-11-19", null, 78.4, "post-run"),
-  ], runs);
-  assert.deepEqual(pairs.map((p) => [p.day, p.before, p.after, p.lost, p.run?.id ?? null]), [
-    [d("2026-11-15"), 78.9, 77.5, 1.4, "r1"],
-    [d("2026-11-17"), 79.1, 78.3, 0.8, "r3"],     // the run after 18:10, not the morning one
-    [d("2026-11-19"), 79.0, 78.4, 0.6, null],     // a morning weigh-in between doesn't break the pair; no run that day
-  ]);
-  assert.deepEqual(runWeights([]), []);
-  // Weighed in the same minute: the before-run one still comes first, whatever the ids.
-  assert.deepEqual(runWeights([w("z", "2026-11-20", "10:00", 79.0, "pre-run"), w("a", "2026-11-20", "10:00", 78.5, "post-run")]).map((p) => p.lost), [0.5]);
-});
+// ---------- Progress: sources, history in the hard sets ----------
 
 test("source names: history says where it came from, Planner's own says nothing", () => {
   assert.equal(sourceName("fitnotes"), "FitNotes");
