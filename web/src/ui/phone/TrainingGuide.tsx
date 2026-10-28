@@ -36,6 +36,12 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose }:
   const [full, setFull] = useState(isWide);
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => { body.current?.scrollTo?.({ top: 0 }); }, [id]);
+  /** Whether the half sheet hides some of the guide (else there's no "Swipe up" hint). */
+  const [more, setMore] = useState(true);
+  useEffect(() => {
+    const el = body.current;
+    if (el && !full) setMore(el.scrollHeight > el.clientHeight + 4);
+  }, [id, full, parts]);
   /** The other ways to do this one: back to the plan's after a swap, else the plan's swaps. */
   const options = planned === undefined ? [] : [
     ...(planned !== id ? [{ exercise: planned, when: "As planned" }] : []),
@@ -74,7 +80,7 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose }:
             {options.map((w) => (
               <button key={w.exercise} className="tr-guide-swap" disabled={!onSwap} onClick={() => onSwap?.(w.exercise)}>
                 <MIcon name="fSwapHoriz" size={18} />
-                <span><b>{exs.get(w.exercise)?.name ?? w.exercise}</b>{w.when ? ` ${w.when.replace(/^./, (c) => c.toLowerCase())}` : ""}</span>
+                <span><b>{exs.get(w.exercise)?.name ?? w.exercise}</b>{w.when && <span className="w">{w.when}</span>}</span>
               </button>
             ))}
           </>}
@@ -84,7 +90,7 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose }:
             </button>
           )}
         </div>
-        {!full && (
+        {!full && more && (
           <button className="tr-guide-more p-sheet-drag" onClick={() => setFull(true)}>
             <MIcon name="fExpandLess" size={18} />Swipe up for the whole guide
           </button>

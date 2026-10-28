@@ -274,7 +274,8 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-guide-swap { display: flex; align-items: flex-start; gap: 10px; width: calc(100% - 48px); margin: 2px 24px 0; padding: 6px 0; border: 0; background: none; text-align: left;
   font: inherit; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .tr-guide-swap > .p-svg { flex: none; margin-top: 1px; color: var(--p-primary); }
-.phone .tr-guide-swap b { font-weight: 500; color: var(--text); }
+.phone .tr-guide-swap b { font-weight: 500; color: var(--text); display: block; }
+.phone .tr-guide-swap .w { display: block; font-size: 13px; line-height: 18px; }
 .phone .tr-guide-swap:disabled { opacity: 1; }
 .phone .tr-guide-open { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 14px 16px 0; padding: 12px 8px; border: 0; border-top: 1px solid var(--line);
   background: none; color: var(--p-primary); font: inherit; font-size: 14px; font-weight: 500; text-align: left; }
