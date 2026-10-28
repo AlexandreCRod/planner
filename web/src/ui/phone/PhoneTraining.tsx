@@ -6,6 +6,9 @@
 // over the week on the phone, beside it in a wide window. Progress (TrainingProgress.tsx) and the documents are
 // in the top bar. Placing a session or futsal on a day that breaks one of the phase's rules opens a sheet that
 // says so (it's never blocked), and a row shows "⚠ 1 rule" while it breaks one.
+// Above the week, the sleep line (last night, the 7-day average, resting HR, HRV; a tap opens Progress on
+// Sleep), and two quiet markers: a moon on a key run (quality or long) after a night under 6 h, and a small
+// heart on a day whose resting HR is up 7+ on its 7-day average two mornings running (domain/sleep.ts).
 // Also here: Today's training line and the calendar's light marks.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { dayShort, formatDate, today as todayEpoch, weekday } from "../../domain/dates.ts";
@@ -17,6 +20,7 @@ import {
 } from "../../domain/training.ts";
 import { type ColourKind, type WeekBar, colourKind, fmtKm, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
+import { type SleepNight, fmtSleep, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
@@ -156,6 +160,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     <div className="p-content tr-week" ref={scroller}>
       <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
       {!readOnly && <HealthCard />}
+      <SleepLine nights={tr.sleep} t={t} onOpen={() => { feel("tick"); go(`training?view=progress&tab=sleep${planQ(planId)}`); }} />
       {readOnly && <div className="tr-oldplan">An earlier plan: read only.</div>}
       <ChipRow className="tr-phases">
         {plan.phases.map((p, i) => (
@@ -207,11 +212,14 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
         <div key={day} data-drop={day}
           className={`tr-day ${day === t ? "today" : ""} ${day < ph.start || day > ph.end ? "outside" : ""} ${picked ? "target" : ""} ${drag.over === String(day) ? "over" : ""}`}
           onClickCapture={picked ? (ev) => { ev.stopPropagation(); ev.preventDefault(); place(picked, day); } : undefined}>
-          <div className="tr-dayhead"><span>{formatDate(day)}</span>{day === t && <span className="tr-todaytag">Today</span>}</div>
+          <div className="tr-dayhead"><span>{formatDate(day)}</span>{day === t && <span className="tr-todaytag">Today</span>}
+            {day <= t && restingHrFlag(tr.sleep, day) && <span className="tr-hrflag" role="img" aria-label="Resting heart rate up 7 or more on your 7-day average, two mornings running"
+              title="Resting heart rate up 7 or more on your 7-day average, two mornings running"><MIcon name="fFavorite" size={12} /></span>}</div>
           {items.length === 0 && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
             <div key={s.id}>
               <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
+                slept={keyRun(s) && day <= t ? shortSleepBefore(tr.sleep, day) : null} lastNight={day === t}
                 warn={broken.get(s.id)?.length ?? 0} onWarn={() => setWarn({ item: { session: s.id }, day, undo: null })}
                 onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly || s.locked ? undefined : drag.props(s.id)} />
               {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
@@ -292,6 +300,36 @@ function Ring({ kind, done, label, onTick }: { kind: ColourKind | null; done: bo
   );
 }
 
+/** A key run: a quality session or the long run, the ones a short night before is worth a word on. */
+const keyRun = (s: Session) => s.kind === "run" && (s.tags.includes("quality") || s.dayType === "long");
+
+/**
+ * "Slept 7 h 12 · 7-day average 7 h 05 · resting HR 51 · HRV 52": the latest morning, when it's today's or
+ * yesterday's (else nothing shows); parts without data are left out. A tap opens the Sleep tab.
+ */
+function SleepLine({ nights, t, onOpen }: { nights: readonly SleepNight[]; t: number; onOpen: () => void }) {
+  const n = nights[nights.length - 1];
+  if (!n || n.day < t - 1) return null;
+  const avg = sleepAverages(nights, n.day);
+  const title = n.totalMin !== null ? `Slept ${fmtSleep(n.totalMin)}` : "Last night";
+  const sub = [
+    avg.sleepMin !== null && `7-day average ${fmtSleep(avg.sleepMin)}`, n.restingHr !== null && `resting HR ${n.restingHr}`, n.hrvMs !== null && `HRV ${Math.round(n.hrvMs)}`,
+  ].filter(Boolean).join(" · ");
+  return (
+    <button className="tr-sleep" onClick={onOpen} aria-label={`${title}${sub ? `, ${sub}` : ""}. Open sleep in Progress`}>
+      <MIcon name="fDarkMode" size={20} />
+      <span className="text"><span className="title">{title}</span>{sub && <span className="detail">{sub}</span>}</span>
+      <MIcon name="fKeyboardArrowRight" size={20} />
+    </button>
+  );
+}
+
+/** The moon on a key run after a short night: how long was slept, quietly. */
+function SleepMark({ min, lastNight }: { min: number; lastNight: boolean }) {
+  const text = `Slept under 6 h ${lastNight ? "last night" : "the night before"} (${fmtSleep(min)})`;
+  return <span className="tr-slept" role="img" aria-label={text} title={text}><MIcon name="fDarkMode" size={12} /><span>{fmtSleep(min)}</span></span>;
+}
+
 /** "⚠ 1 rule" on a row that breaks a placement rule now; a tap opens the rules it breaks. */
 function RuleMark({ n, onOpen }: { n: number; onOpen: () => void }) {
   return (
@@ -301,8 +339,8 @@ function RuleMark({ n, onOpen }: { n: number; onOpen: () => void }) {
   );
 }
 
-function SessionRow({ s, e, run, selected, lifted, warn, onWarn, onTick, onOpen, dragProps }: {
-  s: Session; e: Entry; run: Run | null; selected: boolean; lifted: boolean; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void;
+function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWarn, onTick, onOpen, dragProps }: {
+  s: Session; e: Entry; run: Run | null; selected: boolean; lifted: boolean; slept: number | null; lastNight: boolean; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void;
   dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
 }) {
   const kind = colourKind({ session: s, entry: e });
@@ -316,6 +354,7 @@ function SessionRow({ s, e, run, selected, lifted, warn, onWarn, onTick, onOpen,
         <span className="title">{s.title}</span>
         <span className="detail">{ran || [s.detail, s.optional ? "optional" : "", s.locked ? "fixed" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")}</span>
       </span>
+      {slept !== null && <SleepMark min={slept} lastNight={lastNight} />}
       {warn > 0 && <RuleMark n={warn} onOpen={onWarn} />}
     </div>
   );

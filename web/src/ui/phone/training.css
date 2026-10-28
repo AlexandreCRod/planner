@@ -80,6 +80,19 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
 .phone .tr-warn { position: relative; flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 6px; border: 0; border-radius: 10px;
   background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-size: 11px; line-height: 20px; }
 .phone .tr-warn::before { content: ""; position: absolute; inset: -14px -6px; }
+/* The quiet sleep markers: a moon and the hours on a key run after a short night, a small heart on a day
+   whose resting HR is up. Grey like the mockup's, never alarming. */
+.phone .tr-slept { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 6px; border-radius: 10px;
+  background: var(--p-sc-high, var(--surface-2)); color: color-mix(in srgb, var(--text) 80%, transparent); font-size: 11px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.phone .tr-hrflag { display: inline-flex; align-items: center; color: #c06cb8; opacity: .85; }
+/* The sleep line above the week. */
+.phone .tr-sleep { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 8px 16px 0; padding: 10px 8px 10px 16px; border: 0; border-radius: 12px;
+  background: var(--p-sc-low, var(--surface-2)); color: color-mix(in srgb, var(--text) 80%, transparent); text-align: left; font: inherit; cursor: pointer; }
+.phone .tr-sleep:active { background: var(--p-sec-container); }
+.phone .tr-sleep .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .tr-sleep .title { font-size: 16px; line-height: 22px; color: var(--text); }
+.phone .tr-sleep .detail { font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-sleep > svg:last-child { color: var(--muted); }
 /* The ring: a 48 dp target around a 22 dp circle; done fills it in the accent with a tick. */
 .phone .tr-ring { flex: none; width: 44px; height: 44px; margin-right: -6px; border: 0; background: none; display: grid; place-items: center; color: var(--p-on-primary); padding: 0; position: relative; }
 .phone .tr-ring::before { content: ""; position: absolute; left: 11px; top: 11px; width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--p-outline); transition: background-color .15s, box-shadow .15s; }
