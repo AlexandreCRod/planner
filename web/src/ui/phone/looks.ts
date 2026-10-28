@@ -31,3 +31,9 @@ export const futsalIconLook: "now" | 1 | 2 | 3 | 4 | 5 | 6 = 6;
  * stopwatch (quality), finish flag (race), treadmill (other). (trainingParts.tsx, runIcon.)
  */
 export const runIconSet: 1 | 2 = 2;
+
+/**
+ * Tasks B (241, for item 254): a Tasks button in Today's top bar that opens the whole Tasks page full-screen
+ * (both lists, as before 241), on top of Tasks A's No date list and Agenda chips.
+ */
+export const tasksB: boolean = false;

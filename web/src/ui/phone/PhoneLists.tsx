@@ -29,6 +29,7 @@ import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 import { count } from "../../domain/plural.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
+import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { keepValue, keptValue, useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 
 // ---------- Tasks ----------
@@ -127,13 +128,13 @@ function ScheduledList() {
   const s = useSnapshot();
   const now = useNow();
   const t = todayEpoch();
-  const [showDone, setShowDone] = useState(false);
-  const [category, setCategory] = useState<number | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>({ showDone: false, category: null });
+  const { showDone, category } = filter;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const hold = useCheckedHold();
   const streaks = showStreaks();
   const entries = s.items
-    .filter((i) => i.type === "TASK" && i.startDay !== null && (category === null || i.categoryId === category))
+    .filter((i) => i.type === "TASK" && i.startDay !== null && inCategory(i, category))
     // A routine's box ticks today's (or the next) day, never a missed one.
     .map((i) => (isRoutineItem(i) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)))
     .filter((e) => showDone || e.status !== "DONE" || isRecurring(e.item));
@@ -141,12 +142,7 @@ function ScheduledList() {
     Number(a.status === "DONE") - Number(b.status === "DONE") || b.item.priority - a.item.priority ||
     (a.day ?? 1e9) - (b.day ?? 1e9) || (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || a.item.title.localeCompare(b.item.title));
   return <>
-    <ChipRow className="tasks">
-      <FilterChip selected={showDone} onClick={() => setShowDone(!showDone)}>Show completed</FilterChip>
-      {s.categories.map((c) => (
-        <FilterChip key={c.id} selected={category === c.id} onClick={() => setCategory(category === c.id ? null : c.id)}>{c.name}</FilterChip>
-      ))}
-    </ChipRow>
+    <TaskChips s={s} value={filter} onChange={setFilter} />
     {entries.length === 0 && <EmptyHint>No tasks yet. Tap + and try "Stretch every day 7am".</EmptyHint>}
     {GROUPS.map((g) => {
       const list = hold.arrange(g, sorted(entries.filter((e) => groupOf(e) === g)), (e) => String(e.item.id));
@@ -172,25 +168,39 @@ function ScheduledList() {
   </>;
 }
 
-/** Tasks with no date or time, Google Tasks style, with a line to add one straight away. */
-function TodoList() {
-  const s = useSnapshot();
-  const now = useNow();
-  const hold = useCheckedHold();
-  const [text, setText] = useState("");
-  const [showDone, setShowDone] = useState(false);
-  const undated = s.items.filter((i) => i.type === "TASK" && i.startDay === null);
-  const open = undated.filter((i) => !s.done.isDone(i.id, NO_DAY))
+/** The to-dos (tasks with no date) not yet done, in their order: priority, then the newest first. Today's No date list shows the first few. */
+export function openTodos(s: Snapshot): TaskEntry[] {
+  return s.items.filter((i) => i.type === "TASK" && i.startDay === null && !s.done.isDone(i.id, NO_DAY))
     .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)
     .map((item): TaskEntry => ({ item, day: null, status: "ANYTIME", missed: 0 }));
-  const shown = hold.arrange("todo", open, (e) => String(e.item.id));
-  const done = undated.filter((i) => s.done.isDone(i.id, NO_DAY)).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** "Add a to-do": a line that makes a task with no date (the To-do list, Today's No date list). */
+export function TodoAdd() {
+  const [text, setText] = useState("");
   const add = () => {
     const title = text.trim();
     if (!title) return;
     saveItem(newItem({ type: "TASK", title }));
     setText("");
   };
+  return (
+    <div className="p-todo-add">
+      <MIcon name="oAddTask" />
+      <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+      {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
+    </div>
+  );
+}
+
+/** Tasks with no date or time, Google Tasks style, with a line to add one straight away. */
+function TodoList() {
+  const s = useSnapshot();
+  const now = useNow();
+  const hold = useCheckedHold();
+  const [showDone, setShowDone] = useState(false);
+  const shown = hold.arrange("todo", openTodos(s), (e) => String(e.item.id));
+  const done = s.items.filter((i) => i.type === "TASK" && i.startDay === null && s.done.isDone(i.id, NO_DAY)).sort((a, b) => b.updatedAt - a.updatedAt);
   // A ticked to-do glides down into Completed (or into its header, when it's folded away).
   const box = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
@@ -198,11 +208,7 @@ function TodoList() {
   useGlide(box, layer, (k) => doneKeys.has(k));
   return <div className="p-glide" ref={box}>
     <div ref={layer} />
-    <div className="p-todo-add">
-      <MIcon name="oAddTask" />
-      <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
-      {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
-    </div>
+    <TodoAdd />
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
       <div key={e.item.id} data-glide={`t${e.item.id}`}>

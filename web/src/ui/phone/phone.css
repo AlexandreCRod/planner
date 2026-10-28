@@ -370,7 +370,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 /* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
 .phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
-.phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph { padding-top: 8px; padding-bottom: 4px; }
+.phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
 .phone .p-chip {
   flex: none; height: 32px; margin: 4px 0; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 8px; background: none;
@@ -1549,3 +1549,18 @@ html.phone[data-theme="dark"] {
 .phone .p-stepper-hint { margin-top: 8px; text-align: center; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .pe-lead-row { margin-top: 12px; }
 .phone .pe-lead-sum { margin-top: 12px; text-align: center; }
+
+/* Today's No date list (241): a header that folds it, with the count; the add line; "N more" opens Tasks. */
+.phone .today-list .p-nodate-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; text-align: left; font-family: inherit; cursor: pointer; }
+.phone .today-list .p-nodate-head .cnt { font-weight: 400; color: var(--muted); opacity: .8; }
+.phone .today-list .p-nodate-head svg { margin-left: auto; margin-right: 8px; color: var(--muted); }
+.phone .today-list .p-todo-add { padding-top: 0; }
+.phone .today-list .p-todo-add input { padding: 10px 0; }
+/* The routines list's last line: Streaks. */
+.phone .p-rlist-streaks {
+  display: flex; align-items: center; gap: 16px; width: 100%; min-height: 48px; margin-top: 4px; padding: 0 20px 0 24px; border: 0; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  background: none; text-align: left; font: inherit; font-size: 16px; line-height: 24px; color: var(--text);
+}
+.phone .p-rlist-streaks span { flex: 1; }
+.phone .p-rlist-streaks svg:first-child { color: var(--p-primary); }
+.phone .p-rlist-streaks svg:last-child { color: var(--muted); }

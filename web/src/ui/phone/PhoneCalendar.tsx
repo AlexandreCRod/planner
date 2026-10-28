@@ -17,7 +17,8 @@ import { type Placed, layoutDay } from "../shared/dayLayout.ts";
 import { EventRow, TaskRow, go, openItem, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
-import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
@@ -41,6 +42,8 @@ const ZOOM_KEY = "calHourHeight";
 // Kept while moving around the app, like the native CalendarState.
 let selected = todayEpoch();
 let filters = { events: true, tasks: true, hidden: new Set<number>() };
+/** The Agenda's own chips after Events and Tasks (the Tasks page's: Show completed, a category; 241). */
+let agendaFilter: TaskFilter = { showDone: false, category: null };
 let savedHour: number | null = Number(localStorage.getItem(ZOOM_KEY)) || null;
 /** The view chosen in the menu (the native app keeps it in its settings); Month to begin with, as there. */
 const baseMode = (): Mode => {
@@ -53,6 +56,7 @@ export const calendarSelectedDay = () => selected;
 export function resetCalendar() {
   selected = todayEpoch();
   filters = { events: true, tasks: true, hidden: new Set() };
+  agendaFilter = { showDone: false, category: null };
   savedHour = null;
   localStorage.removeItem(ZOOM_KEY);
 }
@@ -138,7 +142,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
           onLong={(d) => { setAnchor(d); onNewAt(d, 9 * 60); }} onDayNote={(d) => openDailyNote(s, d)} />}
         {mode === "year" && <YearView s={s} items={items} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
-        {mode === "agenda" && <AgendaView s={s} items={items} from={anchor} />}
+        {mode === "agenda" && <AgendaView s={s} items={items} from={anchor} f={f} onFilters={setFilters} />}
       </div>
       {filterOpen && <FilterDialog s={s} value={f} onChange={setFilters} onClose={() => setFilterOpen(false)} />}
     </div>
@@ -364,16 +368,30 @@ const YearPanel = memo(function YearPanel({ s, items, year, t, onMonth }: { s: S
 
 // ---------- Agenda (YearAgenda.kt's AgendaView) ----------
 
-function AgendaView({ s, items, from }: { s: Snapshot; items: Item[]; from: number }) {
+/**
+ * The next 90 days as a list. Its chips (241): Events and Tasks (the Filter dialog's own two), then the Tasks
+ * page's Show completed and categories, so only tasks with a category picked lists them by day.
+ */
+function AgendaView({ s, items, from, f, onFilters }: { s: Snapshot; items: Item[]; from: number; f: typeof filters; onFilters: (v: typeof filters) => void }) {
   const now = useNow();
   const t = todayEpoch();
+  const [tf, setTfState] = useState(agendaFilter);
+  const setTf = (v: TaskFilter) => { agendaFilter = v; setTfState(v); };
   const groups = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
-    for (const o of forCalendar(items, s.done, from, from + 90, t, carryOver())) { const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]); }
+    const shown = items.filter((i) => inCategory(i, tf.category));
+    for (const o of forCalendar(shown, s.done, from, from + 90, t, carryOver())) {
+      if (!tf.showDone && o.item.type === "TASK" && o.completed) continue;
+      const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]);
+    }
     return [...map].sort((a, b) => a[0] - b[0]);
-  }, [items, s, from, t]);
+  }, [items, s, from, t, tf]);
   return (
     <div className="p-agenda p-rows">
+      <TaskChips s={s} value={tf} onChange={setTf} className="agenda" before={<>
+        <FilterChip selected={f.events} check onClick={() => onFilters({ ...f, events: !f.events })}>Events</FilterChip>
+        <FilterChip selected={f.tasks} check onClick={() => onFilters({ ...f, tasks: !f.tasks })}>Tasks</FilterChip>
+      </>} />
       {groups.length === 0 && <div className="p-empty pad16 body-large">Nothing in the next 90 days.</div>}
       {groups.map(([day, list]) => (
         <div key={day}>

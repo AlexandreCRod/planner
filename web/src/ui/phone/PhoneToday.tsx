@@ -15,7 +15,9 @@ import { AppBarActions, IconButton, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { mouseMenu } from "./desk.ts";
-import { openTodoTab } from "./PhoneLists.tsx";
+import { TodoAdd, openTodoTab, openTodos } from "./PhoneLists.tsx";
+import { StreaksSheet } from "./StreaksSheet.tsx";
+import { tasksB } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
 import { HeldTime } from "./TimeWheel.tsx";
 import { BottomSheet } from "./m3.tsx";
@@ -35,6 +37,8 @@ let showDayOnPhone: ((day: number) => void) | null = null;
 
 /** Tomorrow at a glance on the phone's Today: its first few items in time order, and how many more. */
 const GLANCE_ROWS = 3;
+/** To-dos shown in Today's No date list; "N more" opens the rest on the Tasks page. */
+const NO_DATE_ROWS = 3;
 /** Items named in each box of the wide Today's Next 7 days. */
 const WEEK_ROWS = 3;
 /** The day Today shows (the phone's + button adds to it). */
@@ -69,12 +73,11 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   // With routines but none on this day, the row still holds the button to list them all.
   const anyRoutine = s.items.some(isRoutineItem);
   const withoutRoutines = skipRoutines;
-  let overdue: TaskEntry[] = [], dayTasks: TaskEntry[], anytime = 0;
+  let overdue: TaskEntry[] = [], dayTasks: TaskEntry[];
   if (isToday) {
     const tasks = withoutRoutines(tasksForDay(s.items, s.done, t, carryOver()));
     overdue = tasks.filter((e) => e.status === "OVERDUE");
     dayTasks = tasks.filter((e) => e.status === "DUE" || e.status === "CARRIED" || e.status === "DONE");
-    anytime = tasks.filter((e) => e.status === "ANYTIME").length;
   } else {
     // Tasks still overdue today carry on to the days ahead until they're ticked.
     if (day > t) overdue = withoutRoutines(tasksForDay(s.items, s.done, t, carryOver())).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED");
@@ -138,7 +141,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <FoldLine open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} text={`${doneFold.length} done`} />
       {doneOpen && doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
     </>}
-    {anytime > 0 && <button className="hint anytime p-anytime" onClick={openTodoTab}>{count(anytime, "task")} without a date — see Tasks</button>}
+    {isToday && <NoDateList s={s} now={now} hold={hold} />}
     {!fold && alsoDone.length > 0 && <>
       <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
       {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
@@ -181,6 +184,31 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     {schedule}
     {glance && <TomorrowGlance rows={glance} s={s} day={day + 1} />}
     {note}
+  </>;
+}
+
+/**
+ * Today's "No date" list (241): the to-dos with no date under today's tasks, the first few shown, a line to
+ * add one, and "N more" opening the rest on the Tasks page. Its header folds it (kept on this device).
+ */
+function NoDateList({ s, now, hold }: { s: Snapshot; now: number; hold: Hold }) {
+  const [open, setOpen] = useState(() => localStorage.getItem("todayNoDateOpen") !== "0");
+  const all = openTodos(s);
+  const list = hold.arrange("nd", all.slice(0, NO_DATE_ROWS), rowKey);
+  const more = all.length - NO_DATE_ROWS;
+  const flip = () => { const o = !open; setOpen(o); try { localStorage.setItem("todayNoDateOpen", o ? "1" : "0"); } catch { /* private mode */ } };
+  return <>
+    <button className="section p-nodate-head" aria-expanded={open} onClick={flip}>
+      <span>No date</span>{all.length > 0 && <span className="cnt">{all.length}</span>}
+      <MIcon name={open ? "fExpandLess" : "fExpandMore"} size={20} />
+    </button>
+    {open && <>
+      <TodoAdd />
+      {list.map((e, index) => (
+        <TaskRow key={`nd_${e.item.id}`} entry={e} s={s} now={now} onToggle={(done) => hold.onToggle("nd", rowKey(e), e, index, done)} />
+      ))}
+      {more > 0 && <button className="p-fold" onClick={openTodoTab}><span>{more} more</span><MIcon name="fKeyboardArrowRight" size={18} /></button>}
+    </>}
   </>;
 }
 
@@ -247,6 +275,7 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
 function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
   const streaks = showStreaks() && day >= t;
   const [all, setAll] = useState(false);
+  const [streaksOpen, setStreaksOpen] = useState(false);
   return (
     <div className="p-rchips" role="list">
       {list.map((e) => {
@@ -261,13 +290,14 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
       <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
         <MIcon name="fFormatListBulleted" size={18} />
       </button>
-      {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} />, document.body)}
+      {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} onStreaks={() => setStreaksOpen(true)} />, document.body)}
+      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </div>
   );
 }
 
-/** Every routine in a sheet: name, how it repeats, today's state and its streak. A tap opens it. */
-function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: () => void }) {
+/** Every routine in a sheet: name, how it repeats, today's state and its streak. A tap opens it; Streaks at the end (241). */
+function RoutineListSheet({ s, t, onClose, onStreaks }: { s: Snapshot; t: number; onClose: () => void; onStreaks: () => void }) {
   const rows = routineList(s.items, s.done, t);
   const streaks = showStreaks();
   return (
@@ -287,6 +317,11 @@ function RoutineListSheet({ s, t, onClose }: { s: Snapshot; t: number; onClose: 
             </button>
           ))}
         </div>
+        {rows.length > 0 && (
+          <button className="p-rlist-streaks" onClick={() => { close(); window.setTimeout(onStreaks, 210); }}>
+            <MIcon name="fLocalFireDepartment" size={20} /><span>Streaks</span><MIcon name="fKeyboardArrowRight" size={20} />
+          </button>
+        )}
       </div>
     )}</BottomSheet>
   );
@@ -413,6 +448,7 @@ export function PhoneToday() {
         </div>
         <span className="grow" />
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
+        {tasksB && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
         <AppBarActions />
       </header>
       {/* On the page root, so it covers the + button like the other sheets. */}
