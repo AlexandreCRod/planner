@@ -13,6 +13,7 @@ import {
   SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
 } from "../domain/trends.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts";
+import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -49,6 +50,8 @@ export interface Training {
   healthSessions: HealthSession[];
   healthNights: HealthNight[];
   healthDays: HealthDay[];
+  /** One per morning, sleep.json and Health Connect merged (domain/sleep.ts); oldest first. */
+  sleep: SleepNight[];
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -118,7 +121,9 @@ export function training(): Training {
     healthSessions: listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs),
     healthNights: listOf<HealthNight>("healthNights").sort((a, b) => a.day - b.day || a.bed.localeCompare(b.bed)),
     healthDays: listOf<HealthDay>("healthDays").sort((a, b) => a.day - b.day),
+    sleep: [],
   };
+  data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
   cache = { version: v, data };
   return data;
 }
