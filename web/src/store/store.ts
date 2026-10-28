@@ -19,6 +19,8 @@ export const KINDS = [
   // Training (domain/training.ts): the plan's files, pushed by the plan session's script, then the user's own.
   // Weigh-ins and the imported ones hidden (domain/trends.ts) are the user's own too.
   "trainingFiles", "trainingEntries", "trainingLifts", "trainingState", "trainingWeighIns", "trainingHidden",
+  // The watch's data from Health Connect (domain/health.ts): written only by the phone, read everywhere.
+  "healthSessions", "healthNights", "healthDays",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

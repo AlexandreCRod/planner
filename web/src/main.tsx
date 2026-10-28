@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { startNotifications } from "./notify.ts";
 import { startAlarmMirror } from "./alarms/mirror.ts";
+import { startHealthReading } from "./health/healthConnect.ts";
 import { isNative } from "./platform.ts";
 import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/store.ts";
 import { logProblem, startProblemLog } from "./problems.ts";
@@ -74,7 +75,7 @@ async function start() {
   // The PC shows reminders from the page; the phone build hands them to its native alarm engine, which
   // rings them (and its alarm clocks, timers...) with the app closed.
   if (!isNative) startNotifications();
-  else { document.documentElement.classList.add("native"); startAlarmMirror(); }
+  else { document.documentElement.classList.add("native"); startAlarmMirror(); startHealthReading(); }
   root().render(<StrictMode><App /></StrictMode>);
   if ("serviceWorker" in navigator && location.hostname !== "localhost") navigator.serviceWorker.register("/sw.js").catch(() => {});
 }

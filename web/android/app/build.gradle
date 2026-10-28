@@ -73,6 +73,8 @@ dependencies {
     implementation "androidx.core:core-ktx:$androidxCoreVersion"
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    // Health Connect (health/HealthConnectPlugin.kt): the watch's runs, sleep and daily data, read only.
+    implementation 'androidx.health.connect:connect-client:1.1.0'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
