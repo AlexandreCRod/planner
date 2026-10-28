@@ -1,13 +1,13 @@
 // Progress (#/training?view=progress), in place of the old Bests page: how the lifts, runs and body weight
-// are moving. Tabs Lifts · Runs · Weight · Nutrition (greyed: it comes later, from the meal photos). Each tab
+// are moving. Tabs Lifts · Runs · Weight · Sleep · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
 // weigh-ins). Touching a chart reads a day, and the headline shows that day's reading (it stays when the
 // finger lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
 // opens over the list (back closes it); in a wide window the list and the card sit side by side. Weight's
 // top bar has "+ Weigh in", and a weigh-in tapped (a dot, or a row of the recent ones) opens to change or
-// delete it, or hide an imported one.
-// The numbers come from domain/trends.ts; nothing here is stored but the user's weigh-ins and what they hid.
+// delete it, or hide an imported one. Sleep: the nights, resting HR and HRV, from sleep.json and the watch.
+// The numbers come from domain/trends.ts and domain/sleep.ts; nothing here is stored but the user's weigh-ins and what they hid.
 import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
@@ -15,6 +15,7 @@ import {
   type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
 } from "../../domain/trends.ts";
+import { type SleepField, type SleepNight, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
@@ -22,13 +23,13 @@ import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, xD
 import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
-import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
+import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
 import "./progress.css";
 
-type Tab = "lifts" | "runs" | "weight" | "nutrition";
-const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Runs"], ["weight", "Weight"], ["nutrition", "Nutrition"]];
+type Tab = "lifts" | "runs" | "weight" | "sleep" | "nutrition";
+const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Runs"], ["weight", "Weight"], ["sleep", "Sleep"], ["nutrition", "Nutrition"]];
 /** The lifts before this day are the "before the break" peak, shown only as quiet text (keep it quiet before the race). */
 const PEAK_BEFORE = dayOf("2025-04-01")!;
 
@@ -87,7 +88,9 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
         <Segmented value={tab} options={TABS} onChange={(k) => { feel("tick"); replaceRoute(route(k, null, planId)); }} />
       </div>
       {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
-      {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{tab === "lifts" ? "Lifts show here once sets are logged." : "Runs show here once the plan session sends runs.json."}</EmptyHint>}
+      {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{({
+        lifts: "Lifts show here once sets are logged.", sleep: "Sleep shows here once your watch's data (Health Connect) or sleep.json arrives.",
+      } as Record<string, string>)[tab] ?? "Runs show here once the plan session sends runs.json."}</EmptyHint>}
       {rows.map((r) => {
         const head = r.group !== group ? r.group : null;
         group = r.group;
@@ -123,13 +126,14 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
 
 function cardTitle(tr: Training, tab: Tab, id: string): string {
   if (tab === "lifts") return liftName(tr, id);
-  return ({ km: "Distance per week", long: "Long run", easy: "Easy pace", q: "Quality runs", w: "Weight" } as Record<string, string>)[id] ?? "Progress";
+  return ({ km: "Distance per week", long: "Long run", easy: "Easy pace", q: "Quality runs", w: "Weight", sl: "Sleep", rh: "Resting heart rate", hrv: "HRV" } as Record<string, string>)[id] ?? "Progress";
 }
 
 function CardView({ tr, lp, tab, id, t }: { tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number }) {
   if (tab === "lifts") return <LiftCards tr={tr} lp={lp} id={id} />;
   if (tab === "runs") return <RunCards tr={tr} id={id} t={t} />;
   if (tab === "weight") return <WeightCards tr={tr} t={t} />;
+  if (tab === "sleep") return <SleepCards tr={tr} id={id} t={t} />;
   return null;
 }
 
@@ -138,6 +142,7 @@ function rowsOf(tr: Training, lp: LoadedPlan, tab: Tab, t: number): Row[] {
   if (tab === "lifts") return liftRows(tr, since);
   if (tab === "runs") return runRows(tr, lp, since, t);
   if (tab === "weight") return weightRows(tr, since);
+  if (tab === "sleep") return sleepRows(tr, t);
   return [];
 }
 
@@ -520,6 +525,98 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
     )}
     {editing && <WeighInSheet tr={tr} t={t} edit={editing} onClose={() => setEditing(null)} />}
   </>;
+}
+
+// ---------- Sleep ----------
+
+/** The mornings that have [field], oldest first. */
+const withField = (nights: readonly SleepNight[], field: SleepField) => nights.filter((n) => n[field] !== null);
+/** "last night" ("this morning") for today's, else its date. */
+const whenOf = (day: number, t: number, today: string) => (day === t ? today : formatDate(day));
+
+function sleepRows(tr: Training, t: number): Row[] {
+  const rows: Row[] = [];
+  const add = (id: string, name: string, field: SleepField, today: string, value: (v: number) => string, bars = false) => {
+    const list = withField(tr.sleep, field);
+    const last = list[list.length - 1];
+    if (!last) return;
+    const avg = avg7(tr.sleep, field, last.day);
+    rows.push({
+      id, group: "Sleep", name, sub: whenOf(last.day, t, today),
+      spark: <Spark bars={bars} values={list.slice(bars ? -10 : -14).map((n) => n[field]!)} color={SLEEP} />,
+      value: value(last[field]!), valueSub: avg !== null ? `avg ${value(avg)}` : "",
+    });
+  };
+  add("sl", "Sleep", "totalMin", "last night", fmtSleep, true);
+  add("rh", "Resting heart rate", "restingHr", "this morning", (v) => String(Math.round(v)));
+  add("hrv", "HRV", "hrvMs", "last night", (v) => `${Math.round(v)} ms`);
+  return rows;
+}
+
+/** "deep 1 h 10 · light 4 h 20 · REM 1 h 42", for the stages known. */
+const stagesOf = (n: SleepNight) => join(n.deepMin !== null && `deep ${fmtSleep(n.deepMin)}`, n.lightMin !== null && `light ${fmtSleep(n.lightMin)}`, n.remMin !== null && `REM ${fmtSleep(n.remMin)}`);
+
+/**
+ * The Sleep tab's cards: sleep per night (a bar a night and the 7-day line), resting heart rate (each
+ * morning, the 7-day line, a ring on the days it's flagged) and HRV (each night, the 7-day line and the
+ * normal range shaded). Touching a point reads it with where it came from.
+ */
+function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
+  const field: SleepField = id === "rh" ? "restingHr" : id === "hrv" ? "hrvMs" : "totalMin";
+  const list = useMemo(() => withField(tr.sleep, field), [tr, field]);
+  const line = useMemo(() => avg7Line(tr.sleep, field), [tr, field]);
+  const span = useSpan(list.map((n) => n.day), t);
+  const [at, setAt] = useState<number | null>(null);
+  const switcher = <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />;
+  if (!list.length) return <EmptyHint>No nights yet.</EmptyHint>;
+  const shown = inRange(list, span.start);
+  const avgPts = inRange(line, span.start);
+  const last = list[list.length - 1];
+  const lastAvg = avg7(tr.sleep, field, last.day);
+  const n = at !== null ? shown[at] : null;
+  const nAvg = n && avg7(tr.sleep, field, n.day);
+  const legend = (each: string, extra?: ReactNode) => (
+    <div className="pg-leg"><span><i className="ln" style={{ background: SLEEP }} />7-day average</span><span><i className="dt" style={{ background: SLEEP_DIM }} />{each}</span>{extra}</div>
+  );
+  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[] } = {}) => shown.length
+    ? <Chart series={series} domain={span.domain} today={t} height={150} fmt={opts.fmt} zero={opts.zero} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />
+    : <Empty />;
+
+  if (field === "totalMin") {
+    // A bar a night; over a long range, where bars would be hairlines, a small dot instead.
+    const pts = shown.map((x) => ({ day: x.day, v: x.totalMin! / 60 })); // drawn in hours
+    const each: Series = shown.length > 120 ? { kind: "dots", r: 2.5, color: SLEEP_DIM, pts } : { kind: "bars", span: 1, color: SLEEP_DIM, pts };
+    const bed = n && n.bed && n.wake ? `bed ${clockOfMoment(n.bed)} → ${clockOfMoment(n.wake)}` : "";
+    return <>{switcher}<ChartCard title="Sleep per night"
+      read={n ? [join(`Night to ${formatDate(n.day)}`, bed, from(n.source)), <>{fmtSleep(n.totalMin!)} <small>{join(stagesOf(n), n.score !== null && `score ${n.score}`)}</small></>] : null}
+      head={<Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} />}
+      foot={<>{legend("Each night")}<div className="pg-foot">Under 6 h before a quality or long run puts a moon on that session.</div></>}>
+      {chart([each, { kind: "line", dots: false, color: SLEEP, pts: avgPts.map((p) => ({ day: p.day, v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true })}
+    </ChartCard></>;
+  }
+
+  if (field === "restingHr") {
+    const rings = shown.filter((x) => restingHrFlag(tr.sleep, x.day)).map((x) => ({ day: x.day, v: x.restingHr! }));
+    return <>{switcher}<ChartCard title="Resting heart rate"
+      read={n ? [join(formatDate(n.day), from(n.restingHrSource)), <>{n.restingHr} bpm <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, restingHrFlag(tr.sleep, n.day) && "up two mornings running")}</small></>] : null}
+      head={<Head value={String(last.restingHr)} unit={`bpm ${whenOf(last.day, t, "this morning")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
+      foot={<>{legend("Each morning", rings.length > 0 && <span><i className="ho" style={{ borderColor: PAIN }} />Up 7+ two mornings running</span>)}
+        <div className="pg-foot">7 or more above your 7-day average two mornings running puts a quiet marker on the day.</div></>}>
+      {chart([{ kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.restingHr! })) }, { kind: "line", dots: false, color: SLEEP, pts: avgPts }], { rings })}
+    </ChartCard></>;
+  }
+
+  // HRV: the normal range as of each night, shaded.
+  const band = shown.flatMap((x) => { const r = hrvRange(tr.sleep, x.day); return r ? [{ day: x.day, lo: r.lo, hi: r.hi }] : []; });
+  const range = hrvRange(tr.sleep, last.day);
+  const nRange = n && hrvRange(tr.sleep, n.day);
+  return <>{switcher}<ChartCard title="HRV (overnight)"
+    read={n ? [join(formatDate(n.day), from(n.hrvSource)), <>{n.hrvMs} ms <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, nRange && `normal ${Math.round(nRange.lo)}–${Math.round(nRange.hi)}`)}</small></>] : null}
+    head={<Head value={String(last.hrvMs)} unit={`ms ${whenOf(last.day, t, "last night")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
+    foot={<>{legend("Each night", band.length > 0 && <span><i className="bd" style={{ background: SLEEP }} />Your normal range</span>)}
+      <div className="pg-foot">{range ? `Normal for you: ${Math.round(range.lo)}–${Math.round(range.hi)} ms, the last 60 nights' average ± 1 SD. ` : ""}A few nights in a row below the band: make it an easy day.</div></>}>
+    {chart([{ kind: "band", color: SLEEP, pts: band }, { kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.hrvMs! })) }, { kind: "line", dots: false, color: SLEEP, pts: avgPts }])}
+  </ChartCard></>;
 }
 
 /**

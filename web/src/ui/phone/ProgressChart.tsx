@@ -12,6 +12,8 @@ import { feel } from "./haptics.ts";
 
 /** The series colours, validated on the dark surface (dataviz skill); in step with the Training kinds. */
 export const GYM = "#bf8a2a", GYM_DIM = "#7a5c22", RUN = "#33a390", WEIGHT = "#6a8ed4", WEIGHT_DIM = "#5d6475", PAIN = "#d9664f";
+/** Sleep, resting HR and HRV (2.8-final.html); the dim one for each night under the 7-day line. */
+export const SLEEP = "#c06cb8", SLEEP_DIM = "#6e4a6b";
 
 /** One reading. [mark]: drawn hollow (an assumed RPE) or as a lower bound (history with no RPE). */
 export interface Pt { day: number; v: number; mark?: "hollow" | "lower" }
@@ -19,7 +21,9 @@ export type Series =
   | { kind: "line"; pts: Pt[]; color: string; area?: boolean; dots?: boolean }
   | { kind: "dots"; pts: Pt[]; color: string; r?: number }
   /** One bar per [span] days from its day (a week by default). */
-  | { kind: "bars"; pts: Pt[]; color: string; span?: number };
+  | { kind: "bars"; pts: Pt[]; color: string; span?: number }
+  /** A shaded band from [lo] to [hi] (HRV's normal range), drawn under the other series. */
+  | { kind: "band"; pts: { day: number; lo: number; hi: number }[]; color: string };
 
 const L = 36, R = 10, T = 8, B = 22;
 
@@ -60,8 +64,11 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   const press = useRef<{ x: number; y: number; t: number; moved: boolean } | null>(null);
   const onReadRef = useRef(onRead);
   onReadRef.current = onRead;
-  const all = series.flatMap((s) => s.pts.map((p) => p.v)).concat(rings.map((p) => p.v));
-  const bars = series.some((s) => s.kind === "bars");
+  const all = series.flatMap((s) => (s.kind === "band" ? s.pts.flatMap((p) => [p.lo, p.hi]) : s.pts.map((p) => p.v))).concat(rings.map((p) => p.v));
+  const barSeries = series.find((s) => s.kind === "bars");
+  const bars = !!barSeries;
+  /** A bar stands from its day over its span: the cursor goes to its middle. */
+  const half = barSeries?.kind === "bars" ? (barSeries.span ?? 7) / 2 : 0;
   const lo = all.length ? Math.min(...all, ...(zero || bars ? [0] : [])) : 0, hi = all.length ? Math.max(...all) : 1;
   const ticks = niceTicks(lo, hi, 3);
   const [d0, d1] = domain;
@@ -122,6 +129,14 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
 
   const drawn: React.ReactNode[] = [];
   series.forEach((s, k) => {
+    if (s.kind === "band") {
+      if (s.pts.length > 1) {
+        const top = s.pts.map((p, i) => `${i ? "L" : "M"}${x(p.day)},${y(p.hi)}`).join("");
+        const bottom = [...s.pts].reverse().map((p) => `L${x(p.day)},${y(p.lo)}`).join("");
+        drawn.unshift(<path key={`${k}n`} d={`${top}${bottom}Z`} fill={s.color} fillOpacity={0.14} />);
+      }
+      return;
+    }
     if (s.kind === "bars") {
       const span = s.span ?? 7;
       const bw = Math.max(1, Math.min(24, (x(d0 + span) - x(d0)) - 2));
@@ -169,7 +184,7 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
           {l1 !== l0 && <text x={x(l1)} y={height - 5} textAnchor="end">{dayMonth(l1, today)}</text>}
           {drawn}
           {rings.map((p, i) => <circle key={`p${i}`} cx={x(p.day)} cy={y(p.v)} r={8} fill="none" stroke={PAIN} strokeWidth={2} />)}
-          {at !== null && reads[at] !== undefined && <line className="pg-cursor" x1={x(reads[at] + (bars ? 3.5 : 0))} x2={x(reads[at] + (bars ? 3.5 : 0))} y1={T} y2={height - B} />}
+          {at !== null && reads[at] !== undefined && <line className="pg-cursor" x1={x(reads[at] + half)} x2={x(reads[at] + half)} y1={T} y2={height - B} />}
         </svg>
       )}
     </div>

@@ -42,6 +42,7 @@
 .phone .pg-leg i.ln { width: 14px; height: 2px; border-radius: 1px; }
 .phone .pg-leg i.dt { width: 8px; height: 8px; border-radius: 50%; }
 .phone .pg-leg i.ho { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; border: 2px solid; }
+.phone .pg-leg i.bd { width: 14px; height: 9px; border-radius: 2px; opacity: .3; }
 .phone .pg-leg i.tri { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid; }
 .phone .pg-foot { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--muted); }
 .phone .pg-range { margin: 4px 0 12px; }
