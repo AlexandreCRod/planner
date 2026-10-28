@@ -15,7 +15,7 @@ import {
   type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
 } from "../../domain/trends.ts";
-import { type SleepField, type SleepNight, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
+import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
@@ -553,6 +553,9 @@ function sleepRows(tr: Training, t: number): Row[] {
   return rows;
 }
 
+/** Where a sleep number came from, for its reading: sleep.json's "from Garmin"; the watch's own needs no word. */
+const fromSleep = (s: SleepSource | null) => (s === "garmin" ? from(s) : "");
+
 /** "deep 1 h 10 · light 4 h 20 · REM 1 h 42", for the stages known. */
 const stagesOf = (n: SleepNight) => join(n.deepMin !== null && `deep ${fmtSleep(n.deepMin)}`, n.lightMin !== null && `light ${fmtSleep(n.lightMin)}`, n.remMin !== null && `REM ${fmtSleep(n.remMin)}`);
 
@@ -578,27 +581,30 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
   const legend = (each: string, extra?: ReactNode) => (
     <div className="pg-leg"><span><i className="ln" style={{ background: SLEEP }} />7-day average</span><span><i className="dt" style={{ background: SLEEP_DIM }} />{each}</span>{extra}</div>
   );
-  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[] } = {}) => shown.length
-    ? <Chart series={series} domain={span.domain} today={t} height={150} fmt={opts.fmt} zero={opts.zero} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />
+  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[]; bars?: boolean } = {}) => shown.length
+    // A night's bar stands over its day, so the axis runs a day longer and its line goes through the bars' middles.
+    ? <Chart series={series} domain={opts.bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={opts.bars ? span.domain : undefined} today={t} height={150}
+        fmt={opts.fmt} zero={opts.zero} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />
     : <Empty />;
 
   if (field === "totalMin") {
     // A bar a night; over a long range, where bars would be hairlines, a small dot instead.
     const pts = shown.map((x) => ({ day: x.day, v: x.totalMin! / 60 })); // drawn in hours
-    const each: Series = shown.length > 120 ? { kind: "dots", r: 2.5, color: SLEEP_DIM, pts } : { kind: "bars", span: 1, color: SLEEP_DIM, pts };
+    const bars = shown.length <= 120;
+    const each: Series = bars ? { kind: "bars", span: 1, color: SLEEP_DIM, pts } : { kind: "dots", r: 2.5, color: SLEEP_DIM, pts };
     const bed = n && n.bed && n.wake ? `bed ${clockOfMoment(n.bed)} → ${clockOfMoment(n.wake)}` : "";
     return <>{switcher}<ChartCard title="Sleep per night"
-      read={n ? [join(`Night to ${formatDate(n.day)}`, bed, from(n.source)), <>{fmtSleep(n.totalMin!)} <small>{join(stagesOf(n), n.score !== null && `score ${n.score}`)}</small></>] : null}
+      read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
       head={<Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} />}
       foot={<>{legend("Each night")}<div className="pg-foot">Under 6 h before a quality or long run puts a moon on that session.</div></>}>
-      {chart([each, { kind: "line", dots: false, color: SLEEP, pts: avgPts.map((p) => ({ day: p.day, v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true })}
+      {chart([each, { kind: "line", dots: false, color: SLEEP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars })}
     </ChartCard></>;
   }
 
   if (field === "restingHr") {
     const rings = shown.filter((x) => restingHrFlag(tr.sleep, x.day)).map((x) => ({ day: x.day, v: x.restingHr! }));
     return <>{switcher}<ChartCard title="Resting heart rate"
-      read={n ? [join(formatDate(n.day), from(n.restingHrSource)), <>{n.restingHr} bpm <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, restingHrFlag(tr.sleep, n.day) && "up two mornings running")}</small></>] : null}
+      read={n ? [join(formatDate(n.day), fromSleep(n.restingHrSource)), <>{n.restingHr} bpm <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, restingHrFlag(tr.sleep, n.day) && "up two mornings running")}</small></>] : null}
       head={<Head value={String(last.restingHr)} unit={`bpm ${whenOf(last.day, t, "this morning")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
       foot={<>{legend("Each morning", rings.length > 0 && <span><i className="ho" style={{ borderColor: PAIN }} />Up 7+ two mornings running</span>)}
         <div className="pg-foot">7 or more above your 7-day average two mornings running puts a quiet marker on the day.</div></>}>
@@ -611,7 +617,7 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
   const range = hrvRange(tr.sleep, last.day);
   const nRange = n && hrvRange(tr.sleep, n.day);
   return <>{switcher}<ChartCard title="HRV (overnight)"
-    read={n ? [join(formatDate(n.day), from(n.hrvSource)), <>{n.hrvMs} ms <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, nRange && `normal ${Math.round(nRange.lo)}–${Math.round(nRange.hi)}`)}</small></>] : null}
+    read={n ? [join(formatDate(n.day), fromSleep(n.hrvSource)), <>{n.hrvMs} ms <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, nRange && `normal ${Math.round(nRange.lo)}–${Math.round(nRange.hi)}`)}</small></>] : null}
     head={<Head value={String(last.hrvMs)} unit={`ms ${whenOf(last.day, t, "last night")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
     foot={<>{legend("Each night", band.length > 0 && <span><i className="bd" style={{ background: SLEEP }} />Your normal range</span>)}
       <div className="pg-foot">{range ? `Normal for you: ${Math.round(range.lo)}–${Math.round(range.hi)} ms, the last 60 nights' average ± 1 SD. ` : ""}A few nights in a row below the band: make it an easy day.</div></>}>

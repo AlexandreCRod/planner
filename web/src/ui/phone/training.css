@@ -86,7 +86,7 @@ html.phone[data-theme="dark"] { --k-run: #6cc4b4; --k-gym: #e3b866; --k-futsal: 
   background: var(--p-sc-high, var(--surface-2)); color: color-mix(in srgb, var(--text) 80%, transparent); font-size: 11px; line-height: 20px; font-variant-numeric: tabular-nums; }
 .phone .tr-hrflag { display: inline-flex; align-items: center; color: #c06cb8; opacity: .85; }
 /* The sleep line above the week. */
-.phone .tr-sleep { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 8px 16px 0; padding: 10px 8px 10px 16px; border: 0; border-radius: 12px;
+.phone .tr-sleep { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 8px 16px 6px; padding: 10px 8px 10px 16px; border: 0; border-radius: 12px;
   background: var(--p-sc-low, var(--surface-2)); color: color-mix(in srgb, var(--text) 80%, transparent); text-align: left; font: inherit; cursor: pointer; }
 .phone .tr-sleep:active { background: var(--p-sec-container); }
 .phone .tr-sleep .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
