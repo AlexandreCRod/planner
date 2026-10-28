@@ -7,8 +7,8 @@
 // small panel switches between Task and Event, the switch's indicator following the finger. One drag
 // handle stays at the top the whole way (pushed below the status bar as the panel reaches the top).
 // Flicked or dragged closed, the panel keeps what was typed and gives it back the next time it opens
-// (addDraft.ts). On a calendar slot, the new event's box has round handles at its top-left and
-// bottom-right corners: dragging one changes the start or the end in quarter hours, the time showing
+// (addDraft.ts). On a calendar slot, the new event's box has handles on its top and bottom edges
+// (looks.ts: dots at the top-right and bottom-left corners, or tabs mid-edge): dragging one changes the start or the end in quarter hours, the time showing
 // beside the hours, while the panel shrinks to a small bar with the title so the calendar shows.
 import { animated, easings, to, useSpring } from "@react-spring/web";
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -34,6 +34,7 @@ import { type KeptAdd, onSlot, takeKept, worthKeeping } from "./addDraft.ts";
 import { dragEdgeTimes } from "./wheelMath.ts";
 import { feel } from "./haptics.ts";
 import { AssistChip, TextButton, showSnackbar } from "./m3.tsx";
+import { slotLook } from "./looks.ts";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
 const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
@@ -71,7 +72,7 @@ export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: numbe
  * Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box).
  * [edge]: the handle being dragged (its time shows beside the hours).
  */
-export interface SlotPreview { day: number; min: number; end: number; color: string; resizable?: boolean; edge?: "top" | "bottom" }
+export interface SlotPreview { day: number; min: number; end: number; color: string; title?: string; resizable?: boolean; edge?: "top" | "bottom" }
 
 /** Native: spring(stiffness = 600), critically damped. */
 const SETTLE = { tension: 600, friction: 49 };
@@ -191,14 +192,14 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   // "timer 10 min", "alarm 7am weekdays": on the phone the line can start a timer or set an alarm clock.
   const clock = useMemo(() => (hasAlarms && lineMode && type !== "NOTE" ? parseClockCommand(text, new Date()) : null), [text, lineMode, type]);
 
-  // The outline on the calendar follows the slot panel's day, time and colour.
+  // The outline on the calendar follows the slot panel's day, time, colour and title.
   const [dragEdge, setDragEdge] = useState<"top" | "bottom" | null>(null);
   useEffect(() => {
     if (!onPreview || req.mode !== "slot") return;
     if (d.startDay === null || d.allDay || d.startMin === null) { onPreview(null); return; }
     const end = d.type === "EVENT" && d.endMin !== null && d.endMin > d.startMin ? d.endMin : Math.min(d.startMin + (d.type === "EVENT" ? 60 : 30), DAY_END);
-    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d), resizable: d.type === "EVENT", edge: dragEdge ?? undefined });
-  }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId, dragEdge]); // eslint-disable-line react-hooks/exhaustive-deps
+    onPreview({ day: d.startDay, min: d.startMin, end, color: snapshot().colorOf(d), title: d.title, resizable: d.type === "EVENT", edge: dragEdge ?? undefined });
+  }, [d.startDay, d.startMin, d.endMin, d.allDay, d.type, d.color, d.categoryId, d.title, dragEdge]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
     if (clock) { onClose(); void runClock(clock); return; }
@@ -485,9 +486,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
 
   // ---------- The new event's edges on the calendar (Google Calendar's box) ----------
   // While the slot panel is small, a finger (or the mouse) on the box's top or bottom edge, or on its
-  // round handle at the top-left or bottom-right corner, drags that edge over the scrim: the start or
-  // the end lands on the clock's quarter hours, a light tick for each, the time showing beside the
-  // hours. Meanwhile the panel shrinks to a bar with the title, so the calendar shows; near the grid's
+  // handle, drags that edge over the scrim: the start or the end lands on the clock's quarter hours,
+  // a light tick for each, the time showing beside the hours. Meanwhile the panel shrinks to a bar with the title, so the calendar shows; near the grid's
   // top or bottom the hours scroll by themselves.
   type EdgeDrag = {
     id: number; edge: "top" | "bottom"; start: number; end: number; m0: number; y: number; at: string;
@@ -508,8 +508,10 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (x < r.left - side || x > r.right + side) return null;
     const dt = Math.abs(y - r.top), db = Math.abs(y - r.bottom);
     if (dt > reach && db > reach) return null;
-    // A short box: the nearer edge, or when that's unclear, the side's handle (top-left, bottom-right).
-    const edge: "top" | "bottom" = dt > reach ? "bottom" : db > reach ? "top" : Math.abs(dt - db) > 8 ? (dt < db ? "top" : "bottom") : x < r.left + r.width / 2 ? "top" : "bottom";
+    // A short box: the nearer edge, or when that's unclear, the side's handle (Slot A: the top one at the
+    // right, the bottom one at the left; Slot B's tabs are both in the middle, so the nearer half).
+    const topSide = slotLook === "A" ? x > r.left + r.width / 2 : y < r.top + r.height / 2;
+    const edge: "top" | "bottom" = dt > reach ? "bottom" : db > reach ? "top" : Math.abs(dt - db) > 8 ? (dt < db ? "top" : "bottom") : topSide ? "top" : "bottom";
     return { edge, layer, ppm };
   };
   const minuteAt = (g: { layer: HTMLElement; ppm: number }, y: number) => (y - g.layer.getBoundingClientRect().top) / g.ppm;

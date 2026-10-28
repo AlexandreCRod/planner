@@ -21,7 +21,8 @@ import { Checkbox, Dialog, DropdownMenu, IconButton, MIcon, type MenuItem, openS
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
-import { type Animation, GLIDE_SPRING, POP_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
+import { VelocityTracker, frameWriter } from "./motion.ts";
+import { slotLook } from "./looks.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
@@ -399,6 +400,8 @@ interface Gesture {
   mouse: boolean;
   /** A mouse on an event's bottom edge: dragging it changes when the event ends. */
   resize: boolean;
+  /** Landed while the hours were still scrolling (a fling): that touch only stops them. */
+  flung: boolean;
 }
 
 function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
@@ -420,10 +423,6 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   useEffect(() => { const i = setInterval(() => setNow(nowMinutes()), 60_000); return () => clearInterval(i); }, []);
   const [ghost, setGhost] = useState<{ key: string; start: number; dDay: number; length: number; color: string; isTask: boolean } | null>(null);
   const [pendingMove, setPendingMove] = useState<{ series: Item; day: number; edited: Item } | null>(null);
-  // An empty slot tapped once is only marked; a second tap on the marked slot opens the add panel there.
-  const [armed, setArmedState] = useState<{ day: number; min: number } | null>(null);
-  const armedRef = useRef(armed);
-  const setArmed = (a: { day: number; min: number } | null) => { armedRef.current = a; setArmedState(a); };
 
   // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
   // (like a pager) instead of empty space. Index `count` is the first day in view.
@@ -543,43 +542,6 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // The marked slot's block: placed with a transform, popping in on a spring the first time and gliding
-  // (carrying its speed) when another slot is tapped. Positions are sub-pixel; nothing re-renders as it moves.
-  const slotEl = useRef<HTMLDivElement>(null);
-  const slotAnim = useRef<{ x: Animation | null; y: Animation | null; s: Animation | null; pos: { x: number; y: number; s: number }; key: string } | null>(null);
-  useLayoutEffect(() => {
-    const el = slotEl.current;
-    if (!el || !armed || !layer.current) { if (!armed) { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); slotAnim.current = null; } return; }
-    const colW = layer.current.clientWidth / count;
-    const tx = (armed.day - base) * colW + 1, ty = armed.min * pxPerMin;
-    const draw = () => { const p = slotAnim.current!.pos; el.style.transform = `translate3d(${p.x}px,${p.y}px,0) scale(${p.s})`; };
-    const key = `${armed.day}|${armed.min}`;
-    let a = slotAnim.current;
-    if (!a) {
-      a = slotAnim.current = { x: null, y: null, s: null, pos: { x: tx, y: ty, s: 0.6 }, key };
-      a.s = animateSpring(0.6, 1, 0, (v) => { a!.pos.s = v; draw(); }, () => { a!.s = null; }, POP_SPRING);
-      feel("tick");
-    } else if (a.key !== key) {
-      a.key = key;
-      const glide = (axis: "x" | "y", to: number) => {
-        const cur = a![axis]?.now() ?? { x: a!.pos[axis], v: 0 };
-        a![axis]?.stop();
-        a![axis] = animateSpring(cur.x, to, cur.v, (v) => { a!.pos[axis] = v; draw(); }, () => { a![axis] = null; }, GLIDE_SPRING);
-      };
-      glide("x", tx); glide("y", ty);
-      feel("tick");
-    } else {
-      a.x?.stop(); a.y?.stop(); a.x = a.y = null;
-      a.pos.x = tx; a.pos.y = ty;
-    }
-    draw();
-  }, [armed, pxPerMin, count, first, base]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { const a = slotAnim.current; a?.x?.stop(); a?.y?.stop(); a?.s?.stop(); }, []);
-
-  // A marked slot is forgotten once the panel has opened (or another range is shown).
-  useEffect(() => { if (pending) setArmed(null); }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setArmed(null); }, [first, count]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // A moved block keeps its dragged position until the grid has redrawn it in its new place.
   const clearAfterRender = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -626,6 +588,9 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       if (!x) lines = null;
     };
     const colW = () => (layer.current?.clientWidth ?? 300) / daysRef.current.length;
+    // When the hours last scrolled (by finger, fling or wheel).
+    let lastScroll = 0;
+    const onScroll = () => { lastScroll = performance.now(); };
     // The days follow 1.2 times the finger, written once per frame.
     const writeLayers = frameWriter(moveLayers);
     const swipeTo = (cur: Gesture) => {
@@ -714,6 +679,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         block, key: block?.dataset.key ?? "", timer: 0, lifted: false, swiping: false, moved: false,
         dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0, mouse: isMouse(e),
         resize: !!block && isMouse(e) && !!(e.target as HTMLElement).closest(".pg-resize"),
+        flung: !isMouse(e) && performance.now() - lastScroll < 120,
       };
       g.vt.add(e.timeStamp, e.clientX);
       if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
@@ -802,17 +768,15 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         if (cur.block) {
           const info = placed.current.get(cur.key);
           if (info) openItem(info.p.o.item, info.p.o.day);
-        } else if (layer.current && (e.target as HTMLElement).closest(".pg-layer")) {
-          // An empty slot: the add panel opens there (rounded down to the half hour, like the native grid).
+        } else if (layer.current && (e.target as HTMLElement).closest(".pg-layer") && !cur.flung && Math.abs(el.scrollTop - cur.scroll0) < 2) {
+          // An empty slot: one tap opens the add panel there, with the new event's box (rounded down to
+          // the half hour, like the native grid), as Google Calendar does. Only a real tap: not a touch
+          // that scrolled the hours, nor one that stopped them scrolling.
           // (Measured on the grid: the layer itself is moved to show the range in view.)
           const r = (layer.current.parentElement ?? layer.current).getBoundingClientRect();
           const di = Math.max(0, Math.min(daysRef.current.length - 1, Math.floor((e.clientX - r.left) / colW())));
           const min = Math.max(0, Math.min(DAY_MIN - 30, Math.floor((e.clientY - r.top) / pxRef.current / 30) * 30));
-          const day = daysRef.current[di], a = armedRef.current;
-          // A tap anywhere on the marked block (it spans an hour) adds there.
-          const exact = (e.clientY - r.top) / pxRef.current;
-          if (a && a.day === day && exact >= a.min && exact < a.min + Math.max(60, 22 / pxRef.current)) { setArmed(null); props.current.onNewAt(day, a.min); }
-          else setArmed({ day, min });
+          props.current.onNewAt(daysRef.current[di], min);
         }
       }
     };
@@ -894,6 +858,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     };
     el.addEventListener("wheel", onWheel, { passive: false });
 
+    el.addEventListener("scroll", onScroll, { passive: true });
     el.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -910,6 +875,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
       clearTimeout(saveTimer);
       undoDesk();
       el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("scroll", onScroll);
       el.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -1006,20 +972,18 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
                   }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
                 );
               })()}
-              {/* The slot tapped once (tap it again to add there): springs in, and glides to the next one tapped. */}
-              {armed && !pending && all.includes(armed.day) && (
-                <div className={`pg-slot armed ${60 * pxPerMin < 34 ? "short" : ""}`} ref={slotEl} aria-label={`Add at ${formatTime(armed.min)}`}
-                  style={{ width: `calc(${colPct}% - 2px)`, height: Math.max(22, 60 * pxPerMin) }}>
-                  <MIcon name="fAdd" size={18} />
-                </div>
-              )}
-              {/* Where the new event goes: only its outline, in its colour, while the panel is open. Its top
-                  and bottom handles drag to change the times (AddPanel takes the finger, over its scrim). */}
+              {/* Where the new event goes, while the panel is open: its outline in its colour (the look
+                  picked in looks.ts), with the title typed so far and its times. Its handles drag to change
+                  the times (AddPanel takes the finger, over its scrim). */}
               {pending && all.includes(pending.day) && (
-                <div className={`pg-slot pending ${pending.edge ? `drag-${pending.edge}` : ""}`} data-ppm={pxPerMin} style={{
+                <div className={`pg-slot pending look-${slotLook.toLowerCase()} ${pending.edge ? `drag-${pending.edge}` : ""}`} data-ppm={pxPerMin} style={{
                   left: `calc(${(pending.day - base) * colPct}% + 1px)`, width: `calc(${colPct}% - 2px)`, top: pending.min * pxPerMin,
-                  height: Math.max(22, (pending.end - pending.min) * pxPerMin), borderColor: pending.color, color: pending.color,
+                  height: Math.max(22, (pending.end - pending.min) * pxPerMin), color: pending.color,
                 }}>
+                  <div className={`pg-slot-lab ${(pending.end - pending.min) * pxPerMin < 34 ? "one" : ""}`}>
+                    <b>{pending.title?.trim() || "(No title)"}</b>
+                    <i>{formatTime(pending.min)}–{formatTime(pending.end)}</i>
+                  </div>
                   {pending.resizable && <><span className="edge top" /><span className="edge bottom" /></>}
                 </div>
               )}

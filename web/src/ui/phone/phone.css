@@ -1059,8 +1059,6 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-tabpager { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
 .phone .p-tabstrip { position: absolute; top: 0; bottom: 0; width: 100%; }
 .phone .p-tabpage { position: absolute; top: 0; bottom: 0; width: 100%; contain: layout paint style; background: var(--bg); touch-action: pan-y; }
-/* The slot tapped once: an outline in the accent with a small +; a second tap there adds an event. */
-.phone .pg-slot.armed { border-color: var(--p-primary); display: grid; place-items: center; color: var(--p-primary); background: color-mix(in srgb, var(--p-primary) 8%, transparent); }
 
 /* Icon buttons with nothing to do (undo with no history...) look it: dimmed, no press feedback. */
 .phone .p-icon:disabled { opacity: .38; pointer-events: none; }
@@ -1224,30 +1222,33 @@ html.phone[data-theme="dark"] {
 .phone .pa-city .pa-time26 { font-size: 23px; line-height: 28px; }
 .phone .pa-city .pa-wx { height: 36px; font-size: 13px; }
 
-/* The calendar slot tapped once: a soft rounded block in the muted accent with its hour and a +,
-   springing in and gliding between slots (PhoneCalendar's TimeGrid writes its transform). */
 .phone .pg-slot { border-color: var(--p-outline); }
-.phone .pg-slot.armed {
-  left: 0; top: 0; z-index: 8; box-sizing: border-box; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--p-primary) 40%, transparent); border-radius: 10px;
-  background: color-mix(in srgb, var(--p-primary) 30%, var(--p-sc-low)); color: var(--text);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; animation: p-fade .12s linear;
-  transform-origin: 50% 50%; will-change: transform; box-shadow: 0 2px 8px rgb(0 0 0 / .12);
+/* The new event's box while the add panel is open (Google Calendar's): an outline in its colour, faintly
+   filled, with its title and times, and a handle for its start and one for its end (AddPanel.tsx). Its
+   look is picked in looks.ts: Slot A, a crisp outline with dots at the top-right and bottom-left
+   corners; Slot B, a hairline with tabs in the middle of the top and bottom edges. */
+.phone .pg-slot.pending { z-index: 8; overflow: visible; padding: 0; border-color: currentColor; }
+.phone .pg-slot.pending.look-a { border-width: 1.5px; border-radius: 4px; background: color-mix(in srgb, currentColor 14%, transparent); }
+.phone .pg-slot.pending.look-b { border-width: 1px; border-radius: 6px; border-color: color-mix(in srgb, currentColor 80%, transparent); background: color-mix(in srgb, currentColor 20%, transparent); }
+.phone .pg-slot.pending .edge { position: absolute; background: currentColor; transition: transform .12s cubic-bezier(.2, 0, 0, 1); }
+.phone .pg-slot.pending.look-a .edge { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--bg); }
+.phone .pg-slot.pending.look-a .edge.top { top: -3.75px; right: 10px; }
+.phone .pg-slot.pending.look-a .edge.bottom { bottom: -3.75px; left: 10px; }
+.phone .pg-slot.pending.look-b .edge { left: 50%; width: 16px; height: 3px; margin-left: -8px; border-radius: 2px; }
+.phone .pg-slot.pending.look-b .edge.top { top: -2px; }
+.phone .pg-slot.pending.look-b .edge.bottom { bottom: -2px; }
+.phone .pg-slot.pending.drag-top .edge.top, .phone .pg-slot.pending.drag-bottom .edge.bottom { transform: scale(1.4); }
+.phone .pg-slot-lab {
+  max-height: 100%; box-sizing: border-box; padding: 2px 6px; overflow: hidden; font-size: 11px; line-height: 13px;
+  color: color-mix(in srgb, currentColor 25%, var(--text));
 }
-.phone .pg-slot.armed .pg-slot-time { font-size: 11px; line-height: 13px; font-weight: 500; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; opacity: 1; }
-.phone .pg-slot.armed svg { color: var(--p-primary); flex: none; }
-.phone .pg-slot.armed.short { flex-direction: row; gap: 4px; }
-.phone .pg-slot.armed.short svg { width: 14px; height: 14px; }
-/* The new event's outline while the panel is open: round handles on its top and bottom edges. */
-/* The new event's box (Google Calendar's): a clear outline in its colour, faintly filled, with round
-   handles at its top-left and bottom-right corners to drag its start and end (AddPanel.tsx). */
-.phone .pg-slot.pending { z-index: 8; border-radius: 8px; overflow: visible; border-width: 2px; background: color-mix(in srgb, currentColor 10%, transparent); }
-.phone .pg-slot.pending .edge {
-  position: absolute; width: 12px; height: 12px; box-sizing: content-box; border-radius: 50%; background: currentColor;
-  border: 2px solid var(--bg); transition: transform .12s cubic-bezier(.2, 0, 0, 1);
-}
-.phone .pg-slot.pending .edge.top { top: -9px; left: 6px; }
-.phone .pg-slot.pending .edge.bottom { bottom: -9px; right: 6px; }
-.phone .pg-slot.pending.drag-top .edge.top, .phone .pg-slot.pending.drag-bottom .edge.bottom { transform: scale(1.3); }
+.phone .pg-slot-lab b, .phone .pg-slot-lab i { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .pg-slot-lab b { font-weight: 500; }
+.phone .pg-slot-lab i { font-style: normal; font-size: 10px; opacity: .85; }
+/* A short box: the title and times on one line. */
+.phone .pg-slot-lab.one { display: flex; gap: 4px; padding-top: 1px; }
+.phone .pg-slot-lab.one b { flex: 0 1 auto; min-width: 0; }
+.phone .pg-slot-lab.one i { flex: none; }
 /* The time of the edge being dragged, on its line beside the hours. */
 .phone .pg-labels { position: relative; }
 .phone .pg-labels .pg-edgetime { z-index: 1; margin-top: -7px; padding: 0 1px; background: var(--bg); font-weight: 700; font-size: 10px; line-height: 14px; }
