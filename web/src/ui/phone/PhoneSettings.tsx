@@ -1,6 +1,6 @@
 // The phone's Settings, Categories and Trash pages, laid out like SettingsScreen.kt and
 // TrashCategories.kt: section headers, Material 3 list rows with switches or a menu of choices, and
-// dialogs. Settings this build can't act on (backups, the widget, calendar import, wallpaper colours) are
+// dialogs. Settings this build can't act on (backups, the widget, wallpaper colours) are
 // left out. Values are the same local keys the PC settings use.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useKeep, useKeptScroll } from "./keep.ts";
@@ -33,6 +33,7 @@ import { StreaksSheet } from "./StreaksSheet.tsx";
 import { canUseHealth, connect, disconnect, healthFound, readNow, useHealth } from "../../health/healthConnect.ts";
 import { watchStatus } from "../../domain/healthRead.ts";
 import { LOOKS, type LookKey, look, setLook, useLooks } from "./looks.ts";
+import { canImportCalendars } from "../../store/phoneCalendar.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -276,6 +277,8 @@ export function PhoneSettings() {
         <div className="p-hr" />
         <SectionHeader>Data</SectionHeader>
         <HealthRow />
+        {/* Phone only: it reads the phone's own calendars (272). */}
+        {canImportCalendars && <ListItem headline="Import from Google Calendar" supporting="Birthdays, holidays and events from the phone's calendars" onClick={() => go("settings/import")} />}
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
         <ProblemsRow />

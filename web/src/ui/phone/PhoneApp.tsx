@@ -21,6 +21,7 @@ import { swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
+import { PhoneCalendarImport } from "./CalendarImport.tsx";
 import { PhoneCalendar, calendarGoToday, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
 import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks, useTodoTabShown, useTodosSheetOpen } from "./PhoneLists.tsx";
 import { ErrorBoundary } from "../shared/ErrorBoundary.tsx";
@@ -510,7 +511,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
-    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : <PhoneSettings />;
+    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : path[1] === "import" ? <PhoneCalendarImport /> : <PhoneSettings />;
   } else if (route === "tasks") {
     body = <PhoneTasks back />;
   }

@@ -160,6 +160,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Updates: opening Android's installer on a release downloaded from GitHub (it asks first). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Settings → Import from Google Calendar (272): the phone's calendars, read only, asked for there. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
     <!-- Health Connect, read only (health/HealthConnectPlugin.kt): the watch's runs, sleep and daily data,
          and the history from before the permission was given. Nothing is written (debug builds add
          write permissions in src/debug, for test records). -->

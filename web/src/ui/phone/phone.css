@@ -1592,3 +1592,16 @@ html.phone[data-theme="dark"] {
 .phone .ps-look .ps-label { margin: 8px 0 8px; }
 .phone .ps-about { margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .ps-pick { color: var(--p-primary, var(--muted)); }
+
+/* Settings → Import from Google Calendar (272): a calendar's header (its box ticks them all, a tap opens it), then its events. */
+.phone .pci-cal { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.phone .pci-head { display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 4px 16px 4px 6px; cursor: pointer; }
+.phone .pci-head > svg { flex: none; color: var(--muted); }
+.phone .pci-all { flex: none; display: flex; }
+.phone .pci-all.some .p-checkbox { border-color: var(--p-primary); background: linear-gradient(var(--p-primary), var(--p-primary)) center / 10px 2px no-repeat; }
+.phone .pci-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--p-primary); }
+.phone .pci-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .pci-name { font-size: 16px; line-height: 24px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pci-title { font-size: 15px; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pci-sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pci-row { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 2px 16px 2px 26px; }

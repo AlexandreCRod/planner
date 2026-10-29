@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.view.View;
 import androidx.activity.EdgeToEdge;
 import com.alex.planner.web.alarm.AlarmPlugin;
+import com.alex.planner.web.calendar.CalendarPlugin;
 import com.alex.planner.web.device.DevicePlugin;
 import com.alex.planner.web.health.HealthConnectPlugin;
 import com.alex.planner.web.invite.InvitePlugin;
@@ -33,6 +34,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UpdatePlugin.class);
         // The watch's runs, sleep and daily data from Health Connect, read only (web/src/health/).
         registerPlugin(HealthConnectPlugin.class);
+        // The phone's calendars, read for Settings → Import from Google Calendar (272).
+        registerPlugin(CalendarPlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         // No stretch or glow at the WebView's edges: the page draws its own rubber band (overscroll.ts).
