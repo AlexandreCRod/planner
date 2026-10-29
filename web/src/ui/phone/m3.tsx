@@ -6,8 +6,8 @@ import { cssColor } from "../../domain/types.ts";
 import { Dialog, MIcon } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { spring } from "./pager.ts";
-import { SHEET_DISTANCE, SHEET_FLING, sheetCloses } from "./sheet.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { SHEET_DISTANCE, SHEET_FLING, bodyDragStart, sheetCloses } from "./sheet.ts";
+import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { frameWriter } from "./motion.ts";
 import { isWide } from "../../platform.ts";
 
@@ -147,8 +147,26 @@ export function contentColor(c: string): string {
 // ---------- Modal bottom sheet ----------
 
 /**
+ * Whether a finger put down on [t], in [sheet]'s content, may pull the sheet down (274): not from a field
+ * that takes the finger itself (text, a slider), nor a part with its own drags (touch-action none or
+ * sideways only: wheels, steppers, the time dial), nor from inside content scrolled down (it scrolls
+ * back up first). `.p-sheet-nodrag` opts a part out.
+ */
+function dragFromHere(t: Element, sheet: Element): boolean {
+  for (let n: Element | null = t; n && n !== sheet; n = n.parentElement) {
+    if (n.matches("textarea, select, input[type=range], [contenteditable=''], [contenteditable=true], .p-sheet-nodrag")) return false;
+    const cs = getComputedStyle(n);
+    const ta = cs.touchAction;
+    if (ta === "none" || (ta.includes("pan-x") && !ta.includes("pan-y"))) return false;
+    if (n.scrollTop > 0 && /auto|scroll/.test(cs.overflowY)) return false;
+  }
+  return true;
+}
+
+/**
  * Material 3 modal bottom sheet: slides up over a scrim, 28 dp top corners, a drag handle. Dragged
- * by its top it follows the finger and closes when let go far enough down (or flung); back, a tap on
+ * by its top, or pulled down from anywhere on it while its content is scrolled to the top (274), it
+ * follows the finger and closes when let go far enough down (or flung); back, a tap on
  * the scrim and the content's own buttons (through the `close` it is given) close it with the slide.
  * In a wide window it's a dialog in the middle instead (wide.css): it fades out, and has no drag.
  * A sheet that stops halfway (an exercise's guide) takes [onPullUp] (pushed up from its top, or from any
@@ -191,7 +209,10 @@ export function BottomSheet({ onClose, children, className = "", onPullUp, onPul
   useLayoutEffect(() => {
     const el = sheet.current;
     if (!el) return;
-    let g: { id: number; y0: number; dy: number; v: number; lastY: number; lastT: number; moving: boolean } | null = null;
+    // [body]: put down on the content, not the handle: it pulls the sheet only downwards (bodyDragStart).
+    let g: { id: number; x0: number; y0: number; dy: number; v: number; lastY: number; lastT: number; t0: number; moving: boolean; body: boolean } | null = null;
+    // A pull that moved the sheet isn't a tap on what it started on.
+    let eatClick = false;
     let stop: (() => void) | null = null;
     // The sheet's height, measured once per drag; the scrim fades as the sheet goes down.
     let h = 0;
@@ -203,25 +224,35 @@ export function BottomSheet({ onClose, children, className = "", onPullUp, onPul
     // Moves come faster than frames: the sheet is moved once a frame, to the latest.
     const write = frameWriter(place);
     const onDown = (e: PointerEvent) => {
-      if (closing.current || g || isWide() || !(e.target as Element).closest(".p-sheet-top, .p-sheet-drag")) return;
-      stop?.(); stop = null;
-      el.style.transition = "";
-      g = { id: e.pointerId, y0: e.clientY, dy: 0, v: 0, lastY: e.clientY, lastT: e.timeStamp, moving: false };
+      eatClick = false;
+      if (closing.current || g || isWide() || !e.isPrimary) return;
+      const t = e.target as Element;
+      const body = !t.closest(".p-sheet-top, .p-sheet-drag");
+      // From the content: by finger only (a mouse there selects text), and where nothing else takes it.
+      if (body && (e.pointerType === "mouse" || !dragFromHere(t, el))) return;
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dy: 0, v: 0, lastY: e.clientY, lastT: e.timeStamp, t0: e.timeStamp, moving: false, body };
+      if (!body) { stop?.(); stop = null; el.style.transition = ""; }
     };
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       const dt = e.timeStamp - g.lastT;
       if (dt > 0) { g.v = 0.7 * ((e.clientY - g.lastY) / dt) + 0.3 * g.v; g.lastT = e.timeStamp; }
       g.lastY = e.clientY;
+      if (!g.moving && g.body) {
+        const how = bodyDragStart(e.clientX - g.x0, e.clientY - g.y0, e.timeStamp - g.t0, TOUCH_SLOP, LONG_PRESS);
+        if (how === "wait") return;
+        if (how === "leave") { g = null; return; }
+        stop?.(); stop = null; el.style.transition = "";
+      }
       if (!g.moving && Math.abs(e.clientY - g.y0) <= TOUCH_SLOP) return;
       if (!g.moving) {
-        g.moving = true; g.y0 += Math.sign(e.clientY - g.y0) * TOUCH_SLOP;
+        g.moving = true; eatClick = true; g.y0 += Math.sign(e.clientY - g.y0) * TOUCH_SLOP;
         h = el.offsetHeight + 24;
         if (scrim.current) scrim.current.style.transition = "none";
         try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
       }
       // Pushed up: a sheet that can grow does (its own height animates); the drag ends there.
-      if (pullUp.current && e.clientY - g.y0 < -24) {
+      if (pullUp.current && !g.body && e.clientY - g.y0 < -24) {
         g = null;
         write.cancel();
         place(0);
@@ -240,7 +271,7 @@ export function BottomSheet({ onClose, children, className = "", onPullUp, onPul
       write.cancel();
       const v = e.type === "pointercancel" ? 0 : cur.v;
       const settle = () => { stop = spring(cur.dy, 0, v, place, () => { stop = null; if (scrim.current) scrim.current.style.transition = ""; }); };
-      if (pullUp.current && v < -SHEET_FLING && cur.dy < SHEET_DISTANCE) { settle(); pullUp.current(); return; }
+      if (pullUp.current && !cur.body && v < -SHEET_FLING && cur.dy < SHEET_DISTANCE) { settle(); pullUp.current(); return; }
       if (sheetCloses(cur.dy, h - 24, v) && pullDown.current?.()) { settle(); return; }
       if (sheetCloses(cur.dy, h - 24, v)) {
         // Off it goes, carrying on at the finger's speed; it's closed once it's out of sight.
@@ -251,7 +282,19 @@ export function BottomSheet({ onClose, children, className = "", onPullUp, onPul
         stop = spring(cur.dy, h, Math.max(0, v), (y) => { place(y); if (y >= h - 1) away(); }, away);
       } else stop = spring(cur.dy, 0, v, place, () => { stop = null; if (scrim.current) scrim.current.style.transition = ""; });
     };
+    // The content's own scrolling would take a pull down from it (and cancel the pointer): while the finger
+    // goes down from a place that may pull the sheet, the browser doesn't scroll.
+    const onTouchMove = (e: TouchEvent) => {
+      if (!g || !g.body || !e.cancelable) return;
+      const f = e.touches[0];
+      if (!f) return;
+      const dx = f.clientX - g.x0, dy = f.clientY - g.y0;
+      if (g.moving || (dy > 0 && dy >= Math.abs(dx) * 1.2)) e.preventDefault();
+    };
+    const onClick = (e: MouseEvent) => { if (eatClick) { eatClick = false; e.stopPropagation(); e.preventDefault(); } };
     el.addEventListener("pointerdown", onDown);
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("click", onClick, true);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
@@ -259,6 +302,8 @@ export function BottomSheet({ onClose, children, className = "", onPullUp, onPul
       stop?.();
       write.cancel();
       el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("click", onClick, true);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

@@ -110,3 +110,13 @@ test("the opening view reaches 24:00: from just above 06:00 down past the 24:00 
     assert.ok(6 * h - top >= 7, "the 06:00 label reads whole");
   }
 });
+
+test("a finger on a sheet's content pulls it down only on a downward move that isn't a long press (274)", async () => {
+  const { bodyDragStart } = await import("../src/ui/phone/sheet.ts");
+  assert.equal(bodyDragStart(2, 5, 50, 8, 450), "wait");
+  assert.equal(bodyDragStart(1, 12, 80, 8, 450), "take");
+  assert.equal(bodyDragStart(6, 12, 80, 8, 450), "take");
+  assert.equal(bodyDragStart(12, 9, 80, 8, 450), "leave");   // sideways: a swipe row, a chip row
+  assert.equal(bodyDragStart(0, -12, 80, 8, 450), "leave");  // up: the content scrolls
+  assert.equal(bodyDragStart(0, 12, 600, 8, 450), "leave");  // held first: a row picked up
+});

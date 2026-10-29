@@ -32,3 +32,15 @@ export function sheetCloses(dy: number, h: number, v: number): boolean {
   if (v < -SHEET_FLING) return false;
   return dy > Math.min(SHEET_DISTANCE, h * 0.2);
 }
+
+/**
+ * A finger put down on a sheet's content (not its handle), now moved [dx], [dy] px after [held] ms
+ * (274): "wait" until it's past the slop; "take" a pull downwards, so the sheet follows it; "leave" a
+ * sideways move (a swipe row, a chip row, a stepper), an upward one (the content scrolls) and a long
+ * press (a row being picked up) to whatever else handles them.
+ */
+export function bodyDragStart(dx: number, dy: number, held: number, slop: number, longPress: number): "wait" | "take" | "leave" {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) <= slop) return "wait";
+  if (held >= longPress) return "leave";
+  return dy > 0 && dy >= Math.abs(dx) * 1.2 ? "take" : "leave";
+}
