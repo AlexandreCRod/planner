@@ -325,13 +325,15 @@ function SleepLine({ nights, t, onOpen }: { nights: readonly SleepNight[]; t: nu
   if (!n || n.day < t - 1) return null;
   const avg = sleepAverages(nights, n.day);
   const title = n.totalMin !== null ? `Slept ${fmtSleep(n.totalMin)}` : "Last night";
-  const sub = [
-    avg.sleepMin !== null && `7-day average ${fmtSleep(avg.sleepMin)}`, n.restingHr !== null && `resting HR ${n.restingHr}`, n.hrvMs !== null && `HRV ${Math.round(n.hrvMs)}`,
-  ].filter(Boolean).join(" · ");
+  const parts = [
+    avg.sleepMin !== null && `7-day avg ${fmtSleep(avg.sleepMin)}`, n.restingHr !== null && `resting HR ${n.restingHr}`, n.hrvMs !== null && `HRV ${Math.round(n.hrvMs)}`,
+  ].filter((x): x is string => !!x);
+  const sub = parts.join(" · ");
   return (
     <button className="tr-sleep" onClick={onOpen} aria-label={`${title}${sub ? `, ${sub}` : ""}. Open sleep in Progress`}>
       <MIcon name="fDarkMode" size={20} />
-      <span className="text"><span className="title">{title}</span>{sub && <span className="detail">{sub}</span>}</span>
+      <span className="text"><span className="title">{title}</span>{/* Each part wraps whole ("HRV 52" never splits at 390 px). */}
+        {sub && <span className="detail">{parts.map((x, i) => <span key={i}>{i > 0 && " · "}<span className="part">{x}</span></span>)}</span>}</span>
       <MIcon name="fKeyboardArrowRight" size={20} />
     </button>
   );

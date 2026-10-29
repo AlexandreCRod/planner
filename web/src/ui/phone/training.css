@@ -112,6 +112,7 @@ html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now:
 .phone .tr-sleep .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .phone .tr-sleep .title { font-size: 16px; line-height: 22px; color: var(--text); }
 .phone .tr-sleep .detail { font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .tr-sleep .detail .part { white-space: nowrap; }
 .phone .tr-sleep > svg:last-child { color: var(--muted); }
 /* The ring: a 48 dp target around a 22 dp circle; done fills it in the accent with a tick. */
 .phone .tr-ring { flex: none; width: 44px; height: 44px; margin-right: -6px; border: 0; background: none; display: grid; place-items: center; color: var(--p-on-primary); padding: 0; position: relative; }
