@@ -6,6 +6,8 @@ import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTic
 import { SIZE_MARK, sizeStyle, withoutMarks } from "../../domain/textSize.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
+import { takesTap } from "./spellTap.ts";
+import { showKeyboard } from "../phone/native.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
@@ -297,6 +299,70 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     paint();
     return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); unpaintLinks(root); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A tap on a word places the caret here, so the WebView never opens its spelling pop-up over the
+  // keyboard (255; spellTap.ts). Long presses, drags, boxes, links and blank space stay the system's.
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    let down: { x: number; y: number; t: number } | null = null, fingers = 0;
+    let last = { x: 0, y: 0, t: -1e9 };
+    const onStart = (e: TouchEvent) => {
+      fingers = Math.max(fingers, e.touches.length);
+      const p = e.touches[0];
+      down = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, t: performance.now() } : null;
+    };
+    const onEnd = (e: TouchEvent) => {
+      const d = down, p = e.changedTouches[0];
+      const n = fingers;
+      if (!e.touches.length) fingers = 0;
+      down = null;
+      if (!d || !p || !e.cancelable || e.touches.length) return;
+      const now = performance.now();
+      // A second tap in quick succession (a double tap selects the word) is left to the system.
+      if (now - last.t < 350 && Math.hypot(p.clientX - last.x, p.clientY - last.y) < 24) return;
+      const r = document.caretRangeFromPoint?.(p.clientX, p.clientY);
+      if (!r || !root.contains(r.startContainer) || r.startContainer.nodeType !== Node.TEXT_NODE) return;
+      const t = r.startContainer as Text, at = r.startOffset;
+      const tap = { fingers: n, ms: now - d.t, moved: Math.hypot(p.clientX - d.x, p.clientY - d.y) };
+      if (!takesTap(tap, t.data.slice(0, at), t.data.slice(at))) return;
+      if (linksOn.current && linkInEditable(root, p.clientX, p.clientY)) return;
+      if (onBoxAt(p.clientX, p.clientY)) return;
+      e.preventDefault();
+      last = { x: p.clientX, y: p.clientY, t: now };
+      if (document.activeElement !== root) root.focus({ preventScroll: true });
+      getSelection()?.collapse(t, at);
+      caretPastBox();
+      showKeyboard();
+    };
+    const onCancel = () => { down = null; fingers = 0; };
+    root.addEventListener("touchstart", onStart, { passive: true });
+    root.addEventListener("touchend", onEnd, { passive: false });
+    root.addEventListener("touchcancel", onCancel);
+    return () => {
+      root.removeEventListener("touchstart", onStart);
+      root.removeEventListener("touchend", onEnd);
+      root.removeEventListener("touchcancel", onCancel);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Whether the point is on (or just beside) a checklist line's box. */
+  const onBoxAt = (x: number, y: number): boolean => {
+    const root = el.current;
+    if (!root) return false;
+    for (const line of [...root.children] as HTMLElement[]) {
+      const b = line.getBoundingClientRect();
+      if (y < b.top || y > b.bottom) continue;
+      const t = firstText(line), info = boxInfo(line);
+      if (!t || !info.hasBox || t.data[info.indent] !== (info.checked ? TICK : BOX)) return false;
+      const r = document.createRange();
+      r.setStart(t, info.indent);
+      r.setEnd(t, info.indent + 1);
+      const box = r.getBoundingClientRect();
+      return x <= box.right + BOX_SLOP && y >= box.top - BOX_SLOP && y <= box.bottom + BOX_SLOP;
+    }
+    return false;
+  };
 
   // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);
   // the next one joins it to the line above. Delete at the end of a line pulls the next one up, without
