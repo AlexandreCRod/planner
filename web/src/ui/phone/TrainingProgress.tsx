@@ -82,39 +82,12 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   const [lastWanted, setLastWanted] = useState<Tab>(wantedTab);
   if (lastWanted !== wantedTab) { setLastWanted(wantedTab); setTabState(wantedTab); }
   const index = TABS.findIndex(([k]) => k === tab);
-  const idx = useRef(index);
-  idx.current = index;
   const setIndex = (i: number) => {
     const k = TABS[clampTab(i)][0];
-    idx.current = clampTab(i);
     setLastWanted(k);
     setTabState(k);
     replaceRoute(route(k, null, planId));
   };
-  const strip = useRef<HTMLDivElement>(null);
-  const track = useRef<((p: number | null) => void) | null>(null);
-  const stopSlide = useRef<(() => void) | null>(null);
-  // A tap on a tab slides there on the pager's spring (a jump of more than one tab is just there).
-  const showTab = (k: Tab) => {
-    const i = TABS.findIndex(([x]) => x === k), from = idx.current;
-    stopSlide.current?.(); stopSlide.current = null;
-    if (strip.current) strip.current.style.transform = "";
-    if (i === from) return;
-    feel("tick");
-    const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
-    flushSync(() => setIndex(i));
-    if (!el || !w || Math.abs(i - from) > 1) return;
-    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
-    stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
-  };
-  const pager = useSwipePager<HTMLDivElement>({
-    layers: () => [strip.current],
-    onStep: (d) => setIndex(idx.current + d),
-    canStep: (d) => idx.current + d >= 0 && idx.current + d <= TABS.length - 1,
-    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
-    onSettled: () => track.current?.(null),
-    allow: (el) => !el.closest("input, textarea"),
-  });
   const open = (id: string) => {
     feel("tick");
     // Wide, the open card is swapped in place, so back leaves Progress rather than going through each card.
@@ -130,22 +103,9 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
     </Scaffold>;
   }
 
-  const list = (
-    <div className="pg-list">
-      <div className="pg-tabs">
-        <Segmented value={tab} options={TABS} onChange={showTab} track={track} />
-      </div>
-      <div className="p-tabpager" ref={pager}>
-        <div className="p-tabstrip" ref={strip} style={{ left: `${-index * 100}%` }}>
-          {TABS.map(([k], i) => (
-            <div key={k} className="p-content p-tabpage pg-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
-              {Math.abs(i - index) <= 1 && <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  const list = <TabsPager index={index} setIndex={setIndex}>
+    {(k, i) => Math.abs(i - index) <= 1 && <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />}
+  </TabsPager>;
 
   return (
     <Scaffold title="Progress" back flush actions={weighIn}>
@@ -160,6 +120,54 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
       ) : list}
       {sheet}
     </Scaffold>
+  );
+}
+
+/**
+ * The tab row over a pager of the tabs' lists (248): a swipe turns the tab with the tab row following, a tap
+ * on a tab slides there. Its own component, so the pager is set up again each time the list comes back
+ * (on a phone a card replaces the list).
+ */
+function TabsPager({ index, setIndex, children }: { index: number; setIndex: (i: number) => void; children: (k: Tab, i: number) => ReactNode }) {
+  const idx = useRef(index);
+  idx.current = index;
+  const strip = useRef<HTMLDivElement>(null);
+  const track = useRef<((p: number | null) => void) | null>(null);
+  const stopSlide = useRef<(() => void) | null>(null);
+  // A tap on a tab slides there on the pager's spring (a jump of more than one tab is just there).
+  const showTab = (k: Tab) => {
+    const i = TABS.findIndex(([x]) => x === k), from = idx.current;
+    stopSlide.current?.(); stopSlide.current = null;
+    if (strip.current) strip.current.style.transform = "";
+    if (i === from) return;
+    feel("tick");
+    const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
+    flushSync(() => { idx.current = i; setIndex(i); });
+    if (!el || !w || Math.abs(i - from) > 1) return;
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
+    stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
+  };
+  const pager = useSwipePager<HTMLDivElement>({
+    layers: () => [strip.current],
+    onStep: (d) => { const i = clampTab(idx.current + d); idx.current = i; setIndex(i); },
+    canStep: (d) => idx.current + d >= 0 && idx.current + d <= TABS.length - 1,
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => track.current?.(null),
+    allow: (el) => !el.closest("input, textarea"),
+  });
+  return (
+    <div className="pg-list">
+      <div className="pg-tabs">
+        <Segmented value={TABS[index][0]} options={TABS} onChange={showTab} track={track} />
+      </div>
+      <div className="p-tabpager" ref={pager}>
+        <div className="p-tabstrip" ref={strip} style={{ left: `${-index * 100}%` }}>
+          {TABS.map(([k], i) => (
+            <div key={k} className="p-content p-tabpage pg-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>{children(k, i)}</div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
