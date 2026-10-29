@@ -119,3 +119,37 @@ test("completed sections: the ticked items at the end of each checklist", () => 
   assert.equal(checklistTicked("⠀⠀⠀☑ b"), true);
   assert.equal(checklistTicked("☐ b"), false);
 });
+
+test("Delete before a box takes it away; at its end it's an ordinary Delete (262)", async () => {
+  const { forwardDeleteTakesBox } = await import("../src/domain/checklist.ts");
+  assert.equal(forwardDeleteTakesBox("☐ milk", 0), true); // before the box
+  assert.equal(forwardDeleteTakesBox("☐ milk", 1), true); // between the box and its space
+  assert.equal(forwardDeleteTakesBox("⠀⠀⠀☐ milk", 2), true); // in the indent
+  assert.equal(forwardDeleteTakesBox("☐ milk", 2), false); // right after the lead: deletes the "m"
+  assert.equal(forwardDeleteTakesBox("☐ ", 2), false); // an empty box's end: joins the next line
+  assert.equal(forwardDeleteTakesBox("milk", 0), false);
+});
+
+test("Joining lines across a checklist drops the lower box and indent (262)", async () => {
+  const { editorJoins, joinDrops, joinedLine } = await import("../src/domain/checklist.ts");
+  assert.equal(editorJoins("☐ Milk", "☐ Eggs"), true);
+  assert.equal(editorJoins("☐ Milk", "Eggs"), true); // the box was just taken away: Backspace again joins
+  assert.equal(editorJoins("Milk", "⠀⠀⠀☑ Eggs"), true);
+  assert.equal(editorJoins("Milk", "Eggs"), false); // plain lines: the browser's own join
+  assert.equal(joinDrops("⠀⠀⠀☑ Eggs"), 5);
+  assert.equal(joinDrops("Eggs"), 0);
+  assert.equal(joinedLine("☐ Milk", "☐ Eggs"), "☐ MilkEggs");
+  assert.equal(joinedLine("☐ Milk", "☐ "), "☐ Milk"); // an empty box below just goes
+  assert.equal(joinedLine("☐ ", "⠀⠀⠀☐ Ham"), "☐ Ham"); // Delete on an empty box pulls the next item's words onto it
+  assert.equal(joinedLine("☐ Milk", ""), "☐ Milk");
+});
+
+test("A checklist line's box keeps a no-break space before its text (256)", async () => {
+  const { boxGapFix } = await import("../src/domain/checklist.ts");
+  assert.equal(boxGapFix("☐ Milk"), null);
+  assert.deepEqual(boxGapFix("☐ Milk"), { at: 1, replace: 1 }); // a plain space: hidden at a line's end, dropped when typing
+  assert.deepEqual(boxGapFix("⠀⠀⠀☐ "), { at: 4, replace: 1 });
+  assert.deepEqual(boxGapFix("⠀⠀⠀☐Milk"), { at: 4, replace: 0 }); // lost already: put back
+  assert.deepEqual(boxGapFix("☑"), { at: 1, replace: 0 });
+  assert.equal(boxGapFix("Milk"), null);
+});

@@ -2,12 +2,17 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
+import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTicked, completedSections, editorJoins, enterSplitsAt, forwardDeleteTakesBox, joinDrops, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
+import { SIZE_MARK, sizeStyle, withoutMarks } from "../../domain/textSize.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
+import { takesTap } from "./spellTap.ts";
+import { showKeyboard } from "../phone/native.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
+/** The space after a box while editing: a no-break one, which the browser never hides or drops (saved as a plain space). */
+const NBSP = " ";
 /** How far outside the box a tap still ticks it (px). */
 const BOX_SLOP = 6;
 const INDENT = "⠀⠀⠀";
@@ -79,11 +84,17 @@ function normalize(root: HTMLElement): string {
       p.appendChild(n);
     }
   }
-  // Boxes are followed by a plain space in saved text (the phone writes it that way).
+  // Boxes are followed by a plain space in saved text (the phone writes it that way); a size's caret mark isn't saved.
   const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
     if (/[☐☑] /.test(n.data)) n.data = n.data.replace(/([☐☑]) /g, "$1 ");
+    if (n.data.includes(SIZE_MARK)) n.data = n.data.split(SIZE_MARK).join("");
   }
+  // Spans left with nothing in them, or with no style at all (Normal picked inside a bigger size), go.
+  c.querySelectorAll("span").forEach((sp) => {
+    if (!sp.textContent && !sp.querySelector("img,br")) sp.remove();
+    else if (!sp.attributes.length) sp.replaceWith(...sp.childNodes);
+  });
   const html = c.innerHTML;
   return html === "<p><br></p>" || html === "<br>" ? "" : html;
 }
@@ -130,6 +141,57 @@ function boxInfo(block: HTMLElement) {
   return { indent: i, hasBox: text[i] === BOX || text[i] === TICK, checked: text[i] === TICK };
 }
 
+/**
+ * Saved text has a plain space after each box; on screen it's a no-break space. A plain one at the end of
+ * a line (an empty box) is hidden, and the browser drops it when typing there, so the words would touch
+ * the box (256).
+ */
+function liveGaps(root: HTMLElement) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+    if (/[☐☑] /.test(n.data)) n.data = n.data.replace(/([☐☑]) /g, `$1${NBSP}`);
+  }
+}
+
+/** Where the caret is in [block], in characters (null when it's not there or a range is selected). */
+function caretIn(block: HTMLElement): number | null {
+  const sel = getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed || !block.contains(sel.anchorNode)) return null;
+  const r = document.createRange();
+  r.setStart(block, 0);
+  r.setEnd(sel.anchorNode!, sel.anchorOffset);
+  return r.toString().length;
+}
+
+/** An element that sets a text size: a span with a font size, or the browser's own <font size>. */
+const isSized = (n: Element) => (n.tagName === "SPAN" && !!(n as HTMLElement).style.fontSize) || (n.tagName === "FONT" && n.hasAttribute("size"));
+
+/**
+ * Takes [span] out of the sized elements around it in [block], splitting them, so only its own size
+ * counts: Normal picked inside a Title is really normal again (257).
+ */
+function liftOut(span: HTMLElement, block: HTMLElement) {
+  for (let p = span.parentElement; p && p !== block && block.contains(p);) {
+    const up: HTMLElement | null = p.parentElement;
+    if (isSized(p)) {
+      const r = document.createRange();
+      const left = p.cloneNode(false) as HTMLElement, right = p.cloneNode(false) as HTMLElement;
+      r.setStart(p, 0); r.setEndBefore(span); left.append(r.extractContents());
+      r.setStartAfter(span); r.setEnd(p, p.childNodes.length); right.append(r.extractContents());
+      if (left.textContent) p.before(left);
+      if (right.textContent) p.after(right);
+      p.replaceWith(...p.childNodes);
+    }
+    p = up;
+  }
+}
+
+const sizedSpan = (px: number | null) => {
+  const span = document.createElement("span");
+  Object.assign(span.style, sizeStyle(px));
+  return span;
+};
+
 function placeCaretAtEnd(el: HTMLElement) {
   const r = document.createRange();
   r.selectNodeContents(el);
@@ -160,6 +222,13 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const headsKey = useRef("");
   // Which checklists' completed sections are folded, by the text of their first line.
   const folded = useRef(new Map<string, boolean>());
+  // The caret marks of sizes picked with nothing selected (see sizeAtCaret).
+  const marks = useRef(new Set<HTMLElement>());
+  useEffect(() => {
+    const on = () => tidyMarks(false);
+    document.addEventListener("selectionchange", on);
+    return () => document.removeEventListener("selectionchange", on);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Gives each checklist's completed lines (the ticked ones at its end, see completedSections) their marks:
@@ -208,7 +277,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   };
 
   useEffect(() => {
-    if (el.current) el.current.innerHTML = sanitize(initialHtml);
+    if (el.current) { el.current.innerHTML = sanitize(initialHtml); liveGaps(el.current); }
     document.execCommand("defaultParagraphSeparator", false, "p");
   }, [initialHtml, revision]);
   // The "Start writing" hint goes as soon as anything is there: typing, but also a box, a bullet or a
@@ -231,33 +300,165 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); unpaintLinks(root); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // A tap on a word places the caret here, so the WebView never opens its spelling pop-up over the
+  // keyboard (255; spellTap.ts). Long presses, drags, boxes, links and blank space stay the system's.
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    let down: { x: number; y: number; t: number } | null = null, fingers = 0;
+    let last = { x: 0, y: 0, t: -1e9 };
+    const onStart = (e: TouchEvent) => {
+      fingers = Math.max(fingers, e.touches.length);
+      const p = e.touches[0];
+      down = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, t: performance.now() } : null;
+    };
+    const onEnd = (e: TouchEvent) => {
+      const d = down, p = e.changedTouches[0];
+      const n = fingers;
+      if (!e.touches.length) fingers = 0;
+      down = null;
+      if (!d || !p || !e.cancelable || e.touches.length) return;
+      const now = performance.now();
+      // A second tap in quick succession (a double tap selects the word) is left to the system.
+      if (now - last.t < 350 && Math.hypot(p.clientX - last.x, p.clientY - last.y) < 24) return;
+      const r = document.caretRangeFromPoint?.(p.clientX, p.clientY);
+      if (!r || !root.contains(r.startContainer) || r.startContainer.nodeType !== Node.TEXT_NODE) return;
+      const t = r.startContainer as Text, at = r.startOffset;
+      const tap = { fingers: n, ms: now - d.t, moved: Math.hypot(p.clientX - d.x, p.clientY - d.y) };
+      if (!takesTap(tap, t.data.slice(0, at), t.data.slice(at))) return;
+      if (linksOn.current && linkInEditable(root, p.clientX, p.clientY)) return;
+      if (onBoxAt(p.clientX, p.clientY)) return;
+      e.preventDefault();
+      last = { x: p.clientX, y: p.clientY, t: now };
+      if (document.activeElement !== root) root.focus({ preventScroll: true });
+      getSelection()?.collapse(t, at);
+      caretPastBox();
+      showKeyboard();
+    };
+    const onCancel = () => { down = null; fingers = 0; };
+    root.addEventListener("touchstart", onStart, { passive: true });
+    root.addEventListener("touchend", onEnd, { passive: false });
+    root.addEventListener("touchcancel", onCancel);
+    return () => {
+      root.removeEventListener("touchstart", onStart);
+      root.removeEventListener("touchend", onEnd);
+      root.removeEventListener("touchcancel", onCancel);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Whether the point is on (or just beside) a checklist line's box. */
+  const onBoxAt = (x: number, y: number): boolean => {
+    const root = el.current;
+    if (!root) return false;
+    for (const line of [...root.children] as HTMLElement[]) {
+      const b = line.getBoundingClientRect();
+      if (y < b.top || y > b.bottom) continue;
+      const t = firstText(line), info = boxInfo(line);
+      if (!t || !info.hasBox || t.data[info.indent] !== (info.checked ? TICK : BOX)) return false;
+      const r = document.createRange();
+      r.setStart(t, info.indent);
+      r.setEnd(t, info.indent + 1);
+      const box = r.getBoundingClientRect();
+      return x <= box.right + BOX_SLOP && y >= box.top - BOX_SLOP && y <= box.bottom + BOX_SLOP;
+    }
+    return false;
+  };
+
   // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);
-  // the next one joins it to the line above. Android's keyboards send it as a beforeinput, a PC as a key.
+  // the next one joins it to the line above. Delete at the end of a line pulls the next one up, without
+  // its box (262). Android's keyboards send them as a beforeinput, a PC as a key.
   useEffect(() => {
     const root = el.current;
     if (!root) return;
     // Enter too, from a keyboard that sends no Enter key (only the paragraph it inserts).
     const onBefore = (e: InputEvent) => {
       if (!e.cancelable) return;
-      if (e.inputType === "deleteContentBackward" && takeBoxAtCaret()) e.preventDefault();
+      if (e.inputType === "deleteContentBackward" && backspaceAtCaret()) e.preventDefault();
+      else if (e.inputType === "deleteContentForward" && deleteAtCaret()) e.preventDefault();
       else if (e.inputType === "insertParagraph" && enterOnBox()) e.preventDefault();
     };
     root.addEventListener("beforeinput", onBefore);
     return () => root.removeEventListener("beforeinput", onBefore);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** At the start of a checkbox line (caret only): removes its indent and box. True if it did. */
-  const takeBoxAtCaret = (): boolean => {
+  /** The line with the caret (not a list item) when nothing is selected, with the caret's place in it. */
+  const caretLine = (): { block: HTMLElement; caret: number } | null => {
     const root = el.current;
-    const sel = getSelection();
-    if (!root || !sel || !sel.isCollapsed || !sel.rangeCount) return false;
+    if (!root) return null;
     const block = currentBlock(root);
-    if (!block || block.tagName === "LI") return false;
-    const r = document.createRange();
-    r.setStart(block, 0);
-    r.setEnd(sel.anchorNode!, sel.anchorOffset);
+    if (!block || block.tagName === "LI") return null;
+    const caret = caretIn(block);
+    return caret === null ? null : { block, caret };
+  };
+
+  /** The next (or previous) line on screen: lines folded into a "completed" section are skipped. */
+  const lineBeside = (block: HTMLElement, down: boolean): HTMLElement | null => {
+    if (block.parentElement !== el.current) return null;
+    let n = (down ? block.nextElementSibling : block.previousElementSibling) as HTMLElement | null;
+    while (n?.classList.contains("pn-folded")) n = (down ? n.nextElementSibling : n.previousElementSibling) as HTMLElement | null;
+    return n?.tagName === "P" ? n : null;
+  };
+
+  /** Backspace: takes a box away, or joins a line to a checklist line above it. True if it did either. */
+  const backspaceAtCaret = (): boolean => {
+    if (dropMarkAtCaret()) { if (!backspaceAtCaret()) document.execCommand("delete"); return true; }
+    const at = caretLine();
+    if (!at) return false;
+    const text = at.block.textContent ?? "";
+    if (backspaceTakesBox(text, at.caret)) return takeBox(at.block);
+    if (at.caret !== 0) return false;
+    const above = lineBeside(at.block, false);
+    if (!above || !editorJoins(above.textContent ?? "", text)) return false;
+    joinLines(above, at.block);
+    return true;
+  };
+
+  /** Delete: takes a box away from before it, or pulls the next line up when it or this one is a checklist line. */
+  const deleteAtCaret = (): boolean => {
+    const at = caretLine();
+    if (!at) return false;
+    const text = at.block.textContent ?? "";
+    if (forwardDeleteTakesBox(text, at.caret)) return takeBox(at.block);
+    if (at.caret < text.length) return false;
+    const below = lineBeside(at.block, true);
+    if (!below || !editorJoins(text, below.textContent ?? "")) return false;
+    joinLines(at.block, below);
+    return true;
+  };
+
+  /**
+   * Joins line [below] onto the end of line [above], without its lead (indent, box and space) or its
+   * strike-through, with the caret where they meet. Done here rather than by the browser, which leaves
+   * the box in the middle of the text and wraps the moved words in stray styles.
+   */
+  const joinLines = (above: HTMLElement, below: HTMLElement) => {
+    const lowText = below.textContent ?? "";
+    if (checklistTicked(lowText)) setDone(below, null, 0, false);
+    const drop = joinDrops(lowText);
+    if (drop) {
+      const r = document.createRange();
+      r.setStart(below, 0);
+      r.setEnd(...pointAt(below, drop));
+      r.deleteContents();
+    }
+    const at = (above.textContent ?? "").length;
+    while (above.lastChild?.nodeName === "BR") above.lastChild.remove();
+    const moved = [...below.childNodes];
+    if (moved[moved.length - 1]?.nodeName === "BR") moved.pop();
+    above.append(...moved);
+    below.remove();
+    if (!above.childNodes.length) above.appendChild(document.createElement("br"));
+    above.normalize();
+    const sel = getSelection();
+    if (sel) sel.collapse(...(at === 0 ? [above, 0] as [Node, number] : pointAt(above, at)));
+    onChange();
+  };
+
+  /** Removes line [block]'s indent and box (and the strike-through of a ticked one), the caret at its start. */
+  const takeBox = (block: HTMLElement): boolean => {
+    const sel = getSelection();
+    if (!sel) return false;
     const text = block.textContent ?? "";
-    if (!backspaceTakesBox(text, r.toString().length)) return false;
     const t = firstText(block);
     const lead = checklistLead(text);
     if (!t || checklistLead(t.data) !== lead) return false;
@@ -366,18 +567,142 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     const t = firstText(block);
     if (deeper) { if (t) t.insertData(0, INDENT); else block.prepend(document.createTextNode(INDENT)); }
     else if (t) { let n = 0; while (n < INDENT.length && t.data[n] === "⠀") n++; if (n) t.deleteData(0, n); }
+    keepGap(block);
     onChange();
   };
 
+  /** A checklist line's box keeps its no-break space before the text (256), the caret staying where it was. */
+  const keepGap = (block: HTMLElement) => {
+    const fix = boxGapFix(block.textContent ?? "");
+    if (!fix) return;
+    const caret = caretIn(block);
+    const r = document.createRange();
+    r.setStart(...pointAt(block, fix.at));
+    r.setEnd(...pointAt(block, fix.at + fix.replace));
+    r.deleteContents();
+    r.insertNode(document.createTextNode(NBSP));
+    block.normalize();
+    if (caret !== null) getSelection()?.collapse(...pointAt(block, caret + (fix.replace === 0 && caret >= fix.at ? 1 : 0)));
+  };
+
+  /**
+   * A text size from the menu. On selected text it's set on the text (taking it out of any other size
+   * around it). With only a caret, the caret gets the size at once, in an invisible mark, so it shows
+   * the size and what's typed next takes it, even on an empty line (257).
+   */
   const setSize = (px: number | null) => {
-    exec("fontSize", "7");
-    el.current?.querySelectorAll('font[size="7"]').forEach((f) => {
-      const span = document.createElement("span");
-      if (px) { span.style.fontSize = `${px}px`; if (px > 16) span.style.fontWeight = "bold"; }
-      span.innerHTML = f.innerHTML;
-      f.replaceWith(span);
-    });
+    const root = el.current;
+    if (!root) return;
+    root.focus();
+    const sel = getSelection();
+    if (sel && sel.rangeCount && sel.isCollapsed && root.contains(sel.anchorNode)) { sizeAtCaret(px); return; }
+    if (!sel || !sel.rangeCount) return;
+    // Line by line: each line's selected part goes into a span of the new size (the browser's own
+    // fontSize command leaves <font> tags, and half of a Title's style behind when it's undone).
+    const range = sel.getRangeAt(0);
+    const spans: HTMLElement[] = [];
+    for (const b of [...root.children]) {
+      if (!range.intersectsNode(b)) continue;
+      const r = document.createRange();
+      r.selectNodeContents(b);
+      if (b.contains(range.startContainer)) r.setStart(range.startContainer, range.startOffset);
+      if (b.contains(range.endContainer)) r.setEnd(range.endContainer, range.endOffset);
+      if (r.collapsed || !r.toString()) continue;
+      const part = r.extractContents();
+      // Sizes inside the selection give way to the new one (with the bold that comes with a big size).
+      part.querySelectorAll<HTMLElement>("span").forEach((s) => {
+        if (!s.style.fontSize) return;
+        s.style.fontSize = ""; s.style.fontWeight = "";
+        if (!s.getAttribute("style")) s.replaceWith(...s.childNodes);
+      });
+      part.querySelectorAll("font[size]").forEach((f) => f.replaceWith(...f.childNodes));
+      const span = sizedSpan(px);
+      span.append(part);
+      r.insertNode(span);
+      const block = currentBlockOf(span, root) ?? (b as HTMLElement);
+      liftOut(span, block);
+      spans.push(span);
+    }
+    if (spans.length) {
+      const r = document.createRange();
+      r.setStartBefore(spans[0].firstChild ?? spans[0]);
+      r.setEndAfter(spans[spans.length - 1].lastChild ?? spans[spans.length - 1]);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
     onChange();
+  };
+
+  /** The mark span holding the caret (see sizeAtCaret), if any. */
+  const markAtCaret = (): HTMLElement | null => {
+    const n = getSelection()?.anchorNode;
+    if (!n || n.nodeType !== Node.TEXT_NODE) return null;
+    const s = n.parentElement, data = (n as Text).data;
+    return s && marks.current.has(s) && data.length > 0 && withoutMarks(data, null).data === data && data.startsWith(SIZE_MARK) ? s : null;
+  };
+
+  const sizeAtCaret = (px: number | null) => {
+    const root = el.current, sel = getSelection();
+    if (!root || !sel || !sel.rangeCount) return;
+    const block = currentBlock(root);
+    if (!block) return;
+    let span = markAtCaret();
+    if (span) { span.removeAttribute("style"); Object.assign(span.style, sizeStyle(px)); }
+    else {
+      span = sizedSpan(px);
+      span.append(document.createTextNode(SIZE_MARK));
+      sel.getRangeAt(0).insertNode(span);
+      marks.current.add(span);
+      // An empty line's placeholder goes: the mark holds the line now (tidyMarks puts it back if unused).
+      const next = span.nextSibling;
+      if (next?.nodeName === "BR" && !next.nextSibling && !(block.textContent ?? "").replace(SIZE_MARK, "")) next.remove();
+    }
+    liftOut(span, block);
+    sel.collapse(span.firstChild!, 1);
+    onChange();
+  };
+
+  /**
+   * After typing ([typed]), a mark with text beside it goes. Otherwise, an unused mark goes once the caret
+   * is elsewhere in the text (not while a menu or dialog has the focus).
+   */
+  const tidyMarks = (typed: boolean) => {
+    const root = el.current, sel = getSelection();
+    if (!root) return;
+    for (const s of [...marks.current]) {
+      const text = s.textContent ?? "";
+      if (!s.isConnected || !text.includes(SIZE_MARK)) { marks.current.delete(s); continue; }
+      if (withoutMarks(text, null).data === text) {
+        if (!typed && sel?.anchorNode && root.contains(sel.anchorNode) && !s.contains(sel.anchorNode)) {
+          const block = s.parentElement;
+          s.remove();
+          marks.current.delete(s);
+          if (block && block !== root && !block.childNodes.length) block.appendChild(document.createElement("br"));
+        }
+        continue;
+      }
+      if (!typed) continue;
+      const w = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+        const caret = sel && sel.isCollapsed && sel.anchorNode === t ? sel.anchorOffset : null;
+        const fixed = withoutMarks(t.data, caret);
+        if (fixed.data === t.data) continue;
+        t.data = fixed.data;
+        if (fixed.caret !== null) sel!.collapse(t, fixed.caret);
+      }
+      marks.current.delete(s);
+    }
+  };
+
+  /** Backspace right after picking a size: the mark goes with the character before it, in one press. */
+  const dropMarkAtCaret = (): boolean => {
+    const s = markAtCaret();
+    if (!s?.parentNode) return false;
+    const parent = s.parentNode, at = [...parent.childNodes].indexOf(s);
+    s.remove();
+    marks.current.delete(s);
+    getSelection()?.collapse(parent, at);
+    return true;
   };
 
   // Click on a box ticks it and strikes through the rest of the line; anywhere else, the caret stays out of the box's lead.
@@ -493,7 +818,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   // after the caret goes onto the new box, unticked, with its formatting.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (onLinkKey(e)) return;
-    if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
+    const plain = !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (e.key === "Backspace" && plain) { if (backspaceAtCaret()) e.preventDefault(); return; }
+    if (e.key === "Delete" && plain) { if (deleteAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { if (tickAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && !e.shiftKey && enterOnBox()) e.preventDefault();
   };
@@ -517,7 +844,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     }
     const at = enterSplitsAt(block.textContent ?? "", caret);
     const p = document.createElement("p");
-    p.textContent = INDENT.slice(0, info.indent) + BOX + " ";
+    p.textContent = INDENT.slice(0, info.indent) + BOX + NBSP;
     if (at !== null) {
       const rest = document.createRange();
       rest.setStart(...pointAt(block, at));
@@ -550,7 +877,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   return (
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={() => { checkEmpty(); onChange(); }}
+        style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
+        onCompositionEnd={() => tidyMarks(true)}
         data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} {...linkHandlers} />
       {heads.map((h) => (
         <button key={h.key} type="button" className={h.folded ? "pn-done-head is-folded" : "pn-done-head"} style={{ top: h.top, height: HEAD_H - 4 }}
@@ -584,8 +912,8 @@ function currentBlockOf(n: Node, root: HTMLElement): HTMLElement | null {
 }
 
 /** Strikes through (or restores) everything after the box on that line. */
-function setDone(block: HTMLElement, t: Text, at: number, done: boolean) {
-  if (done) {
+function setDone(block: HTMLElement, t: Text | null, at: number, done: boolean) {
+  if (done && t) {
     const r = document.createRange();
     r.setStart(t, Math.min(at + 2, t.length));
     r.setEnd(block, block.childNodes.length);
