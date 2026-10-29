@@ -68,7 +68,7 @@ export function PhoneCalendarImport() {
   };
 
   return (
-    <Scaffold title="Import from Google Calendar" back flush
+    <Scaffold title="Google Calendar" back flush
       actions={state.at === "ready" ? <TextButton disabled={picked.size === 0} onClick={doImport}>{picked.size ? `Import ${picked.size}` : "Import"}</TextButton> : undefined}>
       <div className="p-content ps pci">
         {!canImportCalendars && <EmptyHint>Importing reads the phone's calendars, so it's in the app on the phone.</EmptyHint>}
