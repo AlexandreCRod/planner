@@ -18,7 +18,9 @@ import { feel } from "./haptics.ts";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
 import { MarkdownView, allExercises, docRoute } from "./TrainingDocs.tsx";
-import { GuideSheet } from "./TrainingGuide.tsx";
+import { GuideSheet, useGuideParts } from "./TrainingGuide.tsx";
+import { look, useLooks } from "./looks.ts";
+import { openExternal } from "./native.ts";
 import { isWide } from "../../platform.ts";
 import { KIND_LABEL, Scale, fmtKg, phaseNames, planQ, sessionIcon, setsText } from "./trainingParts.tsx";
 
@@ -79,6 +81,7 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
   tr: Training; lp: LoadedPlan; sessionId: string; readOnly: boolean; onClose: () => void; closeIcon?: boolean;
   onMoved?: (sid: string, day: number, undo: () => void) => boolean;
 }) {
+  useLooks();
   const { plan } = lp;
   const t = todayEpoch();
   const s = sessionsOf(plan).find((x) => x.id === sessionId);
@@ -222,22 +225,50 @@ function GymLog({ tr, lp, s, e, day, t, readOnly }: { tr: Training; lp: LoadedPl
 function TickRow({ tr, lp, doing, known, name, x, ticked, readOnly, onTick }: {
   tr: Training; lp: LoadedPlan; doing: string; known: boolean; name: string; x: SessionExercise; ticked: boolean; readOnly: boolean; onTick: (on: boolean) => void;
 }) {
-  const [guide, setGuide] = useState(false);
+  const [guide, setGuide] = useState<"" | "half" | "full">("");
   const row = useRef<HTMLLabelElement>(null);
+  const guides = look("guides");
+  const open = (how: "half" | "full") => (ev: { preventDefault: () => void; stopPropagation: () => void }) => {
+    ev.preventDefault(); ev.stopPropagation(); showAbove(row.current); setGuide(how);
+  };
+  const sub = [setsText(x.sets, x.reps), x.note].filter(Boolean).join(" · ");
   return <>
     <label className={`tr-tick ${ticked ? "done" : ""}`} ref={row}>
       <input type="checkbox" className="p-checkbox" checked={ticked} disabled={readOnly} onChange={(ev) => onTick(ev.target.checked)} />
       <span className="text">
         {known
-          ? <button className="name tr-guidename" onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); showAbove(row.current); setGuide(true); }}>
-              <span className="nt">{name}</span><span className="tr-info"><MIcon name="oInfo" size={16} /></span>
+          ? <button className="name tr-guidename" onClick={open(guides === "A" ? "full" : "half")}>
+              <span className="nt">{name}</span><GuideSign look={guides} size={16} />
             </button>
           : <span className="name">{name}</span>}
-        <span className="sub">{[setsText(x.sets, x.reps), x.note].filter(Boolean).join(" · ")}</span>
+        {/* Guides A: "How to" in the small print. */}
+        {known && guides === "A"
+          ? <span className="sub">{sub}{sub && " · "}<button className="tr-howto-link" onClick={open("full")}>How to</button></span>
+          : <span className="sub">{sub}</span>}
       </span>
     </label>
-    {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onClose={() => setGuide(false)} />}
+    {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} startFull={guide === "full"} onClose={() => setGuide("")} />}
   </>;
+}
+
+/**
+ * The sign by an exercise's name that says it opens its guide (Guides, looks.ts): B an ⓘ, C a › (the
+ * name as a link), A none (its "How to" line says so).
+ */
+function GuideSign({ look: g, size }: { look: string; size: number }) {
+  if (g === "A") return null;
+  return <span className={`tr-info ${g === "C" ? "chev" : ""}`}><MIcon name={g === "C" ? "fKeyboardArrowRight" : "oInfo"} size={g === "C" ? size + 4 : size} /></span>;
+}
+
+/** Guides A's line under an exercise: "How to" opens the whole guide, "Watch" its video. */
+function HowToLine({ tr, lp, id, onHowTo }: { tr: Training; lp: LoadedPlan; id: string; onHowTo: () => void }) {
+  const { parts } = useGuideParts(tr, lp, id);
+  return (
+    <div className="tr-howto">
+      <button onClick={onHowTo}><MIcon name="oDescription" size={17} />How to</button>
+      {parts?.video && <button onClick={() => openExternal(parts.video!.url)}><MIcon name="fPlayArrow" size={17} />Watch</button>}
+    </div>
+  );
 }
 
 /** Scrolls the session so [el] sits in its top part, above a guide sheet that stops halfway. */
@@ -261,7 +292,8 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
   const [editing, setEditing] = useState<{ k: number; what: "kg" | "reps" } | null>(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const [showPain, setShowPain] = useState(false);
-  const [guide, setGuide] = useState(false);
+  const [guide, setGuide] = useState<"" | "half" | "full">("");
+  const guides = look("guides");
   const card = useRef<HTMLDivElement>(null);
 
   /** Writes the lift, made from what's shown when there isn't one yet. */
@@ -304,8 +336,8 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
   return (
     <div className={`tr-ex ${allDone ? "done" : ""}`} ref={card}>
       <div className="tr-ex-head">
-        <button className="tr-ex-name" onClick={() => { showAbove(card.current); setGuide(true); }}>
-          <span className="nt">{ex?.name ?? doing}</span><span className="tr-info"><MIcon name="oInfo" size={18} /></span>
+        <button className="tr-ex-name" onClick={() => { showAbove(card.current); setGuide(guides === "A" ? "full" : "half"); }}>
+          <span className="nt">{ex?.name ?? doing}</span><GuideSign look={guides} size={18} />
         </button>
         {x.swaps.length > 0 && !readOnly && (
           <div className="p-menu-anchor">
@@ -320,6 +352,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
       {doing !== x.exercise && <div className="tr-ex-sub">In place of {exs.get(x.exercise)?.name ?? x.exercise}</div>}
       <div className="tr-ex-target">{targetLine(x).replace("×", " × ")}</div>
       {(x.targetText || x.note) && <div className="tr-ex-sub">{[x.targetText, x.note].filter(Boolean).join(" ")}</div>}
+      {guides === "A" && <HowToLine tr={tr} lp={lp} id={doing} onHowTo={() => { showAbove(card.current); setGuide("full"); }} />}
       {bests.length > 0 && <div className="tr-newbest"><MIcon name="oEmojiEvents" size={14} />New best · {bests.at(-1) === 1 ? "1 rep" : `${bests.at(-1)} reps`}</div>}
       <div className="tr-sets">
         {sets.map((st, k) => (
@@ -353,7 +386,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
           onSave={(v) => setNumber(editing.k, editing.what, v)}
           onRemove={() => write({ sets: sets.filter((_, j) => j !== editing.k) })} />
       )}
-      {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onSwap={readOnly ? undefined : swapTo} onClose={() => setGuide(false)} />}
+      {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onSwap={readOnly ? undefined : swapTo} startFull={guide === "full"} onClose={() => setGuide("")} />}
     </div>
   );
 }

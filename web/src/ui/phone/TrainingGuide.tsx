@@ -15,17 +15,10 @@ import { openExternal } from "./native.ts";
 import { MarkdownView, docRoute } from "./TrainingDocs.tsx";
 import { allExercises, planQ } from "./trainingParts.tsx";
 
-export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose }: {
-  tr: Training; lp: LoadedPlan;
-  /** The exercise being done (after a swap, the swapped one). */
-  id: string;
-  /** In a session: the exercise the plan has there, and its swaps; [onSwap] swaps to one. */
-  planned?: string; swaps?: Swap[]; onSwap?: (to: string) => void;
-  onClose: () => void;
-}) {
+/** An exercise's guide card in the plan's documents, its parts (video, cues) and the document's title. */
+export function useGuideParts(tr: Training, lp: LoadedPlan, id: string) {
   const exs = useMemo(() => allExercises(tr), [tr]);
   const ex = exs.get(id);
-  const name = ex?.name ?? id;
   const card = ex?.card && lp.docs.has(ex.card.doc) ? ex.card : null;
   const parts = useMemo(() => {
     const md = card ? lp.docs.get(card.doc)! : null;
@@ -33,7 +26,22 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose }:
     return section ? guideParts(section) : null;
   }, [card, lp.docs]);
   const docTitle = card ? lp.plan.documents.find((d) => d.file === card.doc)?.title ?? card.doc : null;
-  const [full, setFull] = useState(isWide);
+  return { exs, ex, card, parts, docTitle };
+}
+
+export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose, startFull = false }: {
+  tr: Training; lp: LoadedPlan;
+  /** The exercise being done (after a swap, the swapped one). */
+  id: string;
+  /** In a session: the exercise the plan has there, and its swaps; [onSwap] swaps to one. */
+  planned?: string; swaps?: Swap[]; onSwap?: (to: string) => void;
+  onClose: () => void;
+  /** Open on the whole guide (Guides A's "How to"), not the half sheet. */
+  startFull?: boolean;
+}) {
+  const { exs, ex, card, parts, docTitle } = useGuideParts(tr, lp, id);
+  const name = ex?.name ?? id;
+  const [full, setFull] = useState(() => startFull || isWide());
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => { body.current?.scrollTo?.({ top: 0 }); }, [id]);
   /** Whether the half sheet hides some of the guide (else there's no "Swipe up" hint). */

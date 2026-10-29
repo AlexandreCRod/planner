@@ -222,6 +222,12 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-info { flex: none; display: inline-flex; margin-left: 5px; color: var(--muted); }
 .phone .tr-tick .tr-guidename { align-self: flex-start; max-width: 100%; display: inline-flex; align-items: center; padding: 0; border: 0; background: none; text-align: left; font: inherit; font-size: 15px; line-height: 21px; }
 .phone .tr-tick.done .tr-guidename .nt { text-decoration: line-through; }
+/* Guides C (looks.ts): a › after the name, as on any row that opens something. */
+.phone .tr-info.chev { margin-left: 0; }
+/* Guides A: a "How to · Watch" line under each exercise, and "How to" in a warm-up's small print. */
+.phone .tr-howto { display: flex; gap: 20px; margin-top: 2px; }
+.phone .tr-howto button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 0; border: 0; background: none; color: var(--p-primary); font: inherit; font-size: 13.5px; line-height: 20px; font-weight: 500; }
+.phone .tr-howto-link { display: inline; padding: 0; border: 0; background: none; color: var(--p-primary); font: inherit; font-weight: 500; }
 .phone .tr-ex-head .p-text-btn { gap: 4px; margin-right: -8px; }
 .phone .tr-ex-target { font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .tr-ex-sub { margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
