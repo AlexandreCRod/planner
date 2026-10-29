@@ -23,7 +23,7 @@ import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
-import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
+import { SwipeToTrash } from "./SwipeRow.tsx";
 import { useRowDrag } from "./rowDrag.ts";
 import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
 import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
@@ -49,9 +49,9 @@ function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
 
 /**
  * Tasks: Scheduled and To-do side by side. A sideways swipe turns between them, live like the other
- * pagers (the lists follow the finger, the switch's indicator rides along, release settles). The rows'
- * own swipe to the trash keeps the other way: on Scheduled a swipe left turns to To-do and a swipe right
- * removes a row; on To-do a swipe right turns back and a swipe left removes one.
+ * pagers (the lists follow the finger, the switch's indicator rides along, release settles). A row swiped
+ * left goes to the trash on both lists (241: one way everywhere), so on Scheduled the page turns to To-do
+ * by the switch or a swipe off the rows (a header, the space below); on To-do a swipe right turns back.
  */
 /** Opens Tasks on its To-do tab (from Today's "2 tasks without a date"), every time. */
 export function openTodoTab() {
@@ -96,7 +96,7 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
     yieldAtEdge: true,
     onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
     onSettled: () => track.current?.(null),
-    allow: (t) => !t.closest("input, textarea, .p-chiprow"),
+    allow: (t) => !t.closest("input, textarea, .p-chiprow") && !(idx.current === 0 && t.closest(".p-swipe")),
   });
   return (
     <Scaffold title="Tasks" flush back={back} actions={<>
@@ -112,10 +112,10 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
       <div className="p-tabpager" ref={pager}>
         <div className="p-tabstrip" ref={strip} style={{ left: `${-index * 100}%` }}>
           <div className="p-list p-rows p-tabpage" style={{ left: 0 }} aria-hidden={todo}>
-            <TrashSwipeWay.Provider value={swipeRight}><ScheduledList /></TrashSwipeWay.Provider>
+            <ScheduledList />
           </div>
           <div className="p-list p-rows p-tabpage" style={{ left: "100%" }} aria-hidden={!todo}>
-            <TrashSwipeWay.Provider value={swipeLeft}><TodoList /></TrashSwipeWay.Provider>
+            <TodoList />
           </div>
         </div>
       </div>
@@ -123,8 +123,6 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
     </Scaffold>
   );
 });
-const swipeRight = (dx: number) => dx > 0;
-const swipeLeft = (dx: number) => dx < 0;
 
 function ScheduledList() {
   const s = useSnapshot();
