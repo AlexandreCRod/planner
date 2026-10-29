@@ -57,7 +57,8 @@ const phaseAt = (plan: Plan, day: number) => plan.phases.findIndex((p) => day >=
 
 function matches(sel: Selector, it: PlacedItem): boolean {
   const s = it.session;
-  if ("kind" in sel) return s ? s.kind === sel.kind : sel.kind === "futsal";
+  // Another sport (267) isn't futsal: only the rules about every day (rest days, days in a row) count it.
+  if ("kind" in sel) return s ? s.kind === sel.kind : sel.kind === "futsal" && !it.entry?.sport;
   if (!s) return false;
   if ("dayType" in sel) return s.dayType === sel.dayType;
   if ("tag" in sel) return s.tags.includes(sel.tag);
@@ -74,7 +75,7 @@ export function placedItems(plan: Plan, entries: ReadonlyMap<string, Entry>): Pl
   }
   for (const e of entries.values()) {
     const day = e.planId === plan.id ? futsalDay(e) : null;
-    if (day !== null) out.push({ key: e.id, session: null, entry: e, day, title: "Futsal" });
+    if (day !== null) out.push({ key: e.id, session: null, entry: e, day, title: e.sport ? e.title : "Futsal" });
   }
   return out;
 }
@@ -194,6 +195,7 @@ export function brokenRules(plan: Plan, entries: ReadonlyMap<string, Entry>, ite
     moved = { key: s.id, session: s, entry: entries.get(entryId(plan.id, s.id)) ?? null, day, title: s.title };
   } else {
     moved = { key: item.futsal ?? "", session: null, entry: (item.futsal && entries.get(item.futsal)) || null, day, title: "Futsal" };
+    if (moved.entry?.sport) moved.title = moved.entry.title;
   }
   const rest = items.filter((it) => it.key !== moved.key || !!it.session !== !!moved.session);
   const all = [...rest, moved];

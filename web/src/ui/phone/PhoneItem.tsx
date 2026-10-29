@@ -33,12 +33,14 @@ import { HeldTime } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
-import { kindIcon } from "./trainingParts.tsx";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
-import { isFutsal } from "../../domain/training.ts";
+import { futsalLogId } from "../../domain/training.ts";
+import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { training } from "../../store/training.ts";
+import { watchHead } from "./WatchRuns.tsx";
 
 // ---------- Shared bits ----------
 
@@ -766,16 +768,16 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
         {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
+        {/* A game the watch recorded (268): its stats in short; a tap opens Training on that day. */}
+        {isEvent && day !== null && (() => {
+          const w = training().watchGames.byGame.get(futsalLogId(item.id, day));
+          return w ? <InfoRow icon="oAvTimer" tint={color} text={`From the watch · ${statLine(sessionStats(w, venueOf(w, item.title)))}`}
+            sub={watchHead(w).replace("From the watch · ", "")} onClick={() => go(`training?d=${day}`)} /> : null;
+        })()}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {canBeRoutine(item) && (
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
             onClick={() => setRoutine(item, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(item, v)} label="Routine" />} />
-        )}
-        {/* A futsal event says so (it's on Training); the editor has the switch for any event. */}
-        {isEvent && isFutsal(item) && (
-          <InfoRow icon={kindIcon("futsal")} tint={color} text="Counts as futsal · on Training"
-            onClick={() => commit({ ...item, futsal: false })}
-            trailing={<Switch checked={isFutsal(item)} onChange={(v) => commit({ ...item, futsal: v })} label="Counts as futsal" />} />
         )}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
@@ -1113,13 +1115,6 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           <FieldRow icon="oTaskAlt" onClick={() => setRoutineDraft(!routine)}>
             <span className="pe-label grow">Routine<span className="pe-sublabel">On Today's checklist; a missed day ends the streak instead of piling up</span></span>
             <Switch checked={routine} onChange={setRoutineDraft} label="Routine" />
-          </FieldRow>
-        )}
-        {/* An event can count as futsal on Training (item 240): by its title until switched. */}
-        {isEvent && (
-          <FieldRow icon={kindIcon("futsal")} onClick={() => set({ futsal: !isFutsal(d) })}>
-            <span className="pe-label grow">Counts as futsal<span className="pe-sublabel">Shows on Training as a futsal game</span></span>
-            <Switch checked={isFutsal(d)} onChange={(v) => set({ futsal: v })} label="Counts as futsal" />
           </FieldRow>
         )}
         <div className="p-divider" />

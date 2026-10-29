@@ -13,7 +13,7 @@
 import { epochOf, ymd } from "./dates.ts";
 import { futsalItemId } from "./ids.ts";
 import { occurrences } from "./recurrence.ts";
-import { type Completion, type Item, newItem } from "./types.ts";
+import { type Category, type Completion, type Item, newItem } from "./types.ts";
 
 /** The planner.json format versions this app reads; a newer one is still shown as far as it goes. */
 export const PLAN_VERSION = 1;
@@ -439,6 +439,8 @@ export interface Entry {
   watchRunsDismissed?: string[];
   /** A futsal game's log (item 240): the event it's about. Its id is futsalLogId(itemId, day); its own day is null. */
   itemId?: number;
+  /** A game of another sport, not futsal (267): set on the Entries gameEntry makes, never stored. */
+  sport?: boolean;
   /** An old futsal entry (from before 240), once converted: the event it became, 0 for none (it was skipped). Kept so a 2.8 phone still shows it. */
   convertedTo?: number;
   updatedAt: number;
@@ -516,18 +518,43 @@ export function futsalDay(e: Entry): number | null {
   return e.status === "done" ? e.doneDay ?? e.day : e.day;
 }
 
-// ---------- Futsal: calendar events (item 240) ----------
-// A futsal game is a normal calendar event: one counts when it's marked (isFutsal), on every day it occurs.
+// ---------- Futsal and other sports: calendar events (items 240, 267) ----------
+// A game is a normal calendar event of the Sports category (267): futsal when its title says futsal or
+// football, else another sport (its own title, a generic icon). One counts on every day it occurs.
 // Done is a Completion {itemId, day}, as for routines. What was logged (how long, pain, effort, a note) is an
 // Entry with the id futsalLogId(itemId, day), made only when something is logged. The views (phaseView,
 // the placement rules, the week bar, logCsv, the day's type) read games as Entries made by gameEntry, put
 // in place of every stored futsal entry by trainingEntries. Old futsal entries convert once (convertFutsal).
 
-/** Whether an event counts as futsal: its own switch when set, else a title with "futsal" in it (any case). Only events. */
-export function isFutsal(item: Item): boolean {
-  if (item.type !== "EVENT") return false;
-  return item.futsal ?? /futsal/i.test(item.title);
+/** A Sports category (267): the user names categories, so any whose name has the word "sport" or "sports" (any case). */
+export const isSportsCategory = (c: Pick<Category, "name">) => /\bsports?\b/i.test(c.name);
+/** The ids of the Sports categories. */
+export const sportsCategoryIds = (cats: Iterable<Category>): Set<number> => new Set([...cats].filter(isSportsCategory).map((c) => c.id));
+const NO_SPORTS: ReadonlySet<number> = new Set();
+
+/** What an event is on Training: futsal, another sport, or nothing. */
+export type GameKind = "futsal" | "sport";
+
+/**
+ * Whether an event is on Training, and as what (267). Only events count:
+ * - marked futsal (Item.futsal true, 240's switch, still read): futsal, whatever its category;
+ * - in a Sports category ([sports]): futsal when its title says futsal or football, else another sport
+ *   (the switch is gone, so a "not futsal" mark no longer counts there);
+ * - with no category, a title with "futsal" in it (240's games added from Training or converted): futsal;
+ * - anything else (another category): nothing.
+ */
+export function gameKind(item: Item, sports: ReadonlySet<number> = NO_SPORTS): GameKind | null {
+  if (item.type !== "EVENT") return null;
+  if (item.futsal === true) return "futsal";
+  if (item.categoryId != null && sports.has(item.categoryId)) return /futsal|football/i.test(item.title) ? "futsal" : "sport";
+  if (item.categoryId == null && item.futsal === undefined && /futsal/i.test(item.title)) return "futsal";
+  return null;
 }
+
+/** Whether an event counts as futsal (gameKind). */
+export const isFutsal = (item: Item, sports: ReadonlySet<number> = NO_SPORTS) => gameKind(item, sports) === "futsal";
+/** Whether an event is on Training at all: futsal or another sport (gameKind). */
+export const isGame = (item: Item, sports: ReadonlySet<number> = NO_SPORTS) => gameKind(item, sports) !== null;
 
 /** The id of a game's log: one per event and day. */
 export const futsalLogId = (itemId: number, day: number) => `futsal:${itemId}:${day}`;
@@ -541,6 +568,8 @@ export interface FutsalGame {
   log: Entry | null;
   /** The event. */
   item: Item;
+  /** Another sport, not futsal (267). */
+  sport: boolean;
 }
 
 /**
@@ -549,15 +578,17 @@ export interface FutsalGame {
  */
 export function futsalGames(
   range: { start: number; end: number }, items: Iterable<Item>, completions: Iterable<Completion>, entries: ReadonlyMap<string, Entry>,
+  sports: ReadonlySet<number> = NO_SPORTS,
 ): FutsalGame[] {
   const done = new Set<string>();
   for (const c of completions) done.add(`${c.itemId}:${c.day}`);
   const out: FutsalGame[] = [];
   for (const item of items) {
-    if (item.deletedAt !== null || !isFutsal(item)) continue;
+    const kind = item.deletedAt === null ? gameKind(item, sports) : null;
+    if (!kind) continue;
     for (const day of occurrences(item, range.start, range.end)) {
       const log = entries.get(futsalLogId(item.id, day));
-      out.push({ itemId: item.id, day, done: done.has(`${item.id}:${day}`), log: log && log.deletedAt === null ? log : null, item });
+      out.push({ itemId: item.id, day, done: done.has(`${item.id}:${day}`), log: log && log.deletedAt === null ? log : null, item, sport: kind === "sport" });
     }
   }
   return out.sort((a, b) => a.day - b.day || (a.item.startMin ?? -1) - (b.item.startMin ?? -1) || a.itemId - b.itemId);
@@ -569,7 +600,8 @@ export function gameEntry(g: FutsalGame, planId: string): Entry {
   return {
     id: futsalLogId(g.itemId, g.day), planId, sessionId: null, kind: "futsal", status: g.done ? "done" : "planned",
     day: g.day, doneDay: g.done ? g.day : null, durationMin: l?.durationMin ?? null, pain: l?.pain ?? null, effort: l?.effort ?? null,
-    note: l?.note ?? "", ticks: [], title: g.item.title.trim() || "Futsal", detail: "", itemId: g.itemId, updatedAt: l?.updatedAt ?? 0, deletedAt: null,
+    note: l?.note ?? "", ticks: [], title: g.item.title.trim() || (g.sport ? "Sport" : "Futsal"), detail: "", itemId: g.itemId, updatedAt: l?.updatedAt ?? 0, deletedAt: null,
+    ...(g.sport ? { sport: true } : {}),
   };
 }
 
@@ -580,13 +612,14 @@ export function gameEntry(g: FutsalGame, planId: string): Entry {
  */
 export function trainingEntries(
   plans: readonly Pick<Plan, "id" | "start" | "end">[], entries: Iterable<Entry>, items: Iterable<Item>, completions: Iterable<Completion>,
+  sports: ReadonlySet<number> = NO_SPORTS,
 ): Map<string, Entry> {
   const out = new Map<string, Entry>();
   const stored = new Map<string, Entry>();
   for (const e of entries) { stored.set(e.id, e); if (e.kind !== "futsal") out.set(e.id, e); }
   const sorted = [...plans].sort((a, b) => a.start - b.start);
   if (!sorted.length) return out;
-  const games = futsalGames({ start: Math.min(...sorted.map((p) => p.start)), end: Math.max(...sorted.map((p) => p.end)) }, items, completions, stored);
+  const games = futsalGames({ start: Math.min(...sorted.map((p) => p.start)), end: Math.max(...sorted.map((p) => p.end)) }, items, completions, stored, sports);
   const latestFirst = [...sorted].reverse();
   for (const g of games) {
     const plan = latestFirst.find((p) => g.day >= p.start && g.day <= p.end);
@@ -601,12 +634,13 @@ export function trainingEntries(
  */
 export function entriesWithGames(
   plans: readonly Pick<Plan, "id" | "start" | "end">[], entries: Iterable<Entry>, items: Iterable<Item>, completions: Iterable<Completion>,
+  sports: ReadonlySet<number> = NO_SPORTS,
 ): Map<string, Entry> {
   const es = [...entries], is = [...items];
   const c = convertFutsal(es, is);
   const byId = new Map(es.map((e) => [e.id, e]));
   for (const e of c.entries) byId.set(e.id, e);
-  return trainingEntries(plans, byId.values(), [...is, ...c.items], [...completions, ...c.completions]);
+  return trainingEntries(plans, byId.values(), [...is, ...c.items], [...completions, ...c.completions], sports);
 }
 
 /** What converting the old futsal entries writes. */
@@ -637,7 +671,7 @@ export function convertFutsal(entries: Iterable<Entry>, items: Iterable<Item>): 
     const title = e.title.trim() || "Futsal";
     if (!have.has(id)) {
       out.items.push(newItem({
-        id, type: "EVENT", title, startDay: day, endDay: day, allDay: true, createdAt: at, updatedAt: at, ...(isFutsal({ type: "EVENT", title } as Item) ? {} : { futsal: true }),
+        id, type: "EVENT", title, startDay: day, endDay: day, allDay: true, createdAt: at, updatedAt: at, ...(isFutsal({ type: "EVENT", title, categoryId: null } as Item) ? {} : { futsal: true }),
       }));
       if (e.status === "done") out.completions.push({ itemId: id, day, completedAt: at });
     }
@@ -869,7 +903,7 @@ export function logCsv(plan: Plan, entries: Iterable<Entry>): string {
     "session_id", "kind", "status", "scheduled_date", "date_done", "duration_min", "pain_0_10", "effort_1_10", "note", "title", "detail",
   ]];
   const row = (e: Entry, day: number | null) => rows.push([
-    e.sessionId ?? "", e.kind, e.status, isoOrEmpty(day), isoOrEmpty(e.doneDay), e.durationMin, e.pain, e.effort, e.note, e.title, e.detail,
+    e.sessionId ?? "", e.sport ? "sport" : e.kind, e.status, isoOrEmpty(day), isoOrEmpty(e.doneDay), e.durationMin, e.pain, e.effort, e.note, e.title, e.detail,
   ]);
   const listed = new Set<string>();
   for (const s of sessionsOf(plan)) {

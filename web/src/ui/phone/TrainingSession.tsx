@@ -22,6 +22,9 @@ import { GuideSheet, useGuideParts } from "./TrainingGuide.tsx";
 import { look, useLooks } from "./looks.ts";
 import { openExternal } from "./native.ts";
 import { isWide } from "../../platform.ts";
+import { runOf } from "../../domain/trainingWeek.ts";
+import { runStats, sessionStats, strengthOn } from "../../domain/watchActivities.ts";
+import { WatchStatsGrid, watchHead } from "./WatchRuns.tsx";
 import { KIND_LABEL, Scale, fmtKg, phaseNames, planQ, sessionIcon, setsText } from "./trainingParts.tsx";
 
 /** Saves a session's entry: the latest copy, the plan's title and detail kept with it, then [patch]. */
@@ -125,6 +128,7 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
           {e.status === "skipped" && <><span className="tr-statustext">Skipped</span>{!readOnly && <TextButton onClick={() => status("planned")}>Undo</TextButton>}</>}
         </div>
 
+        <SessionWatch tr={tr} s={s} e={e} day={day} t={t} />
         {gym && <GymLog tr={tr} lp={lp} s={s} e={e} day={day} t={t} readOnly={readOnly} />}
         <HowItWent lp={lp} s={s} e={e} readOnly={readOnly} />
         {s.card && <CardSection lp={lp} card={s.card} openAtStart={!gym} />}
@@ -133,6 +137,32 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
       {moving && <MoveSheet lp={lp} s={s} onMoved={onMoved} onClose={() => setMoving(false)} />}
     </Scaffold>
   );
+}
+
+/**
+ * What the watch recorded for a session (268): a run's stats (the run matched to it, with its watch
+ * session's calories), or for a gym session the watch's strength sessions that day (time, heart rate,
+ * calories). Nothing when there's none.
+ */
+function SessionWatch({ tr, s, e, day, t }: { tr: Training; s: Session; e: Entry; day: number | null; t: number }) {
+  if (s.kind === "run") {
+    const run = runOf(tr.runs, s.id);
+    if (!run) return null;
+    const hs = tr.healthSessions.find((x) => x.id === run.id);
+    return <>
+      <SectionHeader>{hs ? watchHead(hs) : `The run${run.time ? ` · ${run.time}` : ""}`}</SectionHeader>
+      <WatchStatsGrid stats={runStats(run, hs)} />
+    </>;
+  }
+  if (s.kind !== "gym") return null;
+  const on = e.status === "done" ? e.doneDay ?? day : day;
+  if (on === null || on > t) return null;
+  return <>{strengthOn(tr.healthSessions, on).map((x) => (
+    <div key={x.id}>
+      <SectionHeader>{watchHead(x)}</SectionHeader>
+      <WatchStatsGrid stats={sessionStats(x, "indoor")} />
+    </div>
+  ))}</>;
 }
 
 /** Effort, pain and a note for the whole session. The note saves as it's written (after a pause) and on leaving. */

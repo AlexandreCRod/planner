@@ -19,6 +19,9 @@ export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
   }
 }
 
+/** A game's icon (267): futsal's, or the generic sports one for another sport. */
+export const gameIcon = (e: { sport?: boolean }) => (e.sport ? "fSports" : kindIcon("futsal"));
+
 /** A session's icon: a run's by its type (easy, long, quality, race), every other kind's by its kind. */
 export const sessionIcon = (s: Session) => (s.kind === "run" ? runIcon(runTypeOf(s)) : kindIcon(s.kind));
 

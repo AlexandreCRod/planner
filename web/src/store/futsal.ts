@@ -1,8 +1,8 @@
 // Futsal games as calendar events (item 240, domain/training.ts): what Training does to them. A game is a
 // futsal event's day; ticking it is the event's Completion that day; what was logged is the game's log
 // entry (futsalLogId). The old futsal entries convert once, after a sync (convertOldFutsal).
-import { type Entry, convertFutsal, futsalLogId, newEntry } from "../domain/training.ts";
-import { type Item, isRecurring, newItem } from "../domain/types.ts";
+import { type Entry, convertFutsal, futsalLogId, isSportsCategory, newEntry } from "../domain/training.ts";
+import { type Category, type Item, isRecurring, newItem } from "../domain/types.ts";
 import {
   deleteOccurrence, listOf, putRecords, removeRecords, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash,
 } from "./store.ts";
@@ -41,9 +41,10 @@ export function saveGameLog(g: GameRef, planId: string, log: { durationMin: numb
   putRecords("trainingEntries", [{ ...base, ...log, updatedAt: Date.now() }]);
 }
 
-/** A new game: an untimed event "Futsal" on [day]. */
+/** A new game: an untimed event "Futsal" on [day], in the Sports category when there is one (267). */
 export function addGame(day: number): GameRef {
-  const itemId = saveItem(newItem({ type: "EVENT", title: "Futsal", startDay: day, endDay: day, allDay: true }));
+  const sports = listOf<Category>("categories").filter(isSportsCategory).sort((a, b) => a.id - b.id)[0];
+  const itemId = saveItem(newItem({ type: "EVENT", title: "Futsal", startDay: day, endDay: day, allDay: true, categoryId: sports?.id ?? null }));
   return { itemId, day };
 }
 
