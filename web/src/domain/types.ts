@@ -69,6 +69,9 @@ export interface Item {
   /** 240's "Counts as futsal" switch, gone since 267 (an event of the Sports category is on Training,
    *  domain/training.ts gameKind): true still makes an event futsal; false keeps an uncategorized one off. Events only. */
   futsal?: boolean;
+  /** Where an imported event came from (272: the phone's calendars, "gcal:<calendar>/<event>[@<instance start>]"),
+   *  so importing again updates it rather than adding a copy. Missing on everything else. */
+  source?: string;
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }
