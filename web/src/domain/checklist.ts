@@ -214,3 +214,46 @@ export function tickMoveOrder(texts: string[], i: number, anchorOf: (line: numbe
   }
   return [...rest.slice(0, to), ...block, ...rest.slice(to)];
 }
+
+/**
+ * Delete (forward) with the caret [caret] characters into line [text]: true when the caret is before the
+ * box or between it and its space, so the key takes the box away (with its indent), as Backspace does
+ * right after it. At or past the end of the lead it's an ordinary Delete.
+ */
+export function forwardDeleteTakesBox(text: string, caret: number): boolean {
+  const lead = checklistLead(text);
+  return lead >= 0 && caret < lead;
+}
+
+/**
+ * Whether joining line [below] onto the end of line [above] (Backspace at the start of [below], Delete at
+ * the end of [above]) is done by the editor itself: when either is a checklist line. The browser's own
+ * join leaves the lower box in the middle of the text and wraps the moved words in stray styles.
+ */
+export function editorJoins(above: string, below: string): boolean {
+  return checklistDepth(above) >= 0 || checklistDepth(below) >= 0;
+}
+
+/** How many characters of line [below] go when it's joined onto the line above: its lead (indent, box and space), if any. */
+export function joinDrops(below: string): number {
+  return Math.max(0, checklistLead(below));
+}
+
+/** Line [above] with line [below] joined onto its end (what Backspace or Delete across them leaves). */
+export function joinedLine(above: string, below: string): string {
+  return above + below.slice(joinDrops(below));
+}
+
+/**
+ * Where checklist line [text] needs its gap after the box fixed so the text never touches the box: the
+ * index just after the box and how many characters to replace there with a no-break space (1: a plain
+ * space, which the browser hides at the end of a line and drops when typing there; 0: no space at all).
+ * Null when the gap is already a no-break space, or the line isn't a checklist line.
+ */
+export function boxGapFix(text: string): { at: number; replace: 0 | 1 } | null {
+  const d = checklistDepth(text);
+  if (d < 0) return null;
+  const at = d + 1, c = text[at];
+  if (c === " ") return null;
+  return { at, replace: c === " " ? 1 : 0 };
+}

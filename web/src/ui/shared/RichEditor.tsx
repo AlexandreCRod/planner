@@ -2,12 +2,14 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, checklistLead, checklistRun, completedSections, enterSplitsAt, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
+import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTicked, completedSections, editorJoins, enterSplitsAt, forwardDeleteTakesBox, joinDrops, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
 const BOX = "☐", TICK = "☑";
+/** The space after a box while editing: a no-break one, which the browser never hides or drops (saved as a plain space). */
+const NBSP = " ";
 /** How far outside the box a tap still ticks it (px). */
 const BOX_SLOP = 6;
 const INDENT = "⠀⠀⠀";
@@ -130,6 +132,28 @@ function boxInfo(block: HTMLElement) {
   return { indent: i, hasBox: text[i] === BOX || text[i] === TICK, checked: text[i] === TICK };
 }
 
+/**
+ * Saved text has a plain space after each box; on screen it's a no-break space. A plain one at the end of
+ * a line (an empty box) is hidden, and the browser drops it when typing there, so the words would touch
+ * the box (256).
+ */
+function liveGaps(root: HTMLElement) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+    if (/[☐☑] /.test(n.data)) n.data = n.data.replace(/([☐☑]) /g, `$1${NBSP}`);
+  }
+}
+
+/** Where the caret is in [block], in characters (null when it's not there or a range is selected). */
+function caretIn(block: HTMLElement): number | null {
+  const sel = getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed || !block.contains(sel.anchorNode)) return null;
+  const r = document.createRange();
+  r.setStart(block, 0);
+  r.setEnd(sel.anchorNode!, sel.anchorOffset);
+  return r.toString().length;
+}
+
 function placeCaretAtEnd(el: HTMLElement) {
   const r = document.createRange();
   r.selectNodeContents(el);
@@ -208,7 +232,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   };
 
   useEffect(() => {
-    if (el.current) el.current.innerHTML = sanitize(initialHtml);
+    if (el.current) { el.current.innerHTML = sanitize(initialHtml); liveGaps(el.current); }
     document.execCommand("defaultParagraphSeparator", false, "p");
   }, [initialHtml, revision]);
   // The "Start writing" hint goes as soon as anything is there: typing, but also a box, a bullet or a
@@ -232,32 +256,99 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Backspace at the start of a checkbox line takes the box away first (the line stays, as plain text);
-  // the next one joins it to the line above. Android's keyboards send it as a beforeinput, a PC as a key.
+  // the next one joins it to the line above. Delete at the end of a line pulls the next one up, without
+  // its box (262). Android's keyboards send them as a beforeinput, a PC as a key.
   useEffect(() => {
     const root = el.current;
     if (!root) return;
     // Enter too, from a keyboard that sends no Enter key (only the paragraph it inserts).
     const onBefore = (e: InputEvent) => {
       if (!e.cancelable) return;
-      if (e.inputType === "deleteContentBackward" && takeBoxAtCaret()) e.preventDefault();
+      if (e.inputType === "deleteContentBackward" && backspaceAtCaret()) e.preventDefault();
+      else if (e.inputType === "deleteContentForward" && deleteAtCaret()) e.preventDefault();
       else if (e.inputType === "insertParagraph" && enterOnBox()) e.preventDefault();
     };
     root.addEventListener("beforeinput", onBefore);
     return () => root.removeEventListener("beforeinput", onBefore);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** At the start of a checkbox line (caret only): removes its indent and box. True if it did. */
-  const takeBoxAtCaret = (): boolean => {
+  /** The line with the caret (not a list item) when nothing is selected, with the caret's place in it. */
+  const caretLine = (): { block: HTMLElement; caret: number } | null => {
     const root = el.current;
-    const sel = getSelection();
-    if (!root || !sel || !sel.isCollapsed || !sel.rangeCount) return false;
+    if (!root) return null;
     const block = currentBlock(root);
-    if (!block || block.tagName === "LI") return false;
-    const r = document.createRange();
-    r.setStart(block, 0);
-    r.setEnd(sel.anchorNode!, sel.anchorOffset);
+    if (!block || block.tagName === "LI") return null;
+    const caret = caretIn(block);
+    return caret === null ? null : { block, caret };
+  };
+
+  /** The next (or previous) line on screen: lines folded into a "completed" section are skipped. */
+  const lineBeside = (block: HTMLElement, down: boolean): HTMLElement | null => {
+    if (block.parentElement !== el.current) return null;
+    let n = (down ? block.nextElementSibling : block.previousElementSibling) as HTMLElement | null;
+    while (n?.classList.contains("pn-folded")) n = (down ? n.nextElementSibling : n.previousElementSibling) as HTMLElement | null;
+    return n?.tagName === "P" ? n : null;
+  };
+
+  /** Backspace: takes a box away, or joins a line to a checklist line above it. True if it did either. */
+  const backspaceAtCaret = (): boolean => {
+    const at = caretLine();
+    if (!at) return false;
+    const text = at.block.textContent ?? "";
+    if (backspaceTakesBox(text, at.caret)) return takeBox(at.block);
+    if (at.caret !== 0) return false;
+    const above = lineBeside(at.block, false);
+    if (!above || !editorJoins(above.textContent ?? "", text)) return false;
+    joinLines(above, at.block);
+    return true;
+  };
+
+  /** Delete: takes a box away from before it, or pulls the next line up when it or this one is a checklist line. */
+  const deleteAtCaret = (): boolean => {
+    const at = caretLine();
+    if (!at) return false;
+    const text = at.block.textContent ?? "";
+    if (forwardDeleteTakesBox(text, at.caret)) return takeBox(at.block);
+    if (at.caret < text.length) return false;
+    const below = lineBeside(at.block, true);
+    if (!below || !editorJoins(text, below.textContent ?? "")) return false;
+    joinLines(at.block, below);
+    return true;
+  };
+
+  /**
+   * Joins line [below] onto the end of line [above], without its lead (indent, box and space) or its
+   * strike-through, with the caret where they meet. Done here rather than by the browser, which leaves
+   * the box in the middle of the text and wraps the moved words in stray styles.
+   */
+  const joinLines = (above: HTMLElement, below: HTMLElement) => {
+    const lowText = below.textContent ?? "";
+    if (checklistTicked(lowText)) setDone(below, null, 0, false);
+    const drop = joinDrops(lowText);
+    if (drop) {
+      const r = document.createRange();
+      r.setStart(below, 0);
+      r.setEnd(...pointAt(below, drop));
+      r.deleteContents();
+    }
+    const at = (above.textContent ?? "").length;
+    while (above.lastChild?.nodeName === "BR") above.lastChild.remove();
+    const moved = [...below.childNodes];
+    if (moved[moved.length - 1]?.nodeName === "BR") moved.pop();
+    above.append(...moved);
+    below.remove();
+    if (!above.childNodes.length) above.appendChild(document.createElement("br"));
+    above.normalize();
+    const sel = getSelection();
+    if (sel) sel.collapse(...(at === 0 ? [above, 0] as [Node, number] : pointAt(above, at)));
+    onChange();
+  };
+
+  /** Removes line [block]'s indent and box (and the strike-through of a ticked one), the caret at its start. */
+  const takeBox = (block: HTMLElement): boolean => {
+    const sel = getSelection();
+    if (!sel) return false;
     const text = block.textContent ?? "";
-    if (!backspaceTakesBox(text, r.toString().length)) return false;
     const t = firstText(block);
     const lead = checklistLead(text);
     if (!t || checklistLead(t.data) !== lead) return false;
@@ -366,7 +457,22 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     const t = firstText(block);
     if (deeper) { if (t) t.insertData(0, INDENT); else block.prepend(document.createTextNode(INDENT)); }
     else if (t) { let n = 0; while (n < INDENT.length && t.data[n] === "⠀") n++; if (n) t.deleteData(0, n); }
+    keepGap(block);
     onChange();
+  };
+
+  /** A checklist line's box keeps its no-break space before the text (256), the caret staying where it was. */
+  const keepGap = (block: HTMLElement) => {
+    const fix = boxGapFix(block.textContent ?? "");
+    if (!fix) return;
+    const caret = caretIn(block);
+    const r = document.createRange();
+    r.setStart(...pointAt(block, fix.at));
+    r.setEnd(...pointAt(block, fix.at + fix.replace));
+    r.deleteContents();
+    r.insertNode(document.createTextNode(NBSP));
+    block.normalize();
+    if (caret !== null) getSelection()?.collapse(...pointAt(block, caret + (fix.replace === 0 && caret >= fix.at ? 1 : 0)));
   };
 
   const setSize = (px: number | null) => {
@@ -493,7 +599,9 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   // after the caret goes onto the new box, unticked, with its formatting.
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (onLinkKey(e)) return;
-    if (e.key === "Backspace" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) { if (takeBoxAtCaret()) e.preventDefault(); return; }
+    const plain = !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (e.key === "Backspace" && plain) { if (backspaceAtCaret()) e.preventDefault(); return; }
+    if (e.key === "Delete" && plain) { if (deleteAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { if (tickAtCaret()) e.preventDefault(); return; }
     if (e.key === "Enter" && !e.shiftKey && enterOnBox()) e.preventDefault();
   };
@@ -517,7 +625,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     }
     const at = enterSplitsAt(block.textContent ?? "", caret);
     const p = document.createElement("p");
-    p.textContent = INDENT.slice(0, info.indent) + BOX + " ";
+    p.textContent = INDENT.slice(0, info.indent) + BOX + NBSP;
     if (at !== null) {
       const rest = document.createRange();
       rest.setStart(...pointAt(block, at));
@@ -584,8 +692,8 @@ function currentBlockOf(n: Node, root: HTMLElement): HTMLElement | null {
 }
 
 /** Strikes through (or restores) everything after the box on that line. */
-function setDone(block: HTMLElement, t: Text, at: number, done: boolean) {
-  if (done) {
+function setDone(block: HTMLElement, t: Text | null, at: number, done: boolean) {
+  if (done && t) {
     const r = document.createRange();
     r.setStart(t, Math.min(at + 2, t.length));
     r.setEnd(block, block.childNodes.length);
