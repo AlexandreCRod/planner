@@ -27,10 +27,10 @@ export const LOOKS = {
   ] },
   /**
    * Tasks B (241): a Tasks button in Today's top bar that opens the whole Tasks page full-screen (both
-   * lists, as before 241), on top of Tasks A's No date list and Agenda chips. PhoneToday.
+   * lists, as before 241), beside the to-dos button (271) and the Agenda chips. PhoneToday.
    */
   tasks: { page: "Today", title: "Tasks button", pick: "A", choices: [
-    ["A", "Off", "No button: to-dos without a date are on Today"],
+    ["A", "Off", "No Tasks button: the to-dos button opens them in a sheet"],
     ["B", "On", "A Tasks button in the top bar opens the whole Tasks page"],
   ] },
   /**

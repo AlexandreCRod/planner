@@ -15,8 +15,7 @@ import { AppBarActions, IconButton, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { mouseMenu } from "./desk.ts";
-import { TodoAdd, dropTodo, openTodoTab, openTodos } from "./PhoneLists.tsx";
-import { useRowDrag } from "./rowDrag.ts";
+import { TodosSheet, openTodos } from "./PhoneLists.tsx";
 import { StreaksSheet } from "./StreaksSheet.tsx";
 import { useLook } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
@@ -38,8 +37,6 @@ let showDayOnPhone: ((day: number) => void) | null = null;
 
 /** Tomorrow at a glance on the phone's Today: its first few items in time order, and how many more. */
 const GLANCE_ROWS = 3;
-/** To-dos shown in Today's No date list; "N more" opens the rest on the Tasks page. */
-const NO_DATE_ROWS = 3;
 /** Items named in each box of the wide Today's Next 7 days. */
 const WEEK_ROWS = 3;
 /** The day Today shows (the phone's + button adds to it). */
@@ -142,7 +139,6 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <FoldLine open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} text={`${doneFold.length} done`} />
       {doneOpen && doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
     </>}
-    {isToday && <NoDateList s={s} now={now} hold={hold} />}
     {!fold && alsoDone.length > 0 && <>
       <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
       {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
@@ -185,38 +181,6 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     {schedule}
     {glance && <TomorrowGlance rows={glance} s={s} day={day + 1} />}
     {note}
-  </>;
-}
-
-/**
- * Today's "No date" list (241): the to-dos with no date under today's tasks, the first few shown, a line to
- * add one, and "N more" opening the rest on the Tasks page. Its header folds it (kept on this device).
- * Its rows are dragged into order like the To-do list's (the same order: the rest follow them).
- */
-function NoDateList({ s, now, hold }: { s: Snapshot; now: number; hold: Hold }) {
-  const [open, setOpen] = useState(() => localStorage.getItem("todayNoDateOpen") !== "0");
-  const all = openTodos(s);
-  const list = hold.arrange("nd", all.slice(0, NO_DATE_ROWS), rowKey);
-  const more = all.length - NO_DATE_ROWS;
-  const rows = useRef<HTMLDivElement>(null);
-  const rowDrag = useRowDrag({ list: () => rows.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
-  const flip = () => { const o = !open; setOpen(o); try { localStorage.setItem("todayNoDateOpen", o ? "1" : "0"); } catch { /* private mode */ } };
-  return <>
-    <button className="section p-nodate-head" aria-expanded={open} onClick={flip}>
-      <span>No date</span>{all.length > 0 && <span className="cnt">{all.length}</span>}
-      <MIcon name={open ? "fExpandLess" : "fExpandMore"} size={20} />
-    </button>
-    {open && <>
-      <TodoAdd />
-      <div ref={rows}>
-        {list.map((e, index) => (
-          <div key={`nd_${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
-            <TaskRow entry={e} s={s} now={now} onToggle={(done) => hold.onToggle("nd", rowKey(e), e, index, done)} />
-          </div>
-        ))}
-      </div>
-      {more > 0 && <button className="p-fold" onClick={openTodoTab}><span>{more} more</span><MIcon name="fKeyboardArrowRight" size={18} /></button>}
-    </>}
   </>;
 }
 
@@ -410,6 +374,16 @@ const DayPage = memo(function DayPage({ day, t, s, now, hold, wide }: { day: num
   );
 });
 
+/** The to-dos button in Today's top bar (271): how many are open in a small badge on its corner (none at 0). */
+function TodosButton({ count: n, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <IconButton className="p-badged" label={n ? `To-dos, ${n} open` : "To-dos"} onClick={onClick}>
+      <MIcon name="oCheckBox" />
+      {n > 0 && <span className="p-badge" aria-hidden="true">{n > 99 ? "99+" : n}</span>}
+    </IconButton>
+  );
+}
+
 /**
  * Today on the phone, laid out like the native TodayScreen in HomeScreen's top app bar: the day switcher
  * (arrows and a two-line title that opens a date picker) as the bar's title, search and settings as its
@@ -434,6 +408,9 @@ export function PhoneToday() {
   // The neighbours are drawn a moment after the day changes, so turning a day (by swipe or arrow)
   // only has to move pages that are already there; the new neighbour follows in the background.
   const [picking, setPicking] = useState(false);
+  // The to-dos (tasks with no date) aren't on Today's list (271): a button in the bar opens them in a sheet.
+  const [todosOpen, setTodosOpen] = useState(false);
+  const todoCount = openTodos(s).length;
   const near = useDeferredValue(day);
   const days = [...new Set([near - 1, near, near + 1, day])].sort((a, b) => a - b);
   const track = useRef<HTMLDivElement>(null);
@@ -458,8 +435,11 @@ export function PhoneToday() {
         <span className="grow" />
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
+        {/* On another day, Back to today takes its place (the bar has no room for both beside a long weekday). */}
+        {isToday && <TodosButton count={todoCount} onClick={() => setTodosOpen(true)} />}
         <AppBarActions />
       </header>
+      {todosOpen && createPortal(<TodosSheet onClose={() => setTodosOpen(false)} />, document.body)}
       {/* On the page root, so it covers the + button like the other sheets. */}
       {picking && createPortal(<DayPickerSheet value={day} onPick={show} onClose={() => setPicking(false)} />, document.body)}
       <div className="p-daypager" ref={pager}>

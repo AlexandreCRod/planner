@@ -124,8 +124,10 @@ function ReminderIcon({ kind }: { kind: AlertType | null }) {
 }
 const REMINDER_EMOJI: Record<AlertType, string> = { ALARM: "⏰", REMINDER: "🔔", NOTIFICATION: "🔕" };
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions }: {
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions, onOpen }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** Instead of opening the task straight away (a sheet closes first: Today's to-dos, 271). */
+  onOpen?: () => void;
   /** Buttons shown over the end of the row while the pointer is on it (the wide Today). */
   actions?: ReactNode;
   /** Today's page: behind us now (shown very slightly faded). */
@@ -151,7 +153,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   ].filter(Boolean);
   const sub = subParts.length > 0;
   return (
-    <div className={`task ${past ? "past" : ""}`} style={{ ["--c" as string]: color }} onClick={() => openItem(item, entry.day)}>
+    <div className={`task ${past ? "past" : ""}`} style={{ ["--c" as string]: color }} onClick={() => (onOpen ? onOpen() : openItem(item, entry.day))}>
       <span className="bar" style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />

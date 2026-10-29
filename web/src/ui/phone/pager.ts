@@ -181,7 +181,7 @@ export const barSwipeReversed = () => { try { return localStorage.getItem(BAR_RE
 
 /**
  * Settings > "Keep Tasks in the bottom bar" (241): off, Training has Tasks' place and the Tasks page opens
- * from Today's "No date" list; on, the bar has both (Tasks after Training), so a swipe still reaches it.
+ * from the to-dos sheet on Today; on, the bar has both (Tasks after Training), so a swipe still reaches it.
  */
 export const KEEP_TASKS_KEY = "keepTasksTab";
 export const keepTasksTab = () => { try { return localStorage.getItem(KEEP_TASKS_KEY) === "true"; } catch { return false; } };

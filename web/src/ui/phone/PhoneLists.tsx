@@ -33,6 +33,7 @@ import { count } from "../../domain/plural.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { keepValue, keptValue, useKeep, useKeptScroll, useKeptState } from "./keep.ts";
+import { BottomSheet } from "./m3.tsx";
 
 // ---------- Tasks ----------
 
@@ -170,7 +171,7 @@ function ScheduledList() {
 
 /**
  * The to-dos (tasks with no date) not yet done, in their order: where they were dragged, else priority,
- * then the newest first (domain/todoOrder.ts). Today's No date list shows the first few.
+ * then the newest first (domain/todoOrder.ts). Today's to-dos sheet lists them too (271).
  */
 export function openTodos(s: Snapshot): TaskEntry[] {
   return sortTodos(s.items.filter((i) => i.type === "TASK" && i.startDay === null && !s.done.isDone(i.id, NO_DAY)))
@@ -188,7 +189,7 @@ export function dropTodo(s: Snapshot, ids: readonly number[], moved: number) {
   for (const c of todoOrderChanges(todos, all, moved)) { const t = s.byId.get(c.id); if (t) saveItem({ ...t, listOrder: c.listOrder }); }
 }
 
-/** "Add a to-do": a line that makes a task with no date (the To-do list, Today's No date list). */
+/** "Add a to-do": a line that makes a task with no date (the To-do list, Today's to-dos sheet). */
 export function TodoAdd() {
   const [text, setText] = useState("");
   const add = () => {
@@ -203,6 +204,45 @@ export function TodoAdd() {
       <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
       {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
     </div>
+  );
+}
+
+/**
+ * Today's to-dos (271): the open to-dos in a sheet, from the button in Today's top bar. The add line at
+ * the top, the rows ticked, dragged into order (the To-do list's order), swiped left to the trash, or
+ * tapped to open (the sheet closes first). "All tasks" at the end opens the Tasks page on To-do.
+ */
+export function TodosSheet({ onClose }: { onClose: () => void }) {
+  const s = useSnapshot();
+  const now = useNow();
+  const hold = useCheckedHold();
+  const list = hold.arrange("sheet", openTodos(s), (e) => String(e.item.id));
+  const rows = useRef<HTMLDivElement>(null);
+  const rowDrag = useRowDrag({ list: () => rows.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
+  return (
+    <BottomSheet onClose={onClose} className="p-todos-sheet">{(close) => {
+      const after = (f: () => void) => { close(); window.setTimeout(f, 210); };
+      return (
+        <div className="p-rlist p-todos">
+          <div className="p-rlist-head t-title-medium">To-dos</div>
+          <TodoAdd />
+          <div className="p-rlist-rows p-rows" ref={rows}>
+            {list.length === 0 && <div className="p-rlist-empty muted">Nothing to do</div>}
+            {list.map((e, index) => (
+              <div key={e.item.id} data-row={e.item.id} onPointerDown={rowDrag.down}>
+                <SwipeToTrash item={e.item}>
+                  <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => after(() => openItem(e.item))}
+                    onToggle={(isDone) => hold.onToggle("sheet", String(e.item.id), e, index, isDone)} />
+                </SwipeToTrash>
+              </div>
+            ))}
+          </div>
+          <button className="p-rlist-streaks" onClick={() => after(openTodoTab)}>
+            <MIcon name="oTaskAlt" size={20} /><span>All tasks</span><MIcon name="fKeyboardArrowRight" size={20} />
+          </button>
+        </div>
+      );
+    }}</BottomSheet>
   );
 }
 

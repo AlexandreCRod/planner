@@ -40,7 +40,7 @@ import { UpdateHost } from "./UpdateHost.tsx";
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Alarms is the last where the alarm engine is (the phone build), not in a browser.
 // Training has Tasks' old place (241); Tasks comes back after it when Settings keeps it in the bar, and is
-// otherwise a full-screen page (from Today's "No date" list).
+// otherwise a full-screen page (from the to-dos sheet on Today).
 type Tab = { key: string; label: string };
 const tabsFor = (keepTasks: boolean): Tab[] => [
   { key: "today", label: "Today" },
