@@ -6,9 +6,9 @@
 import { useSyncExternalStore } from "react";
 import { today } from "../domain/dates.ts";
 import {
-  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan, trainingEntries,
+  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan, sportsCategoryIds, trainingEntries,
 } from "../domain/training.ts";
-import type { Completion, Item } from "../domain/types.ts";
+import type { Category, Completion, Item } from "../domain/types.ts";
 import {
   type Hidden, type Meal, type Night, type PastSet, type PastWeighIn, type Run, type WeighIn, LIFT_HISTORY_FILE, MEALS_FILE, RUNS_FILE, SHARED_PLAN,
   SLEEP_FILE, WEIGHTS_FILE, byMoment, hiddenWeighIns, readLiftHistory, readMeals, readRuns, readSleep, readWeights,
@@ -122,7 +122,7 @@ export function training(): Training {
   const healthSessions = listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs);
   const data: Training = {
     plans,
-    entries: trainingEntries(plans.map((p) => p.plan), entries, listOf<Item>("items"), listOf<Completion>("completions")),
+    entries: trainingEntries(plans.map((p) => p.plan), entries, listOf<Item>("items"), listOf<Completion>("completions"), sportsCategoryIds(listOf<Category>("categories"))),
     stored: new Map(entries.map((e) => [e.id, e])),
     lifts,
     liftById: new Map(lifts.map((l) => [l.id, l])),

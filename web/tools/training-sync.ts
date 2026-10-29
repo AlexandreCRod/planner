@@ -15,9 +15,9 @@ import { basename, dirname, join } from "node:path";
 import { anchorsIn } from "../src/domain/markdown.ts";
 import { count } from "../src/domain/plural.ts";
 import {
-  type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, entriesWithGames, isFutsal, logCsv, missingCards, planFileId, readPlan, setsCsv,
+  type Entry, type Lift, type Plan, PLAN_FILE, type PlanFile, entriesWithGames, isGame, logCsv, missingCards, planFileId, readPlan, setsCsv, sportsCategoryIds,
 } from "../src/domain/training.ts";
-import type { Completion, Item } from "../src/domain/types.ts";
+import type { Category, Completion, Item } from "../src/domain/types.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../src/domain/health.ts";
 import { dailyCsv, mergedRuns, runsCsv, typedRuns, watchLinks, workoutsCsv } from "../src/domain/healthRuns.ts";
 import { sleepCsv } from "../src/domain/sleep.ts";
@@ -37,8 +37,11 @@ export interface State { seq: number; records: Record<string, Rec>; kept?: numbe
 const KIND = "trainingFiles";
 const BODYWEIGHT_FILE = "bodyweight.csv";
 const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.csv", SLEEP_CSV = "sleep.csv";
-/** 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. 3: futsal events and the ticks (item 240). */
-export const KEPT_VERSION = 3;
+/**
+ * 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. 3: futsal events and the ticks (item 240).
+ * 4: the Sports category's events, and the categories' names to find it (267).
+ */
+export const KEPT_VERSION = 4;
 
 // ---------- Pure helpers (tested in test/trainingSync.test.ts) ----------
 
@@ -75,24 +78,36 @@ export function applyChanges(records: Record<string, Rec>, ...lists: Change[][])
  */
 export const keptKind = (kind: string) => kind.startsWith("training") || kind.startsWith("health");
 
-/** The fields of a futsal event the log needs (its days and its title), nothing else of it. */
+/** The fields of a game's event the log needs (its days, its title and category), nothing else of it. */
 const FUTSAL_FIELDS = [
-  "id", "type", "title", "startDay", "endDay", "startMin", "endMin", "allDay", "freq", "interval", "weekDays", "monthDays", "months",
+  "id", "type", "title", "categoryId", "startDay", "endDay", "startMin", "endMin", "allDay", "freq", "interval", "weekDays", "monthDays", "months",
   "untilDay", "excludedDays", "deletedAt", "updatedAt", "futsal",
 ] as const;
 
+/** The Sports categories' ids among held records and received changes (267). */
+export function sportsIn(records: Record<string, Rec>, received: Change[]): Set<number> {
+  const cats = new Map<number, Category>();
+  for (const c of recordsOfKind<Category>(records, "categories")) cats.set(c.id, c);
+  for (const c of received) if (c.kind === "categories") { if (c.data) cats.set(Number(c.id), c.data as unknown as Category); else cats.delete(Number(c.id)); }
+  return sportsCategoryIds(cats.values());
+}
+
 /**
  * What of the received changes this script keeps: the kinds above, the ticks (completions: an item id and
- * a day), and of the calendar only the futsal events (item 240), cut to FUTSAL_FIELDS. An event that
- * stops being futsal is dropped (kept as a delete).
+ * a day), the categories cut to their id and name, and of the calendar only the games' events (futsal and
+ * the Sports category's, items 240 and 267, [sports] being its ids), cut to FUTSAL_FIELDS. An event that
+ * stops being a game is dropped (kept as a delete).
  */
-export function keptChanges(received: Change[]): Change[] {
+export function keptChanges(received: Change[], sports: ReadonlySet<number> = new Set()): Change[] {
   const out: Change[] = [];
   for (const c of received) {
     if (keptKind(c.kind) || c.kind === "completions") out.push(c);
-    else if (c.kind === "items") {
+    else if (c.kind === "categories") {
+      const cat = c.data as unknown as Category | null;
+      out.push(cat ? { ...c, data: { id: cat.id, name: cat.name } } : c);
+    } else if (c.kind === "items") {
       const it = c.data as unknown as Item | null;
-      out.push(it && isFutsal(it) ? { ...c, data: Object.fromEntries(FUTSAL_FIELDS.filter((f) => f in it).map((f) => [f, it[f]])) } : { ...c, data: null });
+      out.push(it && isGame(it, sports) ? { ...c, data: Object.fromEntries(FUTSAL_FIELDS.filter((f) => f in it).map((f) => [f, it[f]])) } : { ...c, data: null });
     }
   }
   return out;
@@ -240,8 +255,8 @@ async function sync(changes: Change[]): Promise<{ state: State; received: number
   if (!res.ok || typeof body.seq !== "number") throw new Stop(`Server error ${res.status}: ${body.error ?? text.slice(0, 200)}`);
   // Without this, the Worker would refuse (or ignore) our kinds: stop before saving anything.
   if (!(body.features ?? []).includes("anyKind")) throw new Stop("The server doesn't take training records yet: update the Worker first.");
-  // Only training records, the watch's, ticks and futsal events are kept: the rest of the user's data (notes, tasks...) never lands in this file.
-  const received = keptChanges(body.changes ?? []);
+  // Only training records, the watch's, ticks, category names and the games' events are kept: the rest of the user's data (notes, tasks...) never lands in this file.
+  const received = keptChanges(body.changes ?? [], sportsIn(sinceOf(state) ? state.records : {}, body.changes ?? []));
   const next: State = { seq: body.seq, records: applyChanges(state.records, changes, received), kept: KEPT_VERSION };
   saveState(next);
   return { state: next, received: received.filter((c) => c.kind !== "items" || c.data).length };
@@ -297,9 +312,10 @@ async function pull(folder: string) {
   if (!plan) throw new Stop(`Can't read the plan in ${folder}: ${problems.join(" ")}`);
   const { state, received } = await sync([]);
   const log = `training-log-${plan.id}.csv`, sets = `training-sets-${plan.id}.csv`;
-  // Futsal from the calendar's futsal events; old futsal entries not converted yet are converted here first (not saved).
+  // Futsal and other sports from the calendar's games; old futsal entries not converted yet are converted here first (not saved).
   const entries = entriesWithGames([plan], recordsOfKind<Entry>(state.records, "trainingEntries"),
-    recordsOfKind<Item>(state.records, "items"), recordsOfKind<Completion>(state.records, "completions"));
+    recordsOfKind<Item>(state.records, "items"), recordsOfKind<Completion>(state.records, "completions"),
+    sportsCategoryIds(recordsOfKind<Category>(state.records, "categories")));
   writeFileSync(join(folder, log), logCsv(plan, entries.values()));
   writeFileSync(join(folder, sets), setsCsv(plan, recordsOfKind<Lift>(state.records, "trainingLifts")));
   writeFileSync(join(folder, BODYWEIGHT_FILE), weighInsCsv(recordsOfKind<WeighIn>(state.records, "trainingWeighIns")));

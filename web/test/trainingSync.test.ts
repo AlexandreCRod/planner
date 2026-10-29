@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { KEPT_VERSION, applyChanges, checkPlan, checkShared, fileChanges, healthCsvs, keptChanges, keptKind, sinceOf } from "../tools/training-sync.ts";
+import { KEPT_VERSION, applyChanges, checkPlan, checkShared, fileChanges, healthCsvs, keptChanges, keptKind, sinceOf, sportsIn } from "../tools/training-sync.ts";
 import { planFileId, readPlan } from "../src/domain/training.ts";
 import { MEALS_FILE, RUNS_FILE, SHARED_PLAN } from "../src/domain/trends.ts";
 
@@ -78,6 +78,26 @@ test("pull keeps the ticks and only the futsal events, cut to what the log needs
     ["items", "4", null],
     ["completions", "1:5", "completedAt,day,itemId"],
   ]);
+});
+
+test("pull keeps the Sports category's events and the categories' names, nothing else of them (267)", () => {
+  const ev = (id: number, title: string, categoryId: number | null) => ({ id, type: "EVENT", title, categoryId, content: "<p>private</p>", startDay: 1 });
+  const received = [
+    { kind: "categories", id: "5", data: { id: 5, name: "Sports", color: 1, defaultAlert: "ALARM" } },
+    { kind: "items", id: "1", data: ev(1, "Tennis", 5) },
+    { kind: "items", id: "2", data: ev(2, "Futsal", 2) },
+    { kind: "items", id: "3", data: ev(3, "Futsal", null) },
+  ];
+  const sports = sportsIn({ "categories/2": { id: 2, name: "Work" } }, received);
+  assert.deepEqual([...sports], [5]);
+  const out = keptChanges(received, sports);
+  assert.deepEqual(out.map((c) => [c.kind, c.id, c.data === null ? null : Object.keys(c.data).sort().join(",")]), [
+    ["categories", "5", "id,name"],
+    ["items", "1", "categoryId,id,startDay,title,type"],
+    ["items", "2", null],
+    ["items", "3", "categoryId,id,startDay,title,type"],
+  ]);
+  assert.equal(sportsIn({ "categories/5": { id: 5, name: "Sports" } }, [{ kind: "categories", id: "5", data: null }]).size, 0);
 });
 
 test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linked by the tick", () => {

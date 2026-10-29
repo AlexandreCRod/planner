@@ -37,7 +37,7 @@ import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingFind } from "./TrainingFind.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
-import { kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
+import { gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
 import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
 import "./training.css";
@@ -375,14 +375,14 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
   );
 }
 
-/** A futsal game: its event's title, then its time, how long it was and the note. */
+/** A game (futsal or another sport, 267): its event's title, then its time, how long it was and the note. */
 function FutsalRow({ e, warn, onWarn, onTick, onOpen }: { e: Entry; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
   const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
   const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
   return (
     <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
-      <KindIcon kind="futsal" icon={kindIcon("futsal")} />
+      <KindIcon kind="futsal" icon={gameIcon(e)} />
       <span className="tr-row-text">
         <span className="title">{e.title}</span>
         <span className="detail">{[at, e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
@@ -473,7 +473,8 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
   const { item, day } = warn;
   const [to, setTo] = useState<number | null>(null);
   const s = "session" in item ? sessionsOf(plan).find((x) => x.id === item.session) : undefined;
-  const title = s?.title ?? "Futsal";
+  const game = "futsal" in item && item.futsal ? tr.entries.get(item.futsal) : undefined;
+  const title = s?.title ?? (game?.sport ? game.title : "Futsal");
   const all = brokenRules(plan, tr.entries, item, day);
   const rules = breachesOnly(all);
   const ph = plan.phases.find((p) => day >= p.start && day <= p.end);
@@ -705,7 +706,9 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
   if (!lp || day < lp.plan.start || day > lp.plan.end) return null;
   const { plan } = lp;
   const on = sessionsOnDay(plan, day, tr.entries).filter((x) => x.entry.status !== "skipped");
-  const futsal = [...tr.entries.values()].some((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+  // The day's game (futsal, or another sport by its own title, 267).
+  const game = [...tr.entries.values()].find((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+  const futsal = game ? (game.sport ? game.title : "Futsal") : "";
   let text: string, icon = "oDirectionsRun", target = `training?d=${day}`, rest = false;
   if (on.length) {
     text = on.length === 1 ? [on[0].session.title, on[0].session.detail].filter(Boolean).join(" · ") : on.map((x) => x.session.title).join(" + ");
@@ -714,9 +717,9 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
   } else {
     const left = day >= t ? leftToPlace(plan, day, tr.entries) : [];
     if (left.length) text = `${count(left.length, "session")} to place this week`;
-    else { text = futsal ? "Futsal" : "Rest day"; rest = !futsal; }
+    else { text = futsal || "Rest day"; rest = !futsal; }
   }
-  if (on.length && futsal) text += " · Futsal";
+  if (on.length && futsal) text += ` · ${futsal}`;
   const done = on.length > 0 && on.every((x) => x.entry.status === "done");
   return (
     <button className={`tr-todayline ${rest ? "rest" : ""} ${done ? "done" : ""}`} onClick={() => go(target)}>
