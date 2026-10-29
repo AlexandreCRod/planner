@@ -24,6 +24,8 @@ import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
 import { SwipeToTrash, TrashSwipeWay } from "./SwipeRow.tsx";
+import { useRowDrag } from "./rowDrag.ts";
+import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
 import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
@@ -168,11 +170,24 @@ function ScheduledList() {
   </>;
 }
 
-/** The to-dos (tasks with no date) not yet done, in their order: priority, then the newest first. Today's No date list shows the first few. */
+/**
+ * The to-dos (tasks with no date) not yet done, in their order: where they were dragged, else priority,
+ * then the newest first (domain/todoOrder.ts). Today's No date list shows the first few.
+ */
 export function openTodos(s: Snapshot): TaskEntry[] {
-  return s.items.filter((i) => i.type === "TASK" && i.startDay === null && !s.done.isDone(i.id, NO_DAY))
-    .sort((a, b) => b.priority - a.priority || b.createdAt - a.createdAt)
+  return sortTodos(s.items.filter((i) => i.type === "TASK" && i.startDay === null && !s.done.isDone(i.id, NO_DAY)))
     .map((item): TaskEntry => ({ item, day: null, status: "ANYTIME", missed: 0 }));
+}
+
+/**
+ * Saves a to-do dropped into a new place (241): [ids] is the list it was dragged in, in its new order,
+ * which may be the first few of the to-dos only (Today's); the rest keep theirs after them.
+ */
+export function dropTodo(s: Snapshot, ids: readonly number[], moved: number) {
+  const todos = openTodos(s).map((e) => e.item);
+  const shown = new Set(ids);
+  const all = [...ids, ...todos.map((t) => t.id).filter((id) => !shown.has(id))];
+  for (const c of todoOrderChanges(todos, all, moved)) { const t = s.byId.get(c.id); if (t) saveItem({ ...t, listOrder: c.listOrder }); }
 }
 
 /** "Add a to-do": a line that makes a task with no date (the To-do list, Today's No date list). */
@@ -206,12 +221,13 @@ function TodoList() {
   const layer = useRef<HTMLDivElement>(null);
   const doneKeys = new Set(done.map((i) => `t${i.id}`));
   useGlide(box, layer, (k) => doneKeys.has(k));
+  const rowDrag = useRowDrag({ list: () => box.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
   return <div className="p-glide" ref={box}>
     <div ref={layer} />
     <TodoAdd />
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
-      <div key={e.item.id} data-glide={`t${e.item.id}`}>
+      <div key={e.item.id} data-glide={`t${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
         <SwipeToTrash item={e.item}>
           <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
         </SwipeToTrash>

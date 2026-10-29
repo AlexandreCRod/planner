@@ -15,7 +15,8 @@ import { AppBarActions, IconButton, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { mouseMenu } from "./desk.ts";
-import { TodoAdd, openTodoTab, openTodos } from "./PhoneLists.tsx";
+import { TodoAdd, dropTodo, openTodoTab, openTodos } from "./PhoneLists.tsx";
+import { useRowDrag } from "./rowDrag.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
 import { tasksB } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
@@ -190,12 +191,15 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
 /**
  * Today's "No date" list (241): the to-dos with no date under today's tasks, the first few shown, a line to
  * add one, and "N more" opening the rest on the Tasks page. Its header folds it (kept on this device).
+ * Its rows are dragged into order like the To-do list's (the same order: the rest follow them).
  */
 function NoDateList({ s, now, hold }: { s: Snapshot; now: number; hold: Hold }) {
   const [open, setOpen] = useState(() => localStorage.getItem("todayNoDateOpen") !== "0");
   const all = openTodos(s);
   const list = hold.arrange("nd", all.slice(0, NO_DATE_ROWS), rowKey);
   const more = all.length - NO_DATE_ROWS;
+  const rows = useRef<HTMLDivElement>(null);
+  const rowDrag = useRowDrag({ list: () => rows.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
   const flip = () => { const o = !open; setOpen(o); try { localStorage.setItem("todayNoDateOpen", o ? "1" : "0"); } catch { /* private mode */ } };
   return <>
     <button className="section p-nodate-head" aria-expanded={open} onClick={flip}>
@@ -204,9 +208,13 @@ function NoDateList({ s, now, hold }: { s: Snapshot; now: number; hold: Hold }) 
     </button>
     {open && <>
       <TodoAdd />
-      {list.map((e, index) => (
-        <TaskRow key={`nd_${e.item.id}`} entry={e} s={s} now={now} onToggle={(done) => hold.onToggle("nd", rowKey(e), e, index, done)} />
-      ))}
+      <div ref={rows}>
+        {list.map((e, index) => (
+          <div key={`nd_${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
+            <TaskRow entry={e} s={s} now={now} onToggle={(done) => hold.onToggle("nd", rowKey(e), e, index, done)} />
+          </div>
+        ))}
+      </div>
       {more > 0 && <button className="p-fold" onClick={openTodoTab}><span>{more} more</span><MIcon name="fKeyboardArrowRight" size={18} /></button>}
     </>}
   </>;

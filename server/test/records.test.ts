@@ -86,6 +86,13 @@ test("item fields pass through untouched, new ones included (e.g. routine)", () 
   assert.deepEqual(JSON.parse(canonical(ok.changes[0].data)), item);
 });
 
+test("a to-do's dragged place (241, listOrder on a task) round-trips, fractions included", () => {
+  const item = { id: 1790000000123, type: "TASK", title: "Buy milk", startDay: null, freq: "NONE", priority: 0, listOrder: 17900000001234.5, updatedAt: 5 };
+  const ok = parseSyncBody({ since: 0, changes: [{ kind: "items", id: String(item.id), data: item }] });
+  assert.ok(typeof ok !== "string");
+  assert.deepEqual(JSON.parse(canonical(ok.changes[0].data)), item);
+});
+
 test("futsal as events (240): an item's futsal mark and an entry's itemId/convertedTo round-trip", () => {
   const item = { id: 1234567890123, type: "EVENT", title: "Football", startDay: 20760, allDay: true, freq: "NONE", futsal: true, updatedAt: 100 };
   const log = { id: "futsal:1234567890123:20760", planId: "p", kind: "futsal", itemId: 1234567890123, day: null, durationMin: 60, updatedAt: 100 };

@@ -2,7 +2,7 @@
 // is measured after every redraw; one that moved starts where it was and slides to where it is now.
 // A row that left the list glides off towards the element marked data-glide-into (the collapsed
 // Completed header) and fades there, drawn by a copy of it on a layer of its own. Only transforms and
-// opacity are animated, on the compositor.
+// opacity are animated, on the compositor. A redraw for a row dropped by a drag is only measured.
 import { type RefObject, useLayoutEffect, useRef } from "react";
 
 const EASE = "cubic-bezier(0.2, 0, 0, 1)"; // Material's emphasised decelerate
@@ -24,7 +24,8 @@ export function useGlide(box: RefObject<HTMLElement | null>, layer: RefObject<HT
       next.set(el.dataset.glide!, { top: el.offsetTop, left: el.offsetLeft, h: el.offsetHeight, w: el.offsetWidth, el });
     }
     last.current = next;
-    if (!prev.size || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // A row drag (rowDrag.ts) has put the rows where they go itself ([data-reorder] on the box).
+    if (!prev.size || root.dataset.reorder !== undefined || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     for (const [k, n] of next) {
       const p = prev.get(k);
       if (!p) continue;
