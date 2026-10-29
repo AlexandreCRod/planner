@@ -1,4 +1,4 @@
-// Live sideways pagers (Today's days, the calendar's months and years, the Tasks and Alarms tabs): the
+// Live sideways pagers (Today's days, the calendar's months and years, the Tasks, Alarms and Progress tabs): the
 // content follows the finger, 1.2 times its travel, with the neighbouring page sliding in beside it,
 // then settles like Compose's HorizontalPager: past 400 dp/s it goes the way it was flung, otherwise to
 // the nearest page, on a snappy critically damped spring (motion.ts) that starts at the finger's speed.

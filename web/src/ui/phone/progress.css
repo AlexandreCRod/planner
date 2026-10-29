@@ -3,7 +3,9 @@
    Wide (html.wide): the list and the open card side by side (tr-split, training.css). */
 
 .phone .pg-page { padding: 0 16px calc(var(--sab) + 24px); }
-.phone .pg-tabs { padding: 8px 0 12px; }
+/* The list: the tab row stays put over a pager of the tabs' lists (each scrolls on its own; a swipe turns the tab, 248). */
+.phone .pg-list { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.phone .pg-tabs { flex: none; padding: 8px 16px 4px; }
 /* Nutrition comes later: its tab is greyed until picked. */
 .phone .pg-tabs .p-segmented button:last-child:not(.on) { opacity: .5; }
 .phone .pg-tabs .p-segmented button { padding: 0 4px; }
@@ -79,7 +81,7 @@
 .phone .pg-weigh .pg-left { margin-right: auto; }
 
 /* Wide: the card beside the list. */
-.wide .tr-split .pg-list { flex: 0 0 440px; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.wide .tr-split .pg-list { flex: 0 0 440px; position: relative; box-shadow: inset -1px 0 0 color-mix(in srgb, var(--line) 60%, transparent); }
 .wide .pg-side { padding-top: 12px; }
 .wide .pg-side > * { max-width: 720px; }
 

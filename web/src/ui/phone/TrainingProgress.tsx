@@ -4,11 +4,12 @@
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
 // weigh-ins). Touching a chart reads a day, and the headline shows that day's reading (it stays when the
 // finger lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
-// opens over the list (back closes it); in a wide window the list and the card sit side by side. Weight's
+// opens over the list (back closes it); in a wide window the list and the card sit side by side. A swipe turns the tab. Weight's
 // top bar has "+ Weigh in", and a weigh-in tapped (a dot, or a row of the recent ones) opens to change or
 // delete it, or hide an imported one. Sleep: the nights, resting HR and HRV, from sleep.json and the watch.
 // The numbers come from domain/trends.ts and domain/sleep.ts; nothing here is stored but the user's weigh-ins and what they hid.
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
 import {
@@ -22,6 +23,7 @@ import { go, replaceRoute } from "../shared/common.tsx";
 import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, xDomain } from "./chartMath.ts";
 import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
+import { spring, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
 import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
@@ -30,6 +32,8 @@ import "./progress.css";
 
 type Tab = "lifts" | "runs" | "weight" | "sleep" | "nutrition";
 const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Runs"], ["weight", "Weight"], ["sleep", "Sleep"], ["nutrition", "Nutrition"]];
+/** The tab a route names (Lifts when it names none). */
+const tabOf = (q: string | null): Tab => (TABS.find(([k]) => k === q)?.[0] ?? "lifts") as Tab;
 /** The lifts before this day are the "before the break" peak, shown only as quiet text (keep it quiet before the race). */
 const PEAK_BEFORE = dayOf("2025-04-01")!;
 
@@ -62,10 +66,48 @@ interface Row { id: string; name: string; sub: string; spark: ReactNode; value: 
 export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: LoadedPlan; query: URLSearchParams; planId: string | null }) {
   const wide = useWide();
   const t = todayEpoch();
-  const tab = (TABS.find(([k]) => k === query.get("tab"))?.[0] ?? "lifts") as Tab;
+  const wantedTab = tabOf(query.get("tab"));
   const card = query.get("c");
   const [weighing, setWeighing] = useState(false);
-  const rows = useMemo(() => rowsOf(tr, lp, tab, t), [tr, lp, tab, t]);
+  // The tab shown, kept here as well as in the route, so a swipe's new page is drawn at once (248); a route
+  // changed from elsewhere (back, a link) still wins.
+  const [tab, setTabState] = useState<Tab>(wantedTab);
+  const lastWanted = useRef(wantedTab);
+  if (lastWanted.current !== wantedTab) { lastWanted.current = wantedTab; if (tab !== wantedTab) setTabState(wantedTab); }
+  const index = TABS.findIndex(([k]) => k === tab);
+  const idx = useRef(index);
+  idx.current = index;
+  const setIndex = (i: number) => {
+    const k = TABS[clampTab(i)][0];
+    idx.current = clampTab(i);
+    lastWanted.current = k;
+    setTabState(k);
+    replaceRoute(route(k, null, planId));
+  };
+  const strip = useRef<HTMLDivElement>(null);
+  const track = useRef<((p: number | null) => void) | null>(null);
+  const stopSlide = useRef<(() => void) | null>(null);
+  // A tap on a tab slides there on the pager's spring (a jump of more than one tab is just there).
+  const showTab = (k: Tab) => {
+    const i = TABS.findIndex(([x]) => x === k), from = idx.current;
+    stopSlide.current?.(); stopSlide.current = null;
+    if (strip.current) strip.current.style.transform = "";
+    if (i === from) return;
+    feel("tick");
+    const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
+    flushSync(() => setIndex(i));
+    if (!el || !w || Math.abs(i - from) > 1) return;
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
+    stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
+  };
+  const pager = useSwipePager<HTMLDivElement>({
+    layers: () => [strip.current],
+    onStep: (d) => setIndex(idx.current + d),
+    canStep: (d) => idx.current + d >= 0 && idx.current + d <= TABS.length - 1,
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => track.current?.(null),
+    allow: (el) => !el.closest("input, textarea"),
+  });
   const open = (id: string) => {
     feel("tick");
     // Wide, the open card is swapped in place, so back leaves Progress rather than going through each card.
@@ -81,30 +123,20 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
     </Scaffold>;
   }
 
-  let group = "";
   const list = (
-    <div className="p-content pg-page pg-list">
+    <div className="pg-list">
       <div className="pg-tabs">
-        <Segmented value={tab} options={TABS} onChange={(k) => { feel("tick"); replaceRoute(route(k, null, planId)); }} />
+        <Segmented value={tab} options={TABS} onChange={showTab} track={track} />
       </div>
-      {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
-      {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{({
-        lifts: "Lifts show here once sets are logged.", sleep: "Sleep shows here once your watch's data (Health Connect) or sleep.json arrives.",
-      } as Record<string, string>)[tab] ?? "Runs show here once the plan session sends runs.json."}</EmptyHint>}
-      {rows.map((r) => {
-        const head = r.group !== group ? r.group : null;
-        group = r.group;
-        return <div key={r.id}>
-          {head && <div className="pg-group">{head}</div>}
-          <div className={`pg-row ${wide && card === r.id ? "sel" : ""} ${r.open === false ? "still" : ""}`} role={r.open === false ? undefined : "button"}
-            onClick={r.open === false ? undefined : () => open(r.id)}>
-            <div className="n"><b>{r.name}</b><span>{r.sub}</span></div>
-            {r.spark}
-            <div className="v">{r.value}<span>{r.valueSub}</span></div>
-          </div>
-        </div>;
-      })}
-      <div className="p-endspace" />
+      <div className="p-tabpager" ref={pager}>
+        <div className="p-tabstrip" ref={strip} style={{ left: `${-index * 100}%` }}>
+          {TABS.map(([k], i) => (
+            <div key={k} className="p-content p-tabpage pg-page" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
+              {Math.abs(i - index) <= 1 && <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 
@@ -122,6 +154,34 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
       {sheet}
     </Scaffold>
   );
+}
+
+const clampTab = (i: number) => Math.max(0, Math.min(TABS.length - 1, i));
+
+/** One tab's list: its rows under their group headings ([sel]: the row whose card is open beside it). */
+function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan; tab: Tab; t: number; sel: string | null; onOpen: (id: string) => void }) {
+  const rows = useMemo(() => rowsOf(tr, lp, tab, t), [tr, lp, tab, t]);
+  let group = "";
+  return <>
+    {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
+    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{({
+      lifts: "Lifts show here once sets are logged.", sleep: "Sleep shows here once your watch's data (Health Connect) or sleep.json arrives.",
+    } as Record<string, string>)[tab] ?? "Runs show here once the plan session sends runs.json."}</EmptyHint>}
+    {rows.map((r) => {
+      const head = r.group !== group ? r.group : null;
+      group = r.group;
+      return <div key={r.id}>
+        {head && <div className="pg-group">{head}</div>}
+        <div className={`pg-row ${sel === r.id ? "sel" : ""} ${r.open === false ? "still" : ""}`} role={r.open === false ? undefined : "button"}
+          onClick={r.open === false ? undefined : () => onOpen(r.id)}>
+          <div className="n"><b>{r.name}</b><span>{r.sub}</span></div>
+          {r.spark}
+          <div className="v">{r.value}<span>{r.valueSub}</span></div>
+        </div>
+      </div>;
+    })}
+    <div className="p-endspace" />
+  </>;
 }
 
 function cardTitle(tr: Training, tab: Tab, id: string): string {
