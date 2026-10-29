@@ -12,6 +12,7 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
+import { lastWeighInLine } from "../../domain/body.ts";
 import {
   type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
@@ -202,7 +203,7 @@ function rowsOf(tr: Training, lp: LoadedPlan, tab: Tab, t: number): Row[] {
   const since = rangeStart("3M", t);
   if (tab === "lifts") return liftRows(tr, since);
   if (tab === "runs") return runRows(tr, lp, since, t);
-  if (tab === "weight") return weightRows(tr, since);
+  if (tab === "weight") return weightRows(tr, since, t);
   if (tab === "sleep") return sleepRows(tr, t);
   return [];
 }
@@ -511,13 +512,14 @@ function weightData(tr: Training) {
   return { all, trend: weightTrend(all) };
 }
 
-function weightRows(tr: Training, since: number | null): Row[] {
+function weightRows(tr: Training, since: number | null, t: number): Row[] {
   const { all, trend } = weightData(tr);
   const rows: Row[] = [];
   if (trend.length) {
-    const recent = inRange(trend, since), last = trend[trend.length - 1], wk = weeklyChange(trend), n = inRange(all, since).length;
+    const recent = inRange(trend, since), last = trend[trend.length - 1], wk = weeklyChange(trend), w = all[all.length - 1];
     rows.push({
-      id: "w", group: "Weight", name: "Trend", sub: `from ${n === 1 ? "1 weigh-in" : `${n} weigh-ins`}`,
+      // The trend and its weekly change, with the last weigh-in under the name (250).
+      id: "w", group: "Weight", name: "Trend", sub: lastWeighInLine(w.kg, w.day, t),
       spark: <Spark values={recent.map((p) => p.trend)} color={WEIGHT} />, value: last.trend.toFixed(1), valueSub: wk !== null ? `${signed1(wk)} kg/wk` : "",
     });
   }
