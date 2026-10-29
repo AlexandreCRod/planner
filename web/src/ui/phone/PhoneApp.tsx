@@ -37,6 +37,7 @@ import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt }
 import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
+import { trainingBase, trainingSub } from "./trainingBack.ts";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Alarms is the last where the alarm engine is (the phone build), not in a browser.
@@ -54,8 +55,12 @@ const tabsFor = (keepTasks: boolean): Tab[] => [
 /** The Training page's route ("#/training?s=…"), kept while another tab shows, so coming back finds it as it was. */
 let trainingHash = "#/training";
 const tabHash = (key: string) => (key === "training" ? trainingHash : `#/${key}`);
-/** A session or a document open on the Training page: back closes it before leaving the page. */
-const trainingSub = (q: URLSearchParams) => q.has("s") || q.has("view");
+/** The page key and query of a URL's hash route ("#/training?s=1" -> "training"). */
+const hashRoute = (url: string): [string, URLSearchParams] => {
+  const h = (url.split("#")[1] ?? "").replace(/^\/?/, "");
+  const [path, q = ""] = h.split("?");
+  return [path.split("/")[0], new URLSearchParams(q)];
+};
 /**
  * Going back to today (a tap on the tab already shown): the old view slides out as today's slides in, both
  * together, on a quick ease-out with no overshoot, as Google Calendar's Today does.
@@ -246,6 +251,27 @@ export function PhoneApp() {
   const kbUp = useKeyboardUp(), kbHeight = useKeyboardHeight();
 
   useLayoutEffect(() => { startPhonePlumbing(); }, []);
+  // A session or a document on Training opened from elsewhere (Today's Training line, a link, a cold start)
+  // gets the Training week put under it in the history, so back closes it to Training, not to the page it
+  // came from (277). Synthetic hashchanges (replaceRoute) carry no oldURL: the last route seen stands in.
+  useLayoutEffect(() => {
+    const under = (from: string) => {
+      const [to, q] = hashRoute(location.href);
+      const base = trainingBase(from, to, q);
+      if (!base) return;
+      const here = location.hash;
+      history.replaceState(null, "", base);
+      history.pushState(null, "", here);
+    };
+    let last = hashRoute(location.href)[0];
+    under("");
+    const on = (e: HashChangeEvent) => {
+      under(e.oldURL ? hashRoute(e.oldURL)[0] : last);
+      last = hashRoute(location.href)[0];
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
   useLayoutEffect(() => watchNavButtons(), []);
 
   /**
