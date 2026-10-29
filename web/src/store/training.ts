@@ -16,6 +16,7 @@ import {
 import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts";
 import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
+import { type GameMatches, type GameSlot, matchGames } from "../domain/watchActivities.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -64,6 +65,8 @@ export interface Training {
   healthDays: HealthDay[];
   /** One per morning, sleep.json and Health Connect merged (domain/sleep.ts); oldest first. */
   sleep: SleepNight[];
+  /** The watch's football sessions matched to the games they were, and those left over (domain/watchActivities.ts, 268). */
+  watchGames: GameMatches;
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -120,9 +123,11 @@ export function training(): Training {
   const sleep = readShared(readSleepOf, shared.find((f) => f.file === SLEEP_FILE), readSleep, { nights: [], problems: [] });
   const entries = listOf<Entry>("trainingEntries");
   const healthSessions = listOf<HealthSession>("healthSessions").sort((a, b) => a.startMs - b.startMs);
+  const items = listOf<Item>("items");
+  const shown = trainingEntries(plans.map((p) => p.plan), entries, items, listOf<Completion>("completions"), sportsCategoryIds(listOf<Category>("categories")));
   const data: Training = {
     plans,
-    entries: trainingEntries(plans.map((p) => p.plan), entries, listOf<Item>("items"), listOf<Completion>("completions"), sportsCategoryIds(listOf<Category>("categories"))),
+    entries: shown,
     stored: new Map(entries.map((e) => [e.id, e])),
     lifts,
     liftById: new Map(lifts.map((l) => [l.id, l])),
@@ -138,10 +143,24 @@ export function training(): Training {
     healthNights: listOf<HealthNight>("healthNights").sort((a, b) => a.day - b.day || a.bed.localeCompare(b.bed)),
     healthDays: listOf<HealthDay>("healthDays").sort((a, b) => a.day - b.day),
     sleep: [],
+    watchGames: matchGames(gameSlots(shown, items), healthSessions),
   };
   data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
   cache = { version: v, data };
   return data;
+}
+
+/** The games among [entries] with their events' times, for matching the watch's sessions (268). */
+function gameSlots(entries: ReadonlyMap<string, Entry>, items: readonly Item[]): GameSlot[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const out: GameSlot[] = [];
+  for (const e of entries.values()) {
+    if (e.kind !== "futsal" || e.itemId === undefined || e.day === null) continue;
+    const it = byId.get(e.itemId);
+    const timed = !!it && !it.allDay && it.startMin !== null;
+    out.push({ id: e.id, day: e.day, startMin: timed ? it.startMin : null, endMin: timed ? it.endMin : null, futsal: !e.sport });
+  }
+  return out;
 }
 
 export function useTraining(): Training {

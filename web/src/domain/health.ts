@@ -68,6 +68,8 @@ export interface HealthSession {
   splits: HealthSplit[];
   /** Average HR per 15 s from the start; 0 where there was no reading. */
   hr: number[];
+  /** It has a GPS route Planner could see (the plugin's hasRoute; 268): it was outdoors. Missing on records made before. */
+  route?: boolean;
   updatedAt: number;
 }
 
@@ -309,7 +311,7 @@ export function sessionOf(r: RawRecord, raw: RawByType, now: number): HealthSess
     ascentM: orNull(sumIn(raw.ElevationGained, "elevation", start, end, origin)),
     steps: orNull(steps), kcal: orNull(kcal),
     avgHr: orNull(mean(hrs.map((s) => s.v))), maxHr: hrs.length ? Math.round(Math.max(...hrs.map((s) => s.v))) : null,
-    cadenceSpm: orNull(cadence), laps, splits, hr: line, updatedAt: now,
+    cadenceSpm: orNull(cadence), laps, splits, hr: line, route: r.hasRoute === true, updatedAt: now,
   };
 }
 

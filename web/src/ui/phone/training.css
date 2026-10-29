@@ -356,3 +356,12 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-find .p-li .supporting { white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; line-height: 18px; }
 .phone .tr-findic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--p-sc-high, var(--surface-2)); color: var(--p-on-surface-variant, var(--muted)); }
 .phone mark.tr-hit { padding: 0 1px; border-radius: 3px; background: color-mix(in srgb, var(--p-primary) 28%, transparent); color: var(--text); }
+/* The watch's stats on an activity (268): a small grid of values over their labels. */
+.phone .tr-stats { padding: 4px 16px 4px; }
+.phone .tr-stats.inset { padding: 0 24px 8px; }
+.phone .tr-stats .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding: 12px 14px; border-radius: 14px; background: var(--p-sc-high, var(--surface-2)); }
+.phone .tr-stats .grid > div { display: flex; flex-direction: column; min-width: 0; }
+.phone .tr-stats .v { font-size: 17px; line-height: 22px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-stats .l { font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .tr-stats-note { margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .tr-ring-mark { flex: none; width: 44px; height: 44px; margin-right: -6px; display: grid; place-items: center; color: var(--muted); }
