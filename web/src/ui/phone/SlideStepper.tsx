@@ -1,5 +1,5 @@
-// A number set by sliding sideways on it, with no keyboard: one step per STEP_PX moved (right up, left
-// down), a soft tick for each, a tick tape under it moving with the finger. A tap on it (not a slide)
+// A number set by sliding sideways on it, with no keyboard: one step per STEP_PX moved (left up, right
+// down, 264), a soft tick for each, a tick tape under it moving with the finger. A tap on it (not a slide)
 // turns it into a field to type in, the only way the keyboard opens. On the PC a mouse drag does the
 // same, and the arrow keys step it. Used by a set's weight and reps and by a custom reminder time.
 import { useEffect, useRef, useState } from "react";
@@ -95,7 +95,7 @@ export function SlideStepper({ value, onChange, step, min = 0, max, format = Str
         </div>
         {buttons && <IconButton icon="fAdd" label={by ? `More by ${by}` : "One more"} onClick={() => bump(1)} />}
       </div>
-      <div className="p-stepper-hint">Slide sideways · tap to type</div>
+      <div className="p-stepper-hint">Slide left for more · tap to type</div>
     </div>
   );
 }

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { STEP_PX, clamp, decimalsOf, slideSteps, stepValue, typedValue } from "../src/ui/phone/stepMath.ts";
 
-test("a step only once the finger has fully passed it, either way", () => {
+test("a step only once the finger has fully passed it, either way; left is more (264)", () => {
   assert.equal(slideSteps(0), 0);
-  assert.equal(slideSteps(STEP_PX - 1), 0);
-  assert.equal(slideSteps(STEP_PX), 1);
-  assert.equal(slideSteps(3.5 * STEP_PX), 3);
   assert.equal(slideSteps(-STEP_PX + 1), 0);
-  assert.equal(slideSteps(-2 * STEP_PX), -2);
+  assert.equal(slideSteps(-STEP_PX), 1);
+  assert.equal(slideSteps(-3.5 * STEP_PX), 3);
+  assert.equal(slideSteps(STEP_PX - 1), 0);
+  assert.equal(slideSteps(2 * STEP_PX), -2);
 });
 
 test("steps stay within the limits", () => {

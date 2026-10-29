@@ -17,8 +17,11 @@ export const roundTo = (v: number, d: number) => Number(v.toFixed(d));
 /** [v] kept within [min]–[max]. */
 export const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-/** Whole steps for a slide of [dx] px: right is up, left down, a step only once it's fully passed. */
-export const slideSteps = (dx: number) => Math.trunc(dx / STEP_PX) || 0;
+/**
+ * Whole steps for a slide of [dx] px: left is up, right down (264: the finger pulls the tick tape like a
+ * ruler, so bigger numbers come in from the right), a step only once it's fully passed.
+ */
+export const slideSteps = (dx: number) => Math.trunc(-dx / STEP_PX) || 0;
 
 /** [from] moved by [steps] of [step], within [min]–[max], as precise as the step or [from] (whichever is finer). */
 export function stepValue(from: number, steps: number, step: number, min: number, max: number): number {
