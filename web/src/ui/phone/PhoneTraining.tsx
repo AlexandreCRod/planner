@@ -39,7 +39,9 @@ import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
-import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
+import { LooseWatchRow, WatchRunChips, WatchStatsGrid, useWatchRunAsks, useWatchRunTicks, watchHead } from "./WatchRuns.tsx";
+import type { HealthSession } from "../../domain/health.ts";
+import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
 import "./training.css";
 
 /** Held this long, a placed session lifts to be dragged to another day (as a note card does). */
@@ -165,6 +167,8 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     tickGame({ itemId: e.itemId, day: e.day }, e.status !== "done");
   };
   const pickedSession = picked ? sessions.get(picked) : undefined;
+  // The watch's football sessions no game took (268), on their days.
+  const looseOn = (day: number) => tr.watchGames.loose.filter((x) => x.day === day);
   const showToPlace = v.toPlace.length > 0 || drag.lifted !== null;
 
   const week = (
@@ -227,7 +231,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
             {day <= t && restingHrFlag(tr.sleep, day) && <span className="tr-hrflag" role="img" aria-label="Resting heart rate up 7 or more on your 7-day average, two mornings running"
               title="Resting heart rate up 7 or more on your 7-day average, two mornings running"><MIcon name="fFavorite" size={12} /></span>}</div>
           <WatchRunChips lp={lp} asks={watchAsks.get(day)} />
-          {items.length === 0 && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
+          {items.length === 0 && !looseOn(day).length && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
             <div key={s.id}>
               <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
@@ -237,8 +241,9 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
               {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
             </div>
           ) : (
-            <FutsalRow key={e.id} e={e} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+            <FutsalRow key={e.id} e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
           ))}
+          {looseOn(day).map((x) => <LooseWatchRow key={x.id} s={x} />)}
         </div>
       ))}
       {!readOnly && (
@@ -268,7 +273,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           </div>
         </div>
       ) : week}
-      {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t}
+      {futsal && <FutsalSheet plan={plan} ph={ph} entry={futsal === "new" ? null : futsal} t={t} watch={futsal === "new" ? undefined : tr.watchGames.byGame.get(futsal.id)}
         onPlaced={(g, undo) => { warnNext.current = check({ futsal: futsalLogId(g.itemId, g.day) }, g.day, undo); }}
         onClose={() => { setFutsal(null); if (warnNext.current) { setWarn(warnNext.current); warnNext.current = null; } }} />}
       {warn && <PlacementSheet tr={tr} lp={lp} warn={warn} onMoved={setWarn} onClose={() => setWarn(null)} />}
@@ -375,17 +380,21 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
   );
 }
 
-/** A game (futsal or another sport, 267): its event's title, then its time, how long it was and the note. */
-function FutsalRow({ e, warn, onWarn, onTick, onOpen }: { e: Entry; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
+/**
+ * A game (futsal or another sport, 267): its event's title, then its time, how long it was and the note;
+ * with the watch's session for it (268), how long, heart rate and calories from the watch instead.
+ */
+function FutsalRow({ e, watch, warn, onWarn, onTick, onOpen }: { e: Entry; watch: HealthSession | undefined; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
   const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
   const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
+  const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : "";
   return (
     <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
       <KindIcon kind="futsal" icon={gameIcon(e)} />
       <span className="tr-row-text">
         <span className="title">{e.title}</span>
-        <span className="detail">{[at, e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ")}</span>
+        <span className="detail">{[at, fromWatch || (e.durationMin ? `${e.durationMin} min` : ""), e.note].filter(Boolean).join(" · ")}</span>
       </span>
       {warn > 0 && <RuleMark n={warn} onOpen={onWarn} />}
     </div>
@@ -411,8 +420,8 @@ function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; on
  * when the event has one, how long, a note. A new one is an untimed event "Futsal"; Event opens the event
  * itself (its place, reminders, repeat). Remove takes that day off (the event, if it doesn't repeat).
  */
-function FutsalSheet({ plan, ph, entry, t, onPlaced, onClose }: {
-  plan: Plan; ph: Phase; entry: Entry | null; t: number; onPlaced: (g: GameRef, undo: () => void) => void; onClose: () => void;
+function FutsalSheet({ plan, ph, entry, t, watch, onPlaced, onClose }: {
+  plan: Plan; ph: Phase; entry: Entry | null; t: number; watch: HealthSession | undefined; onPlaced: (g: GameRef, undo: () => void) => void; onClose: () => void;
 }) {
   const game: GameRef | null = entry && entry.itemId !== undefined && entry.day !== null ? { itemId: entry.itemId, day: entry.day } : null;
   const item = game ? snapshot().byId.get(game.itemId) : undefined;
@@ -438,6 +447,10 @@ function FutsalSheet({ plan, ph, entry, t, onPlaced, onClose }: {
     <BottomSheet onClose={onClose}>{(close) => (
       <div className="tr-futsal">
         <div className="tr-sheet-title t-title-medium">{entry ? entry.title : "Add futsal"}</div>
+        {watch && entry && <>
+          <div className="tr-label">{watchHead(watch)}</div>
+          <WatchStatsGrid stats={sessionStats(watch, venueOf(watch, entry.title))} inset />
+        </>}
         <div className="tr-label">Day</div>
         <ChipRow>{days.map((d) => <FilterChip key={d} selected={d === day} onClick={() => setDay(d)}>{formatDate(d)}</FilterChip>)}</ChipRow>
         {timed && min !== null && <>

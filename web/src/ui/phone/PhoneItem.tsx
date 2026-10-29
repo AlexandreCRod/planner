@@ -37,6 +37,9 @@ import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
 import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
+import { futsalLogId } from "../../domain/training.ts";
+import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { training } from "../../store/training.ts";
 
 // ---------- Shared bits ----------
 
@@ -764,6 +767,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         )}
         {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
+        {/* A game the watch recorded (268): its stats in short; a tap opens Training on that day. */}
+        {isEvent && day !== null && (() => {
+          const w = training().watchGames.byGame.get(futsalLogId(item.id, day));
+          return w ? <InfoRow icon="oAvTimer" tint={color} text={`From the watch · ${statLine(sessionStats(w, venueOf(w, item.title)))}`}
+            sub={`${w.time}–${w.endTime}`} onClick={() => go(`training?d=${day}`)} /> : null;
+        })()}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {canBeRoutine(item) && (
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
