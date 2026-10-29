@@ -526,8 +526,11 @@ export function futsalDay(e: Entry): number | null {
 // the placement rules, the week bar, logCsv, the day's type) read games as Entries made by gameEntry, put
 // in place of every stored futsal entry by trainingEntries. Old futsal entries convert once (convertFutsal).
 
-/** A Sports category (267): the user names categories, so any whose name has the word "sport" or "sports" (any case). */
-export const isSportsCategory = (c: Pick<Category, "name">) => /\bsports?\b/i.test(c.name);
+/**
+ * A category that counts as sport on Training: as the user set it in Settings (278), or, until they pick,
+ * any whose name has the word "sport" or "sports" (any case, 267).
+ */
+export const isSportsCategory = (c: Pick<Category, "name" | "sport">) => c.sport ?? /\bsports?\b/i.test(c.name);
 /** The ids of the Sports categories. */
 export const sportsCategoryIds = (cats: Iterable<Category>): Set<number> => new Set([...cats].filter(isSportsCategory).map((c) => c.id));
 const NO_SPORTS: ReadonlySet<number> = new Set();

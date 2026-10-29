@@ -34,6 +34,7 @@ import { canUseHealth, connect, disconnect, healthFound, readNow, useHealth } fr
 import { watchStatus } from "../../domain/healthRead.ts";
 import { LOOKS, type LookKey, look, setLook, useLooks } from "./looks.ts";
 import { canImportCalendars } from "../../store/phoneCalendar.ts";
+import { isSportsCategory } from "../../domain/training.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -62,6 +63,27 @@ function ChoiceRow<T extends string>({ title, value, options, onPick, supporting
 
 function SwitchRow({ title, checked, onChange, supporting }: { title: string; checked: boolean; onChange: (v: boolean) => void; supporting?: string }) {
   return <ListItem headline={title} supporting={supporting} trailing={<Switch checked={checked} onChange={onChange} label={title} />} onClick={() => onChange(!checked)} />;
+}
+
+/**
+ * Which categories count as sport on Training (278): a switch for each, one or several. Until the user
+ * picks, a category whose name has the word sport is on (isSportsCategory); a pick is kept on the category,
+ * so it syncs with it.
+ */
+function SportsSection() {
+  const s = useSnapshot();
+  if (!s.categories.length) return null;
+  return <>
+    <div className="p-hr" />
+    <SectionHeader>Training</SectionHeader>
+    <div className="pe-small ps-note">Counts as sport on Training: the events of the categories switched on show there as games, futsal when the title says so.</div>
+    {s.categories.map((c) => {
+      const on = isSportsCategory(c);
+      const set = (v: boolean) => saveCategory({ ...c, sport: v });
+      return <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: cssColor(c.color) }} />}
+        trailing={<Switch checked={on} onChange={set} label={`${c.name}: counts as sport on Training`} />} onClick={() => set(!on)} />;
+    })}
+  </>;
 }
 
 const SNOOZES: [string, string][] = SNOOZE_CHOICES.map((m) => [String(m), `${m} min`]);
@@ -247,6 +269,8 @@ export function PhoneSettings() {
         {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
         <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
         <ListItem headline="Streaks" supporting="Each routine's current and best streak, and its last 14 days" onClick={() => setStreaksOpen(true)} />
+
+        <SportsSection />
 
         {hasAlarms && <AlarmSettingsSection />}
         {!isNative && <>

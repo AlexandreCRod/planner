@@ -40,8 +40,9 @@ const RUNS_CSV = "runs.csv", WORKOUTS_CSV = "workouts.csv", DAILY_CSV = "daily.c
 /**
  * 2: the watch's kinds (healthSessions, healthNights, healthDays) are kept too. 3: futsal events and the ticks (item 240).
  * 4: the Sports category's events, and the categories' names to find it (267).
+ * 5: the categories' own "counts as sport" switch too (278).
  */
-export const KEPT_VERSION = 4;
+export const KEPT_VERSION = 5;
 
 // ---------- Pure helpers (tested in test/trainingSync.test.ts) ----------
 
@@ -84,7 +85,7 @@ const FUTSAL_FIELDS = [
   "untilDay", "excludedDays", "deletedAt", "updatedAt", "futsal",
 ] as const;
 
-/** The Sports categories' ids among held records and received changes (267). */
+/** The ids of the categories that count as sport, among held records and received changes (267, 278). */
 export function sportsIn(records: Record<string, Rec>, received: Change[]): Set<number> {
   const cats = new Map<number, Category>();
   for (const c of recordsOfKind<Category>(records, "categories")) cats.set(c.id, c);
@@ -94,7 +95,7 @@ export function sportsIn(records: Record<string, Rec>, received: Change[]): Set<
 
 /**
  * What of the received changes this script keeps: the kinds above, the ticks (completions: an item id and
- * a day), the categories cut to their id and name, and of the calendar only the games' events (futsal and
+ * a day), the categories cut to their id, name and sport switch (278), and of the calendar only the games' events (futsal and
  * the Sports category's, items 240 and 267, [sports] being its ids), cut to FUTSAL_FIELDS. An event that
  * stops being a game is dropped (kept as a delete).
  */
@@ -104,7 +105,7 @@ export function keptChanges(received: Change[], sports: ReadonlySet<number> = ne
     if (keptKind(c.kind) || c.kind === "completions") out.push(c);
     else if (c.kind === "categories") {
       const cat = c.data as unknown as Category | null;
-      out.push(cat ? { ...c, data: { id: cat.id, name: cat.name } } : c);
+      out.push(cat ? { ...c, data: { id: cat.id, name: cat.name, ...(typeof cat.sport === "boolean" ? { sport: cat.sport } : {}) } } : c);
     } else if (c.kind === "items") {
       const it = c.data as unknown as Item | null;
       out.push(it && isGame(it, sports) ? { ...c, data: Object.fromEntries(FUTSAL_FIELDS.filter((f) => f in it).map((f) => [f, it[f]])) } : { ...c, data: null });

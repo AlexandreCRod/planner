@@ -135,3 +135,21 @@ test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linke
   // Nothing pushed yet: the folder's runs.json.
   assert.match(healthCsvs({}, plan, runsJson("Folder")).get("runs.csv")!, /Folder/);
 });
+
+test("pull keeps the categories' sport switch, and the sports follow it (278)", () => {
+  assert.equal(KEPT_VERSION, 5);
+  const received = [
+    { kind: "categories", id: "5", data: { id: 5, name: "Sports", color: 1, defaultAlert: "ALARM", sport: false } },
+    { kind: "categories", id: "7", data: { id: 7, name: "Running club", color: 1, defaultAlert: "ALARM", sport: true } },
+    { kind: "items", id: "1", data: { id: 1, type: "EVENT", title: "Tennis", categoryId: 5, startDay: 1 } },
+    { kind: "items", id: "2", data: { id: 2, type: "EVENT", title: "Parkrun", categoryId: 7, startDay: 1 } },
+  ];
+  const sports = sportsIn({ "categories/9": { id: 9, name: "Sport" } }, received);
+  assert.deepEqual([...sports].sort(), [7, 9]);
+  const out = keptChanges(received, sports);
+  assert.deepEqual(out.map((c) => [c.kind, c.id, c.data === null ? null : JSON.stringify(c.data.sport ?? null)]), [
+    ["categories", "5", "false"], ["categories", "7", "true"], ["items", "1", null], ["items", "2", "null"],
+  ]);
+  // A held record with the switch keeps deciding.
+  assert.equal(sportsIn({ "categories/5": { id: 5, name: "Sports", sport: false } }, []).size, 0);
+});

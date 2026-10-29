@@ -84,3 +84,16 @@ test("without a Sports category, only 240's futsal shows (as before)", () => {
   const es = trainingEntries([plan], [], [event({ categoryId: null, title: "Futsal" }), event({ categoryId: 5, title: "Tennis" })], []);
   assert.deepEqual([...es.values()].map((e) => e.title), ["Futsal"]);
 });
+
+test("the Settings switch decides once set; until then the name does (278)", () => {
+  assert.equal(isSportsCategory({ name: "Sports", sport: false }), false);
+  assert.equal(isSportsCategory({ name: "Futsal club", sport: true }), true);
+  assert.equal(isSportsCategory({ name: "Futsal club" }), false);
+  assert.equal(isSportsCategory({ name: "Sports" }), true);
+  const picked = sportsCategoryIds([{ ...cat(5, "Sports"), sport: false }, { ...cat(7, "Running club"), sport: true }, { ...cat(8, "Gym"), sport: true }, cat(9, "Sport")]);
+  assert.deepEqual([...picked].sort(), [7, 8, 9]);
+  // An event of a category switched off leaves Training; one switched on joins it.
+  assert.equal(gameKind(event({ categoryId: 5, title: "Tennis" }), picked), null);
+  assert.equal(gameKind(event({ categoryId: 7, title: "Parkrun" }), picked), "sport");
+  assert.equal(gameKind(event({ categoryId: 8, title: "Futsal" }), picked), "futsal");
+});

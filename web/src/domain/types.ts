@@ -76,7 +76,12 @@ export interface Item {
 
 export interface Completion { itemId: number; day: number; completedAt: number }
 export interface Reminder { id: number; itemId: number; offsetMin: number; type: AlertType; soundUri: string | null }
-export interface Category { id: number; name: string; color: number; defaultAlert: AlertType }
+export interface Category {
+  id: number; name: string; color: number; defaultAlert: AlertType;
+  /** Counts as sport on Training (278, Settings): its events are games there. Missing until the user picks
+   *  for it, and then the name decides (domain/training.ts isSportsCategory). */
+  sport?: boolean;
+}
 export interface Tag { id: number; name: string }
 export interface ItemTag { itemId: number; tagId: number }
 export interface Link { sourceId: number; targetId: number; auto: boolean }
