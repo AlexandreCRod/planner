@@ -72,15 +72,15 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   // The tab shown, kept here as well as in the route, so a swipe's new page is drawn at once (248); a route
   // changed from elsewhere (back, a link) still wins.
   const [tab, setTabState] = useState<Tab>(wantedTab);
-  const lastWanted = useRef(wantedTab);
-  if (lastWanted.current !== wantedTab) { lastWanted.current = wantedTab; if (tab !== wantedTab) setTabState(wantedTab); }
+  const [lastWanted, setLastWanted] = useState<Tab>(wantedTab);
+  if (lastWanted !== wantedTab) { setLastWanted(wantedTab); setTabState(wantedTab); }
   const index = TABS.findIndex(([k]) => k === tab);
   const idx = useRef(index);
   idx.current = index;
   const setIndex = (i: number) => {
     const k = TABS[clampTab(i)][0];
     idx.current = clampTab(i);
-    lastWanted.current = k;
+    setLastWanted(k);
     setTabState(k);
     replaceRoute(route(k, null, planId));
   };
@@ -169,9 +169,10 @@ function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan
     } as Record<string, string>)[tab] ?? "Runs show here once the plan session sends runs.json."}</EmptyHint>}
     {rows.map((r) => {
       const head = r.group !== group ? r.group : null;
+      const first = group === "" && tab !== "nutrition";
       group = r.group;
       return <div key={r.id}>
-        {head && <div className="pg-group">{head}</div>}
+        {head && <div className={`pg-group ${first ? "first" : ""}`}>{head}</div>}
         <div className={`pg-row ${sel === r.id ? "sel" : ""} ${r.open === false ? "still" : ""}`} role={r.open === false ? undefined : "button"}
           onClick={r.open === false ? undefined : () => onOpen(r.id)}>
           <div className="n"><b>{r.name}</b><span>{r.sub}</span></div>
