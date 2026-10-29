@@ -226,6 +226,9 @@ export function PhoneApp() {
     setTab(i);
     setMounted((m) => (m.has(TABS[i].key) ? m : new Set([...m, TABS[i].key])));
   }, [TABS, pos]);
+  // The render that brings the new bar comes before that effect, so it reads the page by its key too: the
+  // old index could be past the end of a shorter bar (a crash on the phone, 2026-10-29).
+  const shown = tabsRef.current === TABS ? tab : Math.max(0, TABS.findIndex((x) => x.key === tabsRef.current[tabRef.current]?.key));
   useLayoutEffect(() => pos.paint(), [wide, pos]);
   const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
@@ -407,12 +410,12 @@ export function PhoneApp() {
   useEffect(() => () => setDeskHandlers(null), []);
 
   return (
-    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[tab].key === "notes" ? "notes-split" : ""} ${TABS[tab].key === "training" ? "on-training" : ""}`}>
+    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[shown].key === "notes" ? "notes-split" : ""} ${TABS[shown].key === "training" ? "on-training" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
         <div className="p-track" ref={(el) => { pos.track = el; if (el) pos.paint(); }}>
           {TABS.map((t, i) => (
-            <div key={t.key} className="p-page" data-tab={t.key} ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== tab}>
-              {mounted.has(t.key) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={tab === i && !overlay}
+            <div key={t.key} className="p-page" data-tab={t.key} ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== shown}>
+              {mounted.has(t.key) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={shown === i && !overlay}
                 query={t.key === "training" ? trainingQ.current : null} />}
               {/* Wide, the open note shows beside the list; with none open, a word on where it goes. */}
               {wide && t.key === "notes" && (
@@ -426,7 +429,7 @@ export function PhoneApp() {
           ))}
         </div>
       </div>
-      <BottomBar tabs={TABS} pos={pos} start={tab} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
+      <BottomBar tabs={TABS} pos={pos} start={shown} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
       {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what
           to add. Wide, it heads the rail, which stays beside full-screen pages. On the phone it fades away over
           Training, which adds nothing with it (phone.css, on-training). */}
