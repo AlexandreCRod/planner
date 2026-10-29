@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
 import type { HealthDay } from "../src/domain/health.ts";
-import { progressTabOf, avg7LineOf, avg7Of, bodySeries, fmtSteps, lastWeighInLine, shortWhen } from "../src/domain/body.ts";
+import { progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths } from "../src/domain/body.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -70,4 +70,19 @@ test("progressTabOf: the old Weight and Sleep tabs open Body (251)", () => {
   assert.equal(progressTabOf("runs"), "runs");
   assert.equal(progressTabOf(null), "lifts");
   assert.equal(progressTabOf("nonsense"), "lifts");
+});
+
+test("steps' average leaves out today's count, still growing; other kinds count today (266)", () => {
+  const t = d("2026-10-29");
+  const pts = Array.from({ length: 8 }, (_, i) => ({ day: t - 7 + i, v: i === 7 ? 1000 : 8000 })); // today: 1000 so far
+  assert.equal(avgNow("steps", pts, t), 8000);                  // the 7 whole days before today
+  assert.equal(avgNow("spo2", pts, t), (6 * 8000 + 1000) / 7);   // the 7 days to today
+  assert.equal(settled("steps", pts, t).length, 7);
+  assert.equal(avgNow("steps", pts.slice(0, 3), t), 8000);       // no reading today: the 7 days to the last
+  assert.equal(avgNow("steps", [], t), null);
+  assert.equal(avgNow("steps", [{ day: t, v: 500 }], t), null);  // only today's: no average yet
+});
+
+test("signedTenths: a change with its sign and always one decimal (266)", () => {
+  assert.deepEqual([1, -0.4, 0, 0.04, -0.06, 2.25, -12].map(signedTenths), ["+1.0", "−0.4", "0.0", "0.0", "−0.1", "+2.3", "−12.0"]);
 });

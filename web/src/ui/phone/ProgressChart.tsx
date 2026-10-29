@@ -22,7 +22,8 @@ export const SLEEP = "#c06cb8", SLEEP_DIM = "#864d81";
 /** One reading. [mark]: drawn hollow (an assumed RPE) or as a lower bound (history with no RPE). */
 export interface Pt { day: number; v: number; mark?: "hollow" | "lower" }
 export type Series =
-  | { kind: "line"; pts: Pt[]; color: string; area?: boolean; dots?: boolean }
+  /** [gap]: the line breaks where readings are more than this many days apart (266: no straight line over weeks of nothing). */
+  | { kind: "line"; pts: Pt[]; color: string; area?: boolean; dots?: boolean; gap?: number }
   | { kind: "dots"; pts: Pt[]; color: string; r?: number }
   /** One bar per [span] days from its day (a week by default). */
   | { kind: "bars"; pts: Pt[]; color: string; span?: number }
@@ -153,7 +154,8 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
       return;
     }
     if (s.kind === "line" && s.pts.length) {
-      const path = s.pts.map((p, i) => `${i ? "L" : "M"}${x(p.day)},${y(p.v)}`).join("");
+      const gap = s.gap ?? Infinity;
+      const path = s.pts.map((p, i) => `${i && p.day - s.pts[i - 1].day <= gap ? "L" : "M"}${x(p.day)},${y(p.v)}`).join("");
       if (s.area && s.pts.length > 1) {
         drawn.push(<path key={`${k}a`} d={`M${x(s.pts[0].day)},${base}${path.replace(/^M/, "L")}L${x(s.pts[s.pts.length - 1].day)},${base}Z`} fill={s.color} fillOpacity={0.1} />);
       }
@@ -195,8 +197,13 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   );
 }
 
-/** A list row's small line (the last reading dotted) or bars, from oldest to newest; [invert]: low at the top. */
-export function Spark({ values, color, bars = false, invert = false }: { values: readonly number[]; color: string; bars?: boolean; invert?: boolean }) {
+/**
+ * A list row's small line (the last reading dotted) or bars, from oldest to newest; [invert]: low at the top.
+ * [days]: the readings' days, so a line is spaced by time and breaks over more than [gap] days without one (266).
+ */
+export function Spark({ values, color, bars = false, invert = false, days, gap = Infinity }: {
+  values: readonly number[]; color: string; bars?: boolean; invert?: boolean; days?: readonly number[]; gap?: number;
+}) {
   const W = 74, H = 26;
   if (!values.length) return <svg className="pg-spark" width={W} height={H} aria-hidden />;
   const mn = Math.min(...values, ...(bars ? [0] : [])), mx = Math.max(...values);
@@ -209,11 +216,13 @@ export function Spark({ values, color, bars = false, invert = false }: { values:
       </svg>
     );
   }
-  const X = (i: number) => (values.length === 1 ? 71 : 3 + 68 * i / (values.length - 1)), Y = (v: number) => 22 - 18 * f(v);
+  const d0 = days?.[0] ?? 0, span = days ? days[days.length - 1] - d0 : values.length - 1;
+  const X = (i: number) => (span <= 0 ? 71 : 3 + 68 * ((days ? days[i] - d0 : i) / span)), Y = (v: number) => 22 - 18 * f(v);
   const last = values.length - 1;
+  const cut = (i: number) => !!days && days[i] - days[i - 1] > gap;
   return (
     <svg className="pg-spark" width={W} height={H} aria-hidden>
-      {values.length > 1 && <path d={values.map((v, i) => `${i ? "L" : "M"}${X(i)},${Y(v)}`).join("")} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+      {values.length > 1 && <path d={values.map((v, i) => `${i && !cut(i) ? "L" : "M"}${X(i)},${Y(v)}`).join("")} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
       <circle cx={X(last)} cy={Y(values[last])} r={3.5} fill={color} className="pg-ring-bg" strokeWidth={2} />
     </svg>
   );

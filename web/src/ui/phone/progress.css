@@ -43,7 +43,8 @@
 .phone .pg-head { height: 56px; }
 .phone .pg-hv { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-top: 2px; font-size: 34px; line-height: 44px; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .pg-hv small { font-size: 14px; color: var(--muted); }
-.phone .pg-chip { align-self: center; padding: 2px 8px; border-radius: 8px; background: var(--p-sc-high, var(--surface-2)); font-size: 13px; line-height: 18px; color: var(--text); }
+/* The headline's chip ("7-day avg 7 h 32", "−0.4 kg / week"): its own class, since the calendar's month grid has .pg-chip (266). */
+.phone .pg-hchip { align-self: center; padding: 3px 10px; border-radius: 8px; background: var(--p-sc-high, var(--surface-2)); font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text); white-space: nowrap; }
 .phone .pg-ro .a { margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
 .phone .pg-ro .b { font-size: 24px; line-height: 32px; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .pg-ro .b small { font-size: 13px; color: var(--muted); }

@@ -262,6 +262,38 @@ test("day: other types go in extra, an unknown one as a count", () => {
   assert.deepEqual(d.extra, { heightM: 1.82, bmrKcal: 1754.08, SkinTemperatureCount: 1 });
 });
 
+test("day: a record over midnight is shared out between the two days by its time on each (266)", () => {
+  const raw: RawByType = { Steps: [interval("x", at("2026-10-27T23:30:00"), at("2026-10-28T00:30:00"), { count: 1000 })] };
+  const tue = dayOf("2026-10-27")!;
+  assert.deepEqual(daysOf(raw, tue, tue + 2, 0).map((d) => [d.id, d.steps]), [["hcd:2026-10-27", 500], ["hcd:2026-10-28", 500]]);
+  // One that ends on the stroke of midnight stays on its day.
+  const raw2: RawByType = { Steps: [interval("y", at("2026-10-27T23:00:00"), at("2026-10-28T00:00:00"), { count: 800 })] };
+  assert.deepEqual(daysOf(raw2, tue, tue + 2, 0).map((d) => [d.id, d.steps]), [["hcd:2026-10-27", 800]]);
+});
+
+test("day: a night's HRV, blood oxygen and breathing go to the morning it ends; by-day spot checks don't count then (266)", () => {
+  const night = interval("n", at("2026-10-27T23:00:00"), at("2026-10-28T07:00:00"), {});
+  const nap = interval("nap", at("2026-10-28T14:00:00"), at("2026-10-28T15:00:00"), {});
+  const raw: RawByType = {
+    SleepSession: [night, nap],
+    HeartRateVariabilityRmssd: [instant("v1", at("2026-10-27T23:40:00"), { heartRateVariabilityMillis: 40 }), instant("v2", at("2026-10-28T03:00:00"), { heartRateVariabilityMillis: 50 })],
+    OxygenSaturation: [
+      instant("o1", at("2026-10-28T02:00:00"), { percentage: 95 }), instant("o2", at("2026-10-28T12:00:00"), { percentage: 99 }), // a spot check by day
+      instant("o3", at("2026-10-28T14:30:00"), { percentage: 90 }), // in a nap: by day too
+      instant("o4", at("2026-10-27T12:00:00"), { percentage: 97 }), // a day with no night: its own day
+    ],
+    RespiratoryRate: [instant("r1", at("2026-10-27T23:30:00"), { rate: 14 })],
+  };
+  const tue = dayOf("2026-10-27")!;
+  const [d27, d28] = daysOf(raw, tue, tue + 2, 0);
+  assert.equal(d27.hrvMs, null);
+  assert.equal(d28.hrvMs, 45);          // (40 + 50) ÷ 2, both on the morning
+  assert.equal(d28.spo2, 95);           // only the night's
+  assert.equal(d27.spo2, 97);
+  assert.equal(d28.respiration, 14);
+  assert.equal(d27.respiration, null);
+});
+
 test("days outside the window aren't made", () => {
   const raw = dayRaw();
   const wed = dayOf("2026-10-28")!;

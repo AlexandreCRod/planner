@@ -384,14 +384,48 @@ export function daysOf(raw: RawByType, from: number, to: number, now: number): H
     for (const r of raw[type] ?? []) { const day = dayOfRecord(r); if (inRange(day)) m.set(day, [...(m.get(day) ?? []), r]); }
     return m;
   };
+  // A day's totals run from local midnight to midnight (266): a record over midnight (a walk, a night's
+  // steps) is shared out between the two days by its time on each.
   const total = (type: string, field: string, set: (d: HealthDay, v: number) => void) => {
-    for (const [day, rs] of byDay(type)) { const v = sumIn(rs, field, -Infinity, Infinity); if (v !== null) set(get(day), v); }
+    const m = new Map<number, { rs: RawRecord[]; off: number }>();
+    for (const r of raw[type] ?? []) {
+      const off = offsetMs(r), s = startOf(r);
+      const a = localDay(s, off), b = Math.min(a + 2, Math.max(a, localDay(Math.max(s, endOf(r) - 1), off)));
+      for (let day = a; day <= b; day++) {
+        if (!inRange(day)) continue;
+        const e = m.get(day);
+        if (e) e.rs.push(r); else m.set(day, { rs: [r], off });
+      }
+    }
+    for (const [day, { rs, off }] of m) { const v = sumIn(rs, field, day * DAY_MS - off, (day + 1) * DAY_MS - off); if (v !== null) set(get(day), v); }
+  };
+  // The nights (not naps: those start after 10:00 on the day they end), for the overnight readings below.
+  const sleeps = (raw.SleepSession ?? []).flatMap((r) => {
+    const s = startOf(r), e = endOf(r), off = offsetMs(r), offEnd = offsetMs(r, "endZoneOffset");
+    const day = localDay(e, offEnd);
+    return localDay(s, off) === day && localTime(s, off) >= "10:00" ? [] : [{ s, e, day }];
+  });
+  /**
+   * HRV, blood oxygen and breathing rate: a night's readings belong to the morning it ends (266: one after
+   * midnight and one before went to two days), and a day with any taken asleep averages only those, so a
+   * spot check by day doesn't count in the overnight figure. Readings outside a night go by their own day.
+   */
+  const overnight = (type: string, field: string, places: number, set: (d: HealthDay, v: number) => void) => {
+    const m = new Map<number, { asleep: number[]; awake: number[] }>();
+    for (const r of raw[type] ?? []) {
+      const v = num(r[field]);
+      if (v === null) continue;
+      const t = startOf(r), night = sleeps.find((n) => t >= n.s && t <= n.e);
+      const day = night ? night.day : dayOfRecord(r);
+      if (!inRange(day)) continue;
+      let e = m.get(day);
+      if (!e) m.set(day, e = { asleep: [], awake: [] });
+      (night ? e.asleep : e.awake).push(v);
+    }
+    for (const [day, { asleep, awake }] of m) { const v = mean(asleep.length ? asleep : awake); if (v !== null) set(get(day), round(v, places)); }
   };
   const values = (rs: RawRecord[], field: string) => rs.map((r) => num(r[field])).filter((v): v is number => v !== null);
   const latest = (rs: RawRecord[], field: string) => { const r = [...rs].sort((a, b) => startOf(b) - startOf(a)).find((x) => num(x[field]) !== null); return r ? num(r[field]) : null; };
-  const avgOf = (type: string, field: string, places: number, set: (d: HealthDay, v: number) => void) => {
-    for (const [day, rs] of byDay(type)) { const v = mean(values(rs, field)); if (v !== null) set(get(day), round(v, places)); }
-  };
 
   total("Steps", "count", (d, v) => { d.steps = Math.round(v); });
   total("Distance", "distance", (d, v) => { d.distanceKm = round(v / 1000, 2); });
@@ -401,9 +435,9 @@ export function daysOf(raw: RawByType, from: number, to: number, now: number): H
   total("ElevationGained", "elevation", (d, v) => { d.ascentM = Math.round(v); });
   for (const [day, rs] of byDay("RestingHeartRate")) { const v = latest(rs, "beatsPerMinute"); if (v !== null) get(day).restingHr = Math.round(v); }
   for (const [day, rs] of byDay("Vo2Max")) { const v = latest(rs, "vo2MillilitersPerMinuteKilogram"); if (v !== null) get(day).vo2max = round(v, 1); }
-  avgOf("HeartRateVariabilityRmssd", "heartRateVariabilityMillis", 0, (d, v) => { d.hrvMs = v; });
-  avgOf("OxygenSaturation", "percentage", 1, (d, v) => { d.spo2 = v; });
-  avgOf("RespiratoryRate", "rate", 1, (d, v) => { d.respiration = v; });
+  overnight("HeartRateVariabilityRmssd", "heartRateVariabilityMillis", 0, (d, v) => { d.hrvMs = v; });
+  overnight("OxygenSaturation", "percentage", 1, (d, v) => { d.spo2 = v; });
+  overnight("RespiratoryRate", "rate", 1, (d, v) => { d.respiration = v; });
 
   // Heart rate: every sample by its own local day.
   const hr = new Map<number, number[]>();

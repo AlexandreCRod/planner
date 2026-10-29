@@ -55,6 +55,20 @@ export function avg7LineOf(points: readonly BodyPoint[]): { day: number; v: numb
   return points.map((p) => ({ day: p.day, v: avg7Of(points, p.day)! }));
 }
 
+/** The readings an average counts: steps leave out [today]'s, which is still growing (266); the rest all. */
+export const settled = (kind: BodyKind, points: readonly BodyPoint[], today: number): readonly BodyPoint[] =>
+  kind === "steps" ? points.filter((p) => p.day < today) : points;
+
+/**
+ * The 7-day average a row and its card show now: over the 7 days to the last reading, and for steps over
+ * the 7 whole days before today when today's count is in (266: a half-day's steps pulled it down).
+ */
+export function avgNow(kind: BodyKind, points: readonly BodyPoint[], today: number): number | null {
+  const base = settled(kind, points, today);
+  const last = base[base.length - 1];
+  return last ? avg7Of(base, last.day) : null;
+}
+
 /** When a reading was, short: "today", the weekday ("Wed") within the last 6 days, else "27 Oct" (with the year when not this one). */
 export function shortWhen(day: number, today: number): string {
   if (day === today) return "today";
@@ -68,3 +82,9 @@ export const lastWeighInLine = (kg: number, day: number, today: number) => `Last
 
 /** "8,412": steps with a thousands comma. */
 export const fmtSteps = (v: number) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+/** "+1.0", "−0.4", "0.0": a change to 0.1 with its sign, the decimal always written (266: body fat's "+1"). */
+export function signedTenths(v: number): string {
+  const r = Math.round(v * 10) / 10;
+  return r > 0 ? `+${r.toFixed(1)}` : r < 0 ? `−${(-r).toFixed(1)}` : "0.0";
+}

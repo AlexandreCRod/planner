@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { HealthDay } from "../src/domain/health.ts";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
   type Hidden, type Run, type WeighIn, bodyWeights, hiddenId, hiddenWeighIns, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
   readRuns, readSleep, readWeights, rpeFor, sourceName,
-  targetRpeOf, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
+  targetRpeOf, healthWeighIns, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
 const d = (iso: string) => dayOf(iso)!;
@@ -169,6 +170,32 @@ test("trend at a day, and its change over a week", () => {
   assert.equal(weeklyChange(t, 104), null);               // nothing a week before
   assert.equal(weeklyChange(t, 99), null);
   assert.equal(weeklyChange([]), null);
+});
+
+test("a week's change needs a weigh-in near the week's start, not one before a gap of weeks (266)", () => {
+  const t = weightTrend([w(50, 82.4), w(51, 82.4), w(98, 84.4), w(99, 84.2)]);
+  assert.equal(weeklyChange(t), null);                   // 99 against 51: 48 days, not a week
+  assert.equal(weeklyChange(t, 98), null);
+  const u = weightTrend([w(90, 84), w(99, 83.5)]);
+  close(weeklyChange(u), u[1].trend - 84);               // 9 days before: still counts
+});
+
+test("the scale's weigh-ins from Health Connect join the history, one per weigh-in (266)", () => {
+  const hd = (day: number, weighIns: { time: string; kg: number; fatPct: number | null; source: string }[]) =>
+    ({ id: `hcd:${day}`, day, weighIns } as unknown as HealthDay);
+  const list = healthWeighIns([
+    hd(20000, [{ time: "08:10", kg: 82.34, fatPct: 18, source: "com.withings.wiscale2" }, { time: "08:12", kg: 82.3, fatPct: null, source: "com.garmin.android.apps.connectmobile" }]),
+    hd(20001, [{ time: "08:00", kg: 82.1, fatPct: null, source: "x" }, { time: "20:30", kg: 83.0, fatPct: null, source: "x" }]),
+  ]);
+  assert.deepEqual(list.map((x) => [x.day, x.time, x.kg, x.source]), [
+    [20000, "08:10", 82.3, "health_connect"], // the same weigh-in from two apps: once
+    [20001, "08:00", 82.1, "health_connect"], [20001, "20:30", 83, "health_connect"],
+  ]);
+  assert.equal(list[0].id, "hcw:2024-10-04T08:10");
+  // Planner's own beats Health Connect's on the same day; Health Connect's beats Garmin's history.
+  const all = bodyWeights([{ id: "o", day: 20001, time: "07:00", kg: 81.9, note: "", updatedAt: 1, deletedAt: null }],
+    [...list, { id: "g", day: 20000, time: "07:00", kg: 85, source: "garmin", note: "" }]);
+  assert.deepEqual(all.map((x) => [x.day, x.source]), [[20000, "health_connect"], [20001, "planner"]]);
 });
 
 test("bodyweight.csv: sorted, deleted ones left out, notes quoted like the other CSVs", () => {

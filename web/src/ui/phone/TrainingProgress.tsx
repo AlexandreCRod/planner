@@ -14,9 +14,9 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
-import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, bodySeries, fmtSteps, lastWeighInLine, shortWhen } from "../../domain/body.ts";
+import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths } from "../../domain/body.ts";
 import {
-  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
+  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, healthWeighIns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
   weeklyHardSets, weeklyKm, weightTrend,
 } from "../../domain/trends.ts";
 import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
@@ -59,6 +59,12 @@ const km1 = (km: number) => String(Math.round(km * 10) / 10);
 const signed1 = (v: number) => { const r = Math.round(v * 10) / 10; return r > 0 ? `+${r}` : r < 0 ? `−${-r}` : "0"; };
 const from = (source: string | null) => { const n = sourceName(source); return n ? `from ${n}` : ""; };
 const join = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(" · ");
+
+/**
+ * Where a chart's line breaks (266): the 7-day average over more than 7 days without a reading has nothing to
+ * average; the weight trend over more than 2 weeks without a weigh-in jumps to the new weight.
+ */
+const AVG_GAP = 7, TREND_GAP = 14;
 
 // ---------- The page ----------
 
@@ -257,7 +263,7 @@ function ChartCard({ title, head, read, children, foot }: {
 
 /** The headline: a big number, a small word after it, and a chip with the change. */
 const Head = ({ value, unit, chip }: { value: string; unit: string; chip?: string | null }) => (
-  <div className="pg-hv">{value}<small>{unit}</small>{chip && <span className="pg-chip">{chip}</span>}</div>
+  <div className="pg-hv">{value}<small>{unit}</small>{chip && <span className="pg-hchip">{chip}</span>}</div>
 );
 const Empty = () => <div className="pg-none">Nothing in this range.</div>;
 
@@ -535,8 +541,11 @@ function RunCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
 
 // ---------- Weight ----------
 
+/** Every weigh-in shown: the user's own, the history's and the scale's from Health Connect (266). */
+const allWeights = (tr: Training) => bodyWeights(tr.weighIns, [...tr.pastWeighIns, ...healthWeighIns(tr.healthDays)], tr.hiddenWeighIns);
+
 function weightData(tr: Training) {
-  const all = bodyWeights(tr.weighIns, tr.pastWeighIns, tr.hiddenWeighIns);
+  const all = allWeights(tr);
   return { all, trend: weightTrend(all) };
 }
 
@@ -548,7 +557,7 @@ function weightRows(tr: Training, since: number | null, t: number): Row[] {
     rows.push({
       // The trend and its weekly change, with the last weigh-in under the name (250).
       id: "w", group: "Weight", name: "Trend", sub: lastWeighInLine(w.kg, w.day, t),
-      spark: <Spark values={recent.map((p) => p.trend)} color={WEIGHT} />, value: last.trend.toFixed(1), valueSub: wk !== null ? `${signed1(wk)} kg/wk` : "",
+      spark: <Spark values={recent.map((p) => p.trend)} days={recent.map((p) => p.day)} gap={TREND_GAP} color={WEIGHT} />, value: last.trend.toFixed(1), valueSub: wk !== null ? `${signedTenths(wk)} kg/wk` : "",
     });
   }
   return rows;
@@ -590,7 +599,7 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
   return <>
     <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />
     <ChartCard title="Weight" read={read}
-      head={last ? <Head value={last.trend.toFixed(1)} unit="kg trend" chip={wk !== null ? `${signed1(wk)} kg / week` : null} /> : <Head value="–" unit="kg" />}
+      head={last ? <Head value={last.trend.toFixed(1)} unit="kg trend" chip={wk !== null ? `${signedTenths(wk)} kg / week` : null} /> : <Head value="–" unit="kg" />}
       foot={<>
         <div className="pg-leg"><span><i className="ln" style={{ background: WEIGHT }} />Trend</span><span><i className="dt" style={{ background: WEIGHT_DIM }} />Each weigh-in</span></div>
         <div className="pg-foot">One weigh-in can swing 1–2 kg with water; follow the line. A day with several weigh-ins counts their average.</div>
@@ -598,7 +607,7 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
       {shown.length
         ? <Chart series={[
             { kind: "dots", r: 3, color: WEIGHT_DIM, pts: raw.map((w) => ({ day: w.day, v: w.kg })) },
-            { kind: "line", dots: false, color: WEIGHT, pts: shown.map((q) => ({ day: q.day, v: q.trend })) },
+            { kind: "line", dots: false, color: WEIGHT, gap: TREND_GAP, pts: shown.map((q) => ({ day: q.day, v: q.trend })) },
           ]} domain={span.domain} today={t} height={150} fmt={(v) => String(v)} reads={shown.map((q) => q.day)} onRead={setAt}
             onTap={(i) => openDay(shown[i].day)} />
         : <Empty />}
@@ -632,9 +641,10 @@ function sleepRows(tr: Training, t: number): Row[] {
     const last = list[list.length - 1];
     if (!last) { rows.push(emptyRow(id, "Sleep", name, "Nothing from the watch yet")); return; }
     const avg = avg7(tr.sleep, field, last.day);
+    const recent = list.slice(bars ? -10 : -14);
     rows.push({
       id, group: "Sleep", name, sub: whenOf(last.day, t, today),
-      spark: <Spark bars={bars} values={list.slice(bars ? -10 : -14).map((n) => n[field]!)} color={SLEEP} />,
+      spark: <Spark bars={bars} values={recent.map((n) => n[field]!)} days={recent.map((n) => n.day)} gap={AVG_GAP} color={SLEEP} />,
       value: value(last[field]!), valueSub: avg !== null ? `avg ${value(avg)}` : "",
     });
   };
@@ -688,7 +698,7 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
       read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
       head={<Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} />}
       foot={<>{legend("Each night")}<div className="pg-foot">Under 6 h before a quality or long run puts a moon on that session.</div></>}>
-      {chart([each, { kind: "line", dots: false, color: SLEEP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars })}
+      {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars })}
     </ChartCard></>;
   }
 
@@ -699,7 +709,7 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
       head={<Head value={String(last.restingHr)} unit={`bpm ${whenOf(last.day, t, "this morning")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
       foot={<>{legend("Each morning", rings.length > 0 && <span><i className="ho" style={{ borderColor: PAIN }} />Up 7+ two mornings running</span>)}
         <div className="pg-foot">7 or more above your 7-day average two mornings running puts a quiet marker on the day.</div></>}>
-      {chart([{ kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.restingHr! })) }, { kind: "line", dots: false, color: SLEEP, pts: avgPts }], { rings })}
+      {chart([{ kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.restingHr! })) }, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts }], { rings })}
     </ChartCard></>;
   }
 
@@ -712,7 +722,7 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
     head={<Head value={String(last.hrvMs)} unit={`ms ${whenOf(last.day, t, "last night")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
     foot={<>{legend("Each night", band.length > 0 && <span><i className="bd" style={{ background: SLEEP }} />Your normal range</span>)}
       <div className="pg-foot">{range ? `Normal for you: ${Math.round(range.lo)}–${Math.round(range.hi)} ms, the last 60 nights' average ± 1 SD. ` : ""}A few nights in a row below the band: make it an easy day.</div></>}>
-    {chart([{ kind: "band", color: SLEEP, pts: band }, { kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.hrvMs! })) }, { kind: "line", dots: false, color: SLEEP, pts: avgPts }])}
+    {chart([{ kind: "band", color: SLEEP, pts: band }, { kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.hrvMs! })) }, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts }])}
   </ChartCard></>;
 }
 
@@ -757,15 +767,15 @@ function bodyRows(tr: Training, since: number | null, t: number): Row[] {
     const list = seriesOf(tr, b.kind);
     const last = list[list.length - 1];
     if (!last) { if (!b.more) rows.push(emptyRow(id, b.group, b.name, "Nothing from the watch yet")); continue; } // More's rows only with data
-    const recent = inRange(list, since);
+    const recent = inRange(list, since), sparkPts = b.sub === "avg" ? list.slice(-14) : recent;
     let valueSub = "";
-    if (b.sub === "avg") { const a = avg7Of(list, last.day); if (a !== null) valueSub = `avg ${rowValue(b, a)}`; }
-    else if (recent.length > 1) valueSub = `${signed1(last.v - recent[0].v)} in 3M`;
+    if (b.sub === "avg") { const a = avgNow(b.kind, list, t); if (a !== null) valueSub = `avg ${rowValue(b, a)}`; }
+    else if (recent.length > 1) valueSub = `${signedTenths(last.v - recent[0].v)} in 3M`;
     rows.push({
       id, group: b.group, more: b.more, name: b.name, sub: last.day === t ? todayWord(b.kind) : shortWhen(last.day, t),
       // Daily readings: the last two weeks (as the sleep rows); slow ones (VO2 max, body fat): the row's 3 months.
       spark: b.kind === "steps" ? <Spark bars values={list.slice(-10).map((p) => p.v)} color={b.color} />
-        : <Spark values={(b.sub === "avg" ? list.slice(-14) : recent).map((p) => p.v)} color={b.color} />,
+        : <Spark values={sparkPts.map((p) => p.v)} days={sparkPts.map((p) => p.day)} gap={b.sub === "avg" ? AVG_GAP : undefined} color={b.color} />,
       value: rowValue(b, last.v), valueSub,
     });
   }
@@ -780,7 +790,9 @@ function bodyRows(tr: Training, since: number | null, t: number): Row[] {
 function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number }) {
   const kind = b.kind;
   const list = useMemo(() => seriesOf(tr, kind), [tr, kind]);
-  const line = useMemo(() => avg7LineOf(list), [list]);
+  // Steps' line and averages leave out today's count, still growing (266).
+  const base = useMemo(() => settled(kind, list, t), [kind, list, t]);
+  const line = useMemo(() => avg7LineOf(base), [base]);
   const span = useSpan(list.map((p) => p.day), t);
   const [at, setAt] = useState<number | null>(null);
   const switcher = <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />;
@@ -788,12 +800,12 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
   const shown = inRange(list, span.start);
   const avgPts = inRange(line, span.start);
   const last = list[list.length - 1], first = shown[0];
-  const lastAvg = avg7Of(list, last.day);
+  const lastAvg = avgNow(kind, list, t);
   const isSteps = kind === "steps", joined = kind === "vo2";
   const chip = b.sub === "avg" ? (lastAvg !== null ? `7-day avg ${rowValue(b, lastAvg)}` : null)
-    : shown.length > 1 ? `${signed1(last.v - first.v)} since ${dayMonth(first.day, t)}` : null;
+    : shown.length > 1 ? `${signedTenths(last.v - first.v)} since ${dayMonth(first.day, t)}` : null;
   const p: BodyPoint | null = at !== null ? shown[at] ?? null : null;
-  const pAvg = p && avg7Of(list, p.day);
+  const pAvg = p && (p.day >= t ? lastAvg : avg7Of(base, p.day));
   const read: [string, ReactNode] | null = p
     ? [join(formatDate(p.day), p.fromSleepJson && "from Garmin"), <>{rowValue(b, p.v)} <small>{join(b.unit !== "%" && b.unit, !joined && pAvg !== null && `7-day avg ${rowValue(b, pAvg)}`)}</small></>]
     : null;
@@ -804,7 +816,7 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
     ? [{ kind: "line", color: b.color, pts }]
     : [
       bars ? { kind: "bars", span: 1, color: b.dim, pts } : { kind: "dots", r: isSteps ? 2.5 : 3, color: b.dim, pts },
-      { kind: "line", dots: false, color: b.color, pts: avgPts.map((x) => ({ day: x.day + (bars ? 0.5 : 0), v: x.v })) },
+      { kind: "line", dots: false, color: b.color, gap: AVG_GAP, pts: avgPts.map((x) => ({ day: x.day + (bars ? 0.5 : 0), v: x.v })) },
     ];
   return <>{switcher}<ChartCard title={b.title} read={read}
     head={<Head value={b.fmt(last.v)} unit={`${b.unit} ${whenOf(last.day, t, todayWord(kind))}`} chip={chip} />}
@@ -826,7 +838,7 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
  */
 function WeighInSheet({ tr, t, edit, onClose }: { tr: Training; t: number; edit?: BodyWeight; onClose: () => void }) {
   const own = edit?.source === "planner" ? tr.weighIns.find((w) => w.id === edit.id) : undefined;
-  const lastKg = useMemo(() => { const all = bodyWeights(tr.weighIns, tr.pastWeighIns, tr.hiddenWeighIns); return all[all.length - 1]?.kg ?? 75; }, [tr]);
+  const lastKg = useMemo(() => allWeights(tr).at(-1)?.kg ?? 75, [tr]);
   const [kg, setKg] = useState<number | null>(Math.round((edit?.kg ?? lastKg) * 10) / 10);
   const done = (close: () => void, text: string, undo: () => void) => { feel("settle"); close(); showSnackbar(text, "Undo", undo); };
   const save = (close: () => void) => {

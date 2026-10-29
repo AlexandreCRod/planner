@@ -14,7 +14,7 @@
 //   is stored.
 // Days are epoch-day numbers (domain/dates.ts); weeks start on Monday.
 import { startOfWeek } from "./dates.ts";
-import type { HealthSplit } from "./health.ts";
+import type { HealthDay, HealthSplit } from "./health.ts";
 import {
   type Entry, type Lift, type LiftSet, type Plan, type Raw, type Range, arr, countedDay, csv, dayOf, entryId, futsalDay, isoOf, num, obj, range, sessionsOf, str,
 } from "./training.ts";
@@ -368,6 +368,31 @@ export function bodyWeights(own: Iterable<WeighIn>, past: Iterable<PastWeighIn> 
   return all.filter((w) => sourceRank(w.source) === best.get(w.day)).sort(byMoment);
 }
 
+/** Two of a day's Health Connect weigh-ins this close (minutes, kg) are one weigh-in written by two apps. */
+const SAME_WEIGH_MIN = 10, SAME_WEIGH_KG = 0.3;
+const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+/**
+ * The scale's weigh-ins from Health Connect (healthDays), as history weigh-ins of source "health_connect"
+ * (266: they were stored but never joined the trend). The same weigh-in written by two apps (within 10 min
+ * and 0.3 kg) counts once. Ids are "hcw:" + the day and time, so hiding one sticks across re-reads.
+ */
+export function healthWeighIns(days: Iterable<HealthDay>): PastWeighIn[] {
+  const out: PastWeighIn[] = [];
+  for (const d of days) {
+    const kept: PastWeighIn[] = [];
+    for (const w of d.weighIns ?? []) {
+      if (!(w.kg > 0)) continue;
+      if (kept.some((k) => Math.abs(minutesOf(k.time!) - minutesOf(w.time)) <= SAME_WEIGH_MIN && Math.abs(k.kg - w.kg) <= SAME_WEIGH_KG)) continue;
+      let id = `hcw:${isoOf(d.day)}T${w.time}`;
+      if (kept.some((k) => k.id === id)) id += `:${kept.length}`;
+      kept.push({ id, day: d.day, time: w.time, kg: Math.round(w.kg * 10) / 10, source: "health_connect", note: "" });
+    }
+    out.push(...kept);
+  }
+  return out;
+}
+
 /**
  * The weight trend from every weigh-in, whatever the time of day: one point a day, its weight the average
  * of the day's weigh-ins, as an exponentially weighted average that gives 10% of the gap to each new day's
@@ -394,11 +419,18 @@ export function trendAt(points: readonly WeightPoint[], day: number): number | n
   return null;
 }
 
-/** How much the trend moved over the 7 days to [day] (default: the last weigh-in); null if it has no value at either end. */
+/**
+ * How much the trend moved over the 7 days to [day] (default: the last weigh-in); null if it has no value at
+ * either end, or when the last weigh-in by the week's start is more than a week older (266: after a gap of
+ * weeks the trend jumps to the new weight, which isn't a week's change).
+ */
 export function weeklyChange(points: readonly WeightPoint[], day = points[points.length - 1]?.day): number | null {
   if (day === undefined) return null;
-  const now = trendAt(points, day), before = trendAt(points, day - 7);
-  return now === null || before === null ? null : now - before;
+  let b = -1;
+  for (let i = points.length - 1; i >= 0; i--) if (points[i].day <= day - 7) { b = i; break; }
+  const now = trendAt(points, day);
+  if (now === null || b < 0 || points[b].day < day - 14) return null;
+  return now - points[b].trend;
 }
 
 /** The name to give a source in "from …" ("FitNotes", "Garmin", "Strava"); null for the user's own (Planner) or none. */
