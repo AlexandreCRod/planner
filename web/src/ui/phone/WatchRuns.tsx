@@ -4,7 +4,7 @@
 // session?". It opens a short picker: the phase's run sessions not done, nearest days first, and "Not a plan
 // run", which hides the run for good.
 import { useEffect, useMemo, useState } from "react";
-import { formatDate } from "../../domain/dates.ts";
+import { formatDate, formatTime } from "../../domain/dates.ts";
 import { type WatchRunStep, hiddenRunId, tickedEntry, watchRunSteps } from "../../domain/healthRuns.ts";
 import { dayOfSession, entryFor, entryId } from "../../domain/training.ts";
 import { fmtKm } from "../../domain/trainingWeek.ts";
@@ -103,8 +103,10 @@ export function WatchStatsGrid({ stats, inset }: { stats: WatchStats; inset?: bo
   );
 }
 
-/** "From the watch · 19:02–20:04": the head over a session's stats. */
-export const watchHead = (s: HealthSession) => `From the watch · ${s.time}–${s.endTime}`;
+/** A session's local "HH:MM" as the app writes times ("7:02 PM" or "19:02"). */
+export const hhmm = (t: string) => (/^\d\d:\d\d$/.test(t) ? formatTime(Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))) : t);
+/** "From the watch · 7:02 PM – 8:04 PM": the head over a session's stats. */
+export const watchHead = (s: HealthSession) => `From the watch · ${hhmm(s.time)}${s.endTime ? ` – ${hhmm(s.endTime)}` : ""}`;
 
 /**
  * A football session from the watch that no game took (268): on its day, with its stats line; a tap opens
@@ -120,7 +122,7 @@ export function LooseWatchRow({ s }: { s: HealthSession }) {
       <span className="tr-bub k-futsal"><MIcon name={kindIcon("futsal")} size={18} /></span>
       <span className="tr-row-text">
         <span className="title">{title}</span>
-        <span className="detail">{["From the watch", s.time, statLine(st)].filter(Boolean).join(" · ")}</span>
+        <span className="detail">{["From the watch", hhmm(s.time), statLine(st)].filter(Boolean).join(" · ")}</span>
       </span>
     </div>
     {open && <BottomSheet onClose={() => setOpen(false)}>{() => (

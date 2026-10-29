@@ -40,6 +40,7 @@ import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
 import { training } from "../../store/training.ts";
+import { watchHead } from "./WatchRuns.tsx";
 
 // ---------- Shared bits ----------
 
@@ -771,7 +772,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {isEvent && day !== null && (() => {
           const w = training().watchGames.byGame.get(futsalLogId(item.id, day));
           return w ? <InfoRow icon="oAvTimer" tint={color} text={`From the watch · ${statLine(sessionStats(w, venueOf(w, item.title)))}`}
-            sub={`${w.time}–${w.endTime}`} onClick={() => go(`training?d=${day}`)} /> : null;
+            sub={watchHead(w).replace("From the watch · ", "")} onClick={() => go(`training?d=${day}`)} /> : null;
         })()}
         {/* A repeating task can be a routine: on Today's own checklist, missed days only end its streak. */}
         {canBeRoutine(item) && (
