@@ -6,7 +6,7 @@ import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTic
 import { SIZE_MARK, sizeStyle, withoutMarks } from "../../domain/textSize.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
-import { takesTap } from "./spellTap.ts";
+import { takesTap, tapInCaretWord } from "./spellTap.ts";
 import { showKeyboard } from "../phone/native.ts";
 import { type LinkActions, useLinkGesture } from "./linkGesture.ts";
 
@@ -301,7 +301,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A tap on a word places the caret here, so the WebView never opens its spelling pop-up over the
-  // keyboard (255; spellTap.ts). Long presses, drags, boxes, links and blank space stay the system's.
+  // keyboard (255; spellTap.ts). Long presses, drags, boxes, links and blank space stay the system's,
+  // and so does a tap on the word the caret is already in: that one opens the suggestions (263).
   useEffect(() => {
     const root = el.current;
     if (!root) return;
@@ -328,10 +329,12 @@ export const RichEditor = forwardRef<RichEditorHandle, {
       if (!takesTap(tap, t.data.slice(0, at), t.data.slice(at))) return;
       if (linksOn.current && linkInEditable(root, p.clientX, p.clientY)) return;
       if (onBoxAt(p.clientX, p.clientY)) return;
+      const sel = getSelection();
+      if (document.activeElement === root && sel?.isCollapsed && sel.anchorNode === t && tapInCaretWord(t.data, sel.anchorOffset, at)) return;
       e.preventDefault();
       last = { x: p.clientX, y: p.clientY, t: now };
       if (document.activeElement !== root) root.focus({ preventScroll: true });
-      getSelection()?.collapse(t, at);
+      sel?.collapse(t, at);
       caretPastBox();
       showKeyboard();
     };
