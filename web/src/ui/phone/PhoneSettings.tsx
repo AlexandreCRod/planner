@@ -2,7 +2,7 @@
 // TrashCategories.kt: section headers, Material 3 list rows with switches or a menu of choices, and
 // dialogs. Settings this build can't act on (backups, the widget, calendar import, wallpaper colours) are
 // left out. Values are the same local keys the PC settings use.
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useKeep, useKeptScroll } from "./keep.ts";
 import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatClock, formatDate, formatDateTime } from "../../domain/dates.ts";
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
@@ -32,6 +32,7 @@ import { count } from "../../domain/plural.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
 import { canUseHealth, connect, disconnect, healthFound, readNow, useHealth } from "../../health/healthConnect.ts";
 import { watchStatus } from "../../domain/healthRead.ts";
+import { LOOKS, type LookKey, look, setLook, useLooks } from "./looks.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -44,11 +45,15 @@ const LINGER: [string, string][] = [["-1", "Stay until you leave the page"], ["1
 const store = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
 /** A row that opens a menu of choices under it (DropdownRow). */
-function ChoiceRow<T extends string>({ title, value, options, onPick }: { title: string; value: T; options: [T, string][]; onPick: (v: T) => void }) {
+function ChoiceRow<T extends string>({ title, value, options, onPick, supporting }: {
+  title: ReactNode; value: T; options: [T, string][]; onPick: (v: T) => void;
+  /** The line under the title (else the chosen option's label). */
+  supporting?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="p-menu-anchor start wide">
-      <ListItem headline={title} supporting={options.find(([k]) => k === value)?.[1] ?? ""} onClick={() => setOpen(true)} />
+      <ListItem headline={title} supporting={supporting ?? options.find(([k]) => k === value)?.[1] ?? ""} onClick={() => setOpen(true)} />
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={options.map(([k, l]) => ({ label: l, checked: k === value, onClick: () => onPick(k) }))} />
     </div>
   );
@@ -222,6 +227,7 @@ export function PhoneSettings() {
           supporting={keepTasks ? "Tasks sits beside Training, so a swipe along the bar still reaches it"
             : "Off: to-dos without a date are on Today, dated tasks in the Calendar's Agenda"} checked={keepTasks}
           onChange={setKeepTasksTab} />
+        <ListItem headline="Looks to try" supporting="Other looks for some pages, to try side by side" onClick={() => go("settings/looks")} />
 
         <div className="p-hr" />
         <SectionHeader>Calendar</SectionHeader>
@@ -289,6 +295,52 @@ export function PhoneSettings() {
         </>}>{isNative ? "This removes this phone's copy." : "This removes this browser's copy."} Your data stays on the server and your other devices.</Dialog>
       )}
     </Scaffold>
+  );
+}
+
+// ---------- Looks to try ----------
+
+/**
+ * Every look that can be tried (looks.ts, roadmap 254), grouped by page: a switch of its choices (a menu
+ * when there are many), and a line saying what the chosen one is and which is the pick.
+ */
+export function PhoneLooks() {
+  useLooks();
+  const keys = Object.keys(LOOKS) as LookKey[];
+  const pages = [...new Set(keys.map((k) => LOOKS[k].page))];
+  return (
+    <Scaffold title="Looks to try" back flush>
+      <div className="p-content ps">
+        <div className="ps-pad ps-intro">Try other looks for now; the ones you don't keep go later. Each starts on your pick.</div>
+        {pages.map((page, i) => <div key={page}>
+          {i > 0 && <div className="p-hr" />}
+          <SectionHeader>{page}</SectionHeader>
+          {keys.filter((k) => LOOKS[k].page === page).map((k) => <LookRow key={k} k={k} />)}
+        </div>)}
+        <div className="p-endspace" />
+      </div>
+    </Scaffold>
+  );
+}
+
+function LookRow({ k }: { k: LookKey }) {
+  const l = LOOKS[k];
+  const v: string = look(k);
+  const choices = l.choices.map(([c, short]) => [c, short] as [string, string]);
+  const chosen = l.choices.find(([c]) => c === v);
+  const pick = l.choices.find(([c]) => c === l.pick)!;
+  const set = (c: string) => setLook(k, c as never);
+  const about = <>{chosen?.[2]}<span className="ps-pick">{v === l.pick ? " (your pick)" : ` · your pick is ${pick[1]}`}</span></>;
+  if (l.choices.length > 3) {
+    return <ChoiceRow title={`${l.title}: ${chosen?.[1] ?? ""}`} value={v} supporting={about} onPick={set}
+      options={l.choices.map(([c, short, what]) => [c, `${short}: ${what}${c === l.pick ? " (your pick)" : ""}`] as [string, string])} />;
+  }
+  return (
+    <div className="ps-pad ps-look">
+      <div className="ps-label">{l.title}</div>
+      <Segmented value={v} options={choices} onChange={set} />
+      <div className="ps-about">{about}</div>
+    </div>
   );
 }
 

@@ -38,6 +38,7 @@ import { TrainingFind } from "./TrainingFind.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
+import { useLooks } from "./looks.ts";
 import { WatchRunChips, useWatchRunAsks, useWatchRunTicks } from "./WatchRuns.tsx";
 import "./training.css";
 
@@ -57,6 +58,7 @@ function checkPlaced(lp: LoadedPlan, item: ItemRef, day: number, undo: () => voi
 
 export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const tr = useTraining();
+  useLooks();
   const t = todayEpoch();
   const wide = useWide();
   const [movedWarn, setMovedWarn] = useState<Warn | null>(null);
@@ -166,7 +168,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const showToPlace = v.toPlace.length > 0 || drag.lifted !== null;
 
   const week = (
-    <div className={`p-content tr-week ${trainingLookClass}`} ref={scroller}>
+    <div className={`p-content tr-week ${trainingLookClass()}`} ref={scroller}>
       <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
       {!readOnly && <HealthCard />}
       <SleepLine nights={tr.sleep} t={t} onOpen={() => { feel("tick"); go(`training?view=progress&tab=sleep${planQ(planId)}`); }} />
@@ -696,6 +698,7 @@ function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day:
  */
 export function TrainingLine({ day, t }: { day: number; t: number }) {
   const tr = useTraining();
+  useLooks();
   const lp = activeOf(tr, t);
   if (!lp || day < lp.plan.start || day > lp.plan.end) return null;
   const { plan } = lp;
@@ -727,6 +730,7 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
 /** The days with a session on them (placed, or the plan's own day), each with its icon: the calendar's light marks. */
 export function useTrainingDays(): Map<number, string> {
   const tr = useTraining();
+  const looks = useLooks();
   return useMemo(() => {
     const out = new Map<number, string>();
     const lp = activeOf(tr);
@@ -737,6 +741,6 @@ export function useTrainingDays(): Map<number, string> {
       if (day !== null && e?.status !== "skipped" && !out.has(day)) out.set(day, sessionIcon(s));
     }
     return out;
-  }, [tr]);
+  }, [tr, looks]);
 }
 

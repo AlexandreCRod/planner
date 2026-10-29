@@ -8,6 +8,7 @@ import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 import { trainingTabIcon } from "./trainingParts.tsx";
+import { useLooks } from "./looks.ts";
 
 /** Older short names used around the phone code, mapped to the Compose icons. */
 const ALIAS: Record<string, string> = {
@@ -277,6 +278,7 @@ const TASK_FILLED = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM6.3 12.4L7.7 11L1
 
 /** One tab's icon, outlined or solid (TabIcons.kt and the Material icons HomeScreen.kt picks). */
 export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolean; day: number }) {
+  useLooks();
   const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const };
   let body: ReactNode;
   switch (tab) {
@@ -304,7 +306,7 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
       break;
     case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
     // The run icons have no outlined kind: the same one, its colour following the selection.
-    case "training": body = <path d={ICONS[trainingTabIcon]} fill="currentColor" />; break;
+    case "training": body = <path d={ICONS[trainingTabIcon()]} fill="currentColor" />; break;
     default: body = <path d={ICONS.oConstellation} fill="currentColor" />;
   }
   return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="p-svg">{body}</svg>;

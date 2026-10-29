@@ -18,7 +18,7 @@ import { mouseMenu } from "./desk.ts";
 import { TodoAdd, dropTodo, openTodoTab, openTodos } from "./PhoneLists.tsx";
 import { useRowDrag } from "./rowDrag.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
-import { tasksB } from "./looks.ts";
+import { useLook } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
 import { HeldTime } from "./TimeWheel.tsx";
 import { BottomSheet } from "./m3.tsx";
@@ -417,6 +417,7 @@ const DayPage = memo(function DayPage({ day, t, s, now, hold, wide }: { day: num
  * finger, the day before or after sliding in beside it, and letting go settles on a day.
  */
 export function PhoneToday() {
+  const tasksB = useLook("tasks");
   const s = useSnapshot();
   const now = useNow();
   const t = todayEpoch();
@@ -456,7 +457,7 @@ export function PhoneToday() {
         </div>
         <span className="grow" />
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
-        {tasksB && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
+        {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
         <AppBarActions />
       </header>
       {/* On the page root, so it covers the + button like the other sheets. */}

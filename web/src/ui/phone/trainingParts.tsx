@@ -5,7 +5,7 @@ import { type Exercise, type Session, type SessionKind, BEST_REPS } from "../../
 import type { RunType } from "../../domain/trends.ts";
 import type { Training } from "../../store/training.ts";
 import { feel } from "./haptics.ts";
-import { futsalColour, futsalIconLook, runIconSet, trainingColours } from "./looks.ts";
+import { look } from "./looks.ts";
 
 /** A kind's icon; a run with its session gets its type's (sessionIcon). */
 export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
@@ -13,7 +13,7 @@ export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
     case "run": return "oDirectionsRun";
     case "gym": return "oFitnessCenter";
     case "bike": return "oDirectionsBike";
-    case "futsal": return FUTSAL_ICON[futsalIconLook];
+    case "futsal": return FUTSAL_ICON[look("futsalIcon")];
     case "record": return "oEmojiEvents";
     default: return "oTaskAlt";
   }
@@ -22,17 +22,17 @@ export function kindIcon(kind: SessionKind | "futsal" | "record"): string {
 /** A session's icon: a run's by its type (easy, long, quality, race), every other kind's by its kind. */
 export const sessionIcon = (s: Session) => (s.kind === "run" ? runIcon(runTypeOf(s)) : kindIcon(s.kind));
 
-// The looks to try (looks.ts), each read here only.
-const FUTSAL_ICON = { now: "oSportsSoccer", 1: "tBallMoving", 2: "tPlayerKick", 3: "tBallGoal", 4: "tBootBall", 5: "tCourt", 6: "tBallSolid" } as const;
-const RUN_ICONS: Record<1 | 2, Record<RunType, string>> = {
+// The looks to try (looks.ts), each read here only; a component showing them calls useLooks to redraw.
+const FUTSAL_ICON: Record<string, string> = { now: "oSportsSoccer", 1: "tBallMoving", 2: "tPlayerKick", 3: "tBallGoal", 4: "tBootBall", 5: "tCourt", 6: "tBallSolid" };
+const RUN_ICONS: Record<string, Record<RunType, string>> = {
   1: { easy: "tRunner", long: "tRunnerLong", quality: "tSprint", race: "tRunnerTape", other: "tRunnerTreadmill" },
   2: { easy: "tShoe", long: "tRoute", quality: "tStopwatchFast", race: "tFinishFlag", other: "tTreadmill" },
 };
-export const runIcon = (type: RunType) => RUN_ICONS[runIconSet][type];
+export const runIcon = (type: RunType) => RUN_ICONS[look("runIcons")][type];
 /** Training's icon in the bottom bar (241): the easy run's (Set 2's shoe, Set 1's runner). */
-export const trainingTabIcon = RUN_ICONS[runIconSet].easy;
+export const trainingTabIcon = () => runIcon("easy");
 /** The Training week's classes for its kind colours and futsal's colour (training.css). */
-export const trainingLookClass = `tr-col-${trainingColours.toLowerCase()} tr-fut-${futsalColour}`;
+export const trainingLookClass = () => `tr-col-${look("trainingColours").toLowerCase()} tr-fut-${look("futsalColour")}`;
 
 export const KIND_LABEL: Record<SessionKind, string> = { run: "Run", gym: "Gym", bike: "Bike", physio: "Physio", other: "Session" };
 

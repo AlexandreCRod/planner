@@ -23,7 +23,7 @@ import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
-import { slotLook } from "./looks.ts";
+import { useLook } from "./looks.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
@@ -426,6 +426,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
+  const slotLook = useLook("slot");
   const days = useMemo(() => Array.from({ length: count }, (_, i) => first + i), [first, count]);
   const t = todayEpoch();
   const scroller = useRef<HTMLDivElement>(null);

@@ -1572,3 +1572,9 @@ html.phone[data-theme="dark"] {
 .phone .p-rlist-streaks span { flex: 1; }
 .phone .p-rlist-streaks svg:first-child { color: var(--p-primary); }
 .phone .p-rlist-streaks svg:last-child { color: var(--muted); }
+/* Looks to try (Settings, 254): a look's name, its switch and what the chosen one is. */
+.phone .ps-intro { margin: 4px 0 4px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .ps-look { padding-bottom: 10px; }
+.phone .ps-look .ps-label { margin: 8px 0 8px; }
+.phone .ps-about { margin-top: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .ps-pick { color: var(--p-primary, var(--muted)); }

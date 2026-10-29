@@ -34,7 +34,7 @@ import { type KeptAdd, onSlot, takeKept, worthKeeping } from "./addDraft.ts";
 import { dragEdgeTimes } from "./wheelMath.ts";
 import { feel } from "./haptics.ts";
 import { AssistChip, TextButton, showSnackbar } from "./m3.tsx";
-import { slotLook } from "./looks.ts";
+import { look } from "./looks.ts";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
 const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
@@ -510,7 +510,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (dt > reach && db > reach) return null;
     // A short box: the nearer edge, or when that's unclear, the side's handle (Slot A: the top one at the
     // right, the bottom one at the left; Slot B's tabs are both in the middle, so the nearer half).
-    const topSide = slotLook === "A" ? x > r.left + r.width / 2 : y < r.top + r.height / 2;
+    const topSide = look("slot") === "A" ? x > r.left + r.width / 2 : y < r.top + r.height / 2;
     const edge: "top" | "bottom" = dt > reach ? "bottom" : db > reach ? "top" : Math.abs(dt - db) > 8 ? (dt < db ? "top" : "bottom") : topSide ? "top" : "bottom";
     return { edge, layer, ppm };
   };
