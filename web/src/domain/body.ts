@@ -9,6 +9,14 @@ import { dayShort, monthShort, weekday, ymd } from "./dates.ts";
 import type { HealthDay } from "./health.ts";
 import type { Night } from "./trends.ts";
 
+/** Progress's tabs (251: the Weight and Sleep tabs became Body). */
+export type ProgressTab = "lifts" | "runs" | "body" | "nutrition";
+/** The tab a route's "tab" names: Lifts when none; the old "weight" and "sleep" open Body (their cards' ids are unchanged). */
+export function progressTabOf(q: string | null): ProgressTab {
+  if (q === "weight" || q === "sleep") return "body";
+  return q === "runs" || q === "body" || q === "nutrition" ? q : "lifts";
+}
+
 /** The Body tab's own kinds (Weight, Sleep, resting HR and HRV come from trends.ts and sleep.ts). */
 export type BodyKind = "vo2" | "steps" | "spo2" | "breath" | "fat";
 

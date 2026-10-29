@@ -171,7 +171,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     <div className={`p-content tr-week ${trainingLookClass()}`} ref={scroller}>
       <UpdateNotice tr={tr} lp={lp} readOnly={readOnly} />
       {!readOnly && <HealthCard />}
-      <SleepLine nights={tr.sleep} t={t} onOpen={() => { feel("tick"); go(`training?view=progress&tab=sleep${planQ(planId)}`); }} />
+      <SleepLine nights={tr.sleep} t={t} onOpen={() => { feel("tick"); go(`training?view=progress&tab=body${planQ(planId)}`); }} />
       {readOnly && <div className="tr-oldplan">An earlier plan: read only.</div>}
       <ChipRow className="tr-phases">
         {plan.phases.map((p, i) => (

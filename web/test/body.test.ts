@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
 import type { HealthDay } from "../src/domain/health.ts";
-import { avg7LineOf, avg7Of, bodySeries, fmtSteps, lastWeighInLine, shortWhen } from "../src/domain/body.ts";
+import { progressTabOf, avg7LineOf, avg7Of, bodySeries, fmtSteps, lastWeighInLine, shortWhen } from "../src/domain/body.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -61,4 +61,13 @@ test("fmtSteps", () => {
   assert.equal(fmtSteps(8412.4), "8,412");
   assert.equal(fmtSteps(12345678), "12,345,678");
   assert.equal(fmtSteps(950), "950");
+});
+
+test("progressTabOf: the old Weight and Sleep tabs open Body (251)", () => {
+  assert.equal(progressTabOf("weight"), "body");
+  assert.equal(progressTabOf("sleep"), "body");
+  assert.equal(progressTabOf("body"), "body");
+  assert.equal(progressTabOf("runs"), "runs");
+  assert.equal(progressTabOf(null), "lifts");
+  assert.equal(progressTabOf("nonsense"), "lifts");
 });
