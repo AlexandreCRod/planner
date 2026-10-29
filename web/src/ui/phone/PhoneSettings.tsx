@@ -225,7 +225,7 @@ export function PhoneSettings() {
           onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
         <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
           supporting={keepTasks ? "Tasks sits beside Training, so a swipe along the bar still reaches it"
-            : "Off: to-dos without a date are on Today, dated tasks in the Calendar's Agenda"} checked={keepTasks}
+            : "Off: to-dos without a date are behind the button on Today, dated tasks in the Calendar's Agenda"} checked={keepTasks}
           onChange={setKeepTasksTab} />
         <ListItem headline="Looks to try" supporting="Other looks for some pages, to try side by side" onClick={() => go("settings/looks")} />
 

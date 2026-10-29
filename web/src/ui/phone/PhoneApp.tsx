@@ -4,7 +4,7 @@
 // In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
 // top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
 import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
@@ -22,7 +22,7 @@ import { TOUCH_SLOP } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendar, calendarGoToday, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
-import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks } from "./PhoneLists.tsx";
+import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks, useTodoTabShown, useTodosSheetOpen } from "./PhoneLists.tsx";
 import { ErrorBoundary } from "../shared/ErrorBoundary.tsx";
 import "./phone.css";
 import "./wide.css";
@@ -409,8 +409,12 @@ export function PhoneApp() {
   });
   useEffect(() => () => setDeskHandlers(null), []);
 
+  const todosSheet = useTodosSheetOpen();
+  const todoTab = useTodoTabShown();
+  const noteChip = dock ? <NoteChip key={dock.n} hash={dock.hash} onOpen={() => { location.hash = dock.hash; }} onClose={() => { setDock(null); setMinimized(false); }} /> : null;
+
   return (
-    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[shown].key === "notes" ? "notes-split" : ""} ${TABS[shown].key === "training" ? "on-training" : ""}`}>
+    <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[shown].key === "notes" ? "notes-split" : ""} ${TABS[shown].key === "training" ? "on-training" : ""} ${TABS[shown].key === "tasks" && todoTab ? "on-todo" : ""} ${overlay === "tasks" ? "over-tasks" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
         <div className="p-track" ref={(el) => { pos.track = el; if (el) pos.paint(); }}>
           {TABS.map((t, i) => (
@@ -445,10 +449,12 @@ export function PhoneApp() {
           {noteKb && <div className="p-navstrip" aria-hidden="true" />}
         </div>
       )}
-      {dock && minimized && routeTab >= 0 && (
-        <NoteChip key={dock.n} hash={dock.hash} onOpen={() => { location.hash = dock.hash; }} onClose={() => { setDock(null); setMinimized(false); }} />
-      )}
       {overlay && overlay !== "note" && <Overlay key={path.join("/") + (query.get("edit") ?? "") + (query.get("n") ?? "")} route={route} path={path} query={query} />}
+      {/* The chip stays over the to-dos (276): the Tasks page opened full-screen, and Today's to-dos sheet
+          (it's on the page then, above the sheet's layer). */}
+      {dock && minimized && (routeTab >= 0 || overlay === "tasks") && (todosSheet
+        ? createPortal(<div className="p-chip-over">{noteChip}</div>, document.body)
+        : noteChip)}
       <DrumHost />
       <SnackbarHost raised={!!overlay && (overlay !== "note" || noteKb)} />
       <PermissionHost />

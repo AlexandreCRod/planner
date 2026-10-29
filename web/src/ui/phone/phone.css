@@ -675,6 +675,8 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 .phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1), opacity .15s; }
 /* Training (a tab since 241) adds nothing with the + button: on the phone it fades away there. */
 html:not(.wide) .p-root.on-training > .p-fab { opacity: 0; transform: scale(.6); pointer-events: none; }
+/* The To-do list adds with its own line (276): no + over it. */
+html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); pointer-events: none; }
 .phone .p-root:has(> .p-snackbar:not(.raised)) > .p-fab { transform: translateY(-64px); }
 .phone .p-snack-close { width: 40px; height: 40px; margin-right: -4px; color: var(--p-inverse-on-surface); }
 .phone .p-icon.primary { color: var(--p-primary); }
@@ -1465,6 +1467,12 @@ html.phone[data-theme="dark"] {
 /* The chip: the note put away, above the bar on every page (left of the + button). */
 .phone .p-notechip-place { position: absolute; left: 12px; right: 84px; bottom: calc(var(--bar-h) + var(--sab) + 20px); z-index: 26; display: flex; transition: transform .15s cubic-bezier(.2, 0, 0, 1); pointer-events: none; }
 .phone .p-root:has(> .p-snackbar:not(.raised)) > .p-notechip-place { transform: translateY(-64px); }
+/* 276: the chip stays over the to-dos. Over the full-screen Tasks page (no bottom bar there), and over Today's
+   to-dos sheet (moved to the sheet's layer; the sheet leaves room for it at its bottom). */
+.phone .p-root.over-tasks > .p-notechip-place { z-index: 31; bottom: calc(var(--sab) + 20px); }
+.phone .p-chip-over { position: fixed; inset: 0; z-index: 56; pointer-events: none; }
+.phone .p-chip-over .p-notechip-place { bottom: calc(var(--sab) + 12px); }
+.phone .p-todos.with-chip { padding-bottom: calc(var(--sab) + 76px); }
 .phone .p-notechip {
   pointer-events: auto; max-width: 100%; min-width: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px;
   border-radius: 24px; background: var(--p-sc-high); color: var(--text); touch-action: pan-y; user-select: none; -webkit-user-select: none;

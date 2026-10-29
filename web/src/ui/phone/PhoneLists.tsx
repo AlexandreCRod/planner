@@ -1,7 +1,7 @@
 // The list pages on the phone, drawn as the native screens are: Tasks (TasksScreen.kt), Notes
 // (NotesScreen.kt), Links (GraphScreen.kt) and Search (BrowseScreen.kt). The data rules are the PC
 // views' own (shared helpers), only the drawing is the phone's.
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { formatDate } from "../../domain/dates.ts";
 import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
@@ -63,6 +63,17 @@ export function openTodoTab() {
 let todoListener: (() => void) | null = null;
 const savedTab = () => { try { return localStorage.getItem("tasksTab") === "todo"; } catch { return false; } };
 
+/**
+ * What the shell needs to know of the to-dos (276): whether the Tasks page shows its To-do list (the +
+ * button stands down there: the list has its own add line), and whether Today's to-dos sheet is open (a
+ * minimised note's chip then shows over it).
+ */
+const todoWatch = { todoTab: savedTab(), sheet: false, listeners: new Set<() => void>() };
+const setTodoWatch = (k: "todoTab" | "sheet", v: boolean) => { if (todoWatch[k] !== v) { todoWatch[k] = v; todoWatch.listeners.forEach((l) => l()); } };
+const onTodoWatch = (l: () => void) => { todoWatch.listeners.add(l); return () => { todoWatch.listeners.delete(l); }; };
+export const useTodoTabShown = () => useSyncExternalStore(onTodoWatch, () => todoWatch.todoTab);
+export const useTodosSheetOpen = () => useSyncExternalStore(onTodoWatch, () => todoWatch.sheet);
+
 /** [back]: opened full-screen (Tasks not in the bottom bar, 241), with a back arrow. */
 export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: boolean }) {
   const [todo, setTodo] = useState(savedTab);
@@ -74,7 +85,7 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
   const strip = useRef<HTMLDivElement>(null);
   const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  const setIndex = (i: number) => { idx.current = i; setTodo(i === 1); try { localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); } catch { /* private mode */ } };
+  const setIndex = (i: number) => { idx.current = i; setTodo(i === 1); setTodoWatch("todoTab", i === 1); try { localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); } catch { /* private mode */ } };
   /** Puts the strip back where its tab is, with nothing left over from a slide. */
   const rest = () => { stopSlide.current?.(); stopSlide.current = null; if (strip.current) strip.current.style.transform = ""; };
   // A tap on the switch slides there on the pager's spring; from elsewhere ([slide] false) it's just there.
@@ -219,11 +230,18 @@ export function TodosSheet({ onClose }: { onClose: () => void }) {
   const list = hold.arrange("sheet", openTodos(s), (e) => String(e.item.id));
   const rows = useRef<HTMLDivElement>(null);
   const rowDrag = useRowDrag({ list: () => rows.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
+  // A minimised note's chip shows over the sheet (276): room is left for it at the bottom.
+  const [chip] = useState(() => !!document.querySelector(".p-notechip"));
+  useEffect(() => { setTodoWatch("sheet", true); return () => setTodoWatch("sheet", false); }, []);
+  // Anything that leaves the page (the chip opening its note) takes the sheet away.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => { const h = () => closeRef.current(); window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
   return (
     <BottomSheet onClose={onClose} className="p-todos-sheet">{(close) => {
       const after = (f: () => void) => { close(); window.setTimeout(f, 210); };
       return (
-        <div className="p-rlist p-todos">
+        <div className={`p-rlist p-todos ${chip ? "with-chip" : ""}`}>
           <div className="p-rlist-head t-title-medium">To-dos</div>
           <TodoAdd />
           <div className="p-rlist-rows p-rows" ref={rows}>
