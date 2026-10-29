@@ -12,8 +12,12 @@ import { feel } from "./haptics.ts";
 
 /** The series colours, validated on the dark surface (dataviz skill); in step with the Training kinds. */
 export const GYM = "#bf8a2a", GYM_DIM = "#7a5c22", RUN = "#33a390", WEIGHT = "#6a8ed4", WEIGHT_DIM = "#5d6475", PAIN = "#d9664f";
-/** Sleep, resting HR and HRV (2.8-final.html); the dim one for each night under the 7-day line. */
-export const SLEEP = "#c06cb8", SLEEP_DIM = "#80527c";
+/**
+ * Sleep, resting HR and HRV (2.8-final.html); the dim one for each night under the 7-day line. Validated on
+ * both themes in 2.8.2 (the dim one was #80527c, too grey); on the dark card it stays just under 3:1, with
+ * the legend and the 7-day line carrying the reading.
+ */
+export const SLEEP = "#c06cb8", SLEEP_DIM = "#864d81";
 
 /** One reading. [mark]: drawn hollow (an assumed RPE) or as a lower bound (history with no RPE). */
 export interface Pt { day: number; v: number; mark?: "hollow" | "lower" }
