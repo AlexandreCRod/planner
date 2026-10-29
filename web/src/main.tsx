@@ -7,6 +7,7 @@ import { startHealthReading } from "./health/healthConnect.ts";
 import { isNative } from "./platform.ts";
 import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/store.ts";
 import { logProblem, startProblemLog } from "./problems.ts";
+import { startProblemSync } from "./store/problemSync.ts";
 import { OtherTab, StartFailed } from "./ui/Notice.tsx";
 import { migrateLocalRoutines } from "./store/routines.ts";
 import { convertOldFutsal } from "./store/futsal.ts";
@@ -71,6 +72,8 @@ async function start() {
   // on every device, so the phone and the PC can both do it; a no-op once they're converted.
   onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) { tidy(); migrateLocalRoutines(); convertOldFutsal(); } });
   window.setInterval(() => tidy(), 3_600_000);
+  // The problem log goes to the server too, so it can be read there (265).
+  startProblemSync();
   if (getToken()) startAutoSync();
   else signOut();
   // Default categories only after the first sync finds none (the server may already have the user's own).

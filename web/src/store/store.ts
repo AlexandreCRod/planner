@@ -21,6 +21,8 @@ export const KINDS = [
   "trainingFiles", "trainingEntries", "trainingLifts", "trainingState", "trainingWeighIns", "trainingHidden",
   // The watch's data from Health Connect (domain/health.ts): written only by the phone, read everywhere.
   "healthSessions", "healthNights", "healthDays",
+  // Each device's problem log (problems.ts, store/problemSync.ts): one record per device, written only by it.
+  "problemLogs",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

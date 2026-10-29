@@ -5,7 +5,7 @@
 export interface Problem { at: number; kind: string; message: string; detail: string; /** A note (logLatest), not counted as a problem. */ note?: true }
 
 const KEY = "problemLog";
-const MAX = 50;
+export const MAX = 50;
 const listeners = new Set<() => void>();
 
 export function problems(): Problem[] {
@@ -62,4 +62,27 @@ export function startProblemLog() {
     const r = e.reason as Error | undefined;
     logProblem("promise", r?.message ?? String(e.reason), r?.stack ?? "");
   });
+}
+
+// ---------- The synced copy (265) ----------
+
+/**
+ * One device's log as a synced record (kind "problemLogs", id the device's): written only by that device,
+ * so two devices never touch the same record, and read through the Worker (.claude/tools/problems.mjs)
+ * instead of copying it from Settings. Only the log's own messages and stacks, the newest 50.
+ */
+export interface ProblemLogRecord { id: string; device: string; app: string; entries: Problem[]; updatedAt: number }
+
+/** This device's record for [list] (newest first), or null when the stored one ([had]) already says the same. */
+export function problemLogRecord(id: string, device: string, app: string, list: readonly Problem[], had: ProblemLogRecord | undefined, now: number): ProblemLogRecord | null {
+  const entries = list.slice(0, MAX);
+  if (had && had.device === device && had.app === app && JSON.stringify(had.entries) === JSON.stringify(entries)) return null;
+  return { id, device, app, entries, updatedAt: now };
+}
+
+/** What kind of device this is, for the record: "Android phone", "PC (Windows)"... */
+export function deviceLabel(native: boolean, ua: string): string {
+  if (native) return "Android phone";
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /Mac OS/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "other";
+  return `Browser (${os})`;
 }
