@@ -26,6 +26,9 @@ android {
     kotlinOptions {
         jvmTarget = '21'
     }
+    testOptions {
+        unitTests { includeAndroidResources = true }
+    }
     // The scheduling cases shared with the web app and the native app (repo shared/), for AlarmDomainTest.
     sourceSets {
         test.resources.srcDirs += ['../../../shared']
@@ -87,6 +90,9 @@ dependencies {
     // Health Connect (health/HealthConnectPlugin.kt): the watch's runs, sleep and daily data, read only.
     implementation 'androidx.health.connect:connect-client:1.1.0'
     testImplementation "junit:junit:$junitVersion"
+    // Robolectric: the alarm service and ringing screen run in unit tests (195).
+    testImplementation 'org.robolectric:robolectric:4.16'
+    testImplementation 'androidx.test:core:1.7.0'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

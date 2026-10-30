@@ -82,6 +82,10 @@ class AlarmActivity : ComponentActivity() {
 
     private var shown by mutableStateOf<ScreenState?>(null)
 
+    /** For the tests (AlarmActivityTest): whether Mark done shows, and for which item. */
+    internal val offersMarkDone get() = shown?.completable == true
+    internal val shownItem get() = shown?.itemId ?: 0L
+
     private fun read(intent: Intent): ScreenState {
         val isClock = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) != 0L
         val isTimer = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0) != 0L
