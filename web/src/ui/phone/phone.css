@@ -1239,7 +1239,8 @@ html.phone[data-theme="dark"] {
 @keyframes pa-dial-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.6); } }
 @keyframes pa-dial-out { to { opacity: 0; transform: scale(.85); } }
 /* The empty page's big symbol adds an alarm. */
-.phone .pa-empty-icon { position: relative; overflow: hidden; width: 88px; height: 88px; margin-bottom: 4px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
+/* The big empty-page symbol is a button with a generous target (77): 120 px round, the symbol at 64. */
+.phone .pa-empty-icon { position: relative; overflow: hidden; width: 120px; height: 120px; margin: -16px 0 -12px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
 .phone .pa-empty > .pa-empty-icon > svg { margin: 0; }
 /* World clock cards, a touch smaller. */
 .phone .pa-city { padding: 8px 2px 8px 18px; border-radius: 20px; }

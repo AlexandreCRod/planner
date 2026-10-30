@@ -439,7 +439,7 @@ function Empty({ icon, title, text, action, onIcon, iconLabel }: { icon: string;
   return (
     <div className="pa-empty">
       {onIcon
-        ? <button className="pa-empty-icon" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={56} /></button>
+        ? <button className="pa-empty-icon pa-noswipe" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={64} /></button>
         : <MIcon name={icon} size={56} />}
       <div className="t-title-medium">{title}</div>
       {text && <div className="t-body-medium muted">{text}</div>}
@@ -714,7 +714,8 @@ function TimersPane({ timers, active, onNew }: { timers: ClockTimer[]; active: b
   return (
     <div className="pa-scroll pa-gap12 pa-top12">
       <PermissionCards />
-      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap + or a length below" />}
+      {/* The big symbol starts a new timer too (77), like the alarms' one adds an alarm. */}
+      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap the timer, + or a length below" onIcon={onNew} iconLabel="New timer" />}
       <div className="pa-presets">
         {TIMER_PRESETS.map((m) => <button key={m} className="p-assist pa-chip" onClick={() => void startTimer(m * 60_000)}>{presetText(m)}</button>)}
         <button className="p-assist pa-chip" onClick={onNew}>Other…</button>
