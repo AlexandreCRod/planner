@@ -6,6 +6,7 @@ import { startAlarmMirror } from "./alarms/mirror.ts";
 import { startHealthReading } from "./health/healthConnect.ts";
 import { detectTestApp, isNative, isTestApp } from "./platform.ts";
 import { seedSampleOnce } from "./store/sample.ts";
+import { startDailyBackups } from "./store/backup.ts";
 import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/store.ts";
 import { logProblem, startProblemLog } from "./problems.ts";
 import { startProblemSync } from "./store/problemSync.ts";
@@ -86,7 +87,7 @@ async function start() {
   // The PC shows reminders from the page; the phone build hands them to its native alarm engine, which
   // rings them (and its alarm clocks, timers...) with the app closed.
   if (!isNative) startNotifications();
-  else { document.documentElement.classList.add("native"); startAlarmMirror(); startHealthReading(); }
+  else { document.documentElement.classList.add("native"); startAlarmMirror(); startHealthReading(); startDailyBackups(); }
   root().render(<StrictMode><App /></StrictMode>);
   if ("serviceWorker" in navigator && location.hostname !== "localhost") navigator.serviceWorker.register("/sw.js").catch(() => {});
 }

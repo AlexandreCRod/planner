@@ -120,6 +120,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-appbar-title.inset { padding-left: 12px; }
 /* "Planner Test"'s marker (chrome.tsx TestChip, 129): a small orange chip, like the test app's icon. */
 .phone .p-testchip { flex: none; margin: 0 4px; padding: 2px 7px; border-radius: 8px; background: #c45a10; color: #fff; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.06em; }
+.phone .p-testchip:last-child { margin-right: 12px; }
 /* M3 icon button: a 48 dp target, a 40 dp round state layer, the icon in onSurfaceVariant. */
 .phone .p-icon { flex: none; width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); padding: 0; }
 .phone .p-icon > .p-ripple { inset: 4px; border-radius: 50%; }

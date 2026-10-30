@@ -10,7 +10,7 @@ import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
 import { syncNow } from "../../store/sync.ts";
 import { go, useRoute } from "../shared/common.tsx";
 import { PhoneNote } from "./PhoneNote.tsx";
-import { PhoneCategories, PhoneLooks, PhoneProblems, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
+import { PhoneBackups, PhoneCategories, PhoneLooks, PhoneProblems, PhoneSettings, PhoneTrash } from "./PhoneSettings.tsx";
 import { PhoneToday, resetToday, showTodayDay, todayViewedDay } from "./PhoneToday.tsx";
 import { AddPanel, type AddRequest, type SlotPreview } from "./AddPanel.tsx";
 import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
@@ -537,7 +537,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
-    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : path[1] === "import" ? <PhoneCalendarImport /> : <PhoneSettings />;
+    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : path[1] === "import" ? <PhoneCalendarImport /> : path[1] === "backups" ? <PhoneBackups /> : <PhoneSettings />;
   } else if (route === "tasks") {
     body = <PhoneTasks back />;
   }

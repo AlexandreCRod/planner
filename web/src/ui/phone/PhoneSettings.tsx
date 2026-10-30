@@ -1,6 +1,6 @@
 // The phone's Settings, Categories and Trash pages, laid out like SettingsScreen.kt and
 // TrashCategories.kt: section headers, Material 3 list rows with switches or a menu of choices, and
-// dialogs. Settings this build can't act on (backups, the widget, wallpaper colours) are
+// dialogs. Settings this build can't act on (the widget, wallpaper colours) are
 // left out. Values are the same local keys the PC settings use.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useKeep, useKeptScroll } from "./keep.ts";
@@ -15,6 +15,8 @@ import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "..
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, isTestApp, setServer, useWide } from "../../platform.ts";
 import { resetSample } from "../../store/sample.ts";
+import { type BackupFile, applyRestore, backUpNow, lastBackupAt, listBackups, planRestore, readBackup, readBackupFile } from "../../store/backup.ts";
+import type { Backup, RestorePlan } from "../../domain/backup.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
@@ -315,6 +317,7 @@ export function PhoneSettings() {
         {canImportCalendars && <ListItem headline="Import from Google Calendar" supporting="Birthdays, holidays and events from the phone's calendars" onClick={() => go("settings/import")} />}
         <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
+        <BackupRows />
         <ProblemsRow />
         {isNative && <UpdateRow />}
         <div className="p-endspace" />
@@ -338,6 +341,113 @@ export function PhoneSettings() {
         </>}>{isNative ? "This removes this phone's copy." : "This removes this browser's copy."} Your data stays on the server and your other devices.</Dialog>
       )}
     </Scaffold>
+  );
+}
+
+// ---------- Backups (140) ----------
+
+const backupWhen = (at: number) => formatDateTime(at);
+
+/** Settings → Data: "Back up now" and "Restore from backup" (the phone's list, or a file picked on the PC). */
+function BackupRows() {
+  const [last, setLast] = useState(lastBackupAt);
+  const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState<Backup | null>(null);
+  const backUp = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const f = await backUpNow();
+      setLast(f.at);
+      showSnackbar(isNative ? `Backed up (${sizeText(f.size)})` : `Downloaded ${f.name}`);
+    } catch (e) {
+      showSnackbar(`Couldn't back up: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  };
+  const lastText = last ? `Last ${backupWhen(last)}` : "None yet";
+  return <>
+    <ListItem headline="Back up now" onClick={() => void backUp()} supporting={<span className="ps-pre">{busy ? "Backing up…"
+      : isNative ? `A copy of everything on this phone, made daily too; the last 14 are kept\n${lastText}`
+      : `Downloads a copy of everything to this computer\n${lastText}`}</span>} />
+    {isNative
+      ? <ListItem headline="Restore from backup" supporting="Puts back what's missing or changed; deletes nothing" onClick={() => go("settings/backups")} />
+      : <FilePickRow headline="Restore from backup" supporting="Pick a backup file; puts back what's missing or changed, deletes nothing" onPicked={setRestoring} />}
+    {restoring && <RestoreDialog backup={restoring} onClose={() => setRestoring(null)} />}
+  </>;
+}
+
+/** A row that opens the file picker and reads the backup picked. */
+function FilePickRow({ headline, supporting, onPicked }: { headline: string; supporting: string; onPicked: (b: Backup) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const picked = async (file: File | undefined) => {
+    if (!file) return;
+    try { onPicked(await readBackupFile(file)); } catch (e) { showSnackbar(e instanceof Error ? e.message : "Couldn't read the file"); }
+  };
+  return <>
+    <ListItem headline={headline} supporting={supporting} onClick={() => input.current?.click()} />
+    <input ref={input} type="file" accept=".gz,.json,application/gzip,application/json" hidden
+      onChange={(e) => { void picked(e.target.files?.[0]); e.target.value = ""; }} />
+  </>;
+}
+
+/** The phone's backups, newest first, with their date and size; one tapped is checked before anything changes. */
+export function PhoneBackups() {
+  const [files, setFiles] = useState<BackupFile[] | null>(null);
+  const [restoring, setRestoring] = useState<Backup | null>(null);
+  useEffect(() => { void listBackups().then(setFiles); }, []);
+  const open = async (f: BackupFile) => {
+    try { setRestoring(await readBackup(f.name)); } catch (e) { showSnackbar(e instanceof Error ? e.message : "Couldn't read the backup"); }
+  };
+  return (
+    <Scaffold title="Restore from backup" back flush>
+      <div className="p-content ps">
+        <div className="pe-small ps-note">Restoring puts back what's missing here, and can set changed things back to how they were. It never deletes anything. You'll see what it would do first.</div>
+        {files !== null && files.length === 0 && <div className="ps-empty">No backups on this phone yet.</div>}
+        {(files ?? []).map((f) => (
+          <ListItem key={f.name} headline={backupWhen(f.at)} supporting={sizeText(f.size)} leading={<MIcon name="oRestoreFromTrash" />} onClick={() => void open(f)} />
+        ))}
+        <FilePickRow headline="From a file" supporting="A backup saved elsewhere, or downloaded on the PC" onPicked={setRestoring} />
+        <div className="p-endspace" />
+      </div>
+      {restoring && <RestoreDialog backup={restoring} onClose={() => setRestoring(null)} />}
+    </Scaffold>
+  );
+}
+
+const recordsText = (entries: [string, unknown][]) => {
+  const items = entries.filter(([k]) => k.startsWith("items/")).length;
+  return `${count(entries.length, "record")}${items ? ` (${count(items, "item")})` : ""}`;
+};
+
+/** What a restore would do, said before it happens: how many records come back, and which ones lose edits. */
+function RestoreDialog({ backup, onClose }: { backup: Backup; onClose: () => void }) {
+  const [plan] = useState<RestorePlan>(() => planRestore(backup));
+  const { missing, changed } = plan;
+  const done = (withChanged: boolean) => {
+    const n = applyRestore(plan, withChanged);
+    onClose();
+    showSnackbar(`Restored ${count(n, "record")}`);
+  };
+  const made = backup.device.startsWith("Phone") ? ", made on the phone" : backup.device.startsWith("PC") ? ", made on the PC" : "";
+  const from = `The backup from ${backupWhen(backup.createdAt)}${made}.`;
+  if (!missing.length && !changed.length) {
+    return <Dialog title="Nothing to restore" onClose={onClose} actions={<TextButton onClick={onClose}>OK</TextButton>}>
+      {from} Everything in it is already here.
+    </Dialog>;
+  }
+  return (
+    <Dialog title={`Restore ${count(missing.length + changed.length, "record")}?`} onClose={onClose} actions={<>
+      <TextButton onClick={onClose}>Cancel</TextButton>
+      {missing.length > 0 && changed.length > 0 && <TextButton onClick={() => done(false)}>Missing only</TextButton>}
+      <TextButton onClick={() => done(true)}>Restore</TextButton>
+    </>}>
+      <span className="ps-pre">{[
+        from,
+        missing.length ? `• ${recordsText(missing)} missing here ${missing.length === 1 ? "comes" : "come"} back.` : "",
+        changed.length ? `• ${recordsText(changed)} changed since ${changed.length === 1 ? "goes back to how it was" : "go back to how they were"} then: edits made since are lost.` : "",
+        "Nothing is deleted. What comes back syncs to your other devices as a new edit.",
+      ].filter(Boolean).join("\n")}</span>
+    </Dialog>
   );
 }
 

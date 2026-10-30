@@ -160,6 +160,12 @@ export function replaceAllRecords(entries: [string, Rec][]) {
   changed();
 }
 
+/** Puts records ("kind/key" and record) back from a backup (140): saved, redrawn and synced like any change; nothing deleted. */
+export function restoreRecords(entries: [string, Rec][]) {
+  for (const [k, v] of entries) records.set(k, v);
+  if (entries.length) changed();
+}
+
 /** Replaces records from sync: data null = deleted. */
 export function applyRemote(changes: { kind: Kind; id: string; data: Rec | null }[]) {
   for (const c of changes) {
