@@ -538,11 +538,13 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
             ? <TextButton onClick={() => setDates([])}>Weekdays</TextButton>
             : <TextButton onClick={() => setPicker("dates")}>Dates…</TextButton>}
         </div>
-        {repeating && <>
-          <div className="p-divider" />
-          <div className="pa-erow pa-pause">
+        {/* The pause row stays while the alarm rings once (a quiet line instead), so picking the first day
+            (or clearing the last) doesn't make the sheet grow and the day buttons jump under the finger (72). */}
+        <div className="p-divider" />
+        <div className="pa-erow pa-pause">
             <MIcon name="oEventBusy" />
-            {pause ? <>
+            {!repeating ? <span className="t-body-large muted grow pa-line">Pause: for repeating alarms</span>
+            : pause ? <>
               <button className="pa-pause-text t-body-large" onClick={() => setPicker(pausedUntil != null && pausedUntil > today ? "until" : "skip")}>{pause}</button>
               <IconButton icon="fClose" label="Stop pausing" onClick={() => { setSkip([]); setPausedUntil(null); }} />
             </> : <>
@@ -550,8 +552,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
               <TextButton onClick={() => setPicker("skip")}>Skip days</TextButton>
               <TextButton onClick={() => setPicker("until")}>Until…</TextButton>
             </>}
-          </div>
-        </>}
+        </div>
         <div className="p-divider" />
         <label className="pa-erow">
           <MIcon name="oLabel" />
