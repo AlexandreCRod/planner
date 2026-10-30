@@ -29,6 +29,8 @@ import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { CLOCK_FILTERS } from "../../domain/clockList.ts";
+import { setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
@@ -98,6 +100,7 @@ const minutesChoice = (m: number): [string, string] => [String(m), m === 1 ? "1 
  */
 function AlarmSettingsSection() {
   const st = useAlarmSettings();
+  const clock = useClockPrefs();
   const { ring, perms, weatherApp } = useAlarmState();
   const [time, setTime] = useState<"" | "task" | "qs" | "qe">("");
   const pickSound = async () => {
@@ -120,6 +123,8 @@ function AlarmSettingsSection() {
       onPick={(v) => setAlarmSettings({ clockRingMinutes: Number(v) })} />
     <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
       supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
+    <ChoiceRow title="Default alarm filter" value={clock.defaultFilter ?? "all"} options={[["all", "None: every alarm"], ...CLOCK_FILTERS]}
+      onPick={(v) => setClockPrefs({ defaultFilter: v === "all" ? null : v as typeof clock.defaultFilter })} />
     <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
     {st.quietHoursEnabled && <>
       <ListItem headline="Quiet from" supporting={formatTime(st.quietStart)} onClick={() => setTime("qs")} />

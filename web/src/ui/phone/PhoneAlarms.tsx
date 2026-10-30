@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type AlarmFilter, type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
@@ -15,6 +15,8 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
+import { CLOCK_FILTERS, type ClockFilter, shownBy, toggleFilter } from "../../domain/clockList.ts";
+import { clockPrefs } from "../../alarms/clockPrefs.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
@@ -299,18 +301,16 @@ function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void;
 
 // ---------- Alarms ----------
 
-type Show = AlarmFilter;
-const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inactive"], ["weekdays", "Weekdays"], ["weekend", "Weekend"]];
-
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
 function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   alarms: ClockAlarm[]; zone: string; rings: { rings: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
 }) {
-  const [show, setShow] = useState<Show>("all");
+  // No chip on shows every alarm; the list opens with the filter chosen in Settings (71).
+  const [show, setShow] = useState<ClockFilter | null>(() => clockPrefs().defaultFilter);
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
-  const list = alarms.filter((a) => alarmShown(a, show, now));
+  const list = alarms.filter((a) => shownBy(a, show, now));
   const groups = bundle(list);
   const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
   // Task and event alarms only where they ring: on this phone, while they're turned on.
@@ -332,10 +332,10 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
       )}
       {alarms.length > 0 && (
         <div className="pa-filter pa-noswipe">
-          {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
+          {CLOCK_FILTERS.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow((f) => toggleFilter(f, k))}>{l}</FilterChip>)}
         </div>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
+      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />

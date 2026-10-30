@@ -948,7 +948,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-next { padding: 8px 0 4px; }
 .phone .pa-filter { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; touch-action: pan-x; }
 .phone .pa-filter::-webkit-scrollbar { display: none; }
-.phone .pa-filter > * { flex: none; }
+/* The four filters (71) share the row, so all fit on a phone at once. */
+.phone .pa-filter > * { flex: 1 0 auto; justify-content: center; padding-left: 10px; padding-right: 10px; }
 .phone .pa-empty { display: flex; flex-direction: column; align-items: center; padding: 64px 0; color: var(--text); text-align: center; }
 .phone .pa-empty > svg { color: var(--muted); margin-bottom: 12px; }
 .phone .pa-empty .p-text-btn { margin-top: 4px; }
