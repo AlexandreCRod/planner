@@ -25,13 +25,13 @@ object Forecast {
 
     fun save(context: Context, text: String): Boolean {
         runCatching { json.decodeFromString(HourlyForecast.serializer(), text) }.getOrNull() ?: return false
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("hourly", text).apply()
+        AlarmStore.prefs(context, PREFS).edit().putString("hourly", text).apply()
         return true
     }
 
     /** Temperature (°C) and weather code for the hour holding [ts], or null. */
     fun at(context: Context, ts: Long): Pair<Double, Int>? {
-        val text = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("hourly", null) ?: return null
+        val text = AlarmStore.prefs(context, PREFS).getString("hourly", null) ?: return null
         val f = runCatching { json.decodeFromString(HourlyForecast.serializer(), text) }.getOrNull() ?: return null
         if (System.currentTimeMillis() - f.fetched > MAX_AGE_MS) return null
         val i = f.at.indexOfFirst { ts >= it && ts < it + 3_600_000 }

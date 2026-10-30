@@ -72,13 +72,16 @@ object ClockTools {
 
     fun current(context: Context): ClockToolsState = state ?: load(context).also { state = it }
 
+    /** Forgets what was read (after AlarmStore moved the data). */
+    fun reload() { state = null }
+
     private fun load(context: Context): ClockToolsState {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return ClockToolsState()
+        val raw = AlarmStore.prefs(context, PREFS).getString(KEY, null) ?: return ClockToolsState()
         return runCatching { json.decodeFromString(ClockToolsState.serializer(), raw) }.getOrDefault(ClockToolsState())
     }
 
     private fun store(context: Context, s: ClockToolsState) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, json.encodeToString(ClockToolsState.serializer(), s)).commit()
+        AlarmStore.prefs(context, PREFS).edit().putString(KEY, json.encodeToString(ClockToolsState.serializer(), s)).commit()
         state = s
         AlarmEvents.changed("tools")
     }

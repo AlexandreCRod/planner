@@ -104,11 +104,14 @@ val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls
 
 /** The engine's copy of the data, in one JSON file in the app's private storage. */
 object Mirror {
-    private const val FILE = "alarm-mirror.json"
     private val lock = Any()
     @Volatile private var cache: MirrorData? = null
 
-    private fun file(context: Context) = AtomicFile(File(context.filesDir, FILE))
+    /** In device-protected storage, so it can be read before the phone is unlocked (AlarmStore). */
+    private fun file(context: Context) = AtomicFile(AlarmStore.file(context, AlarmStore.MIRROR_FILE))
+
+    /** Forgets what was read, so it's read again (after AlarmStore moved the file). */
+    fun reload() { cache = null }
 
     fun current(context: Context): MirrorData {
         cache?.let { return it }

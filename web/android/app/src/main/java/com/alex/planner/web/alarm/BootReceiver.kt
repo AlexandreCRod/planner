@@ -18,12 +18,14 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 val ctx = context.applicationContext
                 Notifications.createChannels(ctx)
-                // A restart clears notifications, so upcoming-alarm notices are shown again.
-                if (intent.action == Intent.ACTION_BOOT_COMPLETED) AlarmOverrides.forgetNotices(ctx)
+                // A restart clears notifications, so upcoming-alarm notices are shown again. The locked boot
+                // comes first (the engine's data is readable then: AlarmStore), the unlocked one after it.
+                val boot = intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_LOCKED_BOOT_COMPLETED
+                if (boot) AlarmOverrides.forgetNotices(ctx)
                 AlarmScheduler.rescheduleAll(ctx)
                 ClockAlarms.rescheduleAll(ctx)
                 ClockTools.rescheduleAll(ctx)
-                // The home-screen widgets go by the date, so a clock change redraws them.
+                // The home-screen widgets go by the date, so a clock change redraws them (once unlocked).
                 com.alex.planner.web.widget.Widgets.update(ctx)
             } finally {
                 pending.finish()

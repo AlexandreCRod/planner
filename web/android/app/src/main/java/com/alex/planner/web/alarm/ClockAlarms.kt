@@ -62,16 +62,19 @@ object ClockAlarms {
 
     fun all(context: Context): List<ClockAlarm> = state ?: load(context).also { state = it }
 
+    /** Forgets what was read (after AlarmStore moved the data). */
+    fun reload() { state = null }
+
     fun get(context: Context, id: Long): ClockAlarm? = all(context).firstOrNull { it.id == id }
 
     private fun load(context: Context): List<ClockAlarm> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null) ?: return emptyList()
+        val raw = AlarmStore.prefs(context, PREFS).getString(KEY, null) ?: return emptyList()
         return runCatching { json.decodeFromString(ListSerializer(ClockAlarm.serializer()), raw) }.getOrDefault(emptyList())
     }
 
     private fun store(context: Context, list: List<ClockAlarm>) {
         val sorted = list.sortedBy { it.minuteOfDay }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        AlarmStore.prefs(context, PREFS).edit()
             .putString(KEY, json.encodeToString(ListSerializer(ClockAlarm.serializer()), sorted)).commit()
         state = sorted
         AlarmEvents.changed("clock")

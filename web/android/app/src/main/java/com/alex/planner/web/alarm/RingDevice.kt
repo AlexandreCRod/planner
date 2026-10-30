@@ -16,13 +16,13 @@ object RingDevice {
     private const val MIGRATED = "onFrom2"
 
     fun ringsEvents(context: Context): Boolean {
-        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val p = AlarmStore.prefs(context, PREFS)
         if (!p.getBoolean(MIGRATED, false)) p.edit().putBoolean(KEY, true).putBoolean(MIGRATED, true).commit()
         return p.getBoolean(KEY, true)
     }
 
     fun set(context: Context, value: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        AlarmStore.prefs(context, PREFS).edit()
             .putBoolean(KEY, value).putBoolean(MIGRATED, true).commit()
     }
 }

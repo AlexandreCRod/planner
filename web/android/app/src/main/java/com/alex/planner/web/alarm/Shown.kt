@@ -18,7 +18,7 @@ object Shown {
 
     data class Occ(val day: Long, val original: Long)
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = AlarmStore.prefs(context, PREFS)
 
     fun put(context: Context, kind: String, reminderId: Long, day: Long, original: Long) {
         prefs(context).edit().putString(kind + reminderId, "$day|$original").apply()

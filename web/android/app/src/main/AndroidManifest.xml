@@ -67,6 +67,7 @@
         <!-- The alarm engine (alarm/), the same components as the native app's. -->
         <activity
             android:name=".alarm.AlarmActivity"
+            android:directBootAware="true"
             android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
@@ -76,19 +77,25 @@
 
         <service
             android:name=".alarm.AlarmService"
+            android:directBootAware="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- The alarm engine runs before the phone is unlocked after a restart (194): its data is in
+             device-protected storage (alarm/AlarmStore.kt), so these may start in that state. -->
         <receiver
             android:name=".alarm.AlarmReceiver"
+            android:directBootAware="true"
             android:exported="false" />
 
-        <!-- Sets every alarm again after a restart, an app update or a clock change, from the
-             engine's own copy of the data (the app's page doesn't need to run). -->
+        <!-- Sets every alarm again after a restart (before the unlock, too), an app update or a clock
+             change, from the engine's own copy of the data (the app's page doesn't need to run). -->
         <receiver
             android:name=".alarm.BootReceiver"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />

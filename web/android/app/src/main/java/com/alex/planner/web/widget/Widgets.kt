@@ -17,6 +17,7 @@ import android.widget.RemoteViews
 import com.alex.planner.web.MainActivity
 import com.alex.planner.web.R
 import com.alex.planner.web.alarm.AlarmEvents
+import com.alex.planner.web.alarm.AlarmStore
 import com.alex.planner.web.alarm.AlarmScheduler
 import com.alex.planner.web.alarm.Completion
 import com.alex.planner.web.alarm.Mirror
@@ -109,6 +110,8 @@ object Widgets {
     /** Draws every placed widget again (after a push, a tick, midnight or a clock change). */
     fun update(context: Context) {
         val ctx = context.applicationContext
+        // Before the first unlock after a restart (an alarm ticked from its ringing screen) the widgets' data can't be read yet.
+        if (!AlarmStore.unlocked(ctx)) return
         val manager = AppWidgetManager.getInstance(ctx) ?: return
         for (id in manager.getAppWidgetIds(ComponentName(ctx, TodayWidget::class.java))) manager.updateAppWidget(id, today(ctx, manager.getAppWidgetOptions(id)))
         for (id in manager.getAppWidgetIds(ComponentName(ctx, UpcomingWidget::class.java))) manager.updateAppWidget(id, upcoming(ctx, manager.getAppWidgetOptions(id)))

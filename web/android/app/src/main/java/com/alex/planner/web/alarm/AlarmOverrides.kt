@@ -14,7 +14,7 @@ object AlarmOverrides {
     private const val NOTICED = "noticed:"
     private const val RANG = "rang:"
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = AlarmStore.prefs(context, PREFS)
     private fun key(reminderId: Long, original: Long) = "$reminderId:$original"
 
     /** When this occurrence should ring now: [original], a snoozed time, or null if stopped. */
