@@ -38,9 +38,9 @@ export function openAlarmSection(section: string) {
   wantListeners.forEach((l) => l());
 }
 
-// The shell's + button (fixed over every page) asks the Alarms page what to add.
+// The shell's + button (fixed over every page) asks the Clock page to add something.
 const addMenuListeners = new Set<() => void>();
-/** Opens the Alarms page's "what to add" menu (from the + button). */
+/** The + button on the Clock page: adds an alarm, a timer or a city, by the section shown (70). */
 export function openAlarmAddMenu() { addMenuListeners.forEach((l) => l()); }
 
 /** Dialogs and sheets go to the top of the page, so the sliding sections don't carry or clip them. */
@@ -153,7 +153,17 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const tabs = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLSpanElement>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  useEffect(() => { const open = () => setMenu(true); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
+  // The + button adds what the section shown holds (70): an alarm, a timer, a city; on the stopwatch,
+  // which has nothing to add, it offers the list of everything instead.
+  const addHere = useRef<() => void>(() => {});
+  addHere.current = () => {
+    const k = SECTIONS[idx.current][0];
+    if (k === "alarm") newAlarm();
+    else if (k === "timer") setNewTimer(true);
+    else if (k === "world") setAddZone(true);
+    else setMenu(true);
+  };
+  useEffect(() => { const open = () => addHere.current(); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
   // Where each tab's label sits, measured once (and again after a resize): reading them on every frame
   // of a slide, just after moving the pages, would make the browser recalculate styles mid-frame.

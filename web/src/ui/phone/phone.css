@@ -101,6 +101,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
   box-shadow: 0 3px 5px -1px rgb(0 0 0 / .2), 0 6px 10px 0 rgb(0 0 0 / .14), 0 1px 18px 0 rgb(0 0 0 / .12);
 }
 
+/* A bigger touch target than the button shows (70): a finger 12 px off its edge still hits it. */
+.phone .p-fab::before { content: ""; position: absolute; inset: -12px; border-radius: 28px; }
+
 /* Full-screen pages over the pager (an item, a note, search, settings) */
 .phone .p-overlay { position: absolute; inset: 0; z-index: 30; background: var(--bg); animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
 /* Three-button navigation: a full-screen page stops at the buttons (an opaque strip under them, above the
