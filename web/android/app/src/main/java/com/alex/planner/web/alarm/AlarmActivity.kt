@@ -68,7 +68,41 @@ class AlarmActivity : ComponentActivity() {
         const val ACTION_CLOSE = "com.alex.planner.web.ALARM_CLOSE"
         /** Clock alarm colour (index into the Alarms page palette), or -1. */
         const val EXTRA_COLOR = "color"
+
+        /** Whether the ringing screen is on screen (a second alarm then updates it: AlarmService). */
+        @Volatile var showing = false
+            private set
     }
+
+    /** What the screen shows: read from the intent it was opened with, and again from a new one ([onNewIntent]). */
+    private data class ScreenState(
+        val title: String, val text: String, val itemId: Long, val isClock: Boolean, val isTimer: Boolean,
+        val completable: Boolean, val weather: Pair<ImageVector, String>?,
+    )
+
+    private var shown by mutableStateOf<ScreenState?>(null)
+
+    private fun read(intent: Intent): ScreenState {
+        val isClock = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) != 0L
+        val isTimer = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0) != 0L
+        val itemId = intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0)
+        // Only what's ticked off (a task, or an event that's a routine) offers "Mark done", as its notifications do (247).
+        val completable = !isClock && !isTimer && Mirror.item(this, itemId)?.completable == true
+        // A clock alarm shows the weather at this hour, from the forecast the page last pushed (Forecast.kt).
+        val now = System.currentTimeMillis()
+        val weather = if (isClock) Forecast.at(this, now)?.let { (t, code) -> Forecast.icon(code, now) to "${Math.round(t)}°C" } else null
+        return ScreenState(intent.getStringExtra(EXTRA_TITLE).orEmpty(), intent.getStringExtra(EXTRA_TEXT).orEmpty(), itemId, isClock, isTimer, completable, weather)
+    }
+
+    /** Another alarm took over while this one rang (194): the screen shows it, so "Mark done" ticks the right item. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        shown = read(intent)
+    }
+
+    override fun onStart() { super.onStart(); showing = true }
+    override fun onStop() { showing = false; super.onStop() }
 
     private val closeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = finish()
@@ -84,27 +118,20 @@ class AlarmActivity : ComponentActivity() {
             override fun handleOnBackPressed() {}
         })
         ContextCompat.registerReceiver(this, closeReceiver, IntentFilter(ACTION_CLOSE), ContextCompat.RECEIVER_NOT_EXPORTED)
-        val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
-        val text = intent.getStringExtra(EXTRA_TEXT).orEmpty()
-        val isClock = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) != 0L
-        val isTimer = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0) != 0L
-        // Only what's ticked off (a task, or an event that's a routine) offers "Mark done", as its notifications do (247).
-        val completable = !isClock && !isTimer && Mirror.item(this, intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0))?.completable == true
+        shown = read(intent)
         val accent = Mirror.settings(this).accent
-        // A clock alarm shows the weather at this hour, from the forecast the page last pushed (Forecast.kt).
-        val now = System.currentTimeMillis()
-        val weather = if (isClock) Forecast.at(this, now)?.let { (t, code) -> Forecast.icon(code, now) to "${Math.round(t)}°C" } else null
         setContent {
             MaterialTheme(colorScheme = darkScheme(accents[accent.coerceIn(accents.indices)])) {
+                val s = shown ?: return@MaterialTheme
                 AlarmScreen(
-                    title = title,
-                    text = text,
-                    weather = weather,
+                    title = s.title,
+                    text = s.text,
+                    weather = s.weather,
                     onDismiss = { send(AlarmService.ACTION_DISMISS) },
                     onSnooze = { send(AlarmService.ACTION_SNOOZE) },
-                    snoozeLabel = if (isTimer) "+1 min" else "Snooze",
+                    snoozeLabel = if (s.isTimer) "+1 min" else "Snooze",
                     // Clock alarms, timers and plain events have nothing to tick off.
-                    onComplete = if (!completable) null else { { send(AlarmService.ACTION_COMPLETE) } },
+                    onComplete = if (!s.completable) null else { { send(AlarmService.ACTION_COMPLETE) } },
                 )
             }
         }
@@ -125,7 +152,8 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun send(action: String) {
-        startService(Intent(this, AlarmService::class.java).setAction(action))
+        // Says which item it showed, so a complete meant for one alarm never ticks the one that took over.
+        startService(Intent(this, AlarmService::class.java).setAction(action).putExtra(AlarmReceiver.EXTRA_ITEM, shown?.itemId ?: 0L))
         finish()
     }
 

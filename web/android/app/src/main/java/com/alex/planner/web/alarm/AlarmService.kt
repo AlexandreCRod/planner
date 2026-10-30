@@ -84,6 +84,7 @@ class AlarmService : Service() {
     private var day = 0L
     private var original = 0L
     private var title = ""
+    private var ringText = ""
     /** Set when a clock alarm (Alarms page) is ringing rather than a task or event's alarm. */
     private var clockId = 0L
     /** Set when a timer (Alarms page) is up. */
@@ -95,8 +96,17 @@ class AlarmService : Service() {
         when (intent?.action) {
             ACTION_DISMISS -> { finishAlarm(); return START_NOT_STICKY }
             ACTION_SNOOZE -> { snoozeAndStop(); return START_NOT_STICKY }
-            ACTION_COMPLETE -> { completeAndStop(); return START_NOT_STICKY }
+            ACTION_COMPLETE -> {
+                // Only for the item the screen showed: if another alarm took over meanwhile, nothing is ticked.
+                val shown = intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, itemId)
+                if (shown == itemId) completeAndStop()
+                return START_NOT_STICKY
+            }
         }
+        // A second alarm while one rings (194): the first isn't silently replaced, it gets a missed notice,
+        // and the ringing screen moves on to the new one (AlarmActivity.onNewIntent).
+        val takeover = ringing != null
+        if (takeover) missedNotice()
         stopRinging()
         itemId = intent?.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0) ?: 0
         reminderId = intent?.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0) ?: 0
@@ -105,6 +115,7 @@ class AlarmService : Service() {
         clockId = intent?.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) ?: 0
         timerId = intent?.getLongExtra(ClockTools.EXTRA_TIMER, 0) ?: 0
         val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty()
+        ringText = text
         val sound = intent?.getStringExtra(EXTRA_SOUND)
 
         val clock = if (clockId != 0L) ClockAlarms.get(this, clockId) else null
@@ -141,9 +152,12 @@ class AlarmService : Service() {
         // Started from the foreground-service start the receiver made, so this must come straight away.
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
         ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
+        // The ringing screen, when it's showing, shows the new alarm at once (the full-screen intent
+        // only opens it the first time).
+        if (takeover && AlarmActivity.showing) runCatching { startActivity(full) }
         startRinging(sound)
         listenToVolumeKeys()
-        handler.postDelayed({ timeout(text) }, ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L))
+        handler.postDelayed({ timeout() }, ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L))
         ringing = Ringing(itemId, reminderId, day, clockId, timerId)
         AlarmEvents.changed("ringing")
         return START_NOT_STICKY
@@ -288,13 +302,23 @@ class AlarmService : Service() {
         focus = null
     }
 
-    private fun timeout(text: String) {
+    private fun timeout() {
         stopRinging()
+        missedNotice()
+        finishAlarm()
+    }
+
+    /** "Missed alarm" for what's ringing now (it timed out, or another alarm took its place). */
+    private fun missedNotice() {
+        val id = when {
+            reminderId != 0L -> smallId(reminderId)
+            clockId != 0L -> Missed.clockNoticeId(clockId)
+            else -> 777_001
+        }
         Missed.show(
-            this, if (reminderId != 0L) smallId(reminderId) else 777_001, title, text,
+            this, id, title, ringText,
             if (itemId != 0L) Notifications.openItemIntent(this, itemId) else Notifications.openSectionIntent(this, if (timerId != 0L) "timer" else "alarm", 4),
         )
-        finishAlarm()
     }
 
     private fun snoozeAndStop() {
