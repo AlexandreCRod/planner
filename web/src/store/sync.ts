@@ -1,7 +1,7 @@
 // Two-way sync with the Worker: same protocol as the phone (app/.../sync/CloudSync.kt).
 // Compare local records with the last synced copy ("base"), send the differences, apply what
 // comes back. The server settles conflicts; deletes are sent as data: null.
-import { apiUrl, deviceName } from "../platform.ts";
+import { apiUrl, deviceName, isTestApp } from "../platform.ts";
 import * as db from "./db.ts";
 import { fetchMissing, uploadBlob } from "./images.ts";
 import { filesToFetch, syncedFile } from "../domain/media.ts";
@@ -96,6 +96,7 @@ let again = false;
  * one is running is sent by another round straight after it (it wasn't in the copy that one sent).
  */
 export function syncNow(force = false): Promise<number> {
+  if (isTestApp()) return Promise.resolve(0); // "Planner Test" never syncs (129)
   if (running) { again = true; return running; }
   again = false;
   running = doSync(force).finally(() => {

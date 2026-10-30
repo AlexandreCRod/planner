@@ -153,6 +153,13 @@ export async function load() {
   changed(true);
 }
 
+/** Puts [entries] ("kind/key" and record) in place of every record: "Planner Test"'s "Reset sample data" only (it never syncs). */
+export function replaceAllRecords(entries: [string, Rec][]) {
+  records.clear();
+  for (const [k, v] of entries) records.set(k, v);
+  changed();
+}
+
 /** Replaces records from sync: data null = deleted. */
 export function applyRemote(changes: { kind: Kind; id: string; data: Rec | null }[]) {
   for (const c of changes) {

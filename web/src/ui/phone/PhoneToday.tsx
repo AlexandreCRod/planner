@@ -11,7 +11,7 @@ import { type Snapshot, toggleCompletion, useSnapshot } from "../../store/store.
 import { useWide } from "../../platform.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, IconButton, MIcon } from "./chrome.tsx";
+import { AppBarActions, IconButton, MIcon, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { mouseMenu } from "./desk.ts";
@@ -433,6 +433,7 @@ export function PhoneToday() {
           <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => show(day + 1)} />
         </div>
         <span className="grow" />
+        <TestChip />
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
         {/* On another day, Back to today takes its place (the bar has no room for both beside a long weekday). */}

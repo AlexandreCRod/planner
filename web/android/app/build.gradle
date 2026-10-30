@@ -51,6 +51,17 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+        // "Planner Test" (roadmap 129): the release build with its own app ID, so it installs beside the real
+        // app with its own data. Its name and icon colour are in src/sandbox/res; the page sees the ".test" ID
+        // (platform.ts isTestApp) and runs without sync or updates, on sample data. `assembleSandbox` builds it;
+        // `assembleRelease` still builds only the real app, as before.
+        sandbox {
+            initWith release
+            applicationIdSuffix ".test"
+            versionNameSuffix "-test"
+            matchingFallbacks = ['release']
+            if (signingProps.storeFile) signingConfig signingConfigs.release
+        }
     }
 }
 

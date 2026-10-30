@@ -4,6 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { go } from "../shared/common.tsx";
+import { isTestApp } from "../../platform.ts";
 import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
@@ -68,9 +69,15 @@ export function TopAppBar({ title, back, actions, tall, className = "", navIcon 
     <header className={`p-appbar ${tall ? "tall" : ""} ${className}`}>
       {navIcon ?? (back && <IconButton icon="fArrowBack" label="Back" onClick={() => history.back()} />)}
       <div className={`p-appbar-title ${back || navIcon ? "" : "inset"}`}>{title}</div>
+      <TestChip />
       {actions}
     </header>
   );
+}
+
+/** "Planner Test"'s marker in every top bar (129), so it's never taken for the real app; nothing in the real app. */
+export function TestChip() {
+  return isTestApp() ? <span className="p-testchip" title="Planner Test: its own data, no sync">TEST</span> : null;
 }
 
 /** A page: the top app bar with search and settings (or a back arrow), then its scrolling content. */

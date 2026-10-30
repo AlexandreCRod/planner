@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- "Planner Test" (build type sandbox, roadmap 129): only what differs from src/main. -->
+<resources>
+    <string name="app_name">Planner Test</string>
+    <string name="title_activity_main">Planner Test</string>
+</resources>

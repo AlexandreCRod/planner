@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Planner Test": an orange icon, so it's never mistaken for the real app on the home screen. -->
+<resources>
+    <color name="launcher_bg">#C45A10</color>
+</resources>

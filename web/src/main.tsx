@@ -4,7 +4,8 @@ import "./styles.css";
 import { startNotifications } from "./notify.ts";
 import { startAlarmMirror } from "./alarms/mirror.ts";
 import { startHealthReading } from "./health/healthConnect.ts";
-import { isNative } from "./platform.ts";
+import { detectTestApp, isNative, isTestApp } from "./platform.ts";
+import { seedSampleOnce } from "./store/sample.ts";
 import { ensureDefaults, flushAll, load, setChangeHook, tidy } from "./store/store.ts";
 import { logProblem, startProblemLog } from "./problems.ts";
 import { startProblemSync } from "./store/problemSync.ts";
@@ -48,7 +49,7 @@ async function start() {
     return;
   }
   try {
-    await load();
+    await Promise.all([load(), detectTestApp()]);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     logProblem("start", `Couldn't load the data: ${message}`, e instanceof Error ? e.stack ?? "" : "");
@@ -57,7 +58,10 @@ async function start() {
   }
   // Ask the browser to keep the local copy even when the device runs low on space.
   void navigator.storage?.persist?.().catch(() => {});
-  setChangeHook(() => requestSync());
+  // "Planner Test" (129): sample data on its first start, and no sync at all (no sign-in either).
+  const test = isTestApp();
+  if (test) seedSampleOnce();
+  else setChangeHook(() => requestSync());
   // Put away (home, recents, the screen going off, the tab closing): every waiting save is written at
   // once, and what changed goes to the server, as the app may be killed before any timer runs.
   const putAway = () => { void flushAll(); if (getToken()) void syncNow(); };
@@ -74,7 +78,8 @@ async function start() {
   window.setInterval(() => tidy(), 3_600_000);
   // The problem log goes to the server too, so it can be read there (265).
   startProblemSync();
-  if (getToken()) startAutoSync();
+  if (test) ensureDefaults();
+  else if (getToken()) startAutoSync();
   else signOut();
   // Default categories only after the first sync finds none (the server may already have the user's own).
   const offDefaults = onStatus((st) => { if (st.state === "idle" && st.lastSyncAt) { offDefaults(); ensureDefaults(); } });

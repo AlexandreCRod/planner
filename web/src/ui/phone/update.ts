@@ -5,7 +5,7 @@
 import { App as CapApp } from "@capacitor/app";
 import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNewerVersion, updateCheckDue } from "../../domain/version.ts";
-import { isNative } from "../../platform.ts";
+import { isNative, isTestApp } from "../../platform.ts";
 
 const LATEST_URL = "https://api.github.com/repos/AlexandreCRod/planner/releases/latest";
 const CHECKED_KEY = "updateCheckedAt";
@@ -69,7 +69,8 @@ export type CheckResult = "newer" | "current" | "failed";
  * and a release dismissed with "Later" isn't offered again; from Settings it always runs.
  */
 export async function checkForUpdate(manual: boolean): Promise<CheckResult> {
-  if (!plugin) return "failed";
+  // "Planner Test" (129) is never offered the real app's releases: it's installed by hand.
+  if (!plugin || isTestApp()) return "failed";
   if (!manual && !updateCheckDue(Number(get(CHECKED_KEY) ?? 0), Date.now())) return "current";
   set(CHECKED_KEY, String(Date.now()));
   const installed = await installedVersion();
@@ -88,7 +89,7 @@ export async function checkForUpdate(manual: boolean): Promise<CheckResult> {
  * function that stops listening.
  */
 export function watchForUpdates(delayMs = 2500): () => void {
-  if (!plugin) return () => {};
+  if (!plugin || isTestApp()) return () => {};
   let timer = 0;
   const soon = () => { clearTimeout(timer); timer = window.setTimeout(() => void checkForUpdate(false), delayMs); };
   soon();

@@ -13,7 +13,8 @@ import { sizeText, STORAGE_LIMIT, storageUse } from "../../domain/storage.ts";
 import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
 import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
-import { getServer, isNative, setServer, useWide } from "../../platform.ts";
+import { getServer, isNative, isTestApp, setServer, useWide } from "../../platform.ts";
+import { resetSample } from "../../store/sample.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
@@ -178,6 +179,7 @@ function UpdateRow() {
   useEffect(() => { void installedVersion().then(setVersion); }, []);
   const check = async () => {
     if (checking) return;
+    if (isTestApp()) { showSnackbar("Planner Test is updated by hand, not from GitHub"); return; }
     setChecking(true);
     const r = await checkForUpdate(true);
     setChecking(false);
@@ -206,7 +208,7 @@ export function PhoneSettings() {
   const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
   const [streaksOpen, setStreaksOpen] = useState(false);
-  const [dialog, setDialog] = useState<"" | "server" | "signout">("");
+  const [dialog, setDialog] = useState<"" | "server" | "signout" | "sample">("");
   const [server, setServerShown] = useState(getServer());
   const [busy, setBusy] = useState(false);
   // The PC: reminders pop up from the page (notify.ts) once the browser may show notifications.
@@ -280,6 +282,13 @@ export function PhoneSettings() {
             checked={notify} onChange={(v) => void setNotificationsEnabled(v).then(setNotify)} />
         </>}
 
+        {isTestApp() && <>
+          <div className="p-hr" />
+          <SectionHeader>Planner Test</SectionHeader>
+          <div className="pe-small ps-note">A test copy of Planner, to try new versions first. It has its own data and never syncs, so nothing here reaches your real app.</div>
+          <div className="ps-buttons"><OutlinedButton onClick={() => setDialog("sample")}>Reset sample data</OutlinedButton></div>
+        </>}
+        {!isTestApp() && <>
         <div className="p-hr" />
         <SectionHeader>Cloud sync</SectionHeader>
         {/* The PC is served by the server itself; only the phone build is told where it is. */}
@@ -297,6 +306,7 @@ export function PhoneSettings() {
           <OutlinedButton disabled={busy || sync.state === "signed-out"} onClick={async () => { setBusy(true); await syncNow(); setBusy(false); }}>Sync now</OutlinedButton>
           <OutlinedButton onClick={() => setDialog("signout")}>Sign out</OutlinedButton>
         </div>
+        </>}
 
         <div className="p-hr" />
         <SectionHeader>Data</SectionHeader>
@@ -313,6 +323,12 @@ export function PhoneSettings() {
       {dialog === "server" && (
         <TextFieldDialog title="Server" label="Server URL" initial={server} onClose={() => setDialog("")}
           onSave={(u) => { setServer(u); setServerShown(getServer()); void syncNow(); }} />
+      )}
+      {dialog === "sample" && (
+        <Dialog title="Reset sample data?" onClose={() => setDialog("")} actions={<>
+          <TextButton onClick={() => setDialog("")}>Cancel</TextButton>
+          <TextButton onClick={() => { resetSample(); setDialog(""); showSnackbar("Sample data put back"); }}>Reset</TextButton>
+        </>}>Everything in Planner Test is replaced by the sample week. Your real app isn't touched.</Dialog>
       )}
       {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
       {dialog === "signout" && (

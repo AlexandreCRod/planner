@@ -1,10 +1,26 @@
 // Where the app runs: a desktop browser (the PC app), a phone-width browser, or the Capacitor phone
 // build. Every screen is the phone's; a wide browser window lays them out for its width (html.wide).
+import { App as CapApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 
 /** Running inside the Capacitor Android app. */
 export const isNative = Capacitor.isNativePlatform();
+
+// ---------- "Planner Test" (roadmap 129) ----------
+// A second Android build (build type sandbox, app ID com.alex.planner.web.test) installed beside the real
+// app: its own data, no sync, no updates, sample data, and a TEST chip in the top bar. The web files are
+// the same, so the page asks Android which app it is, once, before the first render (main.tsx).
+// In `npm run dev` only, localStorage devTestApp=1 makes the browser act as the test app, for checks.
+
+let testApp = import.meta.env.DEV && typeof localStorage !== "undefined" && localStorage.getItem("devTestApp") === "1";
+/** Running as "Planner Test": never syncs, never offers updates, starts on sample data. */
+export const isTestApp = () => testApp;
+/** Finds out whether this is the test app (its app ID ends in ".test"); call before the first render. */
+export async function detectTestApp(): Promise<void> {
+  if (!isNative) return;
+  try { testApp = (await CapApp.getInfo()).id.endsWith(".test"); } catch { /* the real app, as before */ }
+}
 
 /** The PC's wide layout starts here; a window snapped to half the screen keeps the phone's. */
 export const WIDE_MIN = 900;

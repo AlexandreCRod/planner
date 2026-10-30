@@ -1,4 +1,4 @@
-import { useWide } from "../platform.ts";
+import { isTestApp, useWide } from "../platform.ts";
 import { Login } from "./Login.tsx";
 import { PhoneApp } from "./phone/PhoneApp.tsx";
 import { ErrorBoundary } from "./shared/ErrorBoundary.tsx";
@@ -13,6 +13,6 @@ export function App() {
   // rendering, so the pages measure themselves with it already applied.
   document.documentElement.classList.add("phone");
   document.documentElement.classList.toggle("wide", wide);
-  if (sync.state === "signed-out") return <Login message={sync.message} />;
+  if (sync.state === "signed-out" && !isTestApp()) return <Login message={sync.message} />;
   return <ErrorBoundary where="App" full><PhoneApp /></ErrorBoundary>;
 }
