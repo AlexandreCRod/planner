@@ -1,4 +1,4 @@
-// The Alarms tab, drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
+// The Clock tab (69: the route is still "alarms"), drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
 // one, a filter, close ones bundled, and the next week's task and event alarms), a timer, a stopwatch and a world clock, under Material 3 primary
 // tabs. The four sections also turn with a finger swiped sideways, live like a pager, with the tab
 // indicator riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
@@ -135,7 +135,7 @@ function PermissionCards() {
 
 // ---------- The page ----------
 
-/** The Alarms tab. [active]: it's the page on screen (clocks only tick then). */
+/** The Clock tab. [active]: it's the page on screen (clocks only tick then). */
 export function PhoneAlarms({ active }: { active: boolean }) {
   const st = useAlarmState();
   const [index, setIndex] = useState(() => {
@@ -221,7 +221,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
 
   return (
     <div className="p-scaffold pa-page">
-      <TopAppBar title="Alarms" actions={<AppBarActions />} />
+      <TopAppBar title="Clock" actions={<AppBarActions />} />
       <div className="pa-tabs" ref={tabs} role="tablist">
         {SECTIONS.map(([k, label], i) => (
           <button key={k} role="tab" aria-selected={index === i} className={`pa-tab ${index === i ? "on" : ""}`} onClick={() => show(i)}>
