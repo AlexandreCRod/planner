@@ -1007,8 +1007,12 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 /* Timer and stopwatch. */
 .phone .pa-presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .phone .p-assist.pa-chip { padding: 0 16px; }
-.phone .pa-timer { padding: 12px 8px 12px 20px; }
-.phone .pa-timer-head { display: flex; align-items: center; margin: -4px 0; }
+.phone .pa-timer { padding: 6px 4px 10px 20px; }
+.phone .pa-timer-head { display: flex; align-items: center; height: 36px; }
+.phone .pa-timer-row { display: flex; align-items: center; gap: 6px; padding-right: 12px; }
+.phone .pa-timer-row .pa-time36 { font-variant-numeric: tabular-nums; min-width: 0; }
+.phone .pa-timer-row .p-icon { color: var(--muted); }
+.phone .pa-timer-row .pa-small-btn { height: 36px; padding: 0 14px; border-radius: 18px; flex: none; }
 .phone .pa-buttons { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0 0; }
 .phone .pa-buttons.center { justify-content: center; gap: 12px; padding: 0; }
 .phone .pa-tonal { position: relative; overflow: hidden; height: 40px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--p-sec-container); color: var(--p-on-sec-container); font-size: 14px; font-weight: 500; letter-spacing: .1px; }

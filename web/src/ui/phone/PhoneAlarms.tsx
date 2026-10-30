@@ -734,13 +734,14 @@ function TimerCard({ t, now }: { t: ClockTimer; now: number }) {
         <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}</span>
         <IconButton icon="fClose" label="Delete timer" onClick={() => run("delete")} />
       </div>
-      <div className={`pa-time52 ${running ? "" : "muted"}`}>{formatDuration(left)}</div>
-      <div className="pa-buttons">
+      {/* One row (76): the time, then Reset (its symbol), +1:00 and Pause or Resume. */}
+      <div className="pa-timer-row">
+        <div className={`pa-time36 grow ${running ? "" : "muted"}`}>{formatDuration(left)}</div>
+        {left !== t.durationMs && <IconButton icon="fReplay" label="Reset" onClick={() => run("reset")} />}
+        <button className="p-outlined-btn pa-small-btn" onClick={() => run("plus")}>+1:00</button>
         {running
-          ? <button className="pa-tonal" onClick={() => run("pause")}>Pause</button>
-          : <button className="p-filled-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
-        <button className="p-outlined-btn" onClick={() => run("plus")}>+1:00</button>
-        {left !== t.durationMs && <TextButton onClick={() => run("reset")}>Reset</TextButton>}
+          ? <button className="pa-tonal pa-small-btn" onClick={() => run("pause")}>Pause</button>
+          : <button className="p-filled-btn pa-small-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
       </div>
     </div>
   );
