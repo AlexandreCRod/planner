@@ -28,7 +28,10 @@ import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
-import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { type LaunchApp, act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { WeatherAppSheet } from "./WeatherAppSheet.tsx";
+import { CLOCK_FILTERS } from "../../domain/clockList.ts";
+import { BUNDLE_WINDOW_CHOICES, setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
@@ -98,8 +101,15 @@ const minutesChoice = (m: number): [string, string] => [String(m), m === 1 ? "1 
  */
 function AlarmSettingsSection() {
   const st = useAlarmSettings();
+  const clock = useClockPrefs();
   const { ring, perms, weatherApp } = useAlarmState();
   const [time, setTime] = useState<"" | "task" | "qs" | "qe">("");
+  const [apps, setApps] = useState<LaunchApp[] | null>(null);
+  /** The app's own searchable list (83); Android's picker when the engine can't list apps (older native side). */
+  const pickWeather = async () => {
+    const list = await native.weatherApps();
+    if (list?.length) setApps(list); else await act(native.pickWeatherApp());
+  };
   const pickSound = async () => {
     const r = await native.pickSound(st.defaultAlarmSound, "Default alarm sound");
     if (r.picked) setAlarmSettings({ defaultAlarmSound: r.uri ?? null, defaultAlarmSoundName: r.uri ? r.name ?? null : null });
@@ -120,13 +130,19 @@ function AlarmSettingsSection() {
       onPick={(v) => setAlarmSettings({ clockRingMinutes: Number(v) })} />
     <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
       supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
+    <ChoiceRow title="Default alarm filter" value={clock.defaultFilter ?? "all"} options={[["all", "None: every alarm"], ...CLOCK_FILTERS]}
+      onPick={(v) => setClockPrefs({ defaultFilter: v === "all" ? null : v as typeof clock.defaultFilter })} />
+    <ChoiceRow title="Bundle alarms" value={String(clock.bundleWindow)}
+      options={BUNDLE_WINDOW_CHOICES.map((m): [string, string] => [String(m), m === 0 ? "Never: every alarm on its own" : `Up to ${m} min apart`])}
+      supporting={clock.bundleWindow === 0 ? "Never: every alarm on its own" : `Alarms with the same days up to ${clock.bundleWindow} min apart share a card`}
+      onPick={(v) => setClockPrefs({ bundleWindow: Number(v) })} />
     <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
     {st.quietHoursEnabled && <>
       <ListItem headline="Quiet from" supporting={formatTime(st.quietStart)} onClick={() => setTime("qs")} />
       <ListItem headline="Quiet until" supporting={formatTime(st.quietEnd)} onClick={() => setTime("qe")} />
     </>}
     <ListItem headline="Weather app" supporting={weatherApp ? `${weatherApp} — opens from the world clock` : "None — the world clock opens a weather page"}
-      onClick={() => void act(native.pickWeatherApp())}
+      onClick={() => void pickWeather()}
       trailing={weatherApp ? <IconButton icon="fClose" label="Forget the weather app" onClick={() => void act(native.clearWeatherApp())} /> : undefined} />
     <ListItem headline="Notification permission" supporting={perms.notifications ? "Allowed" : "Blocked — tap to fix"}
       onClick={() => void (perms.notifications ? native.openSettings("notifications") : ensureNotifications("Alarms, reminders and timers show and ring through notifications, so this app needs them allowed."))} />
@@ -134,6 +150,7 @@ function AlarmSettingsSection() {
     {!perms.exact && <ListItem headline="Alarms & reminders" supporting="Not allowed — tap to fix, or alarms may ring late" onClick={() => void native.openSettings("exact")} />}
     <ListItem headline="Battery optimization" supporting={perms.batteryExempt ? "Not optimized: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
     {perms.xiaomi && <XiaomiChecks />}
+    {apps && <WeatherAppSheet apps={apps} current={weatherApp} onClose={() => setApps(null)} />}
     {time && (
       <TimePickerDialog value={time === "task" ? st.defaultTaskTime : time === "qs" ? st.quietStart : st.quietEnd} onClose={() => setTime("")}
         onPick={(m) => setAlarmSettings(time === "task" ? { defaultTaskTime: m } : time === "qs" ? { quietStart: m } : { quietEnd: m })} />
@@ -247,9 +264,10 @@ export function PhoneSettings() {
   /** A display setting: kept, then every page redrawn with it. */
   const redraw = (k: string, v: string) => { store(k, v); changed(true); };
 
-  const status = sync.state === "syncing" ? "Syncing…"
-    : sync.state === "signed-out" ? "Signed out"
-    : `Last sync: ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}${sync.message ? `\n${sync.message}` : ""}`;
+  // Always two lines, the same while syncing: the row changing height at every sync made the page behind a
+  // popup (Check for updates) jump every so often (134).
+  const status = sync.state === "signed-out" ? "Signed out"
+    : `Last sync: ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}\n${sync.state === "syncing" ? "Syncing…" : sync.message || "Up to date"}`;
 
   return (
     <Scaffold title="Settings" back flush>

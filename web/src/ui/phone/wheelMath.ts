@@ -25,6 +25,12 @@ export function splitTime(min: number, h24: boolean, minutes: number[]): { hour:
   return { hour: h24 ? h : h % 12, minute, pm: h >= 12 };
 }
 
+/**
+ * On a 12-hour clock, whether the hour wheel turning from row [from] to row [to] (rows 12, 1 ... 11) passes
+ * 11 ↔ 12, so AM/PM flips with it, as Android's own time picker does: 11 AM → 12 PM, 12 PM → 11 AM.
+ */
+export const passesNoon = (from: number, to: number): boolean => (from === 11 && to === 0) || (from === 0 && to === 11);
+
 /** The minute of the day the rows show. */
 export function joinTime(hour: number, minute: number, pm: boolean, h24: boolean, minutes: number[]): number {
   const h = h24 ? hour : (hour % 12) + (pm ? 12 : 0);

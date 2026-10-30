@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dragEdgeTimes, durationRows, joinDuration, joinTime, moveKeepingLength, nearestSlot, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "../src/ui/phone/wheelMath.ts";
+import { dragEdgeTimes, durationRows, joinDuration, joinTime, moveKeepingLength, nearestSlot, passesNoon, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "../src/ui/phone/wheelMath.ts";
 import { snapIndex } from "../src/ui/phone/motion.ts";
 
 test("minutes come in fives, keeping an odd minute the item already has", () => {
@@ -91,4 +91,27 @@ test("alarm wheels go by the minute, event wheels by five", () => {
   assert.equal(wheelMinutes(1).length, 60);
   const mins = wheelMinutes(1);
   assert.equal(joinTime(splitTime(7 * 60 + 13, true, mins).hour, splitTime(7 * 60 + 13, true, mins).minute, false, true, mins), 7 * 60 + 13);
+});
+
+test("on a 12-hour clock the AM/PM wheel flips as the hour wheel passes 11 ↔ 12, like Android's picker (220)", () => {
+  const minutes = wheelMinutes(5);
+  const hours = wheelHours(false); // rows: 12, 1 ... 11
+  // Turning the hour wheel step by step, as the picker hears each row: flip when passing 11 ↔ 12.
+  const turn = (start: number, steps: number) => {
+    let t = splitTime(start, false, minutes);
+    for (let k = 0; k < Math.abs(steps); k++) {
+      const next = wrapIndex(t.hour + Math.sign(steps), hours.length);
+      t = { ...t, hour: next, pm: passesNoon(t.hour, next) ? !t.pm : t.pm };
+    }
+    return joinTime(t.hour, t.minute, t.pm, false, minutes);
+  };
+  assert.equal(turn(11 * 60 + 30, 1), 12 * 60 + 30); // 11:30 AM → 12:30 PM
+  assert.equal(turn(12 * 60 + 30, -1), 11 * 60 + 30); // 12:30 PM → 11:30 AM
+  assert.equal(turn(23 * 60, 1), 0); // 11 PM → 12 AM (midnight)
+  assert.equal(turn(0, -1), 23 * 60); // 12 AM → 11 PM
+  assert.equal(turn(9 * 60, 2), 11 * 60); // 9 AM → 11 AM: no flip
+  assert.equal(turn(10 * 60, 3), 13 * 60); // 10 AM → 1 PM
+  assert.equal(turn(10 * 60, 12), 22 * 60); // a whole turn: 10 AM → 10 PM
+  assert.equal(passesNoon(0, 1), false);
+  assert.equal(passesNoon(5, 6), false);
 });

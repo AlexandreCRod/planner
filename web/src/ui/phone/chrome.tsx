@@ -209,10 +209,31 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     else if (shown) { setLeaving(true); const t = window.setTimeout(() => { setShown(false); setLeaving(false); }, 75); return () => clearTimeout(t); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => (open ? pushBack(onClose) : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A menu that would run off the bottom of the screen opens above its row instead, or as low as fits (84).
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !open) return;
+    el.style.top = el.style.bottom = el.style.transformOrigin = "";
+    // Measured unscaled (it grows in from 80%), within what shows of the page scrolling it.
+    let lo = 8, hi = window.innerHeight - 8;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === "auto" || oy === "scroll") { const b = p.getBoundingClientRect(); lo = Math.max(lo, b.top + 8); hi = Math.min(hi, b.bottom - 8); break; }
+    }
+    const top = el.getBoundingClientRect().top, h = el.offsetHeight;
+    if (top + h <= hi) return;
+    const anchor = el.parentElement?.getBoundingClientRect();
+    if (anchor && anchor.top - h >= lo) {
+      el.style.top = "auto"; el.style.bottom = "100%"; el.style.transformOrigin = "bottom left";
+    } else {
+      el.style.top = `${el.offsetTop - Math.min(top + h - hi, top - lo)}px`;
+    }
+  }, [shown, open]);
   if (!shown) return null;
   return <>
     <div className="p-menu-scrim" onPointerDown={onClose} />
-    <div className={`p-menu ${leaving ? "out" : ""}`} role="menu">
+    <div ref={box} className={`p-menu ${leaving ? "out" : ""}`} role="menu">
       {items.map((it, i) => (
         <div key={i}>
           {it.divider && <div className="p-menu-divider" />}
@@ -278,9 +299,8 @@ const PAGE = "M6 5H18a2.5 2.5 0 0 1 2.5 2.5V18a2.5 2.5 0 0 1 -2.5 2.5H6a2.5 2.5 
 const dot = (x: number, y: number, r = 1.1) => `M${x - r} ${y}a${r} ${r} 0 1 1 ${2 * r} 0a${r} ${r} 0 1 1 ${-2 * r} 0`;
 const DOTS = [dot(8, 14), dot(12, 14), dot(16, 14), dot(8, 17.5), dot(12, 17.5)].join("");
 const FILLED_PAGE = "M6 4.1H18a3.4 3.4 0 0 1 3.4 3.4V18a3.4 3.4 0 0 1 -3.4 3.4H6a3.4 3.4 0 0 1 -3.4 -3.4V7.5a3.4 3.4 0 0 1 3.4 -3.4ZM4.4 9.3H19.6V10.5H4.4Z";
-/** AlarmFilledIcon (TabIcons.kt): two bells' strokes, a solid face with the hands cut out. */
-const ALARM_BELLS = "M2.9 6.3L6.3 3.2M21.1 6.3L17.7 3.2";
-const ALARM_FACE = "M3.5 13a8.5 8.5 0 1 1 17 0a8.5 8.5 0 1 1 -17 0ZM11.1 8H12.9V12.1H15.8V13.9H11.1Z";
+/** The Clock tab's solid icon (69): a clock face with the hands cut out (the outlined one is oSchedule). */
+const CLOCK_FACE = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM11.1 6.5H12.9V11.1H16.6V12.9H11.1Z";
 const TASK_FILLED = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM6.3 12.4L7.7 11L10.5 13.8L16.3 8L17.7 9.4L10.5 16.6Z";
 
 /** One tab's icon, outlined or solid (TabIcons.kt and the Material icons HomeScreen.kt picks). */
@@ -307,9 +327,7 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
       break;
     case "tasks": body = <path d={selected ? TASK_FILLED : ICONS.oTaskAlt} fill="currentColor" fillRule="evenodd" />; break;
     case "alarms":
-      body = selected
-        ? <><path d={ALARM_BELLS} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" /><path d={ALARM_FACE} fill="currentColor" fillRule="evenodd" /></>
-        : <path d={ICONS.oAlarm} fill="currentColor" />;
+      body = <path d={selected ? CLOCK_FACE : ICONS.oSchedule} fill="currentColor" fillRule="evenodd" />;
       break;
     case "notes": body = <path d={selected ? ICONS.fLightbulb : ICONS.oLightbulb} fill="currentColor" />; break;
     // The run icons have no outlined kind: the same one, its colour following the selection.

@@ -1,4 +1,4 @@
-// The Alarms tab, drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
+// The Clock tab (69: the route is still "alarms"), drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
 // one, a filter, close ones bundled, and the next week's task and event alarms), a timer, a stopwatch and a world clock, under Material 3 primary
 // tabs. The four sections also turn with a finger swiped sideways, live like a pager, with the tab
 // indicator riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type AlarmFilter, type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
@@ -15,12 +15,17 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
+import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, nextRingDay, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
+import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
-import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
-import { DatePickerDialog, MultiDatePickerDialog } from "./pickers.tsx";
+import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
+import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
+import { feel } from "./haptics.ts";
+import { TOUCH_SLOP } from "./press.ts";
+import { mouseMenu } from "./desk.ts";
 
 type Section = "alarm" | "timer" | "stopwatch" | "world";
 const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
@@ -38,9 +43,9 @@ export function openAlarmSection(section: string) {
   wantListeners.forEach((l) => l());
 }
 
-// The shell's + button (fixed over every page) asks the Alarms page what to add.
+// The shell's + button (fixed over every page) asks the Clock page to add something.
 const addMenuListeners = new Set<() => void>();
-/** Opens the Alarms page's "what to add" menu (from the + button). */
+/** The + button on the Clock page: adds an alarm, a timer or a city, by the section shown (70). */
 export function openAlarmAddMenu() { addMenuListeners.forEach((l) => l()); }
 
 /** Dialogs and sheets go to the top of the page, so the sliding sections don't carry or clip them. */
@@ -64,8 +69,9 @@ const relative = (d: Date) => relativeDay(epochOf(d.getFullYear(), d.getMonth() 
 /** "Mon 20" (within a few weeks, the month goes without saying). */
 const shortDay = (day: number) => `${dayShort(weekday(day))} ${ymd(day).d}`;
 const todayNow = () => { const n = new Date(); return epochOf(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
-/** An alarm's repeat line, with a pause or skipped days after it. */
-const scheduleLine = (a: ClockAlarm, now: Date) => [repeatText(a, now, relative), a.enabled ? pauseText(a, todayNow(), shortDay) : ""].filter(Boolean).join(" · ");
+/** An alarm's repeat line, with a pause or skipped days after it ("Skips tomorrow", 75). */
+const scheduleLine = (a: ClockAlarm, now: Date) =>
+  [repeatText(a, now, relative), a.enabled ? skipText(a, todayNow(), shortDay) || pauseText(a, todayNow(), shortDay) : ""].filter(Boolean).join(" · ");
 
 // ---------- Asking for permissions, with the reason ----------
 
@@ -135,7 +141,7 @@ function PermissionCards() {
 
 // ---------- The page ----------
 
-/** The Alarms tab. [active]: it's the page on screen (clocks only tick then). */
+/** The Clock tab. [active]: it's the page on screen (clocks only tick then). */
 export function PhoneAlarms({ active }: { active: boolean }) {
   const st = useAlarmState();
   const [index, setIndex] = useState(() => {
@@ -153,7 +159,17 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const tabs = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLSpanElement>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  useEffect(() => { const open = () => setMenu(true); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
+  // The + button adds what the section shown holds (70): an alarm, a timer, a city; on the stopwatch,
+  // which has nothing to add, it offers the list of everything instead.
+  const addHere = useRef<() => void>(() => {});
+  addHere.current = () => {
+    const k = SECTIONS[idx.current][0];
+    if (k === "alarm") newAlarm();
+    else if (k === "timer") setNewTimer(true);
+    else if (k === "world") setAddZone(true);
+    else setMenu(true);
+  };
+  useEffect(() => { const open = () => addHere.current(); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
   // Where each tab's label sits, measured once (and again after a resize): reading them on every frame
   // of a slide, just after moving the pages, would make the browser recalculate styles mid-frame.
@@ -221,7 +237,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
 
   return (
     <div className="p-scaffold pa-page">
-      <TopAppBar title="Alarms" actions={<AppBarActions />} />
+      <TopAppBar title="Clock" actions={<AppBarActions />} />
       <div className="pa-tabs" ref={tabs} role="tablist">
         {SECTIONS.map(([k, label], i) => (
           <button key={k} role="tab" aria-selected={index === i} className={`pa-tab ${index === i ? "on" : ""}`} onClick={() => show(i)}>
@@ -289,30 +305,29 @@ function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void;
 
 // ---------- Alarms ----------
 
-type Show = AlarmFilter;
-const SHOW: [Show, string][] = [["all", "All"], ["on", "Active"], ["off", "Inactive"], ["weekdays", "Weekdays"], ["weekend", "Weekend"]];
-
 const save = (a: ClockAlarm) => act(native.saveClock(a));
 
 function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   alarms: ClockAlarm[]; zone: string; rings: { rings: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
 }) {
-  const [show, setShow] = useState<Show>("all");
+  // No chip on shows every alarm; the list opens with the filter chosen in Settings (71).
+  const [show, setShow] = useState<ClockFilter | null>(() => clockPrefs().defaultFilter);
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
-  const list = alarms.filter((a) => alarmShown(a, show, now));
-  const groups = bundle(list);
+  const list = alarms.filter((a) => shownBy(a, show, now));
+  const groups = bundleAlarms(list, now, useClockPrefs().bundleWindow);
   const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
   // Task and event alarms only where they ring: on this phone, while they're turned on.
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
   const [calOpen, setCalOpen] = useState(false);
+  const [skipping, setSkipping] = useState<ClockAlarm[] | null>(null);
   return (
     <div className="pa-scroll">
       <PermissionCards />
       {!rings.rings && (
         <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
       )}
-      <NextAlarm alarms={alarms} calendar={cal} now={now} />
+      <NextAlarm alarms={alarms} calendar={cal} now={now} onSkip={(a) => setSkipping(bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.includes(a)) ?? [a])} />
       {cal.length > 0 && (
         <button className="pa-cal-line" onClick={() => setCalOpen(true)}>
           <MIcon name="oCalendarToday" size={18} />
@@ -322,29 +337,35 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
       )}
       {alarms.length > 0 && (
         <div className="pa-filter pa-noswipe">
-          {SHOW.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow(k)}>{l}</FilterChip>)}
+          {CLOCK_FILTERS.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow((f) => toggleFilter(f, k))}>{l}</FilterChip>)}
         </div>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : `No ${SHOW.find(([k]) => k === show)![1].toLowerCase()} alarms`} text="Tap + to add one"
+      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
-        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />
-        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
+        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
+      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined} /></Layer>}
     </div>
   );
 }
 
-function NextAlarm({ alarms, calendar, now }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date }) {
-  const rings: { at: Date; title?: string }[] = alarms.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null).map((at) => ({ at }));
+function NextAlarm({ alarms, calendar, now, onSkip }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date; onSkip: (a: ClockAlarm) => void }) {
+  const rings: { at: Date; title?: string; alarm?: ClockAlarm }[] = alarms.filter((a) => a.enabled)
+    .map((alarm) => ({ at: nextRing(alarm, now), alarm })).filter((r): r is { at: Date; alarm: ClockAlarm } => r.at !== null);
   // The calendar's next one too (the list is soonest first; a skipped one doesn't ring).
   const c = calendar.find((x) => !x.skipped);
   if (c) rings.push({ at: new Date(c.at), title: c.title.trim() || "Untitled" });
   if (!rings.length) return null;
-  const { at, title } = rings.reduce((x, y) => (y.at < x.at ? y : x));
+  const { at, title, alarm } = rings.reduce((x, y) => (y.at < x.at ? y : x));
   return (
     <div className="pa-next">
-      <div className="t-title-large">Alarm in {untilText(at, now)}</div>
+      <div className="pa-next-head">
+        <div className="t-title-large grow">Alarm in {untilText(at, now)}</div>
+        {/* The next clock alarm (or its bundle) can be skipped from here (75). */}
+        {alarm && <TextButton onClick={() => onSkip(alarm)}>Skip…</TextButton>}
+      </div>
       <div className="t-body-medium muted pa-line">{relative(at)} at {formatTime(at.getHours() * 60 + at.getMinutes())}{title ? ` · ${title}` : ""}</div>
     </div>
   );
@@ -418,7 +439,7 @@ function Empty({ icon, title, text, action, onIcon, iconLabel }: { icon: string;
   return (
     <div className="pa-empty">
       {onIcon
-        ? <button className="pa-empty-icon" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={56} /></button>
+        ? <button className="pa-empty-icon pa-noswipe" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={64} /></button>
         : <MIcon name={icon} size={56} />}
       <div className="t-title-medium">{title}</div>
       {text && <div className="t-body-medium muted">{text}</div>}
@@ -434,9 +455,10 @@ function AlarmWeather({ a, now, fc }: { a: ClockAlarm; now: Date; fc: Hourly | n
   return <span className="pa-cardwx" aria-label={`${v.label}, ${v.text} when it rings`}><MIcon name={v.icon} size={18} />{v.text}</span>;
 }
 
-function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void }) {
+function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void; onHold: () => void }) {
+  const hold = useHold(onHold, onClick);
   return (
-    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
+    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" {...hold}>
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label pa-line">{a.label.trim()}</div>}
         <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
@@ -448,17 +470,39 @@ function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hour
   );
 }
 
-function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
-  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void;
+function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
+  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
 }) {
+  const hold = useHold(onHold, onOpen);
   const on = group.filter((a) => a.enabled).length;
   const first = group[0], last = group[group.length - 1];
+  const [picking, setPicking] = useState(false);
+  const firstMin = first.hour * 60 + first.minute;
+  /** The heading time moved: every alarm in the bundle moves as much (110), with Undo. */
+  const moveTo = (to: number) => {
+    const moved = shiftBundle(group, to);
+    const by = moved[0].hour * 60 + moved[0].minute - firstMin;
+    if (!by) return;
+    void Promise.all(moved.map((a) => native.saveClock(a))).then(refreshAlarmState);
+    const m = Math.abs(by), span = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+    showSnackbar(`${group.length} alarms moved ${span} ${by > 0 ? "later" : "earlier"}`, "Undo",
+      () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  };
   return (
     <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
-      <div className="pa-bundle-head" role="button" onClick={onOpen}>
+      <div className="pa-bundle-head" role="button" {...hold}>
         <div className="grow">
-          <div className="t-body-medium muted">{group.length} alarms · {on} on</div>
-          <div className="pa-time36">{formatTime(first.hour * 60 + first.minute)} – {formatTime(last.hour * 60 + last.minute)}</div>
+          {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
+          <div className="t-body-medium muted pa-bundle-count">
+            <span>{group.length} alarms · {on} on</span>
+            <AlarmWeather a={group.find((a) => a.enabled) ?? first} now={now} fc={fc} />
+          </div>
+          {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
+          <div className="pa-time36">
+            <span className="pa-bundle-start" role="button" aria-label="Move the whole bundle" onClick={(e) => { e.stopPropagation(); setPicking(true); }}>
+              <HeldTime step={1} min={firstMin} onChange={moveTo} />
+            </span> – {formatTime(last.hour * 60 + last.minute)}
+          </div>
         </div>
         <span className="muted pa-expand"><MIcon name={open ? "fExpandLess" : "fExpandMore"} /></span>
         <Switch checked={on > 0} label="All on" onChange={(v) => void Promise.all(group.map((a) => native.saveClock({ ...a, enabled: v }))).then(refreshAlarmState)} />
@@ -471,13 +515,99 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
                 <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
               </div>
-              <AlarmWeather a={a} now={now} fc={fc} />
               <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
             </div>
           ))}
         </div>
       </div>
+      {picking && <Layer><TimePickerDialog step={1} value={firstMin} onPick={moveTo} onClose={() => setPicking(false)} /></Layer>}
     </div>
+  );
+}
+
+/** Eats the click that may follow a lifted finger, wherever it lands (for the next 400 ms). */
+function swallowNextClick() {
+  const eat = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+  window.addEventListener("click", eat, { capture: true, once: true });
+  window.setTimeout(() => window.removeEventListener("click", eat, { capture: true }), 400);
+}
+
+/**
+ * A tap or a long press (a right-click with the mouse) on an alarm card: handlers to spread on it. A press
+ * on the held digits (their drum), a switch or the bundle's start time is theirs, not the card's.
+ */
+function useHold(onHold: () => void, onTap: () => void) {
+  const st = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
+  const cb = useRef({ onHold, onTap });
+  cb.current = { onHold, onTap };
+  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-bundle-start");
+  const cancel = () => { if (st.current) clearTimeout(st.current.timer); };
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      cancel();
+      if (theirs(e.target) || (e.pointerType === "mouse" && e.button !== 0)) { st.current = null; return; }
+      const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
+      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onHold(); }, 500);
+      st.current = p;
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const p = st.current;
+      if (p && !p.fired && (Math.abs(e.clientX - p.x) > TOUCH_SLOP || Math.abs(e.clientY - p.y) > TOUCH_SLOP)) { clearTimeout(p.timer); st.current = null; }
+    },
+    // After a hold the finger's lift mustn't land as a tap on what the hold opened (the sheet's scrim).
+    onPointerUp: () => { cancel(); if (st.current?.fired) swallowNextClick(); },
+    onPointerCancel: () => { cancel(); st.current = null; },
+    onClick: (e: React.MouseEvent) => { const p = st.current; st.current = null; if (!p?.fired && !theirs(e.target)) cb.current.onTap(); },
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); st.current = null; cb.current.onHold(); } },
+  };
+}
+
+/**
+ * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
+ * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
+ */
+function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: Date; onClose: () => void; onEdit?: () => void }) {
+  const today = todayNow();
+  const nextDay = nextRingDay(group, now);
+  const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
+  const back = group.map((a) => unskip(a, today)).filter((a): a is ClockAlarm => a !== null);
+  const first = group[0], last = group[group.length - 1];
+  const many = group.length > 1;
+  const title = many ? `${formatTime(first.hour * 60 + first.minute)} – ${formatTime(last.hour * 60 + last.minute)} · ${group.length} alarms`
+    : `${formatTime(first.hour * 60 + first.minute)}${first.label.trim() ? ` · ${first.label.trim()}` : ""}`;
+  const dayWord = (d: number) => (d === today ? "today" : d === today + 1 ? "tomorrow" : shortDay(d));
+  /** Saves [changed], with Undo putting back how they were. */
+  const apply = (changed: ClockAlarm[], text: string) => {
+    if (!changed.length) return;
+    const before = group.filter((a) => changed.some((c) => c.id === a.id));
+    void Promise.all(changed.map((a) => native.saveClock(a))).then(refreshAlarmState);
+    showSnackbar(text, "Undo", () => void Promise.all(before.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  };
+  const what = many ? "These alarms" : "It";
+  // The first ring of that day, for the "Skip next" line.
+  const nextAt = group.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null).sort((x, y) => +x - +y)[0];
+  return (
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="pa-skip">
+        <div className="p-sheet-title">{title}</div>
+        {next.length > 0 && nextDay !== null && nextAt && (
+          <ListItem leading={<MIcon name="oAlarmOff" />} headline="Skip next" supporting={`${relative(nextAt)} at ${formatTime(nextAt.getHours() * 60 + nextAt.getMinutes())}`}
+            onClick={() => { close(); apply(next, `${what} won't ring ${dayWord(nextDay)}`); }} />
+        )}
+        {tomorrow.length > 0 && nextDay !== today + 1 && (
+          <ListItem leading={<MIcon name="oEventBusy" />} headline="Skip tomorrow" supporting={many ? `None of them rings ${shortDay(today + 1)}` : `It won't ring ${shortDay(today + 1)}`}
+            onClick={() => { close(); apply(tomorrow, `${what} won't ring tomorrow`); }} />
+        )}
+        {back.length > 0 && (
+          <ListItem leading={<MIcon name="oAlarm" />} headline="Ring as usual" supporting="Stop skipping days"
+            onClick={() => { close(); apply(back, many ? "These alarms ring as usual again" : "It rings as usual again"); }} />
+        )}
+        {!next.length && !tomorrow.length && !back.length && (
+          <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
+        )}
+        {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
+      </div>
+    )}</BottomSheet>
   );
 }
 
@@ -528,11 +658,13 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
             ? <TextButton onClick={() => setDates([])}>Weekdays</TextButton>
             : <TextButton onClick={() => setPicker("dates")}>Dates…</TextButton>}
         </div>
-        {repeating && <>
-          <div className="p-divider" />
-          <div className="pa-erow pa-pause">
+        {/* The pause row stays while the alarm rings once (a quiet line instead), so picking the first day
+            (or clearing the last) doesn't make the sheet grow and the day buttons jump under the finger (72). */}
+        <div className="p-divider" />
+        <div className="pa-erow pa-pause">
             <MIcon name="oEventBusy" />
-            {pause ? <>
+            {!repeating ? <span className="t-body-large muted grow pa-line">Pause: for repeating alarms</span>
+            : pause ? <>
               <button className="pa-pause-text t-body-large" onClick={() => setPicker(pausedUntil != null && pausedUntil > today ? "until" : "skip")}>{pause}</button>
               <IconButton icon="fClose" label="Stop pausing" onClick={() => { setSkip([]); setPausedUntil(null); }} />
             </> : <>
@@ -540,8 +672,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
               <TextButton onClick={() => setPicker("skip")}>Skip days</TextButton>
               <TextButton onClick={() => setPicker("until")}>Until…</TextButton>
             </>}
-          </div>
-        </>}
+        </div>
         <div className="p-divider" />
         <label className="pa-erow">
           <MIcon name="oLabel" />
@@ -583,7 +714,8 @@ function TimersPane({ timers, active, onNew }: { timers: ClockTimer[]; active: b
   return (
     <div className="pa-scroll pa-gap12 pa-top12">
       <PermissionCards />
-      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap + or a length below" />}
+      {/* The big symbol starts a new timer too (77), like the alarms' one adds an alarm. */}
+      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap the timer, + or a length below" onIcon={onNew} iconLabel="New timer" />}
       <div className="pa-presets">
         {TIMER_PRESETS.map((m) => <button key={m} className="p-assist pa-chip" onClick={() => void startTimer(m * 60_000)}>{presetText(m)}</button>)}
         <button className="p-assist pa-chip" onClick={onNew}>Other…</button>
@@ -603,13 +735,14 @@ function TimerCard({ t, now }: { t: ClockTimer; now: number }) {
         <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}</span>
         <IconButton icon="fClose" label="Delete timer" onClick={() => run("delete")} />
       </div>
-      <div className={`pa-time52 ${running ? "" : "muted"}`}>{formatDuration(left)}</div>
-      <div className="pa-buttons">
+      {/* One row (76): the time, then Reset (its symbol), +1:00 and Pause or Resume. */}
+      <div className="pa-timer-row">
+        <div className={`pa-time36 grow ${running ? "" : "muted"}`}>{formatDuration(left)}</div>
+        {left !== t.durationMs && <IconButton icon="fReplay" label="Reset" onClick={() => run("reset")} />}
+        <button className="p-outlined-btn pa-small-btn" onClick={() => run("plus")}>+1:00</button>
         {running
-          ? <button className="pa-tonal" onClick={() => run("pause")}>Pause</button>
-          : <button className="p-filled-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
-        <button className="p-outlined-btn" onClick={() => run("plus")}>+1:00</button>
-        {left !== t.durationMs && <TextButton onClick={() => run("reset")}>Reset</TextButton>}
+          ? <button className="pa-tonal pa-small-btn" onClick={() => run("pause")}>Pause</button>
+          : <button className="p-filled-btn pa-small-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
       </div>
     </div>
   );

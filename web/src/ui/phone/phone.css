@@ -101,6 +101,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
   box-shadow: 0 3px 5px -1px rgb(0 0 0 / .2), 0 6px 10px 0 rgb(0 0 0 / .14), 0 1px 18px 0 rgb(0 0 0 / .12);
 }
 
+/* A bigger touch target than the button shows (70): a finger 12 px off its edge still hits it. */
+.phone .p-fab::before { content: ""; position: absolute; inset: -12px; border-radius: 28px; }
+
 /* Full-screen pages over the pager (an item, a note, search, settings) */
 .phone .p-overlay { position: absolute; inset: 0; z-index: 30; background: var(--bg); animation: p-in .22s cubic-bezier(.2, 0, 0, 1); }
 /* Three-button navigation: a full-screen page stops at the buttons (an opaque strip under them, above the
@@ -684,6 +687,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .p-menu-anchor.start { display: inline-block; }
 .phone .p-menu-anchor.start.wide { display: block; }
 .phone .p-menu-anchor.start > .p-menu { left: 0; right: auto; top: 100%; transform-origin: top left; }
+/* A settings row's choices open in from the screen edge, under the row's text (84). */
+.phone .p-menu-anchor.start.wide > .p-menu { left: 16px; top: calc(100% - 8px); }
 .phone .p-menu button.lead .p-menu-dot { width: 24px; display: grid; place-items: center; }
 .phone .p-menu-dot > span { width: 12px; height: 12px; border-radius: 50%; }
 .phone .p-appbar.nosat { padding-top: 0; height: 64px; }
@@ -943,9 +948,14 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-warn { display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 16px; border-radius: 16px; background: var(--p-sc-high); color: var(--text); font-size: 14px; line-height: 20px; letter-spacing: .25px; }
 .phone .pa-warn > svg { flex: none; color: var(--p-primary); }
 .phone .pa-next { padding: 8px 0 4px; }
+.phone .pa-next-head { display: flex; align-items: center; gap: 8px; margin-right: -12px; }
+.phone .pa-next-head .p-text-btn { margin: -6px 0; }
+.phone .pa-skip { padding-bottom: 8px; }
+.phone .pa-skip-none { padding: 8px 24px 16px; }
 .phone .pa-filter { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; touch-action: pan-x; }
 .phone .pa-filter::-webkit-scrollbar { display: none; }
-.phone .pa-filter > * { flex: none; }
+/* The four filters (71) share the row, so all fit on a phone at once. */
+.phone .pa-filter > * { flex: 1 0 auto; justify-content: center; padding-left: 10px; padding-right: 10px; }
 .phone .pa-empty { display: flex; flex-direction: column; align-items: center; padding: 64px 0; color: var(--text); text-align: center; }
 .phone .pa-empty > svg { color: var(--muted); margin-bottom: 12px; }
 .phone .pa-empty .p-text-btn { margin-top: 4px; }
@@ -961,6 +971,7 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-time26 { flex: none; font-size: 26px; line-height: 32px; font-variant-numeric: tabular-nums; }
 .phone .pa-bundle-head { position: relative; display: flex; align-items: center; padding: 10px 18px 8px; }
 .phone .pa-expand { display: flex; margin: 0 12px 0 8px; }
+.phone .pa-bundle-count { display: flex; align-items: center; gap: 12px; }
 .phone .pa-bundle-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s cubic-bezier(.2, 0, 0, 1); }
 .phone .pa-bundle-body.open { grid-template-rows: 1fr; }
 .phone .pa-bundle-body > div { min-height: 0; overflow: hidden; }
@@ -998,8 +1009,12 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 /* Timer and stopwatch. */
 .phone .pa-presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .phone .p-assist.pa-chip { padding: 0 16px; }
-.phone .pa-timer { padding: 12px 8px 12px 20px; }
-.phone .pa-timer-head { display: flex; align-items: center; margin: -4px 0; }
+.phone .pa-timer { padding: 6px 4px 10px 20px; }
+.phone .pa-timer-head { display: flex; align-items: center; height: 36px; }
+.phone .pa-timer-row { display: flex; align-items: center; gap: 6px; padding-right: 12px; }
+.phone .pa-timer-row .pa-time36 { font-variant-numeric: tabular-nums; min-width: 0; }
+.phone .pa-timer-row .p-icon { color: var(--muted); }
+.phone .pa-timer-row .pa-small-btn { height: 36px; padding: 0 14px; border-radius: 18px; flex: none; }
 .phone .pa-buttons { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0 0; }
 .phone .pa-buttons.center { justify-content: center; gap: 12px; padding: 0; }
 .phone .pa-tonal { position: relative; overflow: hidden; height: 40px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--p-sec-container); color: var(--p-on-sec-container); font-size: 14px; font-weight: 500; letter-spacing: .1px; }
@@ -1017,7 +1032,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-wx { position: relative; overflow: hidden; flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px; margin-right: 4px; border: 0; border-radius: 20px; background: none; color: var(--muted); font-size: 14px; font-weight: 500; }
 .phone .pa-wx svg { color: var(--p-primary); }
 .phone .pa-zones { margin: 8px -24px 0; max-height: 360px; overflow-y: auto; }
-.phone .pa-zone { position: relative; overflow: hidden; display: flex; flex-direction: column; width: 100%; padding: 10px 24px; border: 0; background: none; text-align: left; color: var(--text); }
+/* About a thousand cities (78): rows off screen skip layout and paint until scrolled near. */
+.phone .pa-zone { content-visibility: auto; contain-intrinsic-size: auto 64px; position: relative; overflow: hidden; display: flex; flex-direction: column; width: 100%; padding: 10px 24px; border: 0; background: none; text-align: left; color: var(--text); }
 /* The item view's early alarm controls (EarlyAlarmControls): a neutral card per alarm. */
 .phone .pe-early { margin: 6px 16px; padding: 10px 6px 2px 14px; border-radius: 16px; background: var(--p-sc-high); }
 .phone .pe-early-text { display: flex; align-items: center; gap: 10px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
@@ -1226,7 +1242,8 @@ html.phone[data-theme="dark"] {
 @keyframes pa-dial-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.6); } }
 @keyframes pa-dial-out { to { opacity: 0; transform: scale(.85); } }
 /* The empty page's big symbol adds an alarm. */
-.phone .pa-empty-icon { position: relative; overflow: hidden; width: 88px; height: 88px; margin-bottom: 4px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
+/* The big empty-page symbol is a button with a generous target (77): 120 px round, the symbol at 64. */
+.phone .pa-empty-icon { position: relative; overflow: hidden; width: 120px; height: 120px; margin: -16px 0 -12px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
 .phone .pa-empty > .pa-empty-icon > svg { margin: 0; }
 /* World clock cards, a touch smaller. */
 .phone .pa-city { padding: 8px 2px 8px 18px; border-radius: 20px; }
@@ -1402,6 +1419,9 @@ html.phone[data-theme="dark"] {
 .phone .p-rchip.p-rchip-all { padding: 0 8px; color: var(--muted); }
 .phone .p-rlist { padding: 0 0 calc(var(--sab) + 12px); }
 .phone .p-rlist-head { padding: 4px 24px 8px; }
+.phone .p-rlist > .p-sheet-title { padding-bottom: 2px; }
+.phone .p-rlist-count { padding: 0 24px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .p-rlist-group { padding: 12px 24px 4px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
 .phone .p-rlist-empty { padding: 16px 24px 24px; }
 .phone .p-rlist-rows { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
 .phone .p-rlist-row { position: relative; overflow: hidden; width: 100%; display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 8px 24px; border: 0; background: none; color: var(--text); text-align: left; }
@@ -1609,3 +1629,18 @@ html.phone[data-theme="dark"] {
 .phone .pci-title { font-size: 15px; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .pci-sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .pci-row { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 2px 16px 2px 26px; }
+
+/* Settings' weather app picker (83): a search bar over a list whose rows off screen skip layout. */
+.phone .ps-apps { display: flex; flex-direction: column; height: min(78vh, 640px); } /* fixed, so typing doesn't make the sheet jump */
+.phone .ps-apps-search { flex: none; display: flex; align-items: center; gap: 12px; height: 48px; margin: 4px 16px 8px; padding: 0 8px 0 16px; border-radius: 24px; background: var(--p-sc-highest); color: var(--muted); }
+.phone .ps-apps-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 16px; caret-color: var(--p-primary); }
+.phone .ps-apps-search input::placeholder { color: var(--muted); }
+.phone .ps-apps-search button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; padding: 0; }
+.phone .ps-apps-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+.phone .ps-app { content-visibility: auto; contain-intrinsic-size: auto 56px; position: relative; overflow: hidden; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 0 24px; border: 0; background: none; color: var(--text); text-align: left; font-size: 16px; }
+.phone .ps-app .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .ps-app > svg { color: var(--p-primary); }
+.phone .ps-appicon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); }
+.phone .ps-appicon img { width: 40px; height: 40px; border-radius: 10px; }
+.phone .ps-apps-none { padding: 16px 24px; }
+.phone .ps-apps > .p-sheet-title { flex: none; }

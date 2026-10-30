@@ -4,6 +4,9 @@ import { registerPlugin } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../platform.ts";
 import type { CalendarAlarm } from "../domain/alarms.ts";
+import type { LaunchApp } from "../domain/apps.ts";
+
+export type { LaunchApp };
 
 /** A plain alarm clock (ClockAlarms.kt). days: bit 0 = Monday ... bit 6 = Sunday; 0 rings once. */
 export interface ClockAlarm {
@@ -54,6 +57,10 @@ interface Plugin {
   pickSound(o: { current: string | null; title?: string }): Promise<{ picked: boolean; uri?: string | null; name?: string | null }>;
   soundName(o: { uri: string }): Promise<{ name?: string | null }>;
   pickWeatherApp(): Promise<{ picked: boolean; label?: string }>;
+  /** 83 (needs the native side, see weatherApps below): the phone's launchable apps, an app's icon, keeping the pick. */
+  weatherApps(): Promise<{ json: string }>;
+  appIcon(o: { component: string }): Promise<{ png?: string }>;
+  setWeatherApp(o: { component: string; label: string }): Promise<void>;
   clearWeatherApp(): Promise<void>;
   openWeather(o: { url: string }): Promise<{ opened: string }>;
   requestNotifications(): Promise<{ granted: boolean }>;
@@ -100,6 +107,17 @@ export const native = {
   pickSound: (current: string | null, title?: string) => call((p) => p.pickSound({ current, title }), { picked: false }),
   soundName: async (uri: string) => (await call((p) => p.soundName({ uri }), {})).name ?? null,
   pickWeatherApp: () => call((p) => p.pickWeatherApp(), { picked: false }),
+  /**
+   * The phone's launchable apps by name, for Settings' own weather app picker (83), or null when the engine
+   * can't list them (before 2.9.2's native side): Settings then opens Android's picker as before.
+   */
+  weatherApps: async (): Promise<LaunchApp[] | null> => {
+    if (!plugin) return null;
+    try { return JSON.parse((await plugin.weatherApps()).json) as LaunchApp[]; } catch { return null; }
+  },
+  /** An app's icon as a data URL (small PNG), asked for only when its row scrolls into view; "" if none. */
+  appIcon: async (component: string) => (await call((p) => p.appIcon({ component }), {})).png ?? "",
+  setWeatherApp: (component: string, label: string) => call((p) => p.setWeatherApp({ component, label }), undefined),
   clearWeatherApp: () => call((p) => p.clearWeatherApp(), undefined),
   openWeather: (url: string) => call((p) => p.openWeather({ url }), { opened: "" }),
   requestNotifications: () => call((p) => p.requestNotifications(), { granted: false }),
