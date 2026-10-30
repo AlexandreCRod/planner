@@ -8,7 +8,7 @@ import { filesToFetch, syncedFile } from "../domain/media.ts";
 import type { NoteImage } from "../domain/types.ts";
 import { FIRST_KINDS, type Kind, allRecords, applyRemote, saveWith } from "./store.ts";
 import { count } from "../domain/plural.ts";
-import { mergeEdited, remoteToApply } from "../domain/syncMerge.ts";
+import { type SyncBase, outgoingChanges, settleReply } from "../domain/syncMerge.ts";
 import { logProblem } from "../problems.ts";
 
 /** The app's version, sent with each sync so a later Worker can warn an outdated app. */
@@ -32,8 +32,8 @@ function serverTakes(kind: Kind): boolean {
 const serverMerges = () => (localStorage.getItem("serverFeatures") ?? "").split(",").includes("baseMerge");
 
 type Rec = Record<string, unknown>;
-interface Base { seq: number; records: Record<string, Rec> }
-interface Change { kind: Kind; id: string; data: Rec | null; base?: Rec }
+type Base = SyncBase;
+interface Change { kind: Kind; id: string; data: Rec | null; base?: Rec; keep?: "mine" }
 
 export type SyncState = "idle" | "syncing" | "offline" | "error" | "needs-confirm" | "signed-out";
 export interface SyncStatus { state: SyncState; lastSyncAt: number; message: string }
@@ -84,15 +84,6 @@ export async function serverStorageBytes(): Promise<number | null> {
   } catch { return null; }
 }
 
-/** JSON with sorted keys, so field order never counts as a change. */
-function canonical(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
-  if (v && typeof v === "object") {
-    const o = v as Rec;
-    return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(v);
-}
 
 let running: Promise<number> | null = null;
 let again = false;
@@ -117,23 +108,8 @@ async function doSync(force: boolean): Promise<number> {
   setStatus({ state: "syncing" });
   const base = (await db.get<Base>("base")) ?? { seq: 0, records: {} };
   const sent = new Map(allRecords());
-  const local: Record<string, Rec> = Object.fromEntries(sent);
-  const outgoing: Change[] = [];
-  const tooLarge: string[] = [];
-  const withBase = serverMerges();
-  for (const key of new Set([...Object.keys(base.records), ...Object.keys(local)])) {
-    const l = local[key], b = base.records[key];
-    if (l === undefined && b === undefined) continue;
-    const lc = l === undefined ? undefined : canonical(l);
-    if (lc !== undefined && b !== undefined && lc === canonical(b)) continue;
-    const slash = key.indexOf("/");
-    const kind = key.slice(0, slash) as Kind;
-    if (!serverTakes(kind)) continue; // waits here, out of the synced copy, until the Worker takes it
-    if (lc !== undefined && lc.length > MAX_RECORD_CHARS) { tooLarge.push(key); continue; }
-    const change: Change = { kind, id: key.slice(slash + 1), data: l ?? null };
-    if (withBase && kind === "items" && l !== undefined && b !== undefined) change.base = b;
-    outgoing.push(change);
-  }
+  const { outgoing: out, tooLarge } = outgoingChanges(base, sent, { withBase: serverMerges(), takes: (k) => serverTakes(k as Kind), maxChars: MAX_RECORD_CHARS });
+  const outgoing = out as Change[];
   if (tooLarge.length) logProblem("sync", `Too large to sync (over 1 MB), kept on this device: ${tooLarge.join(", ")}`);
   try {
     // A picture's file goes up before its record, so the phone can always fetch it. A video's file stays
@@ -150,31 +126,13 @@ async function doSync(force: boolean): Promise<number> {
     const hadAny = serverTakes("trainingEntries");
     localStorage.setItem("serverFeatures", (reply.features ?? []).join(","));
     if (!hadAny && serverTakes("trainingEntries")) again = true;
-    // What was edited here while the request was out stays; the next round sends it.
-    const now = allRecords();
-    const { apply, kept } = remoteToApply(reply.changes, sent, now);
-    // An item edited during the request takes in the reply's other changes (item 141); a field changed on
-    // both is synced next against what this request sent, so the Worker keeps both sides.
-    const againstSent = new Set<string>();
-    for (const c of reply.changes) {
-      const k = `${c.kind}/${c.id}`, s = sent.get(k), n = now.get(k);
-      if (c.kind !== "items" || c.data === null || !s || !n || !kept.includes(k)) continue;
-      const { merged, clash } = mergeEdited(s, n, c.data);
-      apply.push({ ...c, data: merged });
-      if (clash) againstSent.add(k);
-    }
-    applyRemote(apply);
+    // What was edited here while the request was out stays (taking in the reply's other changes); the
+    // next round sends it.
+    const { apply, kept, next } = settleReply(base, sent, allRecords(), outgoing, reply);
+    applyRemote(apply as Change[]);
     if (kept.length) again = true;
-    const records = { ...base.records };
-    for (const c of outgoing) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
-    for (const c of reply.changes) {
-      const k = `${c.kind}/${c.id}`;
-      if (againstSent.has(k)) records[k] = sent.get(k)!;
-      else if (c.data === null) delete records[k];
-      else records[k] = c.data;
-    }
     // The received records and the copy they were synced against land together (see saveWith).
-    await saveWith([["base", { seq: reply.seq, records }]]);
+    await saveWith([["base", next]]);
     const at = Date.now();
     localStorage.setItem("lastSyncAt", String(at));
     const parts = ["Synced"];
