@@ -37,3 +37,26 @@ test("a record deleted here during the request isn't brought back", () => {
   const now = new Map<string, unknown>();
   assert.deepEqual(remoteToApply([{ kind: "items", id: "8", data: note("y") }], sent, now).kept, ["items/8"]);
 });
+
+// Item 141: a note edited during the request takes in the reply's other changes, keeping what was typed.
+import { mergeEdited } from "../src/domain/syncMerge.ts";
+
+test("an edit made during the request keeps its typing and takes the reply's other fields", () => {
+  const sent = { id: 7, type: "NOTE", title: "Shopping", content: "milk", pinned: false, updatedAt: 10 };
+  const now = { ...sent, content: "milk, eggs", updatedAt: 12 };
+  const remote = { ...sent, title: "Groceries", pinned: true, pinOrder: 1, updatedAt: 11 };
+  const { merged, clash } = mergeEdited(sent, now, remote);
+  assert.equal(clash, false);
+  assert.deepEqual(merged, { ...now, title: "Groceries", pinned: true, pinOrder: 1, updatedAt: 12 });
+});
+
+test("a field changed both here and in the reply is a clash, and this device's typing stays", () => {
+  const sent = { id: 7, title: "Shopping", content: "milk", updatedAt: 10 };
+  const now = { ...sent, content: "milk, eggs", updatedAt: 12 };
+  const remote = { ...sent, content: "milk, bread", updatedAt: 20 };
+  const { merged, clash } = mergeEdited(sent, now, remote);
+  assert.equal(clash, true);
+  assert.deepEqual(merged, { ...now, updatedAt: 20 });
+  // A field removed in the reply is removed here too, unless edited here.
+  assert.deepEqual(mergeEdited({ a: 1, b: 2 }, { a: 1, b: 3 }, { b: 2 }).merged, { b: 3 });
+});
