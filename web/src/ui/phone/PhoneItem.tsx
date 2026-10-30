@@ -368,7 +368,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
       <span className="pe-label ph">{alarms ? "Add alarm" : "Add notification"}</span>
     </FieldRow>
     {picking === "date" && <DatePickerDialog value={null} onClose={() => setPicking((p) => (p === "date" ? null : p))} onPick={(d) => setPicking(d)} />}
-    {typeof picking === "number" && <TimePickerDialog value={null} onClose={() => setPicking(null)} onPick={(m) => { onDate?.(picking, m); setPicking(null); }} />}
+    {typeof picking === "number" && <TimePickerDialog step={alarms ? 1 : 5} value={null} onClose={() => setPicking(null)} onPick={(m) => { onDate?.(picking, m); setPicking(null); }} />}
     {custom !== null && all[custom] && (
       <CustomLeadDialog value={all[custom].offsetMin} onSave={(m) => set(custom, { ...all[custom], offsetMin: m })} onClose={() => setCustom(null)} />
     )}

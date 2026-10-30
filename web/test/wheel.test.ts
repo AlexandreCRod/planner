@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dragEdgeTimes, joinTime, moveKeepingLength, nearestSlot, splitTime, wheelHours, wheelMinutes, wrapIndex } from "../src/ui/phone/wheelMath.ts";
+import { dragEdgeTimes, durationRows, joinDuration, joinTime, moveKeepingLength, nearestSlot, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "../src/ui/phone/wheelMath.ts";
 import { snapIndex } from "../src/ui/phone/motion.ts";
 
 test("minutes come in fives, keeping an odd minute the item already has", () => {
@@ -65,4 +65,30 @@ test("the new event's handles move its start or end in quarter hours", () => {
   assert.deepEqual(dragEdgeTimes("bottom", 540, 600, -300), { start: 540, end: 555 });
   assert.deepEqual(dragEdgeTimes("top", 30, 90, -200), { start: 0, end: 90 });
   assert.deepEqual(dragEdgeTimes("bottom", 1380, 1410, 200), { start: 1380, end: 1439 });
+});
+
+test("picker wheel rows: the middle one full size, smaller and fainter away from the band (220)", () => {
+  assert.deepEqual(wheelRowLook(0), { scale: 1, opacity: 1 });
+  assert.ok(Math.abs(wheelRowLook(1).scale - 22 / 30) < 1e-9);
+  assert.ok(Math.abs(wheelRowLook(-2).scale - 20 / 30) < 1e-9);
+  assert.equal(wheelRowLook(3).opacity, 0);
+  let last = 2;
+  for (let d = 0; d <= 3; d += 0.25) { const o = wheelRowLook(d).opacity; assert.ok(o <= last, `fades at ${d}`); last = o; }
+  assert.deepEqual(wheelRowLook(1.5), wheelRowLook(-1.5));
+});
+
+test("a timer's length splits into hour, minute and second rows and back (220)", () => {
+  for (const ms of [0, 1000, 59_000, 60_000, 25 * 60_000, 3_600_000 + 61_000, 23 * 3_600_000 + 59 * 60_000 + 59_000]) {
+    assert.equal(joinDuration(splitDuration(ms)), ms);
+  }
+  assert.deepEqual(splitDuration(90 * 60_000 + 5_000), { h: 1, m: 30, s: 5 });
+  assert.equal(splitDuration(30 * 3_600_000).h, 23);
+  assert.deepEqual(durationRows(60, true).slice(0, 2), ["00", "01"]);
+  assert.equal(durationRows(24, false)[9], "9");
+});
+
+test("alarm wheels go by the minute, event wheels by five", () => {
+  assert.equal(wheelMinutes(1).length, 60);
+  const mins = wheelMinutes(1);
+  assert.equal(joinTime(splitTime(7 * 60 + 13, true, mins).hour, splitTime(7 * 60 + 13, true, mins).minute, false, true, mins), 7 * 60 + 13);
 });
