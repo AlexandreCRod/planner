@@ -27,6 +27,17 @@ object AlarmScheduler {
 
     fun canSnoozeEarly(at: Long, now: Long = System.currentTimeMillis()) = at - now > NO_SNOOZE_MS
 
+    /**
+     * At most this many task and event reminders are set with AlarmManager at once (194): it allows 500
+     * pending alarms for the whole app, and each can bring an upcoming notice and a start with it, beside
+     * the clock alarms, snoozes and timers. The nearest are set; the rest are set as those ring.
+     */
+    const val MAX_ARMED = 120
+
+    /** The latest time still set when reminders are due at [times]: all of them if there are no more than [cap]. */
+    fun horizon(times: List<Long>, cap: Int = MAX_ARMED): Long =
+        if (times.size <= cap) Long.MAX_VALUE else times.sorted()[cap - 1]
+
     /** [atMillis] is when it rings; [originalMillis] when it was due before any early snooze. */
     data class Fire(val day: LocalDate, val atMillis: Long, val originalMillis: Long = atMillis)
 
@@ -176,9 +187,11 @@ object AlarmScheduler {
             return
         }
         val settings = Mirror.settings(context)
+        val horizon = Armed.horizon(context)
         for (r in reminders) {
             val fire = nextFireNow(context, item, r)
-            if (fire == null) {
+            // Beyond the nearest [MAX_ARMED]: set later, as nearer ones ring (rescheduleAll moves the horizon).
+            if (fire == null || fire.atMillis > horizon) {
                 cancel(context, r.id)
                 continue
             }
@@ -207,6 +220,11 @@ object AlarmScheduler {
     fun rescheduleAll(context: Context) {
         val m = Mirror.current(context)
         val items = m.items.associateBy { it.id }
+        // Only the nearest are set when there are many (AlarmManager's limit).
+        val times = if (!RingDevice.ringsEvents(context)) emptyList() else m.reminders.mapNotNull { r ->
+            items[r.itemId]?.takeIf { it.deletedAt == null }?.let { nextFireNow(context, it, r)?.atMillis }
+        }
+        Armed.setHorizon(context, horizon(times))
         val live = HashSet<Long>()
         m.reminders.groupBy { it.itemId }.forEach { (itemId, rs) ->
             val item = items[itemId]

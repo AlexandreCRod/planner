@@ -23,7 +23,16 @@ object Armed {
     /** One reminder set to ring at [at], for [itemId]'s occurrence on [day] (due at [original]). */
     data class Entry(val reminderId: Long, val itemId: Long, val day: Long, val at: Long, val original: Long)
 
+    private const val HORIZON = "horizon"
+
     fun prefs(context: Context) = AlarmStore.prefs(context, PREFS)
+
+    /** Reminders due after this aren't set yet ([AlarmScheduler.MAX_ARMED]); Long.MAX_VALUE: all are. */
+    fun horizon(context: Context): Long = prefs(context).getLong(HORIZON, Long.MAX_VALUE)
+
+    fun setHorizon(context: Context, at: Long) {
+        if (horizon(context) != at) prefs(context).edit().putLong(HORIZON, at).apply()
+    }
 
     fun putReminder(context: Context, e: Entry) {
         prefs(context).edit().putString(REMINDER + e.reminderId, "${e.at}|${e.itemId}|${e.day}|${e.original}").apply()

@@ -173,8 +173,12 @@ class AlarmReceiver : BroadcastReceiver() {
                     // A reminder before the start: at the start it's cleared, and "Starting now" may show.
                     if (reminder.offsetMin > 0) AlarmScheduler.scheduleStart(context, item, day)
                 }
-                // Queue the next occurrence of this reminder (snoozes are one-offs).
-                if (!snoozed) AlarmScheduler.scheduleItem(context, item, listOf(reminder))
+                // Queue the next occurrence of this reminder (snoozes are one-offs). With too many to set at once,
+                // everything is looked at again, so the next nearest get set (194).
+                if (!snoozed) {
+                    if (Armed.horizon(context) != Long.MAX_VALUE) AlarmScheduler.rescheduleAll(context)
+                    else AlarmScheduler.scheduleItem(context, item, listOf(reminder))
+                }
             }
         }
     }
