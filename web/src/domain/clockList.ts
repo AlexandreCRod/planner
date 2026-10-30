@@ -61,3 +61,16 @@ export function bundleAlarms<T extends Clockish>(alarms: T[], now: Date, windowM
   }
   return out;
 }
+
+/**
+ * A bundle moved to start at [to] (minutes after midnight): every alarm shifts by the same amount (110).
+ * The shift stops at midnight on either side, so no alarm moves to another day (that would change its
+ * days); [to] is then as near as it can be.
+ */
+export function shiftBundle<T extends Clockish>(group: T[], to: number): T[] {
+  if (!group.length) return group;
+  const times = group.map(minuteOf);
+  const lo = Math.min(...times), hi = Math.max(...times);
+  const delta = Math.max(-lo, Math.min(1439 - hi, to - minuteOf(group[0])));
+  return group.map((a) => { const m = minuteOf(a) + delta; return { ...a, hour: Math.floor(m / 60), minute: m % 60 }; });
+}

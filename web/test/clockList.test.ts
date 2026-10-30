@@ -33,3 +33,23 @@ test("only alarms with exactly the same days bundle (73)", async () => {
   // Skips don't split a bundle.
   assert.equal(bundleAlarms([alarm(6, 30, WEEKDAYS, true, { skip: [20761] }), alarm(6, 40, WEEKDAYS)], fri).length, 1);
 });
+
+test("moving a bundle's heading time shifts every alarm, and the bundles form again (110)", async () => {
+  const { bundleAlarms, shiftBundle } = await import("../src/domain/clockList.ts");
+  const hm = (l: { hour: number; minute: number }[]) => l.map((a) => a.hour * 60 + a.minute);
+  const group = [alarm(6, 30, WEEKDAYS), alarm(6, 40, WEEKDAYS), alarm(6, 55, WEEKDAYS)];
+  assert.deepEqual(hm(shiftBundle(group, 7 * 60)), [420, 430, 445]);
+  assert.deepEqual(hm(shiftBundle(group, 6 * 60)), [360, 370, 385]);
+  // Never past midnight: the last alarm stops at 23:59, the first at 00:00.
+  assert.deepEqual(hm(shiftBundle(group, 23 * 60 + 50)), [1414, 1424, 1439]);
+  assert.deepEqual(hm(shiftBundle([alarm(0, 10, 1), alarm(0, 20, 1)], 23 * 60 + 50)), [1429, 1439]);
+  assert.deepEqual(hm(shiftBundle([alarm(0, 10, 1), alarm(0, 20, 1)], 0)), [0, 10]);
+  // After the shift, a nearby alarm with the same days joins; the window decides (19 min by default).
+  const other = alarm(7, 20, WEEKDAYS);
+  assert.equal(bundleAlarms([...group, other], fri).length, 2); // 06:55, then 07:20: 25 min apart
+  assert.equal(bundleAlarms([...shiftBundle(group, 6 * 60 + 40), other], fri).length, 1); // 07:05, then 07:20: joins
+  assert.equal(bundleAlarms([...shiftBundle(group, 6 * 60), other], fri).length, 2);
+  // A window of 0 bundles nothing; a wider one takes more.
+  assert.equal(bundleAlarms(group, fri, 0).length, 3);
+  assert.equal(bundleAlarms([...group, other], fri, 25).length, 1);
+});

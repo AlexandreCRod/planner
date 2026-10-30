@@ -15,12 +15,12 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, shownBy, toggleFilter } from "../../domain/clockList.ts";
-import { clockPrefs } from "../../alarms/clockPrefs.ts";
+import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, shiftBundle, shownBy, toggleFilter } from "../../domain/clockList.ts";
+import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
-import { DatePickerDialog, MultiDatePickerDialog } from "./pickers.tsx";
+import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
 
@@ -311,7 +311,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
   const list = alarms.filter((a) => shownBy(a, show, now));
-  const groups = bundleAlarms(list, now);
+  const groups = bundleAlarms(list, now, useClockPrefs().bundleWindow);
   const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
   // Task and event alarms only where they ring: on this phone, while they're turned on.
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
@@ -463,12 +463,29 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
 }) {
   const on = group.filter((a) => a.enabled).length;
   const first = group[0], last = group[group.length - 1];
+  const [picking, setPicking] = useState(false);
+  const firstMin = first.hour * 60 + first.minute;
+  /** The heading time moved: every alarm in the bundle moves as much (110), with Undo. */
+  const moveTo = (to: number) => {
+    const moved = shiftBundle(group, to);
+    const by = moved[0].hour * 60 + moved[0].minute - firstMin;
+    if (!by) return;
+    void Promise.all(moved.map((a) => native.saveClock(a))).then(refreshAlarmState);
+    const m = Math.abs(by), span = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+    showSnackbar(`${group.length} alarms moved ${span} ${by > 0 ? "later" : "earlier"}`, "Undo",
+      () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  };
   return (
     <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
       <div className="pa-bundle-head" role="button" onClick={onOpen}>
         <div className="grow">
           <div className="t-body-medium muted">{group.length} alarms · {on} on</div>
-          <div className="pa-time36">{formatTime(first.hour * 60 + first.minute)} – {formatTime(last.hour * 60 + last.minute)}</div>
+          {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
+          <div className="pa-time36">
+            <span className="pa-bundle-start" role="button" aria-label="Move the whole bundle" onClick={(e) => { e.stopPropagation(); setPicking(true); }}>
+              <HeldTime step={1} min={firstMin} onChange={moveTo} />
+            </span> – {formatTime(last.hour * 60 + last.minute)}
+          </div>
         </div>
         <span className="muted pa-expand"><MIcon name={open ? "fExpandLess" : "fExpandMore"} /></span>
         <Switch checked={on > 0} label="All on" onChange={(v) => void Promise.all(group.map((a) => native.saveClock({ ...a, enabled: v }))).then(refreshAlarmState)} />
@@ -487,6 +504,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
           ))}
         </div>
       </div>
+      {picking && <Layer><TimePickerDialog step={1} value={firstMin} onPick={moveTo} onClose={() => setPicking(false)} /></Layer>}
     </div>
   );
 }

@@ -30,7 +30,7 @@ import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
 import { CLOCK_FILTERS } from "../../domain/clockList.ts";
-import { setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
+import { BUNDLE_WINDOW_CHOICES, setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
@@ -125,6 +125,10 @@ function AlarmSettingsSection() {
       supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
     <ChoiceRow title="Default alarm filter" value={clock.defaultFilter ?? "all"} options={[["all", "None: every alarm"], ...CLOCK_FILTERS]}
       onPick={(v) => setClockPrefs({ defaultFilter: v === "all" ? null : v as typeof clock.defaultFilter })} />
+    <ChoiceRow title="Bundle alarms" value={String(clock.bundleWindow)}
+      options={BUNDLE_WINDOW_CHOICES.map((m): [string, string] => [String(m), m === 0 ? "Never: every alarm on its own" : `Up to ${m} min apart`])}
+      supporting={clock.bundleWindow === 0 ? "Never: every alarm on its own" : `Alarms with the same days up to ${clock.bundleWindow} min apart share a card`}
+      onPick={(v) => setClockPrefs({ bundleWindow: Number(v) })} />
     <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
     {st.quietHoursEnabled && <>
       <ListItem headline="Quiet from" supporting={formatTime(st.quietStart)} onClick={() => setTime("qs")} />
