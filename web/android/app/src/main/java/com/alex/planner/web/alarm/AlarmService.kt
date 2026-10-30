@@ -210,7 +210,7 @@ class AlarmService : Service() {
             val now = audio.getStreamVolume(stream)
             val min = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) audio.getStreamMinVolume(stream) else 0
             val max = audio.getStreamMaxVolume(stream)
-            val target = when { now <= min -> min + 1; now >= max -> max - 1; else -> now }
+            val target = VolumeKeys.nudgeTarget(now, min, max)
             musicWas = now
             if (target != now && target in min..max) {
                 audio.setStreamVolume(stream, target, 0)
@@ -222,13 +222,10 @@ class AlarmService : Service() {
                 val stream = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
                 val value = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", -1)
                 val prev = intent.getIntExtra("android.media.EXTRA_PREV_VOLUME_STREAM_VALUE", -1)
-                // Not our own nudge of the media stream (its broadcast can arrive after this is registered).
-                if (stream == AudioManager.STREAM_MUSIC && musicSet >= 0 && value == musicSet && prev == musicWas) return
-                if (value == prev) return
-                // A late broadcast from the previous alarm setting the media volume back, when a new alarm
-                // took over while one was ringing, must not stop the new one.
-                if (SystemClock.uptimeMillis() - listeningSince < 700) return
-                handler.post { finishAlarm() }
+                // Not our own nudge of the media stream (its broadcast can arrive after this is registered), and
+                // not a late broadcast from the previous alarm setting the media volume back, when a new alarm
+                // took over while one was ringing (VolumeKeys.changeStops).
+                if (VolumeKeys.changeStops(stream, value, prev, musicSet, musicWas, SystemClock.uptimeMillis() - listeningSince)) handler.post { finishAlarm() }
             }
         }.also {
             ContextCompat.registerReceiver(this, it, IntentFilter("android.media.VOLUME_CHANGED_ACTION"), ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -249,10 +246,10 @@ class AlarmService : Service() {
                 setCallback(object : MediaSession.Callback() {}, handler)
                 setPlaybackToRemote(object : VolumeProvider(VOLUME_CONTROL_RELATIVE, 10, 5) {
                     override fun onAdjustVolume(direction: Int) {
-                        if (direction != 0) handler.post { finishAlarm() }
+                        if (VolumeKeys.adjustStops(direction)) handler.post { finishAlarm() }
                     }
                     override fun onSetVolumeTo(volume: Int) {
-                        if (volume != currentVolume) handler.post { finishAlarm() }
+                        if (VolumeKeys.setStops(volume, currentVolume)) handler.post { finishAlarm() }
                     }
                 })
                 setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0, 1f).build())

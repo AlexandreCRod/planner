@@ -142,13 +142,9 @@ class AlarmActivity : ComponentActivity() {
      * keep it from onKeyDown), and on the release too, in case the press itself went elsewhere.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        when (event.keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE -> {
-                if (!isFinishing && event.repeatCount == 0) send(AlarmService.ACTION_DISMISS)
-                return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
+        if (!VolumeKeys.isVolumeKey(event.keyCode)) return super.dispatchKeyEvent(event)
+        if (VolumeKeys.keyStops(event.keyCode, event.repeatCount, isFinishing)) send(AlarmService.ACTION_DISMISS)
+        return true
     }
 
     private fun send(action: String) {
