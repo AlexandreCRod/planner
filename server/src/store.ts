@@ -1,7 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   FEATURES, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
-  canonical, clientWins, deletionGuard, isPhone, keyOf, kindsIn, recordsOf, syncDeletionGuard,
+  canonical, clientWins, conflictCopy, copyId, deletionGuard, isPhone, keyOf, kindsIn, mergeFields, needsCopy,
+  recordsOf, syncDeletionGuard,
 } from "./records.ts";
 
 export interface Env {
@@ -14,7 +15,7 @@ export type PushResult =
   | { ok: false; reason: string };
 
 export type SyncResult =
-  | { ok: true; seq: number; applied: number; conflicts: number; changes: Change[]; features: readonly string[] }
+  | { ok: true; seq: number; applied: number; conflicts: number; copies: number; changes: Change[]; features: readonly string[] }
   | { ok: false; reason: string };
 
 export interface Change {
@@ -173,6 +174,12 @@ export class PlannerStore extends DurableObject<Env> {
    * device in the meantime and loses the conflict rules ([clientWins]). The reply holds every record
    * changed since [since] that the client doesn't already have, including server versions that won.
    * Durable Objects handle one request at a time, so nothing can slip in between read and write.
+   *
+   * A change that carries its [IncomingChange.base] (newer apps) is merged field by field with the stored
+   * record instead ([mergeFields]), so edits of different fields on two devices both stand. When a note's
+   * title or content was changed on both, the losing side is kept as a new "(conflicted copy)" note, made
+   * here so every device receives it. The merged record goes back to the client when it differs from
+   * what the client sent.
    */
   async sync(since: number, changes: IncomingChange[], force: boolean, device: string | null): Promise<SyncResult> {
     const live = (kind: Kind, id: string) =>
@@ -198,13 +205,37 @@ export class PlannerStore extends DurableObject<Env> {
 
     const fromPhone = isPhone(device);
     const kept = new Set<string>(); // records where the client's version now stands
+    const resend = new Set<string>(); // merged records the client must receive even though their seq is old
+    const copies: { merged: PlannerRecord; loser: PlannerRecord }[] = [];
     let applied = 0;
     let conflicts = 0;
+    let made = 0;
     this.ctx.storage.transactionSync(() => {
       let seq = this.seq();
+      const write = (kind: Kind, id: string, data: string, phone = fromPhone) => {
+        seq++;
+        applied++;
+        this.sql.exec(
+          "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted, phone) VALUES (?, ?, ?, ?, 0, ?)",
+          kind, id, data, seq, phone ? 1 : 0,
+        );
+      };
       for (const c of changes) {
         const row = live(c.kind, c.id);
         const existing = row && row.deleted === 0 && row.data !== null ? (JSON.parse(row.data) as PlannerRecord) : null;
+        if (c.base && c.data !== null && existing) {
+          const wins = c.keep === "mine" || clientWins(c.kind, c.data, existing, fromPhone, row!.phone === 1);
+          const { merged, clashes } = mergeFields(c.base, c.data, existing, wins);
+          if (clashes.length) conflicts++;
+          const loser = wins ? existing : c.data;
+          if (needsCopy(c.kind, merged, clashes, loser)) copies.push({ merged, loser });
+          const data = canonical(merged);
+          // When the stored side won a clash, the record keeps its writer's mark, so the phone still wins later.
+          if (data !== row!.data) write(c.kind, c.id, data, clashes.length && !wins ? row!.phone === 1 : fromPhone);
+          if (data === canonical(c.data)) kept.add(`${c.kind}\u0000${c.id}`);
+          else if (data === row!.data && row!.seq <= since) resend.add(`${c.kind}\u0000${c.id}`);
+          continue;
+        }
         if (row && row.seq > since && !clientWins(c.kind, c.data, existing, fromPhone, row.phone === 1)) {
           conflicts++;
           continue; // the server's newer version goes back to the client below
@@ -218,12 +249,24 @@ export class PlannerStore extends DurableObject<Env> {
         } else {
           const data = canonical(c.data);
           if (existing && row!.data === data) continue;
-          seq++;
-          applied++;
-          this.sql.exec(
-            "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted, phone) VALUES (?, ?, ?, ?, 0, ?)",
-            c.kind, c.id, data, seq, fromPhone ? 1 : 0,
-          );
+          write(c.kind, c.id, data);
+        }
+      }
+      // The losing sides of note clashes, as new notes with the same tags (read now, after this sync's own
+      // tag changes).
+      const now = Date.now();
+      for (const { merged, loser } of copies) {
+        const id = copyId(merged.id, loser);
+        if (live("items", String(id))) continue; // made already (a retry), and maybe edited or deleted since
+        made++;
+        write("items", String(id), canonical(conflictCopy(merged, loser, id, now)));
+        for (const t of this.sql
+          .exec<{ data: string }>(
+            "SELECT data FROM records WHERE kind = 'itemTags' AND deleted = 0 AND json_extract(data, '$.itemId') = ?", Number(merged.id),
+          )
+          .toArray()) {
+          const tag = { ...(JSON.parse(t.data) as PlannerRecord), itemId: id };
+          write("itemTags", keyOf("itemTags", tag), canonical(tag));
         }
       }
       this.setMeta("seq", seq);
@@ -240,11 +283,16 @@ export class PlannerStore extends DurableObject<Env> {
       .toArray()
       .filter((r) => !kept.has(`${r.kind}\u0000${r.id}`))
       .map((r) => ({ kind: r.kind, id: r.id, seq: r.seq, data: r.data === null ? null : (JSON.parse(r.data) as PlannerRecord) }));
+    for (const key of resend) {
+      const [kind, id] = key.split("\u0000");
+      const row = live(kind, id);
+      if (row && row.data !== null) missing.push({ kind, id, seq: row.seq, data: JSON.parse(row.data) as PlannerRecord });
+    }
 
     // The position is taken before anything else can run, so a sync arriving meanwhile can't be skipped.
     const seq = this.seq();
     if (applied > 0) await this.maybeKeepHistory();
-    return { ok: true, seq, applied, conflicts, changes: missing, features: FEATURES };
+    return { ok: true, seq, applied, conflicts, copies: made, changes: missing, features: FEATURES };
   }
 
   /** The current data in the same shape the Android app uses for backups. */

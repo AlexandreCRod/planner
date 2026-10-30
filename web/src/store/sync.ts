@@ -8,7 +8,7 @@ import { filesToFetch, syncedFile } from "../domain/media.ts";
 import type { NoteImage } from "../domain/types.ts";
 import { FIRST_KINDS, type Kind, allRecords, applyRemote, saveWith } from "./store.ts";
 import { count } from "../domain/plural.ts";
-import { remoteToApply } from "../domain/syncMerge.ts";
+import { type SyncBase, outgoingChanges, settleReply } from "../domain/syncMerge.ts";
 import { logProblem } from "../problems.ts";
 
 /** The app's version, sent with each sync so a later Worker can warn an outdated app. */
@@ -25,9 +25,15 @@ function serverTakes(kind: Kind): boolean {
   return FIRST_KINDS.includes(kind) || (localStorage.getItem("serverFeatures") ?? "").split(",").includes("anyKind");
 }
 
+/**
+ * Whether the Worker merges a change with the copy it started from (item 141): then each edited item
+ * carries that copy as its base. An older Worker ignores it, so it isn't sent there.
+ */
+const serverMerges = () => (localStorage.getItem("serverFeatures") ?? "").split(",").includes("baseMerge");
+
 type Rec = Record<string, unknown>;
-interface Base { seq: number; records: Record<string, Rec> }
-interface Change { kind: Kind; id: string; data: Rec | null }
+type Base = SyncBase;
+interface Change { kind: Kind; id: string; data: Rec | null; base?: Rec; keep?: "mine" }
 
 export type SyncState = "idle" | "syncing" | "offline" | "error" | "needs-confirm" | "signed-out";
 export interface SyncStatus { state: SyncState; lastSyncAt: number; message: string }
@@ -78,15 +84,6 @@ export async function serverStorageBytes(): Promise<number | null> {
   } catch { return null; }
 }
 
-/** JSON with sorted keys, so field order never counts as a change. */
-function canonical(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
-  if (v && typeof v === "object") {
-    const o = v as Rec;
-    return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(v);
-}
 
 let running: Promise<number> | null = null;
 let again = false;
@@ -112,20 +109,8 @@ async function doSync(force: boolean): Promise<number> {
   setStatus({ state: "syncing" });
   const base = (await db.get<Base>("base")) ?? { seq: 0, records: {} };
   const sent = new Map(allRecords());
-  const local: Record<string, Rec> = Object.fromEntries(sent);
-  const outgoing: Change[] = [];
-  const tooLarge: string[] = [];
-  for (const key of new Set([...Object.keys(base.records), ...Object.keys(local)])) {
-    const l = local[key], b = base.records[key];
-    if (l === undefined && b === undefined) continue;
-    const lc = l === undefined ? undefined : canonical(l);
-    if (lc !== undefined && b !== undefined && lc === canonical(b)) continue;
-    const slash = key.indexOf("/");
-    const kind = key.slice(0, slash) as Kind;
-    if (!serverTakes(kind)) continue; // waits here, out of the synced copy, until the Worker takes it
-    if (lc !== undefined && lc.length > MAX_RECORD_CHARS) { tooLarge.push(key); continue; }
-    outgoing.push({ kind, id: key.slice(slash + 1), data: l ?? null });
-  }
+  const { outgoing: out, tooLarge } = outgoingChanges(base, sent, { withBase: serverMerges(), takes: (k) => serverTakes(k as Kind), maxChars: MAX_RECORD_CHARS });
+  const outgoing = out as Change[];
   if (tooLarge.length) logProblem("sync", `Too large to sync (over 1 MB), kept on this device: ${tooLarge.join(", ")}`);
   try {
     // A picture's file goes up before its record, so the phone can always fetch it. A video's file stays
@@ -137,27 +122,26 @@ async function doSync(force: boolean): Promise<number> {
     const reply = await api(`/api/sync${force ? "?force=1" : ""}`, {
       method: "POST",
       body: JSON.stringify({ since: base.seq, changes: outgoing, app: APP_VERSION }),
-    }) as { seq: number; conflicts: number; changes: Change[]; features?: string[] };
+    }) as { seq: number; conflicts: number; copies?: number; changes: Change[]; features?: string[] };
     // What this Worker takes; newer kinds held back so far go in the next round once it takes them.
     const hadAny = serverTakes("trainingEntries");
     localStorage.setItem("serverFeatures", (reply.features ?? []).join(","));
     if (!hadAny && serverTakes("trainingEntries")) again = true;
-    // What was edited here while the request was out stays; the next round sends it.
-    const { apply, kept } = remoteToApply(reply.changes, sent, allRecords());
-    applyRemote(apply);
+    // What was edited here while the request was out stays (taking in the reply's other changes); the
+    // next round sends it.
+    const { apply, kept, next } = settleReply(base, sent, allRecords(), outgoing, reply);
+    applyRemote(apply as Change[]);
     if (kept.length) again = true;
-    const records = { ...base.records };
-    for (const c of outgoing) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
-    for (const c of reply.changes) { const k = `${c.kind}/${c.id}`; if (c.data === null) delete records[k]; else records[k] = c.data; }
     // The received records and the copy they were synced against land together (see saveWith).
-    await saveWith([["base", { seq: reply.seq, records }]]);
-    const now = Date.now();
-    localStorage.setItem("lastSyncAt", String(now));
+    await saveWith([["base", next]]);
+    const at = Date.now();
+    localStorage.setItem("lastSyncAt", String(at));
     const parts = ["Synced"];
     if (outgoing.length || reply.changes.length) parts.push(`sent ${outgoing.length}, received ${reply.changes.length}`);
     if (reply.conflicts) parts.push(`${count(reply.conflicts, "conflict")} settled`);
+    if (reply.copies) parts.push(`${count(reply.copies, "conflicted copy", "conflicted copies")} kept`);
     if (tooLarge.length) parts.push(`${count(tooLarge.length, "record")} too large to sync (see Problem log)`);
-    setStatus({ state: "idle", lastSyncAt: now, message: parts.join(" · ") });
+    setStatus({ state: "idle", lastSyncAt: at, message: parts.join(" · ") });
     await fetchMissing(filesToFetch(allRecords()));
     return reply.changes.length;
   } catch (e) {

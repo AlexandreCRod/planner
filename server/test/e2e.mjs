@@ -2,6 +2,8 @@
 // Usage: node test/e2e.mjs [baseUrl] [token]
 // Note: it overwrites the server's data, so don't point it at your real deployment.
 import assert from "node:assert/strict";
+// The app's own sync steps (item 141), so the conflict checks below run the real app code.
+import { outgoingChanges, settleReply } from "../../web/src/domain/syncMerge.ts";
 
 const base = process.argv[2] ?? "http://127.0.0.1:8787";
 const token = process.argv[3] ?? "dev-token";
@@ -180,6 +182,160 @@ await step("two devices sync both ways", async () => {
   const final = await call("GET", "/api/snapshot");
   assert.deepEqual(final.json.items.map((i) => i.title).sort(), ["From PC", "Stretch 10 min"]);
   assert.equal(final.json.seq, pcAgain.json.seq);
+});
+
+await step("item 141: note edits merge field by field, and both versions are kept on a clash", async () => {
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [], images: [], trainingEntries: [], trainingFiles: [] }) });
+  const PHONE = { device: "Google Pixel 6a" };
+  const PC = { device: "PC browser" };
+  const note = (extra = {}) => item(50, "Shopping", { type: "NOTE", freq: "NONE", startDay: null, startMin: null, content: "<p>milk</p>", categoryId: 4, updatedAt: 10, ...extra });
+  const b0 = note();
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const first = await call("POST", "/api/sync", { ...PHONE, body: { since: s0, changes: [
+    { kind: "items", id: "50", data: b0 }, { kind: "itemTags", id: "50:8", data: { itemId: 50, tagId: 8 } },
+  ] } });
+  assert.ok(first.json.features.includes("baseMerge"));
+  const since = first.json.seq;
+
+  // One device renames the note, the other pins it: both stand, no copy.
+  const pcTitle = await call("POST", "/api/sync", { ...PC, body: { since, changes: [{ kind: "items", id: "50", data: note({ title: "Groceries", updatedAt: 20 }), base: b0 }] } });
+  assert.deepEqual([pcTitle.json.applied, pcTitle.json.copies], [1, 0]);
+  const phonePin = await call("POST", "/api/sync", { ...PHONE, body: { since, changes: [{ kind: "items", id: "50", data: note({ pinned: true, pinOrder: 1, updatedAt: 15 }), base: b0 }] } });
+  assert.deepEqual([phonePin.json.conflicts, phonePin.json.copies], [0, 0]);
+  const merged = note({ title: "Groceries", pinned: true, pinOrder: 1, updatedAt: 20 });
+  const back = phonePin.json.changes.find((c) => c.kind === "items" && c.id === "50");
+  assert.deepEqual(back?.data, merged, "the phone gets the merged note back");
+  let notes = (await call("GET", "/api/snapshot")).json.items;
+  assert.deepEqual(notes, [merged]);
+
+  // Both edit the content: the phone's wins, and the PC's is kept as a conflicted copy with the same tags.
+  const since2 = phonePin.json.seq;
+  const pcText = await call("POST", "/api/sync", { ...PC, body: { since: since2, changes: [{ kind: "items", id: "50", data: { ...merged, content: "<p>milk, bread</p>", updatedAt: 40 }, base: merged }] } });
+  assert.equal(pcText.json.copies, 0);
+  const phoneText = await call("POST", "/api/sync", { ...PHONE, body: { since: since2, changes: [{ kind: "items", id: "50", data: { ...merged, content: "<p>milk, eggs</p>", updatedAt: 30 }, base: merged }] } });
+  assert.deepEqual([phoneText.json.conflicts, phoneText.json.copies], [1, 1]);
+  const snap = (await call("GET", "/api/snapshot")).json;
+  const original = snap.items.find((i) => i.id === 50);
+  const copy = snap.items.find((i) => i.id !== 50);
+  assert.equal(original.content, "<p>milk, eggs</p>", "the phone's edit wins");
+  assert.equal(original.updatedAt, 40);
+  assert.deepEqual([copy.title, copy.content, copy.categoryId, copy.type, copy.pinned], ["Groceries (conflicted copy)", "<p>milk, bread</p>", 4, "NOTE", false]);
+  assert.deepEqual(snap.itemTags.map((t) => `${t.itemId}:${t.tagId}`).sort(), ["50:8", `${copy.id}:8`].sort());
+  assert.ok(phoneText.json.changes.some((c) => c.kind === "items" && c.data?.id === copy.id), "the syncing device receives the copy");
+  const pcPull = await call("POST", "/api/sync", { ...PC, body: { since: pcText.json.seq, changes: [] } });
+  assert.deepEqual(pcPull.json.changes.filter((c) => c.kind === "items").map((c) => c.data.title).sort(), ["Groceries", "Groceries (conflicted copy)"], "and so does the other");
+
+  // An edit made while a sync was out: the app sent v1 (title), the PC pinned off meanwhile, then the app
+  // sends v2 (content typed during the first request) against v1. Nothing is lost.
+  const cur = original;
+  const s3 = pcPull.json.seq;
+  const v1 = { ...cur, title: "Weekly shop", updatedAt: 50 };
+  const r1 = await call("POST", "/api/sync", { ...PHONE, body: { since: s3, changes: [{ kind: "items", id: "50", data: v1, base: cur }] } });
+  await call("POST", "/api/sync", { ...PC, body: { since: s3, changes: [{ kind: "items", id: "50", data: { ...cur, pinned: false, pinOrder: undefined, updatedAt: 45 }, base: cur }] } });
+  const v2 = { ...v1, content: "<p>milk, eggs, tea</p>", updatedAt: 55 };
+  const r2 = await call("POST", "/api/sync", { ...PHONE, body: { since: r1.json.seq, changes: [{ kind: "items", id: "50", data: v2, base: v1 }] } });
+  assert.deepEqual([r2.json.conflicts, r2.json.copies], [0, 0]);
+  const end = (await call("GET", "/api/snapshot")).json.items.find((i) => i.id === 50);
+  assert.deepEqual([end.title, end.content, end.pinned, end.pinOrder, end.updatedAt], ["Weekly shop", "<p>milk, eggs, tea</p>", false, undefined, 55]);
+  assert.equal(r2.json.changes.find((c) => c.id === "50")?.data.pinned, false, "the app receives the PC's unpin");
+
+  // An older app (no base) keeps the old rules: its whole note wins or loses, and no copy is made.
+  const s4 = r2.json.seq;
+  await call("POST", "/api/sync", { ...PC, body: { since: s4, changes: [{ kind: "items", id: "50", data: { ...end, content: "<p>from the PC</p>", updatedAt: 70 } }] } });
+  const old = await call("POST", "/api/sync", { ...PHONE, body: { since: s4, changes: [{ kind: "items", id: "50", data: { ...end, title: "Old phone", updatedAt: 60 } }] } });
+  assert.deepEqual([old.json.conflicts, old.json.copies], [0, 0]);
+  const after = (await call("GET", "/api/snapshot")).json.items;
+  assert.equal(after.length, 2, "no new copy");
+  assert.deepEqual([after.find((i) => i.id === 50).title, after.find((i) => i.id === 50).content], ["Old phone", "<p>milk, eggs, tea</p>"], "phone wins whole, as before");
+});
+
+// A device running the app's sync steps: its records ("kind/id" → record) and its synced copy.
+const EMPTY = { completions: [], reminders: [], categories: [], tags: [], itemTags: [], links: [], images: [], trainingEntries: [], trainingFiles: [] };
+function device(name, seq) { return { name, base: { seq, records: {} }, local: new Map() }; }
+/** One sync of [d] as the app does it; [during] edits its records while the request is out. */
+async function appSync(d, during) {
+  const sent = new Map(d.local);
+  const { outgoing } = outgoingChanges(d.base, sent, { withBase: true, takes: () => true, maxChars: 1_000_000 });
+  const reply = await call("POST", "/api/sync", { device: d.name, body: { since: d.base.seq, changes: outgoing } });
+  assert.equal(reply.status, 200, JSON.stringify(reply.json));
+  during?.(d.local);
+  const { apply, next } = settleReply(d.base, sent, d.local, outgoing, reply.json);
+  for (const c of apply) { const k = `${c.kind}/${c.id}`; if (c.data === null) d.local.delete(k); else d.local.set(k, c.data); }
+  d.base = next;
+  return reply.json;
+}
+const edit = (d, id, fields) => { const k = `items/${id}`; d.local.set(k, { ...d.local.get(k), ...fields }); };
+const items = async () => (await call("GET", "/api/snapshot")).json.items;
+
+await step("item 141 review: the second round after an edit during a sync, through the app's own code", async () => {
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], EMPTY) });
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const phone = device("Google Pixel 6a", s0), pc = device("PC browser", s0);
+  phone.local.set("items/60", item(60, "Shopping", { type: "NOTE", freq: "NONE", content: "<p>milk</p>", updatedAt: 10 }));
+  await appSync(phone);
+  await appSync(pc);
+  assert.equal(pc.local.get("items/60").content, "<p>milk</p>");
+  edit(phone, 60, { content: "<p>phone</p>", updatedAt: 20 });
+  await appSync(phone);
+  // The PC's edit loses to the phone's; more is typed on the PC while that sync is out.
+  edit(pc, 60, { content: "<p>pc 1</p>", updatedAt: 30 });
+  const r1 = await appSync(pc, (local) => edit({ local }, 60, { content: "<p>pc 1 and 2</p>", updatedAt: 31 }));
+  assert.deepEqual([r1.conflicts, r1.copies], [1, 1]);
+  assert.deepEqual(pc.base.mine, ["items/60"]);
+  assert.equal(pc.local.get("items/60").content, "<p>pc 1 and 2</p>", "the typing stays on screen");
+  const r2 = await appSync(pc);
+  assert.equal(r2.copies, 1, "the stored text is kept once, as a copy");
+  const r3 = await appSync(pc);
+  assert.deepEqual([r3.copies, r3.applied], [0, 0], "and nothing more after");
+  await appSync(phone);
+  const contents = (await items()).map((i) => [i.id === 60 ? "main" : "copy", i.content]).sort();
+  assert.deepEqual(contents, [["copy", "<p>pc 1</p>"], ["copy", "<p>phone</p>"], ["main", "<p>pc 1 and 2</p>"]], "nothing lost");
+  assert.deepEqual([...phone.local.values()].map((r) => r.content).sort(), contents.map((c) => c[1]).sort(), "the phone has it all");
+});
+
+await step("item 141 review: a lost reply sent again makes no second copy, and the phone still wins", async () => {
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], EMPTY) });
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const b0 = item(61, "Plan", { type: "NOTE", freq: "NONE", content: "<p>a</p>", updatedAt: 10 });
+  await call("POST", "/api/sync", { device: "Pixel", body: { since: s0, changes: [{ kind: "items", id: "61", data: b0 }] } });
+  const s1 = (await call("GET", "/api/status")).json.seq;
+  await call("POST", "/api/sync", { device: "Pixel", body: { since: s1, changes: [{ kind: "items", id: "61", data: { ...b0, content: "<p>phone</p>", updatedAt: 20 }, base: b0 }] } });
+  // The PC's clashing edit, with a pin: the phone's text stays, the pin merges in (a write by the PC).
+  const body = { since: s1, changes: [{ kind: "items", id: "61", data: { ...b0, content: "<p>pc</p>", pinned: true, updatedAt: 99 }, base: b0 }] };
+  const first = await call("POST", "/api/sync", { device: "PC browser", body });
+  assert.deepEqual([first.json.copies, first.json.applied], [1, 2]);
+  const again = await call("POST", "/api/sync", { device: "PC browser", body }); // its reply was lost
+  assert.deepEqual([again.json.copies, again.json.applied], [0, 0]);
+  assert.equal((await items()).length, 2, "one copy");
+  assert.ok(again.json.changes.some((c) => c.kind === "items" && c.data.title === "Plan (conflicted copy)"), "the retry still receives the copy");
+  // The merged write kept the phone's mark: another PC with an old copy and a later edit still loses.
+  const other = await call("POST", "/api/sync", { device: "PC browser", body: { since: s1, changes: [{ kind: "items", id: "61", data: { ...b0, content: "<p>pc 2</p>", updatedAt: 500 }, base: b0 }] } });
+  assert.equal(other.json.copies, 1);
+  const main = (await items()).find((i) => i.id === 61);
+  assert.deepEqual([main.content, main.pinned], ["<p>phone</p>", true]);
+});
+
+await step("item 141 review: daily notes' copies are plain notes; an edit beats a trashing", async () => {
+  await call("PUT", "/api/snapshot?force=1", { body: snapshot([], EMPTY) });
+  const s0 = (await call("GET", "/api/status")).json.seq;
+  const daily = item(62, "", { type: "NOTE", freq: "NONE", startDay: null, noteDay: 20391, content: "<p>day</p>", updatedAt: 10 });
+  const plain = item(63, "Ideas", { type: "NOTE", freq: "NONE", content: "<p>x</p>", updatedAt: 10 });
+  const r0 = await call("POST", "/api/sync", { device: "Pixel", body: { since: s0, changes: [{ kind: "items", id: "62", data: daily }, { kind: "items", id: "63", data: plain }] } });
+  await call("POST", "/api/sync", { device: "Pixel", body: { since: r0.json.seq, changes: [
+    { kind: "items", id: "62", data: { ...daily, content: "<p>phone</p>", updatedAt: 20 }, base: daily },
+    { kind: "items", id: "63", data: { ...plain, deletedAt: 25, updatedAt: 25 }, base: plain },
+  ] } });
+  const pc = await call("POST", "/api/sync", { device: "PC browser", body: { since: r0.json.seq, changes: [
+    { kind: "items", id: "62", data: { ...daily, content: "<p>pc</p>", updatedAt: 30 }, base: daily },
+    { kind: "items", id: "63", data: { ...plain, content: "<p>x and more</p>", updatedAt: 30 }, base: plain },
+  ] } });
+  assert.equal(pc.json.copies, 1);
+  const all = await items();
+  assert.deepEqual(all.filter((i) => i.noteDay === 20391).map((i) => i.content), ["<p>phone</p>"], "still one daily note for the day");
+  const copy = all.find((i) => ![62, 63].includes(i.id));
+  assert.deepEqual([copy.title, copy.noteDay, copy.content], ["30 Oct 2025 (conflicted copy)", null, "<p>pc</p>"]);
+  const kept = all.find((i) => i.id === 63);
+  assert.deepEqual([kept.deletedAt, kept.content], [null, "<p>x and more</p>"], "the edited note is out of the trash");
 });
 
 await step("image files: stored by hash, synced as records", async () => {
