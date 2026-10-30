@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
@@ -15,7 +15,7 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { CLOCK_FILTERS, type ClockFilter, shownBy, toggleFilter } from "../../domain/clockList.ts";
+import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, shownBy, toggleFilter } from "../../domain/clockList.ts";
 import { clockPrefs } from "../../alarms/clockPrefs.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
@@ -311,7 +311,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const now = new Date(useTick(15_000, active));
   const list = alarms.filter((a) => shownBy(a, show, now));
-  const groups = bundle(list);
+  const groups = bundleAlarms(list, now);
   const fc = useForecast(zone, active && alarms.some((a) => a.enabled));
   // Task and event alarms only where they ring: on this phone, while they're turned on.
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
