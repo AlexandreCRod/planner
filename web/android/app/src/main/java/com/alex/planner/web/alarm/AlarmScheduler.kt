@@ -223,6 +223,8 @@ object AlarmScheduler {
             putExtra(AlarmReceiver.EXTRA_ORIGINAL, original)
         }
         val pi = pending(context, r.id, snooze, intent) ?: return
+        // Remembered, so a restart can tell what should have rung while the phone was off (Missed).
+        if (!snooze) Armed.putReminder(context, Armed.Entry(r.id, item.id, day, at, original))
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
         when {
             r.type == AlertType.ALARM && canExact ->
@@ -260,6 +262,7 @@ object AlarmScheduler {
         listOf(false, true).forEach { snooze ->
             pending(context, reminderId, snooze)?.let { am.cancel(it); it.cancel() }
         }
+        Armed.removeReminder(context, reminderId)
         cancelNotice(context, reminderId)
     }
 

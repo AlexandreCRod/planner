@@ -22,6 +22,8 @@ class BootReceiver : BroadcastReceiver() {
                 // comes first (the engine's data is readable then: AlarmStore), the unlocked one after it.
                 val boot = intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_LOCKED_BOOT_COMPLETED
                 if (boot) AlarmOverrides.forgetNotices(ctx)
+                // What should have rung while the phone was off: a missed notice each (once per restart).
+                if (boot) Missed.afterBoot(ctx)
                 AlarmScheduler.rescheduleAll(ctx)
                 ClockAlarms.rescheduleAll(ctx)
                 ClockTools.rescheduleAll(ctx)

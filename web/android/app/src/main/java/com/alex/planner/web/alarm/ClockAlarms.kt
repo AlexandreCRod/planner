@@ -119,6 +119,7 @@ object ClockAlarms {
         val next = nextRing(a) ?: run { cancel(context, a.id); return }
         val at = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         set(context, a.id, at, snooze = false)
+        Armed.putClock(context, a.id, at)
     }
 
     fun snooze(context: Context, id: Long, minutes: Int) {
@@ -177,5 +178,6 @@ object ClockAlarms {
         val am = context.getSystemService(AlarmManager::class.java)
         listOf(false, true).forEach { s -> pending(context, id, s, create = false)?.let { am.cancel(it); it.cancel() } }
         clearSnooze(context, id)
+        Armed.removeClock(context, id)
     }
 }

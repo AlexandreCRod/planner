@@ -290,13 +290,10 @@ class AlarmService : Service() {
 
     private fun timeout(text: String) {
         stopRinging()
-        val b = NotificationCompat.Builder(this, Notifications.CH_REMIND)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Missed alarm: $title")
-            .setContentText(text)
-            .setContentIntent(if (itemId != 0L) Notifications.openItemIntent(this, itemId) else Notifications.openSectionIntent(this, if (timerId != 0L) "timer" else "alarm", 4))
-            .setAutoCancel(true)
-        Notifications.notify(this, if (reminderId != 0L) smallId(reminderId) else 777_001, b)
+        Missed.show(
+            this, if (reminderId != 0L) smallId(reminderId) else 777_001, title, text,
+            if (itemId != 0L) Notifications.openItemIntent(this, itemId) else Notifications.openSectionIntent(this, if (timerId != 0L) "timer" else "alarm", 4),
+        )
         finishAlarm()
     }
 

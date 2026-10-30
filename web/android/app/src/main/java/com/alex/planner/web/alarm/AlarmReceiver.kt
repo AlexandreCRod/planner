@@ -60,7 +60,7 @@ class AlarmReceiver : BroadcastReceiver() {
             val id = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0)
             val alarm = ClockAlarms.get(context, id) ?: return
             val snoozed = intent.getBooleanExtra(EXTRA_SNOOZE, false)
-            if (snoozed) ClockAlarms.clearSnooze(context, id)
+            if (snoozed) ClockAlarms.clearSnooze(context, id) else Armed.removeClock(context, id)
             if (!snoozed) {
                 if (!alarm.enabled) return
                 ClockAlarms.afterRing(context, id)
@@ -133,6 +133,7 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             ACTION_START -> handleStart(context, item, day, intent.getLongExtra(EXTRA_AT, 0L))
             ACTION_FIRE -> {
+                if (!intent.getBooleanExtra(EXTRA_SNOOZE, false)) Armed.removeReminder(context, reminderId)
                 Notifications.cancelUpcoming(context, reminderId)
                 Shown.remove(context, Shown.UPCOMING, reminderId)
                 val snoozed = intent.getBooleanExtra(EXTRA_SNOOZE, false)
