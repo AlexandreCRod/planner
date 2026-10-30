@@ -11,6 +11,7 @@ import { type NoteImage, cssColor } from "../../domain/types.ts";
 import { importImage, importVideo } from "../../store/images.ts";
 import { MAX_VIDEO_BYTES } from "../../domain/media.ts";
 import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
+import { useMouseSelect } from "./mouseSelect.ts";
 import { addImage, deleteImage, trash } from "../../store/store.ts";
 import { openItem, replaceRoute } from "../shared/common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/noteStyle.ts";
@@ -48,6 +49,8 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const [hasChecks, setHasChecks] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const scrollBox = useRef<HTMLDivElement>(null);
+  // The mouse selecting text keeps hold of it anywhere on the page, and scrolls the note past its edges (258).
+  useMouseSelect(() => rich.current?.root() ?? null, () => scrollBox.current);
   // Find in the note: from the menu, or already open on a note opened from Search.
   const [finding, setFinding] = useState<{ q: string; focus: boolean } | null>(() => { const q = takePendingFind(); return q ? { q, focus: false } : null; });
   // Another note shown in a panel under this one (and the picker choosing it).

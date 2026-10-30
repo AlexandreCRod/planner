@@ -18,9 +18,9 @@ import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
-import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { DatePickerDialog, MultiDatePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
-import { HeldTime } from "./TimeWheel.tsx";
+import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
 
 type Section = "alarm" | "timer" | "stopwatch" | "world";
 const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
@@ -481,7 +481,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
   );
 }
 
-/** New or changed alarm: a big time (tap to change), the days, a label and the sound (AlarmEditor). */
+/** New or changed alarm: the time on scroll wheels (220), the days, a label and the sound (AlarmEditor). */
 function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: boolean; onClose: () => void }) {
   const [minute, setMinute] = useState(alarm.hour * 60 + alarm.minute);
   const [label, setLabel] = useState(alarm.label);
@@ -491,7 +491,6 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
   const [pausedUntil, setPausedUntil] = useState<number | null>(alarm.pausedUntil ?? null);
   const [picker, setPicker] = useState<null | "dates" | "skip" | "until">(null);
   const [sound, setSound] = useState(alarm.sound);
-  const [pickTime, setPickTime] = useState(isNew);
   const today = todayNow();
   const sched = { hour: Math.floor(minute / 60), minute: minute % 60, days, dates, skip, pausedUntil };
   const repeating = isRepeating(sched);
@@ -507,7 +506,7 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
           <span className="t-title-medium grow">{isNew ? "New alarm" : "Alarm"}</span>
           {!isNew && <TextButton className="icon" onClick={() => { void act(native.deleteClock(alarm.id)); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
         </div>
-        <button className="pa-bigtime" onClick={() => setPickTime(true)}><HeldTime step={1} min={minute} onChange={setMinute} /></button>
+        <div className="pa-wheels"><TimeWheels step={1} value={minute} onChange={setMinute} /></div>
         <div className="pa-erow">
           <MIcon name="fRepeat" />
           {dates.length ? (
@@ -565,7 +564,6 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
         </div>
       </div>
     )}</BottomSheet>
-    {pickTime && <TimePickerDialog value={minute} onPick={setMinute} onClose={() => setPickTime(false)} />}
     {picker === "dates" && <MultiDatePickerDialog title="Ring on these dates" value={dates} from={today} onPick={setDates} onClose={() => setPicker(null)} />}
     {picker === "skip" && <MultiDatePickerDialog title="Skip these days" value={skip} from={today} onPick={(d) => { setSkip(d); if (d.length) setPausedUntil(null); }} onClose={() => setPicker(null)} />}
     {picker === "until" && <DatePickerDialog value={pausedUntil ?? today + 7} onPick={(d) => { setPausedUntil(d > today ? d : null); setSkip([]); }} onClose={() => setPicker(null)} />}
@@ -617,22 +615,16 @@ function TimerCard({ t, now }: { t: ClockTimer; now: number }) {
   );
 }
 
-/** Hours, minutes and seconds (and a label) for a new timer; it starts on "Start" (NewTimerDialog). */
+/** Hours, minutes and seconds on wheels (220), and a label, for a new timer; it starts on "Start" (NewTimerDialog). */
 function NewTimerDialog({ onClose }: { onClose: () => void }) {
-  const [h, setH] = useState(""), [m, setM] = useState(""), [s, setS] = useState(""), [label, setLabel] = useState("");
-  const total = ((Number(h) || 0) * 3600 + (Number(m) || 0) * 60 + (Number(s) || 0)) * 1000;
-  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 2);
+  const [total, setTotal] = useState(0), [label, setLabel] = useState("");
   const start = () => { if (total > 0) { onClose(); void startTimer(total, label.trim()); } };
   return (
     <Dialog title="New timer" onClose={onClose} actions={<>
       <TextButton onClick={onClose}>Cancel</TextButton>
       <TextButton disabled={total <= 0} onClick={start}>Start</TextButton>
     </>}>
-      <div className="pa-hms">
-        <Field label="h" value={h} onChange={(v) => setH(digits(v))} numeric autoFocus />
-        <Field label="min" value={m} onChange={(v) => setM(digits(v))} numeric />
-        <Field label="s" value={s} onChange={(v) => setS(digits(v))} numeric />
-      </div>
+      <DurationWheels ms={total} onChange={setTotal} />
       <Field label="Label (optional)" value={label} onChange={setLabel} onEnter={start} />
     </Dialog>
   );

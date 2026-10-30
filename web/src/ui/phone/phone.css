@@ -659,21 +659,19 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
 /* ---------- Time picker (M3 dial) ---------- */
 .phone .p-timepicker { width: 328px; max-width: calc(100% - 32px); padding: 24px 24px 12px; border-radius: 28px; background: var(--p-sc-high); color: var(--text); }
 .phone .p-tp-title { margin-bottom: 20px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
-.phone .p-tp-display { display: flex; align-items: center; justify-content: center; }
-.phone .p-tp-box { position: relative; overflow: hidden; width: 96px; height: 80px; padding: 0; border: 0; border-radius: 8px; background: var(--p-sc-highest); color: var(--text); font-size: 57px; line-height: 64px; font-weight: 400; letter-spacing: -.25px; font-variant-numeric: tabular-nums; }
-.phone .p-tp-box.on { background: var(--p-primary-container); color: var(--p-on-primary-container); }
-.phone .p-tp-colon { width: 24px; text-align: center; font-size: 57px; line-height: 64px; }
-.phone .p-tp-period { display: flex; flex-direction: column; width: 52px; height: 80px; margin-left: 12px; border: 1px solid var(--p-outline); border-radius: 8px; overflow: hidden; }
-.phone .p-tp-period button { position: relative; flex: 1; padding: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; }
-.phone .p-tp-period button + button { border-top: 1px solid var(--p-outline); }
-.phone .p-tp-period button.on { background: var(--p-sec-container); color: var(--text); }
-.phone .p-tp-dial { position: relative; width: 256px; height: 256px; margin: 36px auto 24px; border-radius: 50%; background: var(--p-sc-highest); touch-action: none; user-select: none; -webkit-user-select: none; }
-.phone .p-tp-dial svg { position: absolute; inset: 0; }
-.phone .p-tp-dial .hand { stroke: var(--p-primary); stroke-width: 2; }
-.phone .p-tp-dial .hub, .phone .p-tp-dial .knob { fill: var(--p-primary); }
-.phone .p-tp-dial .num { position: absolute; width: 48px; height: 48px; display: grid; place-items: center; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); pointer-events: none; }
-.phone .p-tp-dial .num.inner { font-size: 14px; color: var(--muted); }
-.phone .p-tp-dial .num.on { color: var(--p-on-primary); }
+/* The time picker's scroll wheels (220, pick B): 44 px rows, five showing, the picked row in a band. */
+.phone .tw-wheels { position: relative; display: flex; justify-content: center; align-items: stretch; margin: 0 auto 8px; user-select: none; -webkit-user-select: none; }
+.phone .tw-band-row { position: absolute; left: 0; right: 0; top: 88px; height: 44px; border-radius: 12px; background: var(--p-primary-container); pointer-events: none; }
+.phone .tw-col { position: relative; width: 96px; overflow: hidden; touch-action: none; outline: none; cursor: grab; border-radius: 12px; }
+.phone .tw-col:active { cursor: grabbing; }
+.phone .tw-col:focus-visible { box-shadow: inset 0 0 0 2px var(--p-primary); }
+.phone .tw-col-row { position: absolute; left: 0; right: 0; top: 88px; height: 44px; line-height: 44px; text-align: center; font-size: 30px; font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; will-change: transform, opacity; pointer-events: none; }
+.phone .tw-colon { position: relative; width: 24px; display: flex; align-items: center; justify-content: center; padding-bottom: 4px; font-size: 30px; color: var(--text); pointer-events: none; }
+.phone .tw-ampm { width: 72px; margin-left: 8px; }
+.phone .tw-ampm .tw-col-row { font-size: 22px; }
+.phone .tw-dur .tw-col { width: 92px; }
+.phone .tw-dur .tw-col-row { padding-right: 34px; }
+.phone .tw-unit { position: absolute; top: 88px; right: 6px; width: 28px; text-align: left; line-height: 46px; font-size: 14px; color: var(--muted); pointer-events: none; }
 /* The + button moves up out of the snackbar's way, as Scaffold does it. */
 .phone .p-root > .p-fab { transition: transform .15s cubic-bezier(.2, 0, 0, 1), opacity .15s; }
 /* Training (a tab since 241) adds nothing with the + button: on the phone it fades away there. */
@@ -704,6 +702,11 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pe-cat { position: relative; overflow: hidden; padding: 2px 0; border: 0; border-radius: 6px; background: none; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
 .phone .pe-done { position: relative; display: flex; align-items: center; padding: 0 4px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone .pe-done .p-checkbox { margin: 14px; }
+.phone .pe-done-when { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--muted); }
+.phone .pe-done-when::before, .phone .pe-donewhen-verdict .dot { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #86c79a; }
+.phone .pe-done-when.late::before, .phone .pe-donewhen-verdict.late .dot { background: #e3b866; }
+.phone .pe-donewhen-day { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; color: var(--text); font-size: 16px; text-align: left; }
+.phone .pe-donewhen-verdict { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; font-size: 14px; color: var(--muted); }
 .phone .pe-info { position: relative; display: flex; align-items: flex-start; gap: 16px; padding: 9px 16px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone .pe-info > svg { flex: none; margin-top: 1px; color: var(--muted); }
 .phone .pe-info.trailing { align-items: center; padding-right: 4px; }
@@ -977,7 +980,7 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 /* The editor sheet. */
 .phone .pa-editor-head { display: flex; align-items: center; min-height: 40px; padding: 0 16px 0 24px; }
 .phone .pa-editor-head .p-text-btn { gap: 4px; }
-.phone .pa-bigtime { margin: 0 16px; padding: 0 8px; border: 0; border-radius: 16px; background: none; font-size: 64px; line-height: 76px; font-weight: 400; color: var(--p-primary); position: relative; overflow: hidden; }
+.phone .pa-wheels { margin: 4px 16px 4px; }
 .phone .pa-erow { position: relative; display: flex; align-items: center; gap: 24px; width: 100%; min-height: 56px; padding: 0 24px; border: 0; background: none; color: var(--text); text-align: left; }
 .phone .pa-erow > svg { flex: none; color: var(--muted); }
 .phone .pa-days { flex: 1; display: flex; justify-content: space-between; }
@@ -1000,8 +1003,6 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-buttons { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0 0; }
 .phone .pa-buttons.center { justify-content: center; gap: 12px; padding: 0; }
 .phone .pa-tonal { position: relative; overflow: hidden; height: 40px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--p-sec-container); color: var(--p-on-sec-container); font-size: 14px; font-weight: 500; letter-spacing: .1px; }
-.phone .pa-hms { display: flex; gap: 8px; margin-bottom: 12px; }
-.phone .pa-hms .p-tf { flex: 1; min-width: 0; }
 .phone .pa-scroll.pa-sw { padding-left: 0; padding-right: 0; gap: 0; }
 .phone .pa-sw-time { align-self: center; padding: 40px 0 24px; font-family: "Roboto Mono", ui-monospace, monospace; font-size: 60px; line-height: 72px; font-weight: 300; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
 .phone .pa-sw-divider { margin-top: 24px; }
@@ -1213,10 +1214,6 @@ html.phone[data-theme="dark"] {
 .phone .p-progress .active, .phone .p-progress .stop { background: var(--p-strong); }
 .phone .pa-indicator { background: var(--p-strong); }
 .phone .pa-tab.on { color: var(--text); }
-.phone .p-tp-dial .hand { stroke: var(--p-strong); }
-.phone .p-tp-dial .hub, .phone .p-tp-dial .knob { fill: var(--p-strong); }
-.phone .p-tp-dial .num.on { color: var(--p-on-strong); }
-.phone .p-tp-box.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
 
 /* Alarms' + stack: round symbols above the button, no names (holding one shows it). */
 .phone .pa-dial { position: absolute; right: 4px; bottom: 68px; z-index: 40; display: flex; flex-direction: column-reverse; gap: 12px; }
@@ -1422,15 +1419,19 @@ html.phone[data-theme="dark"] {
 .phone .p-streak-row .sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-streak-days { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
 .phone .p-streak-days span { flex: none; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
-.phone .p-streak-days .done { background: var(--p-strong); }
-.phone .p-streak-days .missed { background: color-mix(in srgb, var(--danger) 45%, transparent); }
+.phone :is(.p-streak-days, .p-streak-key) .done { background: #86c79a; }
+.phone :is(.p-streak-days, .p-streak-key) .late { background: #e3b866; }
+/* Missed: a grey gap, a dim empty spot in the row rather than an alarm (221). */
+.phone :is(.p-streak-days, .p-streak-key) .missed { background: color-mix(in srgb, var(--p-outline) 22%, transparent); }
 .phone .p-streak-days .open { border: 1.5px solid var(--p-outline); }
 .phone .p-streak-days .off::after { content: ""; width: 3px; height: 3px; border-radius: 50%; background: var(--p-outline); opacity: .5; }
 .phone .p-streak-now { flex: none; min-width: 52px; display: flex; flex-direction: column; align-items: flex-end; color: var(--muted); }
 .phone .p-streak-now .n { display: inline-flex; align-items: center; gap: 2px; font-size: 22px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .phone .p-streak-now.on .n { color: var(--text); }
 .phone .p-streak-now .l { font-size: 12px; line-height: 16px; letter-spacing: .4px; }
-.phone .p-streak-foot { padding: 8px 24px 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.phone .p-streak-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 24px 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.phone .p-streak-key { display: inline-flex; align-items: center; gap: 5px; }
+.phone .p-streak-key span { width: 8px; height: 8px; border-radius: 50%; }
 
 /* The update popup (UpdateHost.tsx): which version, the release notes as plain text, a quiet progress bar. */
 .phone .p-update-version { color: var(--muted); margin-bottom: 12px; }

@@ -1,14 +1,13 @@
 // Material 3 date and time pickers, as the native app shows them (Compose's DatePickerDialog and the
-// TimePicker dial in an AlertDialog, see DatePickDialog / TimePickDialog in Common.kt), instead of the
-// browser's own <input type=date|time> pop-ups.
+// time picker, now scroll wheels (220)), instead of the browser's own <input type=date|time> pop-ups.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { addMonths, daysInMonth, epochOf, formatDate, formatDateShort, monthLong, startOfWeek, today as todayEpoch, use24h, ymd } from "../../domain/dates.ts";
+import { addMonths, daysInMonth, epochOf, formatDate, formatDateShort, monthLong, startOfWeek, today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { IconButton, MIcon, ModalLayer } from "./chrome.tsx";
 import { BottomSheet, TextButton } from "./m3.tsx";
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
-import { magnetMinute } from "./dial.ts";
+import { TimeWheels } from "./TimeWheel.tsx";
 import { type RangePick, rangeRole, slideRange, slideTicks, tapRange } from "./range.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
@@ -311,126 +310,17 @@ function YearList({ year, onPick }: { year: number; onPick: (y: number) => void 
 
 // ---------- Time ----------
 
-const DIAL = 256, C = DIAL / 2, OUTER = 101, INNER = 69;
-
 /**
- * M3 time picker dial: the hour and minute boxes (the chosen one filled), AM / PM in the 12-hour
- * clock, and the clock face: touch or drag the hand to a number. Picking the hour moves on to the
- * minutes. The 24-hour face has 12–23 on an inner ring, as Compose's.
+ * The time picker (220, pick B): scroll wheels for the hours and the minutes (and AM/PM on a 12-hour
+ * clock), the picked time in a band across the middle, Cancel / OK. Minutes go by [step]: 5 for events
+ * and tasks (keeping an odd minute the time already has), 1 for alarms.
  */
-export function TimePickerDialog({ value, onPick, onClose }: { value: number | null; onPick: (min: number) => void; onClose: () => void }) {
-  const h24 = use24h();
+export function TimePickerDialog({ value, onPick, onClose, step = 5 }: { value: number | null; onPick: (min: number) => void; onClose: () => void; step?: number }) {
   const [min, setMin] = useState(value ?? 9 * 60);
-  const [mode, setMode] = useState<"h" | "m">("h");
-  const hour = Math.floor(min / 60), minute = min % 60;
-  const dial = useRef<HTMLDivElement>(null);
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-  const minRef = useRef(min);
-  minRef.current = min;
-
-  const fromPoint = (clientX: number, clientY: number, snap: boolean) => {
-    const r = dial.current!.getBoundingClientRect();
-    const dx = clientX - (r.left + C), dy = clientY - (r.top + C);
-    let a = Math.atan2(dx, -dy) / (2 * Math.PI);
-    if (a < 0) a += 1;
-    const cur = minRef.current;
-    const h = Math.floor(cur / 60), mm = cur % 60;
-    if (modeRef.current === "h") {
-      let i = Math.round(a * 12) % 12;
-      let nh: number;
-      if (h24) {
-        const inner = Math.hypot(dx, dy) < (OUTER + INNER) / 2;
-        nh = inner ? (i === 0 ? 12 : i + 12) : i;
-        if (inner && i === 0) nh = 12;
-        if (!inner && i === 0) nh = 0;
-      } else {
-        if (i === 0) i = 12;
-        nh = (i % 12) + (h >= 12 ? 12 : 0);
-      }
-      setMin(nh * 60 + mm);
-    } else {
-      // A touch lands on the nearest five; a drag can stop on any minute, drawn gently onto the fives.
-      const nm = snap ? (Math.round(a * 12) * 5) % 60 : magnetMinute(a);
-      if (!snap && nm !== mm && nm % 5 === 0) feel("tick");
-      setMin(h * 60 + nm);
-    }
-  };
-
-  useEffect(() => {
-    const el = dial.current;
-    if (!el) return;
-    let id: number | null = null;
-    let moved = false;
-    const down = (e: PointerEvent) => { id = e.pointerId; moved = false; el.setPointerCapture(e.pointerId); fromPoint(e.clientX, e.clientY, true); };
-    const move = (e: PointerEvent) => { if (e.pointerId !== id) return; moved = true; fromPoint(e.clientX, e.clientY, false); };
-    const up = (e: PointerEvent) => {
-      if (e.pointerId !== id) return;
-      id = null;
-      if (!moved) fromPoint(e.clientX, e.clientY, true);
-      if (modeRef.current === "h") setMode("m");
-    };
-    el.addEventListener("pointerdown", down);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
-    return () => {
-      el.removeEventListener("pointerdown", down);
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("pointercancel", up);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The numbers on the face, and where the hand points.
-  const labels: { text: string; x: number; y: number; on: boolean; inner?: boolean }[] = [];
-  let handAngle: number, handR = OUTER;
-  if (mode === "h") {
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * 2 * Math.PI;
-      const outerHour = h24 ? i : i === 0 ? 12 : i;
-      labels.push({ text: h24 ? String(outerHour).padStart(2, "0") : String(outerHour), x: C + OUTER * Math.sin(a), y: C - OUTER * Math.cos(a), on: h24 ? hour === i : hour % 12 === i % 12 });
-      if (h24) {
-        const innerHour = i === 0 ? 12 : i + 12;
-        labels.push({ text: String(innerHour), x: C + INNER * Math.sin(a), y: C - INNER * Math.cos(a), on: hour === innerHour, inner: true });
-      }
-    }
-    handAngle = ((hour % 12) / 12) * 360;
-    if (h24 && hour >= 12) handR = INNER;
-  } else {
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * 2 * Math.PI;
-      labels.push({ text: String(i * 5).padStart(2, "0"), x: C + OUTER * Math.sin(a), y: C - OUTER * Math.cos(a), on: minute === i * 5 });
-    }
-    handAngle = (minute / 60) * 360;
-  }
-  const hx = C + handR * Math.sin((handAngle * Math.PI) / 180), hy = C - handR * Math.cos((handAngle * Math.PI) / 180);
-  const hourText = h24 ? String(hour).padStart(2, "0") : String(hour % 12 === 0 ? 12 : hour % 12);
-
   return (
     <PickerShell onClose={onClose} className="p-timepicker">
       <div className="p-tp-title">Select time</div>
-      <div className="p-tp-display">
-        <button className={`p-tp-box ${mode === "h" ? "on" : ""}`} onClick={() => setMode("h")}>{hourText}</button>
-        <span className="p-tp-colon">:</span>
-        <button className={`p-tp-box ${mode === "m" ? "on" : ""}`} onClick={() => setMode("m")}>{String(minute).padStart(2, "0")}</button>
-        {!h24 && (
-          <div className="p-tp-period">
-            <button className={hour < 12 ? "on" : ""} onClick={() => { if (hour >= 12) setMin(min - 720); }}>AM</button>
-            <button className={hour >= 12 ? "on" : ""} onClick={() => { if (hour < 12) setMin(min + 720); }}>PM</button>
-          </div>
-        )}
-      </div>
-      <div className="p-tp-dial" ref={dial}>
-        <svg width={DIAL} height={DIAL} aria-hidden="true">
-          <line x1={C} y1={C} x2={hx} y2={hy} className="hand" />
-          <circle cx={C} cy={C} r={4} className="hub" />
-          <circle cx={hx} cy={hy} r={24} className="knob" />
-        </svg>
-        {labels.map((l, i) => (
-          <span key={i} className={`num ${l.on ? "on" : ""} ${l.inner ? "inner" : ""}`} style={{ left: l.x - 24, top: l.y - 24 }}>{l.text}</span>
-        ))}
-      </div>
+      <TimeWheels value={min} step={step} onChange={setMin} />
       <div className="p-dp-actions">
         <TextButton onClick={onClose}>Cancel</TextButton>
         <TextButton onClick={() => { onPick(min); onClose(); }}>OK</TextButton>

@@ -116,11 +116,14 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     if (contentSaved.current && fresh.content !== opened.current) saveVersion(snapshot().byId.get(savedId) ?? fresh);
   }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The user's own changes: shown, and saved shortly after.
+  // The user's own changes: shown, and saved shortly after. A style change (pin, colour, hide) is one
+  // tap, not typing, so it's saved at once: a pinned note's card moves in the list beside it straight
+  // away (223), instead of after the typing pause.
   const edit = <T,>(set: (v: T) => void, key: "title" | "tags" | "style") => (v: T) => {
     (latest.current as Record<string, unknown>)[key] = v;
     set(v);
-    scheduleSave();
+    if (key === "style") save();
+    else scheduleSave();
   };
   return {
     s, base, rich, noteId,

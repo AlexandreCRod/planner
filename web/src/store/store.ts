@@ -277,6 +277,12 @@ export function toggleCompletion(itemId: number, day: number, done: boolean) {
   changed();
 }
 
+/** Sets when [itemId]'s [day] was really done (221: a routine's tick held), ticking it if it wasn't. */
+export function setCompletedAt(itemId: number, day: number, completedAt: number) {
+  put("completions", { itemId, day, completedAt });
+  changed();
+}
+
 export function trash(id: number) {
   const now = Date.now();
   for (const i of list<Item>("items")) if (i.id === id || i.parentId === id) put("items", { ...i, deletedAt: now, updatedAt: now });

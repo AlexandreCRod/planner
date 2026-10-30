@@ -2,6 +2,7 @@
 // (gym, swimming lessons). On Today they have their own short checklist instead of mixing with one-off
 // tasks; a day missed doesn't pile up as overdue, it only ends the streak. An item is one when its
 // synced `routine` field is set; these are the rules.
+import { epochOf, ymd } from "./dates.ts";
 import { describe, nextOnOrAfter, occursOn, previousBefore } from "./recurrence.ts";
 import { type CompletionIndex, type TaskEntry, currentEntry, streak } from "./schedule.ts";
 import { type Item, isRecurring } from "./types.ts";
@@ -117,18 +118,68 @@ export function routineProgress(list: TaskEntry[]): { done: number; total: numbe
   return { done: list.filter((e) => e.status === "DONE").length, total: list.length };
 }
 
-/** One day in a routine's recent history: ticked, missed, today's still open, or not one of its days. */
-export type DayMark = "done" | "missed" | "open" | "off";
+/**
+ * One day in a routine's recent history (221): done on time, done late, missed, today's still open, or
+ * not one of its days.
+ */
+export type DayMark = "done" | "late" | "missed" | "open" | "off";
+
+/** How a routine's day was done (221): on time, or late (which still keeps the streak). */
+export type DoneTiming = "ontime" | "late";
+
+/** The minute of the day, as late as a routine's [item] can be done and still be on time (null: any time that day). */
+export function onTimeUntil(item: Pick<Item, "allDay" | "startMin" | "endMin">): number | null {
+  if (item.allDay || item.startMin === null) return null;
+  if (item.endMin !== null && item.endMin > item.startMin) return item.endMin;
+  return item.startMin + 60;
+}
+
+/**
+ * Whether a routine's [day], ticked on local day [doneDay] at minute [doneMin], was on time (221).
+ * With a time: on time when done by its end time (or within an hour of its start if it has none), on
+ * the day or before; late when done later that day, or ticked on a later day. Without a time: on time
+ * when done that day (or before), late when ticked afterwards.
+ */
+export function doneTiming(item: Pick<Item, "allDay" | "startMin" | "endMin" | "startDay" | "endDay">, day: number, doneDay: number, doneMin: number): DoneTiming {
+  // A routine event over several days is due by its last day.
+  const span = item.startDay !== null && item.endDay !== null ? Math.max(0, item.endDay - item.startDay) : 0;
+  const lastDay = day + span;
+  if (doneDay < lastDay) return "ontime";
+  if (doneDay > lastDay) return "late";
+  const until = onTimeUntil(item);
+  return until === null || doneMin <= until ? "ontime" : "late";
+}
+
+/** The local day and minute of the day of [ms]. */
+export function localDayMinute(ms: number): { day: number; min: number } {
+  const d = new Date(ms);
+  return { day: epochOf(d.getFullYear(), d.getMonth() + 1, d.getDate()), min: d.getHours() * 60 + d.getMinutes() };
+}
+
+/** The time (ms) of minute [min] on local day [day]. */
+export function localMs(day: number, min: number): number {
+  const { y, m, d } = ymd(day);
+  return new Date(y, m - 1, d, Math.floor(min / 60), min % 60).getTime();
+}
+
+/** How [item]'s [day] was done, from when it was ticked; undefined if it wasn't. */
+export function timingOf(item: Item, done: CompletionIndex, day: number): DoneTiming | undefined {
+  const at = done.doneAt(item.id, day);
+  if (at === undefined) return undefined;
+  const l = localDayMinute(at);
+  return doneTiming(item, day, l.day, l.min);
+}
 
 /**
  * The last [n] days of a routine, oldest first, today last: the same counting as its streak (a tick on
- * the day it was due; today, while it's still open, isn't missed yet). Days before it started are off.
+ * the day it was due; today, while it's still open, isn't missed yet), each tick on time or late. Days
+ * before it started are off.
  */
 export function recentDays(item: Item, done: CompletionIndex, today: number, n = 14): DayMark[] {
   const ticked = done.days(item.id);
   return Array.from({ length: n }, (_, k): DayMark => {
     const day = today - (n - 1) + k;
-    if (ticked.has(day)) return "done";
+    if (ticked.has(day)) return timingOf(item, done, day) === "late" ? "late" : "done";
     if (!occursOn(item, day)) return "off";
     return day < today ? "missed" : "open";
   });

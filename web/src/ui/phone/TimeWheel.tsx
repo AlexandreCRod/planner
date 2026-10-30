@@ -17,7 +17,7 @@ import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
-import { joinTime, nearestSlot, splitTime, wheelHours, wheelMinutes, wrapIndex } from "./wheelMath.ts";
+import { durationRows, joinDuration, joinTime, nearestSlot, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
 
 export interface WheelOptions {
   count: number;
@@ -424,5 +424,164 @@ export function HeldTime({ min, onChange, step = 5, className = "" }: { min: num
       <span ref={mEl} className="tw-part" {...hold(mEl, "Minutes", minutes.map(two), t.minute, true, (i) => joinTime(t.hour, i, t.pm, h24, minutes))}>{two(minutes[t.minute])}</span>
       {!h24 && <>{" "}<span ref={pEl} className="tw-part" {...hold(pEl, "AM or PM", ["AM", "PM"], t.pm ? 1 : 0, false, (i) => joinTime(t.hour, t.minute, i === 1, h24, minutes))}>{t.pm ? "PM" : "AM"}</span></>}
     </span>
+  );
+}
+
+// ---------- Wheels in a picker (220) ----------
+//
+// The time picker's scroll wheels (pick B, 2026-10-27): flat columns of 44 px rows, five showing, the
+// picked row in a band across the middle. A finger or the mouse drags a column and lets it coast onto a
+// row, a tap above or below the band turns to that row, the mouse wheel and the arrow keys step it. Each
+// row passed ticks once through the shared haptic gate. Like the drum, nothing re-renders while it
+// turns: each column writes its own rows' transforms once per frame, and tells the picker its row.
+
+/** A picker wheel's row height (px) and how many rows show. */
+export const WHEEL_ROW = 44;
+const WHEEL_SHOW = 5;
+/** Rows drawn each side of the middle (one more than shows, so the edges never pop in). */
+const WHEEL_SIDE = 3;
+
+/** One wheel: [values] in rows, [index] in the band; [onIndex] hears each row that reaches it. */
+export function WheelColumn({ values, index, wrap, label, onIndex, unit, className = "" }: {
+  values: string[]; index: number; wrap: boolean; label: string; onIndex: (i: number) => void; unit?: string; className?: string;
+}) {
+  const n = values.length;
+  const col = useRef<HTMLDivElement>(null);
+  const rows = useRef<HTMLDivElement[]>([]);
+  const texts = useRef(new Map<HTMLElement, string>());
+  const drive = useRef<WheelDrive | null>(null);
+  const shown = useRef(index);
+  const cb = useRef(onIndex);
+  cb.current = onIndex;
+  const valueAt = (slot: number) => (wrap ? values[wrapIndex(slot, n)] : slot >= 0 && slot < n ? values[slot] : null);
+  const write = (offset: number) => {
+    const c = Math.round(offset / WHEEL_ROW);
+    for (let i = -WHEEL_SIDE; i <= WHEEL_SIDE; i++) {
+      const el = rows.current[i + WHEEL_SIDE];
+      if (!el) continue;
+      const slot = c + i, v = valueAt(slot);
+      const y = slot * WHEEL_ROW - offset;
+      if (v === null) { el.style.opacity = "0"; continue; }
+      if (texts.current.get(el) !== v) { texts.current.set(el, v); el.textContent = v; }
+      const look = wheelRowLook(y / WHEEL_ROW);
+      el.style.transform = `translate3d(0,${y.toFixed(2)}px,0) scale(${look.scale.toFixed(4)})`;
+      el.style.opacity = look.opacity.toFixed(3);
+    }
+  };
+  useLayoutEffect(() => {
+    const d = new WheelDrive({
+      count: n, rowH: WHEEL_ROW, index, wrap, write,
+      onRow: (i) => { feel("tick"); shown.current = i; col.current?.setAttribute("aria-valuetext", values[i]); cb.current(i); },
+    });
+    drive.current = d;
+    write(d.offset);
+    return () => d.stop();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Set from outside: turn to it.
+  useEffect(() => {
+    const d = drive.current;
+    if (d && index !== shown.current && !d.busy) { shown.current = index; d.glide(index); }
+  }, [index]);
+  // A mouse wheel turns it a row per notch (a trackpad's smooth scroll, a row per row's height).
+  useEffect(() => {
+    const el = col.current;
+    if (!el) return;
+    let acc = 0;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.deltaMode !== 0 || Math.abs(e.deltaY) >= 50) { drive.current?.step(Math.sign(e.deltaY)); acc = 0; return; }
+      acc += e.deltaY;
+      const k = Math.trunc(acc / WHEEL_ROW);
+      if (!k) return;
+      acc -= k * WHEEL_ROW;
+      drive.current?.step(k);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+  return (
+    <div ref={col} className={`tw-col p-sheet-nodrag ${className}`} role="spinbutton" tabIndex={0} aria-label={label} aria-valuetext={values[index]}
+      style={{ height: WHEEL_ROW * WHEEL_SHOW }}
+      onKeyDown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); drive.current?.step(e.key === "ArrowUp" ? -1 : 1); } }}
+      onPointerDown={(e) => {
+        if (e.button !== 0 || !e.isPrimary) return;
+        e.stopPropagation();
+        const el = col.current!, d = drive.current!;
+        el.setPointerCapture(e.pointerId);
+        const y0 = e.clientY, id = e.pointerId;
+        d.grab(e.clientY, e.timeStamp);
+        const move = (ev: PointerEvent) => {
+          if (ev.pointerId !== id) return;
+          const list = typeof ev.getCoalescedEvents === "function" ? ev.getCoalescedEvents() : [];
+          for (const c of list.length ? list : [ev]) d.move(c.clientY, c.timeStamp);
+        };
+        const up = (ev: PointerEvent) => {
+          if (ev.pointerId !== id) return;
+          el.removeEventListener("pointermove", move);
+          el.removeEventListener("pointerup", up);
+          el.removeEventListener("pointercancel", up);
+          if (d.release(ev.timeStamp) || ev.type === "pointercancel") return;
+          // A tap above or below the band turns to that row.
+          const r = el.getBoundingClientRect();
+          const steps = Math.round((y0 - (r.top + r.height / 2)) / WHEEL_ROW);
+          if (steps) d.step(steps);
+        };
+        el.addEventListener("pointermove", move);
+        el.addEventListener("pointerup", up);
+        el.addEventListener("pointercancel", up);
+      }}>
+      {Array.from({ length: 2 * WHEEL_SIDE + 1 }, (_, i) => (
+        <div key={i} className="tw-col-row" aria-hidden="true" ref={(el) => { if (el) rows.current[i] = el; }} />
+      ))}
+      {unit && <span className="tw-unit" aria-hidden="true">{unit}</span>}
+    </div>
+  );
+}
+
+/**
+ * A time of day on wheels: hours, minutes (every [step], keeping an odd minute the time started on) and,
+ * on a 12-hour clock, AM/PM. [onChange] hears each new time as its row reaches the band.
+ */
+export function TimeWheels({ value, onChange, step = 5 }: { value: number; onChange: (min: number) => void; step?: number }) {
+  const h24 = use24h();
+  const [minutes] = useState(() => wheelMinutes(step, value % 60));
+  const hours = wheelHours(h24);
+  const t = splitTime(value, h24, minutes);
+  const cur = useRef(t);
+  cur.current = t;
+  const set = (p: Partial<typeof t>) => {
+    const next = { ...cur.current, ...p };
+    cur.current = next;
+    onChange(joinTime(next.hour, next.minute, next.pm, h24, minutes));
+  };
+  const hourText = (x: number) => (h24 ? two(x) : String(x));
+  return (
+    <div className="tw-wheels">
+      <div className="tw-band-row" />
+      <WheelColumn key={h24 ? "h24" : "h12"} label="Hours" values={hours.map(hourText)} index={t.hour} wrap onIndex={(i) => set({ hour: i })} />
+      <div className="tw-colon" aria-hidden="true">:</div>
+      <WheelColumn label="Minutes" values={minutes.map(two)} index={t.minute} wrap onIndex={(i) => set({ minute: i })} />
+      {!h24 && <WheelColumn className="tw-ampm" label="AM or PM" values={["AM", "PM"]} index={t.pm ? 1 : 0} wrap={false} onIndex={(i) => set({ pm: i === 1 })} />}
+    </div>
+  );
+}
+
+/** A timer's length on wheels: hours (0–23), minutes and seconds, each with its unit beside the band. */
+export function DurationWheels({ ms, onChange }: { ms: number; onChange: (ms: number) => void }) {
+  const p = splitDuration(ms);
+  const cur = useRef(p);
+  cur.current = p;
+  const set = (q: Partial<typeof p>) => {
+    const next = { ...cur.current, ...q };
+    cur.current = next;
+    onChange(joinDuration(next));
+  };
+  return (
+    <div className="tw-wheels tw-dur">
+      <div className="tw-band-row" />
+      <WheelColumn label="Hours" unit="h" values={durationRows(24, false)} index={p.h} wrap onIndex={(i) => set({ h: i })} />
+      <WheelColumn label="Minutes" unit="min" values={durationRows(60, true)} index={p.m} wrap onIndex={(i) => set({ m: i })} />
+      <WheelColumn label="Seconds" unit="s" values={durationRows(60, true)} index={p.s} wrap onIndex={(i) => set({ s: i })} />
+    </div>
   );
 }

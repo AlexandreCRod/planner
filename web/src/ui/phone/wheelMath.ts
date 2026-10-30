@@ -57,3 +57,23 @@ export function dragEdgeTimes(edge: "top" | "bottom", start: number, end: number
   if (edge === "top") return { start: Math.max(0, Math.min(end - step, snap(start + dMin))), end };
   return { start, end: Math.max(start + step, Math.min(24 * 60 - 1, snap(end + dMin))) };
 }
+
+/** How a picker wheel's row [d] rows from the band looks (220): its scale (30 px digits, 22, then 20) and opacity. */
+export function wheelRowLook(d: number): { scale: number; opacity: number } {
+  const a = Math.abs(d);
+  if (a <= 1) return { scale: 1 - a * (8 / 30), opacity: 1 - a * 0.45 };
+  if (a <= 2) return { scale: 22 / 30 - (a - 1) * (2 / 30), opacity: 0.55 - (a - 1) * 0.27 };
+  return { scale: 20 / 30, opacity: Math.max(0, 0.28 - (a - 2) * 0.28) };
+}
+
+/** A timer's length [ms] as its wheels' rows: hours (at most 23), minutes and seconds. */
+export function splitDuration(ms: number): { h: number; m: number; s: number } {
+  const t = Math.max(0, Math.round(ms / 1000));
+  return { h: Math.min(23, Math.floor(t / 3600)), m: Math.floor(t / 60) % 60, s: t % 60 };
+}
+
+/** The length (ms) the duration wheels show. */
+export const joinDuration = ({ h, m, s }: { h: number; m: number; s: number }): number => (h * 3600 + m * 60 + s) * 1000;
+
+/** A duration wheel's rows: 0..n−1, two digits for minutes and seconds. */
+export const durationRows = (n: number, pad: boolean): string[] => Array.from({ length: n }, (_, i) => (pad ? String(i).padStart(2, "0") : String(i)));
