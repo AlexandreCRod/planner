@@ -1,7 +1,7 @@
 // Today: the day pager, each day's tasks, schedule and note, and the routines row.
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
+import { dayShort, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { type Occurrence, type TaskEntry, completionDay, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../../domain/schedule.ts";
 import { type GlanceRow, dayGlance, eventOver, foldDone, foldEvents, taskOver, weekAhead } from "../../domain/todayPlan.ts";
 import { carryOver } from "../../store/prefs.ts";
@@ -268,26 +268,40 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
   );
 }
 
-/** Every routine in a sheet: name, how it repeats, today's state and its streak. A tap opens it; Streaks at the end (241). */
+/**
+ * Every routine in a sheet (85, laid out like the app's other sheets): a title with today's count, then
+ * today's routines and the ones on other days under small headings. Each row: its ring (done, due, or
+ * dashed when it isn't today), name, how it repeats and when it's next, and its streak. A tap opens it;
+ * Streaks at the end (241).
+ */
 function RoutineListSheet({ s, t, onClose, onStreaks }: { s: Snapshot; t: number; onClose: () => void; onStreaks: () => void }) {
   const rows = routineList(s.items, s.done, t);
   const streaks = showStreaks();
+  const todays = rows.filter((r) => r.today !== "off"), others = rows.filter((r) => r.today === "off");
+  const done = todays.filter((r) => r.today === "done").length;
+  /** "Tomorrow", "Sun", or the date further off. */
+  const nextText = (d: number | null) => (d === null ? "Not planned" : d === t + 1 ? "Next tomorrow" : d - t < 7 ? `Next ${dayShort(weekday(d))}` : `Next ${formatDateShort(d)}`);
+  const row = (r: (typeof rows)[number], close: () => void) => (
+    <button key={r.item.id} className={`p-rlist-row ${r.today}`} onClick={() => { close(); window.setTimeout(() => openItem(r.item, r.today === "off" ? r.next : t), 210); }}>
+      <span className="ring">{r.today === "done" && <MIcon name="fCheck" size={14} />}</span>
+      <span className="text">
+        <span className="name">{r.item.title || "Untitled"}</span>
+        <span className="sub">{[r.repeat, r.today === "done" ? "Done" : r.today === "due" ? "To do" : nextText(r.next)].join(" · ")}</span>
+      </span>
+      {streaks && r.streak.current > 0 && <span className="streak">{streakSymbol() ? <MIcon name="fLocalFireDepartment" size={14} /> : null}{r.streak.current}{streakSymbol() ? "" : " in a row"}</span>}
+    </button>
+  );
   return (
     <BottomSheet onClose={onClose} className="p-rlist-sheet">{(close) => (
       <div className="p-rlist">
-        <div className="p-rlist-head t-title-medium">Routines</div>
-        {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet</div>}
+        <div className="p-sheet-title">Routines</div>
+        {todays.length > 0 && <div className="p-rlist-count">{done === todays.length ? `All ${todays.length} done today` : `${done} of ${todays.length} done today`}</div>}
+        {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet. Turn on Routine in a repeating task or event.</div>}
         <div className="p-rlist-rows">
-          {rows.map((r) => (
-            <button key={r.item.id} className={`p-rlist-row ${r.today}`} onClick={() => { close(); window.setTimeout(() => openItem(r.item, r.today === "off" ? r.next : t), 210); }}>
-              <span className="ring">{r.today === "done" && <MIcon name="fCheck" size={14} />}</span>
-              <span className="text">
-                <span className="name">{r.item.title || "Untitled"}</span>
-                <span className="sub">{[r.repeat, r.today === "done" ? "Done today" : r.today === "due" ? "Due today" : r.next !== null ? `Next ${formatDateShort(r.next)}` : "Not today"].join(" · ")}</span>
-              </span>
-              {streaks && r.streak.current > 0 && <span className="streak">{streakSymbol() ? <MIcon name="fLocalFireDepartment" size={14} /> : null}{r.streak.current}{streakSymbol() ? "" : " in a row"}</span>}
-            </button>
-          ))}
+          {todays.length > 0 && others.length > 0 && <div className="p-rlist-group">Today</div>}
+          {todays.map((r) => row(r, close))}
+          {others.length > 0 && <div className="p-rlist-group">{todays.length ? "Other days" : "Not today"}</div>}
+          {others.map((r) => row(r, close))}
         </div>
         {rows.length > 0 && (
           <button className="p-rlist-streaks" onClick={() => { close(); window.setTimeout(onStreaks, 210); }}>
