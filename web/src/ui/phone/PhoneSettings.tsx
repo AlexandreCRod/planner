@@ -264,9 +264,10 @@ export function PhoneSettings() {
   /** A display setting: kept, then every page redrawn with it. */
   const redraw = (k: string, v: string) => { store(k, v); changed(true); };
 
-  const status = sync.state === "syncing" ? "Syncing…"
-    : sync.state === "signed-out" ? "Signed out"
-    : `Last sync: ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}${sync.message ? `\n${sync.message}` : ""}`;
+  // Always two lines, the same while syncing: the row changing height at every sync made the page behind a
+  // popup (Check for updates) jump every so often (134).
+  const status = sync.state === "signed-out" ? "Signed out"
+    : `Last sync: ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}\n${sync.state === "syncing" ? "Syncing…" : sync.message || "Up to date"}`;
 
   return (
     <Scaffold title="Settings" back flush>
