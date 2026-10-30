@@ -6,6 +6,8 @@
 // scrolls only with the end in the zone along its top or bottom edge, faster the nearer the edge. The page gets no touch events during
 // such a drag (the browser takes the finger), so the selection's end stands in for the finger.
 // Scrolling a page that merely has a selection in it is untouched: the selection isn't changing.
+// Nor is a selection made with the mouse (258): there the wheel scrolls freely, and mouseSelect.ts
+// scrolls past the edges, as text editors do.
 
 /**
  * px/ms a selection drag may scroll, with its end [depth] into the edge zone (0 outside, 1 at the edge).
@@ -37,6 +39,8 @@ const ZONE = 56;
 const ACTIVE_MS = 250;
 
 let lastChange = -1e9;
+/** The last press was the mouse's: its selections are left to mouseSelect.ts. */
+let mousePressed = false;
 const seen = new WeakMap<Element, { top: number; left: number; t: number }>();
 
 function selectionEnd(): { node: Node; rect: DOMRect | null; field: HTMLInputElement | HTMLTextAreaElement | null } | null {
@@ -110,6 +114,7 @@ function glide(el: Element, top: number, left: number, speed: number, now: numbe
 function onScroll(e: Event) {
   const el = e.target === document ? document.scrollingElement : e.target;
   if (!(el instanceof Element)) return;
+  if (mousePressed) { stopGlide(el); seen.delete(el); return; }
   const now = performance.now();
   const prev = seen.get(el);
   const top = el.scrollTop, left = el.scrollLeft;
@@ -134,6 +139,7 @@ let started = false;
 export function startSelectScroll() {
   if (started) return;
   started = true;
+  document.addEventListener("pointerdown", (e) => { mousePressed = e.pointerType === "mouse"; }, { capture: true, passive: true });
   document.addEventListener("selectionchange", () => {
     lastChange = performance.now();
     // Know where the scrollers holding the selection are, so even their first move is held in.
