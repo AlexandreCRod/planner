@@ -5,10 +5,12 @@
 // lens moves by transforms written straight to the elements each frame (no React render while it moves).
 // Any of them can be saved to the phone. Videos stay on the phone that added them (domain/media.ts).
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, miniScale, previewHash } from "../../domain/media.ts";
 import type { NoteImage } from "../../domain/types.ts";
 import { getBlob, useImageUrl } from "../../store/images.ts";
-import { Dialog, IconButton, MIcon } from "./chrome.tsx";
+import { Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
+import { isNative } from "../../platform.ts";
 import { saveToPhone } from "./device.ts";
 import { feel } from "./haptics.ts";
 import { TextButton, showSnackbar } from "./m3.tsx";
@@ -49,6 +51,71 @@ export async function downloadMedia(m: NoteImage) {
   }
 }
 
+/** Copying pictures to the clipboard works here (a browser with ClipboardItem; the phone app shares instead). */
+export const canCopyImages = !isNative && typeof ClipboardItem !== "undefined" && !!navigator.clipboard?.write;
+
+/** A picture as a PNG (what clipboards take): as it is when it's one already, else drawn onto a canvas. */
+async function asPng(blob: Blob): Promise<Blob> {
+  if (blob.type === "image/png") return blob;
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement("canvas");
+  c.width = bmp.width;
+  c.height = bmp.height;
+  c.getContext("2d")!.drawImage(bmp, 0, 0);
+  bmp.close();
+  return new Promise((ok, fail) => c.toBlob((b) => (b ? ok(b) : fail(new Error("Couldn't copy it"))), "image/png"));
+}
+
+/** Copies a picture to the clipboard (222), without downloading it: Ctrl+V pastes it anywhere. */
+export async function copyImage(m: NoteImage) {
+  if (isVideo(m)) return;
+  const blob = await getBlob(m.hash);
+  if (!blob) { showSnackbar("This picture hasn't arrived on this device yet"); return; }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": asPng(blob) })]);
+    showSnackbar("Picture copied");
+  } catch {
+    showSnackbar("Couldn't copy the picture");
+  }
+}
+
+/** Ctrl+C (Cmd+C) copies [m] while it's shown, unless text is selected (then that's what's copied). */
+function useCopyKey(m: NoteImage | undefined) {
+  const cur = useRef(m);
+  cur.current = m;
+  useEffect(() => {
+    if (!canCopyImages) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "c" || e.altKey || e.shiftKey) return;
+      const x = cur.current;
+      if (!x || isVideo(x) || (window.getSelection()?.toString() ?? "") !== "") return;
+      e.preventDefault();
+      void copyImage(x);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}
+
+/** The picture's right-click menu (222), at the mouse: open it, copy it, download it, or look through them all. */
+function PictureMenu({ m, at, onClose, onOpen, onLens }: { m: NoteImage; at: { x: number; y: number }; onClose: () => void; onOpen: () => void; onLens: () => void }) {
+  const video = isVideo(m);
+  const items: MenuItem[] = [
+    { label: video ? "Open video" : "Open picture", icon: "oImage", onClick: onOpen },
+    ...(canCopyImages && !video ? [{ label: "Copy image", icon: "oContentCopy", onClick: () => void copyImage(m) }] : []),
+    { label: video ? "Download video" : "Download image", icon: "fDownload", onClick: () => void downloadMedia(m) },
+    { label: "Look through all", icon: "oVideoLibrary", onClick: onLens },
+  ];
+  // Kept inside the window near the right or bottom edge.
+  const left = Math.min(at.x, window.innerWidth - 240), top = Math.min(at.y, window.innerHeight - items.length * 48 - 24);
+  return createPortal(
+    <div className="p-menu-anchor start pn-ctx" style={{ position: "fixed", left, top: top - 48, zIndex: 80 }}>
+      <DropdownMenu open onClose={onClose} items={items} />
+    </div>,
+    document.body,
+  );
+}
+
 function Still({ m }: { m: NoteImage }) {
   const url = useImageUrl(previewHash(m));
   return url ? <img src={url} alt="" draggable={false} /> : <span className="pn-media-none"><MIcon name={isVideo(m) ? "oVideoLibrary" : "oImage"} /></span>;
@@ -59,21 +126,27 @@ function VideoMark({ m }: { m: NoteImage }) {
   return <span className="pn-media-video"><MIcon name="fPlayArrow" size={16} />{d}</span>;
 }
 
-/** The row of previews. A tap opens one ([onOpen]); a long press (or a right-click) opens the lens on it ([onLens]). */
+/**
+ * The row of previews. A tap opens one ([onOpen]); a long press opens the lens on it ([onLens]); a
+ * right-click opens its menu (open, copy, download, the lens).
+ */
 export function MediaStrip({ media, onOpen, onLens }: {
   media: NoteImage[]; onOpen: (i: number) => void; onLens: (i: number, pointer: { id: number; x: number } | null) => void;
 }) {
   const press = useRef<{ id: number; x: number; y: number; i: number; timer: number } | null>(null);
   const cancel = () => { if (press.current) { clearTimeout(press.current.timer); press.current = null; } };
   useEffect(() => cancel, []);
+  const [menu, setMenu] = useState<{ i: number; x: number; y: number } | null>(null);
   return (
+    <>
+    {menu && media[menu.i] && <PictureMenu m={media[menu.i]} at={menu} onClose={() => setMenu(null)} onOpen={() => onOpen(menu.i)} onLens={() => onLens(menu.i, null)} />}
     <div className="pn-media" onPointerMove={(e) => {
       const p = press.current;
       if (p && e.pointerId === p.id && Math.hypot(e.clientX - p.x, e.clientY - p.y) > TOUCH_SLOP) cancel();
     }} onPointerUp={cancel} onPointerCancel={cancel}>
       {media.map((m, i) => (
         <button key={m.id} className="pn-media-item" style={{ aspectRatio: String(clamp(aspect(m), 0.6, 1.8)) }} aria-label={isVideo(m) ? "Open video" : "Open picture"}
-          onContextMenu={(e) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); onLens(i, null); } }}
+          onContextMenu={(e) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); setMenu({ i, x: e.clientX, y: e.clientY }); } }}
           onPointerDown={(e) => {
             if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
             cancel();
@@ -92,6 +165,7 @@ export function MediaStrip({ media, onOpen, onLens }: {
         </button>
       ))}
     </div>
+    </>
   );
 }
 
@@ -218,6 +292,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const m = media[cur];
+  useCopyKey(m);
   return (
     <div ref={root} className="pn-lens" onContextMenu={(e) => e.preventDefault()}>
       <div className="pn-lens-row">
@@ -235,6 +310,7 @@ export function MediaLens({ media, start, pointer, onClose, onOpen }: {
       </div>
       <div className="pn-lens-bar">
         <span className="pn-lens-count">{cur + 1} / {n}{m && isVideo(m) ? " · video" : ""}{m && isVideo(m) && m.phoneOnly ? " on the phone" : ""}</span>
+        {canCopyImages && m && !isVideo(m) && <IconButton icon="oContentCopy" label="Copy image (Ctrl+C)" onClick={() => void copyImage(m)} />}
         <IconButton icon="fDownload" label="Save to the phone" onClick={() => m && void downloadMedia(m)} />
         <IconButton icon="fClose" label="Close" onClick={close} />
       </div>
@@ -248,18 +324,20 @@ function LensVideo({ m, active }: { m: NoteImage; active: boolean }) {
   return url && active ? <video className="pn-lens-video" src={url} autoPlay muted loop playsInline /> : null;
 }
 
-/** One full screen: a picture, or a video with its controls; save to the phone, and remove (asked first). */
+/** One full screen: a picture, or a video with its controls; copy it (a button, Ctrl+C; on the PC), save it, and remove it (asked first). */
 export function MediaViewer({ m, onClose, onRemove }: { m: NoteImage; onClose: () => void; onRemove: () => void }) {
   const still = useImageUrl(previewHash(m));
   const video = useVideoUrl(m, true);
   const [ask, setAsk] = useState(false);
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
   const what = isVideo(m) ? "video" : "picture";
+  useCopyKey(m);
   return (
     <div className="pn-picture" onClick={onClose}>
       <div className="pn-picture-bar" onClick={(e) => e.stopPropagation()}>
         <IconButton icon="fClose" label="Close" onClick={onClose} />
         <span className="grow" />
+        {canCopyImages && !isVideo(m) && <IconButton icon="oContentCopy" label="Copy image (Ctrl+C)" onClick={() => void copyImage(m)} />}
         <IconButton icon="fDownload" label={`Save ${what} to the phone`} onClick={() => void downloadMedia(m)} />
         <IconButton icon="oDelete" label={`Remove ${what}`} onClick={() => setAsk(true)} />
       </div>
