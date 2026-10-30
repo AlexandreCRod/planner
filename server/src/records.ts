@@ -32,7 +32,7 @@ export function recordsOf(snapshot: Snapshot, kind: Kind): PlannerRecord[] {
 }
 
 /** What this Worker can do, reported by /api/status and every sync reply, so newer apps know what to send. */
-export const FEATURES = ["anyKind", "maxRecord"] as const;
+export const FEATURES = ["anyKind", "maxRecord", "baseMerge"] as const;
 
 /** Largest record accepted, as canonical JSON (Durable Object rows hold 2 MB; leave room). */
 export const MAX_RECORD_CHARS = 1_000_000;
@@ -123,11 +123,16 @@ export function tokensMatch(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** One record change sent by a client: `data: null` means the client deleted it. */
+/**
+ * One record change sent by a client: `data: null` means the client deleted it. `base` is the copy the
+ * client last synced, the version its edit started from (newer apps, items only, once the Worker lists
+ * "baseMerge"); with it the server merges field by field ([mergeFields]).
+ */
 export interface IncomingChange {
   kind: Kind;
   id: string;
   data: PlannerRecord | null;
+  base?: PlannerRecord;
 }
 
 /** Validates the body of POST /api/sync; returns an error message when it's malformed. */
@@ -140,13 +145,16 @@ export function parseSyncBody(input: unknown): { since: number; changes: Incomin
   const changes: IncomingChange[] = [];
   for (const c of obj.changes as unknown[]) {
     if (c === null || typeof c !== "object") return "Each change must be an object";
-    const { kind, id, data } = c as Record<string, unknown>;
+    const { kind, id, data, base } = c as Record<string, unknown>;
     if (!isKind(kind)) return `Unknown kind "${String(kind)}"`;
     if (typeof id !== "string" || id.length === 0) return "Each change needs a string id";
     if (data !== null && (typeof data !== "object" || Array.isArray(data))) return "data must be an object or null";
     if (data !== null && keyOf(kind, data as PlannerRecord) !== id) return `id "${id}" does not match its ${kind} record`;
     if (data !== null && canonical(data).length > MAX_RECORD_CHARS) return `Too large: ${kind}/${id} is over ${MAX_RECORD_CHARS / 1_000_000} MB`;
-    changes.push({ kind, id, data: data as PlannerRecord | null });
+    if (base !== undefined && base !== null && (typeof base !== "object" || Array.isArray(base))) return "base must be an object";
+    const change: IncomingChange = { kind, id, data: data as PlannerRecord | null };
+    if (base && data !== null) change.base = base as PlannerRecord;
+    changes.push(change);
   }
   return { since, changes };
 }
@@ -196,4 +204,67 @@ export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 export function syncDeletionGuard(storedItems: number, deletedItems: number): string | null {
   if (deletedItems === 0) return null;
   return deletionGuard(storedItems, storedItems - deletedItems);
+}
+
+/** The fields both sides may change without it being a clash: the later edit time is kept. */
+const EDIT_TIME = "updatedAt";
+/** A note's clash in one of these keeps the losing side as a conflicted copy ([conflictCopy]). */
+export const COPY_FIELDS = ["title", "content"] as const;
+
+/**
+ * Three-way merge of one record (item 141): [base] is the copy the client's edit started from,
+ * [incoming] the client's version, [existing] the server's. A field only one side changed takes that
+ * side's value; a field both changed to different values is a clash, settled by [incomingWins] (the
+ * old whole-record rules, [clientWins]), except the edit time, which keeps the later one.
+ */
+export function mergeFields(
+  base: PlannerRecord, incoming: PlannerRecord, existing: PlannerRecord, incomingWins: boolean,
+): { merged: PlannerRecord; clashes: string[] } {
+  const merged: PlannerRecord = {};
+  const clashes: string[] = [];
+  for (const f of new Set([...Object.keys(base), ...Object.keys(incoming), ...Object.keys(existing)])) {
+    const b = canonical(base[f]), i = canonical(incoming[f]), e = canonical(existing[f]);
+    let v: unknown;
+    if (i === b || i === e) v = existing[f];
+    else if (e === b) v = incoming[f];
+    else if (f === EDIT_TIME) v = Math.max(Number(incoming[f]) || 0, Number(existing[f]) || 0);
+    else { clashes.push(f); v = incomingWins ? incoming[f] : existing[f]; }
+    if (v !== undefined) merged[f] = v;
+  }
+  return { merged, clashes };
+}
+
+/** A new item id, in the same range as the apps' (domain/ids.ts): [2^40, 2^53). */
+export function newItemId(): number {
+  const lo = 2 ** 40;
+  const r = crypto.getRandomValues(new Uint32Array(2));
+  const f = (r[0] * 2 ** 21 + (r[1] >>> 11)) / 2 ** 53;
+  return lo + Math.floor(f * (2 ** 53 - lo));
+}
+
+/** Whether a merge of an item should keep the loser as a copy: a note whose title or content clashed. */
+export function needsCopy(kind: Kind, merged: PlannerRecord, clashes: string[]): boolean {
+  return kind === "items" && merged.type === "NOTE" && clashes.some((f) => (COPY_FIELDS as readonly string[]).includes(f));
+}
+
+/**
+ * The note that keeps the losing side of a clash: the merged note's other fields (its category, look),
+ * the loser's title and content, titled "<title> (conflicted copy)", new and unpinned, at the top.
+ */
+export function conflictCopy(merged: PlannerRecord, loser: PlannerRecord, id: number, now: number): PlannerRecord {
+  const copy: PlannerRecord = { ...merged };
+  delete copy.pinOrder;
+  delete copy.listOrder;
+  delete copy.source;
+  const title = String(loser.title ?? "").trim();
+  return {
+    ...copy,
+    id,
+    title: title ? `${title} (conflicted copy)` : "Conflicted copy",
+    content: loser.content ?? "",
+    pinned: false,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  };
 }
