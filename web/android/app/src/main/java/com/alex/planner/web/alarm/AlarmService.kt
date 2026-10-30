@@ -49,6 +49,8 @@ class AlarmService : Service() {
         const val ACTION_DISMISS = "com.alex.planner.web.ALARM_DISMISS"
         const val ACTION_SNOOZE = "com.alex.planner.web.ALARM_SNOOZE"
         const val ACTION_COMPLETE = "com.alex.planner.web.ALARM_COMPLETE"
+        /** When it began ringing (a restart after the app was killed carries on from then). */
+        const val EXTRA_STARTED = "startedAt"
         private const val NOTIF_ID = 777_000
 
         /** What's ringing now (ids are 0 when not that kind), for the page's item window. */
@@ -92,8 +94,23 @@ class AlarmService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+    override fun onStartCommand(startIntent: Intent?, flags: Int, startId: Int): Int {
+        // Restarted by Android after the app was killed while it rang (194): carry on from what was saved.
+        var intent = startIntent
+        if (intent == null) {
+            val saved = RingState.load(this) ?: run { stopSelf(); return START_NOT_STICKY }
+            val left = RingState.left(saved.startedAt, ringMillis(Mirror.settings(this), saved.clockId != 0L || saved.timerId != 0L), System.currentTimeMillis())
+            if (left <= 0L) {
+                itemId = saved.itemId; reminderId = saved.reminderId; clockId = saved.clockId; timerId = saved.timerId; ringText = saved.text
+                title = titleFor(if (clockId != 0L) ClockAlarms.get(this, clockId) else null)
+                missedNotice()
+                RingState.clear(this)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            intent = saved.intent(this)
+        }
+        when (intent.action) {
             ACTION_DISMISS -> { finishAlarm(); return START_NOT_STICKY }
             ACTION_SNOOZE -> { snoozeAndStop(); return START_NOT_STICKY }
             ACTION_COMPLETE -> {
@@ -108,22 +125,20 @@ class AlarmService : Service() {
         val takeover = ringing != null
         if (takeover) missedNotice()
         stopRinging()
-        itemId = intent?.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0) ?: 0
-        reminderId = intent?.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0) ?: 0
-        day = intent?.getLongExtra(AlarmReceiver.EXTRA_DAY, 0) ?: 0
-        original = intent?.getLongExtra(AlarmReceiver.EXTRA_ORIGINAL, 0) ?: 0
-        clockId = intent?.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) ?: 0
-        timerId = intent?.getLongExtra(ClockTools.EXTRA_TIMER, 0) ?: 0
-        val text = intent?.getStringExtra(EXTRA_TEXT).orEmpty()
+        itemId = intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0)
+        reminderId = intent.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0)
+        day = intent.getLongExtra(AlarmReceiver.EXTRA_DAY, 0)
+        original = intent.getLongExtra(AlarmReceiver.EXTRA_ORIGINAL, 0)
+        clockId = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0)
+        timerId = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0)
+        val text = intent.getStringExtra(EXTRA_TEXT).orEmpty()
         ringText = text
-        val sound = intent?.getStringExtra(EXTRA_SOUND)
+        val sound = intent.getStringExtra(EXTRA_SOUND)
+        val now = System.currentTimeMillis()
+        val startedAt = intent.getLongExtra(EXTRA_STARTED, now)
 
         val clock = if (clockId != 0L) ClockAlarms.get(this, clockId) else null
-        title = when {
-            timerId != 0L -> "Time's up"
-            clockId != 0L -> clock?.label?.trim()?.ifBlank { null } ?: "Alarm"
-            else -> Mirror.item(this, itemId)?.title?.ifBlank { "Alarm" } ?: "Alarm"
-        }
+        title = titleFor(clock)
         val full = Intent(this, AlarmActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
             putExtra(AlarmActivity.EXTRA_TITLE, title)
@@ -151,16 +166,28 @@ class AlarmService : Service() {
             .build()
         // Started from the foreground-service start the receiver made, so this must come straight away.
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
-        ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
+        val started = runCatching { ServiceCompat.startForeground(this, NOTIF_ID, notification, type) }.isSuccess
+        if (!started) {
+            // Android refused (a restart from the background on a newer Android): it can't ring, so say so.
+            missedNotice()
+            RingState.clear(this)
+            RingWakeLock.release()
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // The ringing screen, when it's showing, shows the new alarm at once (the full-screen intent
         // only opens it the first time).
         if (takeover && AlarmActivity.showing) runCatching { startActivity(full) }
         startRinging(sound)
         listenToVolumeKeys()
-        handler.postDelayed({ timeout() }, ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L))
+        val ringMs = ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L)
+        handler.postDelayed({ timeout() }, RingState.left(startedAt, ringMs, now).coerceAtLeast(1_000))
+        // Awake while it rings (the receiver's hold covered the start), and saved in case the app is killed.
+        RingWakeLock.acquire(this, ringMs + 30_000)
+        RingState.save(this, RingState.Saved(itemId, reminderId, day, original, clockId, timerId, text, sound, startedAt))
         ringing = Ringing(itemId, reminderId, day, clockId, timerId)
         AlarmEvents.changed("ringing")
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     /**
@@ -363,8 +390,16 @@ class AlarmService : Service() {
         finishAlarm()
     }
 
+    private fun titleFor(clock: ClockAlarm?): String = when {
+        timerId != 0L -> "Time's up"
+        clockId != 0L -> clock?.label?.trim()?.ifBlank { null } ?: "Alarm"
+        else -> Mirror.item(this, itemId)?.title?.ifBlank { "Alarm" } ?: "Alarm"
+    }
+
     private fun finishAlarm() {
         stopRinging()
+        RingState.clear(this)
+        RingWakeLock.release()
         if (ringing != null) { ringing = null; AlarmEvents.changed("ringing") }
         sendBroadcast(Intent(AlarmActivity.ACTION_CLOSE).setPackage(packageName))
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)

@@ -71,6 +71,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 putExtra(AlarmService.EXTRA_TEXT, if (snoozed) "Snoozed" else "")
                 putExtra(AlarmService.EXTRA_SOUND, alarm.sound ?: Mirror.settings(context).defaultAlarmSound)
             }
+            RingWakeLock.acquire(context, 60_000)
             ContextCompat.startForegroundService(context, svc)
             return
         }
@@ -162,7 +163,8 @@ class AlarmReceiver : BroadcastReceiver() {
                             putExtra(AlarmService.EXTRA_TEXT, text)
                             putExtra(AlarmService.EXTRA_SOUND, reminder.soundUri ?: settings.defaultAlarmSound)
                         }
-                        ContextCompat.startForegroundService(context, svc)
+                        RingWakeLock.acquire(context, 60_000)
+            ContextCompat.startForegroundService(context, svc)
                     } else {
                         val quiet = settings.quietHoursEnabled && inQuietHours(settings.quietStart, settings.quietEnd)
                         Notifications.show(context, item, reminder.id, day, reminder.type, text, quiet, settings.snoozeMinutes)
@@ -196,7 +198,8 @@ class AlarmReceiver : BroadcastReceiver() {
                     putExtra(AlarmService.EXTRA_TEXT, t.label.ifBlank { ClockTools.formatDuration(t.durationMs) + " timer" })
                     putExtra(AlarmService.EXTRA_SOUND, Mirror.settings(context).defaultAlarmSound)
                 }
-                ContextCompat.startForegroundService(context, svc)
+                RingWakeLock.acquire(context, 60_000)
+            ContextCompat.startForegroundService(context, svc)
             }
         }
     }
