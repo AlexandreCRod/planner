@@ -702,6 +702,11 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pe-cat { position: relative; overflow: hidden; padding: 2px 0; border: 0; border-radius: 6px; background: none; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
 .phone .pe-done { position: relative; display: flex; align-items: center; padding: 0 4px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone .pe-done .p-checkbox { margin: 14px; }
+.phone .pe-done-when { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; letter-spacing: .25px; color: var(--muted); }
+.phone .pe-done-when::before, .phone .pe-donewhen-verdict .dot { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: #86c79a; }
+.phone .pe-done-when.late::before, .phone .pe-donewhen-verdict.late .dot { background: #e3b866; }
+.phone .pe-donewhen-day { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--p-outline); border-radius: 8px; background: none; color: var(--text); font-size: 16px; text-align: left; }
+.phone .pe-donewhen-verdict { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; font-size: 14px; color: var(--muted); }
 .phone .pe-info { position: relative; display: flex; align-items: flex-start; gap: 16px; padding: 9px 16px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone .pe-info > svg { flex: none; margin-top: 1px; color: var(--muted); }
 .phone .pe-info.trailing { align-items: center; padding-right: 4px; }
@@ -1414,15 +1419,19 @@ html.phone[data-theme="dark"] {
 .phone .p-streak-row .sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-streak-days { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
 .phone .p-streak-days span { flex: none; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
-.phone .p-streak-days .done { background: var(--p-strong); }
-.phone .p-streak-days .missed { background: color-mix(in srgb, var(--danger) 45%, transparent); }
+.phone :is(.p-streak-days, .p-streak-key) .done { background: #86c79a; }
+.phone :is(.p-streak-days, .p-streak-key) .late { background: #e3b866; }
+/* Missed: a grey gap, a dim empty spot in the row rather than an alarm (221). */
+.phone :is(.p-streak-days, .p-streak-key) .missed { background: color-mix(in srgb, var(--p-outline) 22%, transparent); }
 .phone .p-streak-days .open { border: 1.5px solid var(--p-outline); }
 .phone .p-streak-days .off::after { content: ""; width: 3px; height: 3px; border-radius: 50%; background: var(--p-outline); opacity: .5; }
 .phone .p-streak-now { flex: none; min-width: 52px; display: flex; flex-direction: column; align-items: flex-end; color: var(--muted); }
 .phone .p-streak-now .n { display: inline-flex; align-items: center; gap: 2px; font-size: 22px; line-height: 28px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .phone .p-streak-now.on .n { color: var(--text); }
 .phone .p-streak-now .l { font-size: 12px; line-height: 16px; letter-spacing: .4px; }
-.phone .p-streak-foot { padding: 8px 24px 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.phone .p-streak-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 24px 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.phone .p-streak-key { display: inline-flex; align-items: center; gap: 5px; }
+.phone .p-streak-key span { width: 8px; height: 8px; border-radius: 50%; }
 
 /* The update popup (UpdateHost.tsx): which version, the release notes as plain text, a quiet progress bar. */
 .phone .p-update-version { color: var(--muted); margin-bottom: 12px; }

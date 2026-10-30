@@ -41,15 +41,21 @@ export const dueAt = (e: TaskEntry) => (e.day !== null && e.item.startMin !== nu
 
 export class CompletionIndex {
   private byItem = new Map<number, Set<number>>();
+  private atByItem = new Map<number, Map<number, number>>();
   constructor(list: Completion[]) {
     for (const c of list) {
       let s = this.byItem.get(c.itemId);
       if (!s) this.byItem.set(c.itemId, (s = new Set()));
       s.add(c.day);
+      let a = this.atByItem.get(c.itemId);
+      if (!a) this.atByItem.set(c.itemId, (a = new Map()));
+      a.set(c.day, c.completedAt);
     }
   }
   isDone(itemId: number, day: number) { return this.byItem.get(itemId)?.has(day) ?? false; }
   days(itemId: number) { return this.byItem.get(itemId) ?? new Set<number>(); }
+  /** When [itemId]'s [day] was ticked (ms), if it was. */
+  doneAt(itemId: number, day: number): number | undefined { return this.atByItem.get(itemId)?.get(day); }
 }
 
 export function occurrencesIn(items: Item[], done: CompletionIndex, from: number, to: number): Occurrence[] {

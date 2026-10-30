@@ -12,7 +12,7 @@ import {
   NO_DAY, PRIORITIES, priorityColor, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
-  type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash, useSnapshot,
+  type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot,
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
@@ -29,13 +29,13 @@ import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { fetchPlaceOfLink } from "../../store/preview.ts";
 import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
-import { HeldTime } from "./TimeWheel.tsx";
+import { HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
-import { canBeRoutine, isRoutineItem, isRoutineSeries, routineEntry, routineStreak } from "../../domain/routines.ts";
+import { canBeRoutine, doneTiming, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
@@ -750,12 +750,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           )}
         </div>
 
-        {completable && (
+        {completable && (routine && completion !== NO_DAY ? <RoutineDoneRow item={item} day={completion} done={done} color={color} forDay={forDay} /> : (
           <div className="pe-done" role="button" onClick={() => { if (!done) feel("confirm"); toggleCompletion(id, completion, !done); }}>
             <Checkbox checked={done} color={color} onChange={(v) => { if (v) feel("confirm"); toggleCompletion(id, completion, v); }} />
             <span>{done ? "Done" : "Mark done"}{forDay}</span>
           </div>
-        )}
+        ))}
 
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
         {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a long press changes it. */}
@@ -862,6 +862,56 @@ function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, tra
       {trailing && <span className="pe-trail" onClick={(e) => e.stopPropagation()}>{trailing}</span>}
     </div>
   );
+}
+
+/**
+ * A routine's tick in its view (221): a tap ticks it (now) or unticks it; once ticked it says when, and
+ * whether that was on time or late. A long press (or a right-click) sets when it was really done.
+ */
+function RoutineDoneRow({ item, day, done, color, forDay }: { item: Item; day: number; done: boolean; color: string; forDay: string }) {
+  const s = useSnapshot();
+  const [when, setWhen] = useState(false);
+  const { fired, ...hold } = useHold(() => setWhen(true));
+  const at = s.done.doneAt(item.id, day);
+  const timing = timingOf(item, s.done, day);
+  const toggle = (v: boolean) => { if (v) feel("confirm"); toggleCompletion(item.id, day, v); };
+  return <>
+    <div className="pe-done" role="button" {...hold} onClick={() => { if (!fired()) toggle(!done); }}>
+      <Checkbox checked={done} color={color} onChange={(v) => { if (!fired()) toggle(v); }} />
+      <span className="grow">{done ? "Done" : "Mark done"}{forDay}
+        {done && at !== undefined && at > 0 && <span className={`pe-done-when ${timing ?? ""}`}>{doneWhenText(at, day)} · {timing === "late" ? "late" : "on time"}</span>}
+      </span>
+    </div>
+    {when && <DoneWhenDialog item={item} day={day} at={at} onClose={() => setWhen(false)} />}
+  </>;
+}
+
+/** When a tick was made, said against the day it was for: "07:42", or "Sat 31 Oct, 09:10" for another day. */
+function doneWhenText(at: number, day: number): string {
+  const l = localDayMinute(at);
+  return l.day === day ? formatTime(l.min) : `${formatDate(l.day)}, ${formatTime(l.min)}`;
+}
+
+/** "When was it done?": the day and the time on wheels, and whether that counts as on time or late (221). */
+function DoneWhenDialog({ item, day, at, onClose }: { item: Item; day: number; at: number | undefined; onClose: () => void }) {
+  const start = at !== undefined && at > 0 ? localDayMinute(at) : localDayMinute(Date.now());
+  const [d, setD] = useState(start.day);
+  const [min, setMin] = useState(start.min);
+  const [pickDay, setPickDay] = useState(false);
+  const timing = doneTiming(item, day, d, min);
+  return <>
+    <Dialog title="When was it done?" onClose={onClose} actions={<>
+      <TextButton onClick={onClose}>Cancel</TextButton>
+      <TextButton onClick={() => { setCompletedAt(item.id, day, localMs(d, min)); onClose(); }}>Save</TextButton>
+    </>}>
+      <button className="pe-donewhen-day" onClick={() => setPickDay(true)}>
+        <MIcon name="oCalendarToday" size={20} /><span className="grow">{formatDate(d)}</span>
+      </button>
+      <TimeWheels value={min} onChange={setMin} />
+      <div className={`pe-donewhen-verdict ${timing}`}><span className="dot" />{timing === "late" ? "Late: still keeps the streak" : "On time"}</div>
+    </Dialog>
+    {pickDay && <DatePickerDialog value={d} onClose={() => setPickDay(false)} onPick={(x) => setD(x)} />}
+  </>;
 }
 
 /** A long press (450 ms, the finger kept within the touch slop): a pick-up pulse, then [onLong]; the tap after it is dropped. */

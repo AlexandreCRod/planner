@@ -1,6 +1,7 @@
 // The Streaks sheet (from the Tasks page's menu and Settings): every routine, tasks and repeating events,
-// with its current streak, its best one and its last 14 days as a row of small dots (filled = done,
-// red = missed, a ring = today still open, a speck = not one of its days). A tap opens the routine.
+// with its current streak, its best one and its last 14 days as a row of small dots (221: green = done on
+// time, amber = done late, a grey gap = missed, a ring = today still open, a speck = not one of its
+// days). Late keeps the streak; missed ends it. A tap opens the routine.
 // It shows whatever the Streak badges setting says, since it was opened to see them.
 import { createPortal } from "react-dom";
 import { today as todayEpoch } from "../../domain/dates.ts";
@@ -12,7 +13,7 @@ import { MIcon } from "./chrome.tsx";
 import { BottomSheet } from "./m3.tsx";
 
 const DAYS = 14;
-const MARK_LABEL = { done: "done", missed: "missed", open: "today, still open", off: "not one of its days" } as const;
+const MARK_LABEL = { done: "on time", late: "late", missed: "missed", open: "today, still open", off: "not one of its days" } as const;
 
 export function StreaksSheet({ onClose }: { onClose: () => void }) {
   const s = useSnapshot();
@@ -30,7 +31,7 @@ export function StreaksSheet({ onClose }: { onClose: () => void }) {
               <span className="text">
                 <span className="name">{r.item.title || "Untitled"}</span>
                 <span className="sub">{r.repeat} · Best {r.streak.best}</span>
-                <span className="p-streak-days" role="img" aria-label={`Last ${DAYS} days: ${r.days.filter((d) => d === "done").length} done, ${r.days.filter((d) => d === "missed").length} missed`}>
+                <span className="p-streak-days" role="img" aria-label={`Last ${DAYS} days: ${r.days.filter((d) => d === "done").length} on time, ${r.days.filter((d) => d === "late").length} late, ${r.days.filter((d) => d === "missed").length} missed`}>
                   {r.days.map((d, i) => <span key={i} className={d} title={MARK_LABEL[d]} />)}
                 </span>
               </span>
@@ -41,7 +42,12 @@ export function StreaksSheet({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
-        {rows.length > 0 && <div className="p-streak-foot muted">Last {DAYS} days, today on the right</div>}
+        {rows.length > 0 && <div className="p-streak-foot muted">
+          <span className="p-streak-key"><span className="done" />On time</span>
+          <span className="p-streak-key"><span className="late" />Late</span>
+          <span className="p-streak-key"><span className="missed" />Missed</span>
+          <span className="grow" />Last {DAYS} days, today on the right
+        </div>}
       </div>
     )}</BottomSheet>,
     document.body,
