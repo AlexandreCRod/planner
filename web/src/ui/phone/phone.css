@@ -965,6 +965,7 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-time26 { flex: none; font-size: 26px; line-height: 32px; font-variant-numeric: tabular-nums; }
 .phone .pa-bundle-head { position: relative; display: flex; align-items: center; padding: 10px 18px 8px; }
 .phone .pa-expand { display: flex; margin: 0 12px 0 8px; }
+.phone .pa-bundle-count { display: flex; align-items: center; gap: 12px; }
 .phone .pa-bundle-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s cubic-bezier(.2, 0, 0, 1); }
 .phone .pa-bundle-body.open { grid-template-rows: 1fr; }
 .phone .pa-bundle-body > div { min-height: 0; overflow: hidden; }

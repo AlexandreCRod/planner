@@ -479,7 +479,11 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
     <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
       <div className="pa-bundle-head" role="button" onClick={onOpen}>
         <div className="grow">
-          <div className="t-body-medium muted">{group.length} alarms · {on} on</div>
+          {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
+          <div className="t-body-medium muted pa-bundle-count">
+            <span>{group.length} alarms · {on} on</span>
+            <AlarmWeather a={group.find((a) => a.enabled) ?? first} now={now} fc={fc} />
+          </div>
           {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
           <div className="pa-time36">
             <span className="pa-bundle-start" role="button" aria-label="Move the whole bundle" onClick={(e) => { e.stopPropagation(); setPicking(true); }}>
@@ -498,7 +502,6 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
                 <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
               </div>
-              <AlarmWeather a={a} now={now} fc={fc} />
               <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
             </div>
           ))}
