@@ -103,7 +103,16 @@ object ClockAlarms {
         return null
     }
 
-    fun rescheduleAll(context: Context) = load(context).forEach { schedule(context, it) }
+    /** Sets every alarm again (after a restart, an update, a clock change), and the snoozes still to ring (194). */
+    fun rescheduleAll(context: Context) {
+        val list = load(context)
+        list.forEach { schedule(context, it) }
+        val now = System.currentTimeMillis()
+        for ((id, until) in snoozes(context)) {
+            if (list.none { it.id == id }) clearSnooze(context, id)
+            else if (until > now) set(context, id, until, snooze = true)
+        }
+    }
 
     fun schedule(context: Context, a: ClockAlarm) {
         if (!a.enabled) { cancel(context, a.id); return }
@@ -113,7 +122,30 @@ object ClockAlarms {
     }
 
     fun snooze(context: Context, id: Long, minutes: Int) {
-        set(context, id, System.currentTimeMillis() + minutes * 60_000L, snooze = true)
+        val until = System.currentTimeMillis() + minutes * 60_000L
+        // Remembered, so a restart sets it again: AlarmManager forgets everything then (194).
+        setSnoozes(context, snoozes(context) + (id to until))
+        set(context, id, until, snooze = true)
+    }
+
+    private const val SNOOZES = "snoozes"
+
+    /** Snoozed clock alarms: id to when it rings again. */
+    fun snoozes(context: Context): Map<Long, Long> =
+        (AlarmStore.prefs(context, PREFS).getString(SNOOZES, null) ?: "").split(',').mapNotNull { e ->
+            val id = e.substringBefore(':').toLongOrNull() ?: return@mapNotNull null
+            val until = e.substringAfter(':').toLongOrNull() ?: return@mapNotNull null
+            id to until
+        }.toMap()
+
+    private fun setSnoozes(context: Context, map: Map<Long, Long>) {
+        AlarmStore.prefs(context, PREFS).edit().putString(SNOOZES, map.entries.joinToString(",") { "${it.key}:${it.value}" }).commit()
+    }
+
+    /** The snooze rang, or was dropped. */
+    fun clearSnooze(context: Context, id: Long) {
+        val map = snoozes(context)
+        if (id in map) setSnoozes(context, map - id)
     }
 
     /** After ringing: a one-off alarm (or one whose dates have all come) switches itself off, a repeating one queues its next day. */
@@ -144,5 +176,6 @@ object ClockAlarms {
     fun cancel(context: Context, id: Long) {
         val am = context.getSystemService(AlarmManager::class.java)
         listOf(false, true).forEach { s -> pending(context, id, s, create = false)?.let { am.cancel(it); it.cancel() } }
+        clearSnooze(context, id)
     }
 }

@@ -84,6 +84,10 @@ object AlarmOverrides {
     fun ringSnooze(context: Context, reminderId: Long, now: Long = System.currentTimeMillis()): Long? =
         prefs(context).getLong(RANG + reminderId, 0L).takeIf { it > now }
 
+    /** The ring snooze's time even if it's past (a restart checks what it missed). */
+    fun ringSnoozeAny(context: Context, reminderId: Long): Long? =
+        prefs(context).getLong(RANG + reminderId, 0L).takeIf { it > 0L }
+
     /** True the first time it's asked for an occurrence, so a dismissed notice doesn't come back. */
     fun firstNotice(context: Context, reminderId: Long, original: Long): Boolean {
         val k = NOTICED + key(reminderId, original)

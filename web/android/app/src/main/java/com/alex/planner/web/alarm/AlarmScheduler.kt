@@ -143,6 +143,17 @@ object AlarmScheduler {
             if (r.type == AlertType.ALARM && settings.upcomingAlarms) scheduleNotice(context, item, r, fire)
             else cancelNotice(context, r.id)
         }
+        // A snooze still to ring is set again: a restart clears AlarmManager, and a reminder with no next
+        // occurrence was just cancelled above, snooze and all (194).
+        rearmSnoozes(context, item, reminders)
+    }
+
+    private fun rearmSnoozes(context: Context, item: Item, reminders: List<Reminder>) {
+        for (r in reminders) {
+            val until = AlarmOverrides.ringSnooze(context, r.id) ?: continue
+            val occ = Shown.get(context, Shown.SNOOZE, r.id) ?: continue
+            set(context, item, r, occ.day, until, snooze = true, original = 0L)
+        }
     }
 
     /**
