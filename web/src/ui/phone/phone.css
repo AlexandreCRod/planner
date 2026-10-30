@@ -687,6 +687,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .p-menu-anchor.start { display: inline-block; }
 .phone .p-menu-anchor.start.wide { display: block; }
 .phone .p-menu-anchor.start > .p-menu { left: 0; right: auto; top: 100%; transform-origin: top left; }
+/* A settings row's choices open in from the screen edge, under the row's text (84). */
+.phone .p-menu-anchor.start.wide > .p-menu { left: 16px; top: calc(100% - 8px); }
 .phone .p-menu button.lead .p-menu-dot { width: 24px; display: grid; place-items: center; }
 .phone .p-menu-dot > span { width: 12px; height: 12px; border-radius: 50%; }
 .phone .p-appbar.nosat { padding-top: 0; height: 64px; }

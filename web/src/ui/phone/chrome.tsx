@@ -209,10 +209,31 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     else if (shown) { setLeaving(true); const t = window.setTimeout(() => { setShown(false); setLeaving(false); }, 75); return () => clearTimeout(t); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => (open ? pushBack(onClose) : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A menu that would run off the bottom of the screen opens above its row instead, or as low as fits (84).
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !open) return;
+    el.style.top = el.style.bottom = el.style.transformOrigin = "";
+    // Measured unscaled (it grows in from 80%), within what shows of the page scrolling it.
+    let lo = 8, hi = window.innerHeight - 8;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === "auto" || oy === "scroll") { const b = p.getBoundingClientRect(); lo = Math.max(lo, b.top + 8); hi = Math.min(hi, b.bottom - 8); break; }
+    }
+    const top = el.getBoundingClientRect().top, h = el.offsetHeight;
+    if (top + h <= hi) return;
+    const anchor = el.parentElement?.getBoundingClientRect();
+    if (anchor && anchor.top - h >= lo) {
+      el.style.top = "auto"; el.style.bottom = "100%"; el.style.transformOrigin = "bottom left";
+    } else {
+      el.style.top = `${el.offsetTop - Math.min(top + h - hi, top - lo)}px`;
+    }
+  }, [shown, open]);
   if (!shown) return null;
   return <>
     <div className="p-menu-scrim" onPointerDown={onClose} />
-    <div className={`p-menu ${leaving ? "out" : ""}`} role="menu">
+    <div ref={box} className={`p-menu ${leaving ? "out" : ""}`} role="menu">
       {items.map((it, i) => (
         <div key={i}>
           {it.divider && <div className="p-menu-divider" />}
