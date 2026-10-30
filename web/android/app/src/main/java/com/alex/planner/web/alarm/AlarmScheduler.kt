@@ -60,6 +60,49 @@ object AlarmScheduler {
         return null
     }
 
+    /** One task or event alarm occurrence for the Alarms page (CalendarAlarm in web/src/domain/alarms.ts). */
+    @kotlinx.serialization.Serializable
+    data class Upcoming(
+        val itemId: Long, val reminderId: Long, val title: String,
+        /** The occurrence's day (the item's: an alarm the evening before belongs to the next day). */
+        val day: Long,
+        /** When it was due (identifies it to the skips), and when it rings now (an early snooze moves it). */
+        val original: Long, val at: Long,
+        val skipped: Boolean,
+    )
+
+    /**
+     * The task and event alarms due after [now] on today and the next [days] - 1 days, soonest first, as
+     * this engine rings them (194: the page shows these instead of working them out itself, so a DST change
+     * can't make the two disagree). [adjust] is [AlarmOverrides.adjusted]: when it rings now, null if skipped.
+     */
+    fun upcoming(
+        items: List<Item>, reminders: List<Reminder>, isDone: (Long, Long) -> Boolean, now: Long, defaultTime: Int,
+        adjust: (Long, Long) -> Long?, days: Int, zone: ZoneId = ZoneId.systemDefault(),
+    ): List<Upcoming> {
+        val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val until = today.plusDays(days.toLong()).atStartOfDay(zone).toInstant().toEpochMilli()
+        val byItem = reminders.filter { it.type == AlertType.ALARM }.groupBy { it.itemId }
+        val out = ArrayList<Upcoming>()
+        for (item in items) {
+            if (item.type == ItemType.NOTE || item.startDay == null || item.deletedAt != null) continue
+            for (r in byItem[item.id] ?: continue) {
+                // Reach back and on far enough for alarms set days before (or after) the item.
+                val reach = (kotlin.math.abs(r.offsetMin) + 1439) / 1440 + 1L
+                for (d in Recurrence.occurrences(item, today.minusDays(reach), today.plusDays(days + reach))) {
+                    val day = d.epoch()
+                    if (item.completable && isDone(item.id, if (item.isRecurring) day else item.startDay)) continue
+                    val original = originalAt(item, d, r.offsetMin, defaultTime, zone)
+                    val o = adjust(r.id, original)
+                    val at = o ?: original
+                    if ((if (o == null) original else at) <= now || original >= until) continue
+                    out += Upcoming(item.id, r.id, item.title, day, original, at, o == null)
+                }
+            }
+        }
+        return out.sortedWith(compareBy({ it.at }, { it.reminderId }))
+    }
+
     /** When [item]'s occurrence on [day] is due for a reminder [offsetMin] minutes before it, as the item is now. */
     fun originalAt(item: Item, day: LocalDate, offsetMin: Int, defaultTime: Int, zone: ZoneId = ZoneId.systemDefault()): Long {
         val time = if (item.allDay || item.startMin == null) defaultTime else item.startMin

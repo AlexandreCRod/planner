@@ -6,12 +6,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type AlarmFilter, type CalendarAlarm, NARROW_DAYS, calendarAlarms, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type AlarmFilter, type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, alarmShown, bundle, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
-import { type AlarmOverride, type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
-import { useAlarmSettings } from "../../alarms/settings.ts";
+import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
 import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
@@ -354,28 +353,27 @@ function NextAlarm({ alarms, calendar, now }: { alarms: ClockAlarm[]; calendar: 
 // ---------- Task and event alarms ("From calendar") ----------
 
 /**
- * The next week's task and event alarms, with the engine's skips and early snoozes (kept on this phone:
- * AlarmOverrides.kt), read again whenever the engine says they changed. Empty when [on] is false.
+ * Today's and tomorrow's task and event alarms, worked out by the engine itself with its skips and early
+ * snoozes (AlarmScheduler.upcoming, 194), read again each minute and whenever the engine says they changed.
+ * Empty when [on] is false.
  */
 function useCalendarAlarms(now: number, on: boolean): CalendarAlarm[] {
-  const snap = useSnapshot();
-  const { defaultTaskTime } = useAlarmSettings();
-  const [overrides, setOverrides] = useState<AlarmOverride[]>([]);
+  const [list, setList] = useState<CalendarAlarm[]>([]);
+  // Minute by minute is plenty: the list moves on as alarms pass (and a new day comes in at midnight).
+  const minute = Math.floor(now / 60_000);
+  const [stamp, setStamp] = useState(0);
   useEffect(() => {
     if (!on) return;
-    let live = true;
-    const load = () => void native.overrides().then((o) => { if (live) setOverrides(o); });
-    load();
-    const off = onNative("changed", (what) => { if (what === "overrides" || what === "resume") load(); });
-    return () => { live = false; off(); };
+    // The engine's skips, snoozes and data changed (a push from this page: "mirror").
+    return onNative("changed", (what) => { if (["overrides", "resume", "mirror", "done", "ring"].includes(what)) setStamp((n) => n + 1); });
   }, [on]);
-  // Minute by minute is plenty: the list moves on as alarms pass.
-  const minute = Math.floor(now / 60_000);
-  return useMemo(() => {
-    if (!on) return [];
-    const map = new Map(overrides.map((o) => [`${o.reminderId}:${o.original}`, o.at ?? null]));
-    return calendarAlarms(snap.items, snap.reminders, (id, d) => snap.done.isDone(id, d), minute * 60_000, defaultTaskTime, map);
-  }, [snap, overrides, defaultTaskTime, minute, on]);
+  useEffect(() => {
+    if (!on) { setList([]); return; }
+    let live = true;
+    void native.calendarAlarms(CALENDAR_ALARM_DAYS).then((l) => { if (live) setList(l); });
+    return () => { live = false; };
+  }, [on, minute, stamp]);
+  return useMemo(() => list.filter((a) => (a.skipped ? a.original : a.at) > minute * 60_000), [list, minute]);
 }
 
 /** How many show before "more": the group stays compact. */

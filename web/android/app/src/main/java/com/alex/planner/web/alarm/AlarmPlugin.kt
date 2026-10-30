@@ -98,6 +98,8 @@ class AlarmPlugin : Plugin() {
         val push = runCatching { json.decodeFromString(MirrorPush.serializer(), text) }.getOrElse { return call.reject("bad json: ${it.message}") }
         Mirror.replace(context, push)
         AlarmScheduler.rescheduleAll(context)
+        // The Alarms page reads its calendar alarms from here again.
+        AlarmEvents.changed("mirror")
         ok(call)
     }
 
@@ -264,6 +266,24 @@ class AlarmPlugin : Plugin() {
     fun overrides(call: PluginCall) {
         val out = AlarmOverrides.ahead(context).map { (r, o, at) -> Override(r, o, at) }
         ok(call, json.encodeToString(ListSerializer(Override.serializer()), out))
+    }
+
+    /**
+     * The task and event alarms of today and the next days ("days", default 2), as this engine rings them,
+     * for the Alarms page ("From calendar", the next alarm). Empty while they don't ring on this phone.
+     */
+    @PluginMethod
+    fun calendarAlarms(call: PluginCall) {
+        val days = (call.num("days") ?: 2L).toInt().coerceIn(1, 31)
+        val m = Mirror.current(context)
+        val out = if (!RingDevice.ringsEvents(context)) emptyList() else {
+            val done = m.completions.groupBy({ it.itemId }, { it.day }).mapValues { it.value.toSet() }
+            AlarmScheduler.upcoming(
+                m.items, m.reminders, { id, day -> done[id]?.contains(day) == true }, System.currentTimeMillis(),
+                m.settings.defaultTaskTime, { r, o -> AlarmOverrides.adjusted(context, r, o) }, days,
+            )
+        }
+        ok(call, json.encodeToString(ListSerializer(AlarmScheduler.Upcoming.serializer()), out))
     }
 
     /** Undoes an early snooze or "don't ring", and a snooze from the ringing screen: back to the original time. */

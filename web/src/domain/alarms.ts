@@ -1,9 +1,7 @@
 // The Alarms page's rules, ported from the native app (alarm/ClockAlarms.kt, ClockTools.kt and
 // ui/alarms/AlarmsScreen.kt), plus what the page sends to the alarm engine. Pure, so it's unit-tested
 // (test/alarms.test.ts).
-import { type Completion, type Item, type Reminder, isRecurring } from "./types.ts";
-import { epochOf, toTimestamp } from "./dates.ts";
-import { occurrences } from "./recurrence.ts";
+import type { Completion, Item, Reminder } from "./types.ts";
 
 // ---------- The engine's copy of the data ----------
 
@@ -82,7 +80,11 @@ export function buildMirror(
 /** How many days, from today, the Alarms page lists task and event alarms for ("From calendar"): today and tomorrow. */
 export const CALENDAR_ALARM_DAYS = 2;
 
-/** One occurrence of a task's or event's ALARM reminder, as the alarm engine rings it. */
+/**
+ * One occurrence of a task's or event's ALARM reminder, as the alarm engine rings it. The engine works these
+ * out itself (AlarmScheduler.upcoming, read through native.calendarAlarms), so the page never disagrees with
+ * what rings, across a DST change too (194).
+ */
 export interface CalendarAlarm {
   itemId: number; reminderId: number; title: string;
   /** The occurrence's day (the item's, not the alarm's: an alarm the evening before belongs to the next day). */
@@ -90,41 +92,6 @@ export interface CalendarAlarm {
   /** When it was due (identifies it to the engine's skips), and when it rings now (an early snooze moves it). */
   original: number; at: number;
   skipped: boolean;
-}
-
-/**
- * The task and event alarms due after [now] on today and the next [days] - 1 days, soonest first, worked out as the
- * engine does (AlarmScheduler.nextFire): an untimed item rings at [defaultTime]; a ticked task's don't
- * ring; [overrides] ("reminderId:original" → when it rings now, or null when skipped) are the engine's.
- */
-export function calendarAlarms(
-  items: Iterable<Item>, reminders: Map<number, Reminder[]>, isDone: (itemId: number, day: number) => boolean,
-  now: number, defaultTime: number, overrides: Map<string, number | null>, days = CALENDAR_ALARM_DAYS,
-): CalendarAlarm[] {
-  const n = new Date(now);
-  const t = epochOf(n.getFullYear(), n.getMonth() + 1, n.getDate());
-  const until = toTimestamp(t + days, 0);
-  const out: CalendarAlarm[] = [];
-  for (const item of items) {
-    if (item.type === "NOTE" || item.startDay === null || item.deletedAt !== null) continue;
-    const completable = item.type === "TASK" || (item.type === "EVENT" && item.routine === true);
-    for (const r of reminders.get(item.id) ?? []) {
-      if (r.type !== "ALARM") continue;
-      // Reach back and on far enough for alarms set days before (or after) the item.
-      const reach = Math.ceil(Math.abs(r.offsetMin) / 1440) + 1;
-      const time = item.allDay || item.startMin === null ? defaultTime : item.startMin;
-      for (const day of occurrences(item, t - reach, t + days + reach)) {
-        const original = toTimestamp(day, time) - r.offsetMin * 60_000;
-        if (completable && isDone(item.id, isRecurring(item) ? day : item.startDay)) continue;
-        const o = overrides.get(`${r.id}:${original}`);
-        const skipped = o === null;
-        const at = o ?? original;
-        if ((skipped ? original : at) <= now || original >= until) continue;
-        out.push({ itemId: item.id, reminderId: r.id, title: item.title, day, original, at, skipped });
-      }
-    }
-  }
-  return out.sort((a, b) => a.at - b.at || a.reminderId - b.reminderId);
 }
 
 // ---------- Clock alarms ----------

@@ -7,7 +7,8 @@
     "weekDays: list of MON..SUN; months: list of 1..12; monthDays: list of 1..31 or 32 (last day); excludedDays: list of dates.",
     "done: completions; day null = undated (NO_DAY); 'at' = local wall time it was ticked (optional).",
     "fn: days (Recurrence.occurrences of the first item) | occurrences | forCalendar | tasksForDay | tasksOnDay | entriesFor |",
-    "currentEntry | tickedDuring | streak | routinesOnDay | tasksForDayWithoutRoutines. entriesFor/currentEntry/streak use itemId (default: first item).",
+    "currentEntry | tickedDuring | streak | routinesOnDay | tasksForDayWithoutRoutines | alarmTimes (Kotlin only since 2.9.1:",
+    "the alarm engine's task and event alarm times, which the page reads from it; zone, now and expected 'at' are local wall times). entriesFor/currentEntry/streak use itemId (default: first item).",
     "routine: true marks a routine (the synced item field); routinesOnDay uses day + today, tasksForDayWithoutRoutines uses today.",
     "Expected occurrences: endDay defaults to day, startMin/endMin to null, completed/overdue to false.",
     "Expected task entries: day defaults to null, missed to 0."
@@ -648,6 +649,71 @@
       ],
       "today": "2026-10-15",
       "expect": { "current": 0, "best": 3, "rate30": 0, "total": 5 }
+    },
+    {
+      "name": "alarm times: before, at, after the start; an untimed task at the default time; a ticked day; the evening before belongs to the next day",
+      "fn": "alarmTimes",
+      "zone": "Europe/Lisbon", "now": "2026-10-15T06:00", "days": 2, "defaultTime": "09:00",
+      "items": [
+        { "id": 1, "type": "EVENT", "title": "Dentist", "startDay": "2026-10-15", "startMin": "10:30" },
+        { "id": 2, "title": "Bins", "startDay": "2026-10-16" },
+        { "id": 3, "title": "Pills", "startDay": "2026-10-01", "startMin": "07:00", "freq": "DAILY" },
+        { "id": 4, "type": "EVENT", "title": "Night train", "startDay": "2026-10-17", "startMin": "00:10" },
+        { "id": 5, "type": "EVENT", "title": "Early run", "startDay": "2026-10-15", "startMin": "05:00" }
+      ],
+      "reminders": [
+        { "id": 101, "itemId": 1, "offsetMin": 30 }, { "id": 106, "itemId": 1, "offsetMin": 0, "type": "NOTIFICATION" },
+        { "id": 102, "itemId": 2, "offsetMin": 0 }, { "id": 103, "itemId": 3, "offsetMin": 15 },
+        { "id": 104, "itemId": 4, "offsetMin": 30 }, { "id": 105, "itemId": 5, "offsetMin": -90 }
+      ],
+      "done": [{ "itemId": 3, "day": "2026-10-15" }],
+      "expect": [
+        { "reminderId": 105, "day": "2026-10-15", "at": "2026-10-15T06:30" },
+        { "reminderId": 101, "day": "2026-10-15", "at": "2026-10-15T10:00" },
+        { "reminderId": 103, "day": "2026-10-16", "at": "2026-10-16T06:45" },
+        { "reminderId": 102, "day": "2026-10-16", "at": "2026-10-16T09:00" },
+        { "reminderId": 104, "day": "2026-10-17", "at": "2026-10-16T23:40" }
+      ]
+    },
+    {
+      "name": "alarm times across the spring DST change: 12 hours before goes by the wall clock (21:00, not 20:00)",
+      "fn": "alarmTimes",
+      "zone": "Europe/Lisbon", "now": "2026-03-28T12:00", "days": 2, "defaultTime": "09:00",
+      "items": [{ "id": 1, "type": "EVENT", "title": "Race", "startDay": "2026-03-29", "startMin": "09:00" }],
+      "reminders": [{ "id": 11, "itemId": 1, "offsetMin": 720 }],
+      "expect": [{ "reminderId": 11, "day": "2026-03-29", "at": "2026-03-28T21:00" }]
+    },
+    {
+      "name": "alarm times across the autumn DST change: a day before is the same time the day before (08:00, not 09:00)",
+      "fn": "alarmTimes",
+      "zone": "Europe/Lisbon", "now": "2026-10-24T06:00", "days": 2, "defaultTime": "09:00",
+      "items": [{ "id": 1, "type": "EVENT", "title": "Flight", "startDay": "2026-10-25", "startMin": "08:00" }],
+      "reminders": [{ "id": 11, "itemId": 1, "offsetMin": 1440 }],
+      "expect": [{ "reminderId": 11, "day": "2026-10-25", "at": "2026-10-24T08:00" }]
+    },
+    {
+      "name": "a skip is kept by local day and minute, so it holds in another time zone (New York)",
+      "fn": "alarmTimes",
+      "zone": "America/New_York", "now": "2026-10-15T06:00", "days": 2, "defaultTime": "09:00",
+      "items": [{ "id": 1, "title": "Stretch", "startDay": "2026-10-01", "startMin": "07:30", "freq": "DAILY" }],
+      "reminders": [{ "id": 11, "itemId": 1, "offsetMin": 0 }],
+      "skips": [{ "reminderId": 11, "at": "2026-10-15T07:30" }],
+      "expect": [
+        { "reminderId": 11, "day": "2026-10-15", "at": "2026-10-15T07:30", "skipped": true },
+        { "reminderId": 11, "day": "2026-10-16", "at": "2026-10-16T07:30" }
+      ]
+    },
+    {
+      "name": "the same skip in Lisbon",
+      "fn": "alarmTimes",
+      "zone": "Europe/Lisbon", "now": "2026-10-15T06:00", "days": 2, "defaultTime": "09:00",
+      "items": [{ "id": 1, "title": "Stretch", "startDay": "2026-10-01", "startMin": "07:30", "freq": "DAILY" }],
+      "reminders": [{ "id": 11, "itemId": 1, "offsetMin": 0 }],
+      "skips": [{ "reminderId": 11, "at": "2026-10-15T07:30" }],
+      "expect": [
+        { "reminderId": 11, "day": "2026-10-15", "at": "2026-10-15T07:30", "skipped": true },
+        { "reminderId": 11, "day": "2026-10-16", "at": "2026-10-16T07:30" }
+      ]
     }
   ]
 }

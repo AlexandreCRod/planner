@@ -131,6 +131,9 @@ function run(c: Json) {
       assert.ok(Math.abs(s.rate30 - c.expect.rate30) < 1e-4, `rate30 ${s.rate30} != ${c.expect.rate30}`);
       return;
     }
+    case "alarmTimes":
+      // The alarm engine's (Kotlin) alone since 194: the page reads them from it. Run by AlarmDomainTest.kt.
+      return;
     default:
       assert.fail(`unknown fn ${c.fn}`);
   }

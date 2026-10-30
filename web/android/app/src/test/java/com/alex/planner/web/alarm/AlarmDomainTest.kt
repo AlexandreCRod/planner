@@ -35,6 +35,41 @@ class AlarmDomainTest {
         }
     }
 
+    /** The engine's task and event alarm times (194): reminder times, DST changes, skips by local time. */
+    @Test fun sharedAlarmTimeCases() {
+        val text = javaClass.classLoader!!.getResourceAsStream("schedule-cases.json")!!.bufferedReader().use { it.readText() }
+        val cases = Json.parseToJsonElement(text).jsonObject["cases"]!!.jsonArray.map { it.jsonObject }
+            .filter { (it["fn"] as JsonPrimitive).content == "alarmTimes" }
+        assertTrue(cases.size >= 4)
+        for (c in cases) {
+            val zone = java.time.ZoneId.of(c.str("zone"))
+            val local = { s: String -> java.time.LocalDateTime.parse(s).atZone(zone).toInstant().toEpochMilli() }
+            val items = c["items"]!!.jsonArray.map { toItem(it.jsonObject) }
+            val reminders = c["reminders"]!!.jsonArray.map { it.jsonObject }.map {
+                Reminder(it["id"]!!.jsonPrimitive.long, it["itemId"]!!.jsonPrimitive.long, it["offsetMin"]!!.jsonPrimitive.int,
+                    AlertType.valueOf(it.str("type") ?: "ALARM"))
+            }
+            val done = (c["done"]?.jsonArray ?: JsonArray(emptyList())).map { it.jsonObject }
+                .map { it["itemId"]!!.jsonPrimitive.long to LocalDate.parse(it.str("day")).toEpochDay() }.toSet()
+            // Skips are given by local wall time, and looked up by OverrideKey, as AlarmOverrides does.
+            val skips = (c["skips"]?.jsonArray ?: JsonArray(emptyList())).map { it.jsonObject }
+                .map { OverrideKey.of(it["reminderId"]!!.jsonPrimitive.long, local(it.str("at")!!), zone) }.toSet()
+            val got = AlarmScheduler.upcoming(
+                items, reminders, { id, d -> (id to d) in done }, local(c.str("now")!!), hhmm(c.str("defaultTime")!!),
+                { r, o -> if (OverrideKey.of(r, o, zone) in skips) null else o }, c["days"]!!.jsonPrimitive.int, zone,
+            ).map { u ->
+                val at = java.time.Instant.ofEpochMilli(u.at).atZone(zone).toLocalDateTime().toString()
+                "${u.reminderId} ${LocalDate.ofEpochDay(u.day)} $at${if (u.skipped) " skipped" else ""}"
+            }
+            val want = c["expect"]!!.jsonArray.map { it.jsonObject }.map {
+                "${it["reminderId"]!!.jsonPrimitive.long} ${it.str("day")} ${it.str("at")}${if (it["skipped"]?.jsonPrimitive?.boolean == true) " skipped" else ""}"
+            }
+            assertEquals(c.str("name"), want, got)
+        }
+    }
+
+    private fun hhmm(s: String) = s.substringBefore(':').toInt() * 60 + s.substringAfter(':').toInt()
+
     @Test fun pagePushDecodes() {
         val push = json.decodeFromString(
             MirrorPush.serializer(),
@@ -77,6 +112,8 @@ class AlarmDomainTest {
         return Item(
             id = j["id"]!!.jsonPrimitive.long,
             type = ItemType.valueOf(j.str("type") ?: "TASK"),
+            title = j.str("title") ?: "",
+            startMin = j.str("startMin")?.let { hhmm(it) },
             startDay = j.str("startDay")?.let { LocalDate.parse(it).toEpochDay() },
             allDay = j["allDay"]?.jsonPrimitive?.boolean ?: false,
             freq = Freq.valueOf(j.str("freq") ?: "NONE"),

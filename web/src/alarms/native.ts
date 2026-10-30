@@ -3,6 +3,7 @@
 import { registerPlugin } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../platform.ts";
+import type { CalendarAlarm } from "../domain/alarms.ts";
 
 /** A plain alarm clock (ClockAlarms.kt). days: bit 0 = Monday ... bit 6 = Sunday; 0 rings once. */
 export interface ClockAlarm {
@@ -38,6 +39,7 @@ interface Plugin {
   state(): Promise<{ json: string }>;
   controls(o: { itemId: number }): Promise<{ json: string }>;
   overrides(): Promise<{ json: string }>;
+  calendarAlarms(o: { days: number }): Promise<{ json: string }>;
   earlySnooze(o: { reminderId: number; original: number }): Promise<void>;
   earlyStop(o: { reminderId: number; original: number }): Promise<void>;
   resetAlarm(o: { reminderId: number; original: number | null }): Promise<void>;
@@ -78,6 +80,11 @@ export const native = {
   controls: async (itemId: number) => JSON.parse((await call((p) => p.controls({ itemId }), { json: "[]" })).json) as Control[],
   /** Every task and event alarm occurrence skipped or snoozed ahead of time; none on the PC (or an engine before 2.6). */
   overrides: async () => JSON.parse((await call((p) => p.overrides(), { json: "[]" })).json) as AlarmOverride[],
+  /**
+   * The task and event alarms of today and the next days, as the engine rings them (AlarmScheduler.upcoming):
+   * one source of truth for their times (194). None on the PC, or from an engine before 2.9.1.
+   */
+  calendarAlarms: async (days: number) => JSON.parse((await call((p) => p.calendarAlarms({ days }), { json: "[]" })).json) as CalendarAlarm[],
   earlySnooze: (reminderId: number, original: number) => call((p) => p.earlySnooze({ reminderId, original }), undefined),
   earlyStop: (reminderId: number, original: number) => call((p) => p.earlyStop({ reminderId, original }), undefined),
   resetAlarm: (reminderId: number, original: number | null) => call((p) => p.resetAlarm({ reminderId, original }), undefined),
