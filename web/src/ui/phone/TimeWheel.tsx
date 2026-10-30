@@ -17,7 +17,7 @@ import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
-import { durationRows, joinDuration, joinTime, nearestSlot, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
+import { durationRows, joinDuration, joinTime, nearestSlot, passesNoon, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
 
 export interface WheelOptions {
   count: number;
@@ -558,7 +558,9 @@ export function TimeWheels({ value, onChange, step = 5 }: { value: number; onCha
   return (
     <div className="tw-wheels">
       <div className="tw-band-row" />
-      <WheelColumn key={h24 ? "h24" : "h12"} label="Hours" values={hours.map(hourText)} index={t.hour} wrap onIndex={(i) => set({ hour: i })} />
+      {/* On 12 hours, turning past 11 ↔ 12 flips AM/PM, as Android's picker does. */}
+      <WheelColumn key={h24 ? "h24" : "h12"} label="Hours" values={hours.map(hourText)} index={t.hour} wrap
+        onIndex={(i) => set(!h24 && passesNoon(cur.current.hour, i) ? { hour: i, pm: !cur.current.pm } : { hour: i })} />
       <div className="tw-colon" aria-hidden="true">:</div>
       <WheelColumn label="Minutes" values={minutes.map(two)} index={t.minute} wrap onIndex={(i) => set({ minute: i })} />
       {!h24 && <WheelColumn className="tw-ampm" label="AM or PM" values={["AM", "PM"]} index={t.pm ? 1 : 0} wrap={false} onIndex={(i) => set({ pm: i === 1 })} />}
