@@ -93,3 +93,14 @@ test("skip the next ring or tomorrow's, for an alarm or a whole bundle (75)", as
   assert.deepEqual(unskip({ ...ev, skip: [today - 2, today + 1] }, today)?.skip, [today - 2]);
   assert.equal(unskip(ev, today), null);
 });
+
+test("the weather app picker's search: by name or package, accents ignored, starting matches first (83)", async () => {
+  const { filterApps } = await import("../src/domain/apps.ts");
+  const apps = [{ component: "com.google.android.apps.weather/.Main", label: "Weather" }, { component: "com.accuweather.android/.Main", label: "AccuWeather" },
+    { component: "pt.ipma.meteo/.Main", label: "IPMA Météo" }, { component: "com.whatsapp/.Main", label: "WhatsApp" }];
+  assert.deepEqual(filterApps(apps, "").map((a) => a.label), ["AccuWeather", "IPMA Météo", "Weather", "WhatsApp"]);
+  assert.deepEqual(filterApps(apps, "weather").map((a) => a.label), ["Weather", "AccuWeather"]);
+  assert.deepEqual(filterApps(apps, "meteo").map((a) => a.label), ["IPMA Météo"]);
+  assert.deepEqual(filterApps(apps, "ipma").map((a) => a.label), ["IPMA Météo"]);
+  assert.deepEqual(filterApps(apps, "zzz"), []);
+});

@@ -28,7 +28,8 @@ import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
-import { act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { type LaunchApp, act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { WeatherAppSheet } from "./WeatherAppSheet.tsx";
 import { CLOCK_FILTERS } from "../../domain/clockList.ts";
 import { BUNDLE_WINDOW_CHOICES, setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
@@ -103,6 +104,12 @@ function AlarmSettingsSection() {
   const clock = useClockPrefs();
   const { ring, perms, weatherApp } = useAlarmState();
   const [time, setTime] = useState<"" | "task" | "qs" | "qe">("");
+  const [apps, setApps] = useState<LaunchApp[] | null>(null);
+  /** The app's own searchable list (83); Android's picker when the engine can't list apps (older native side). */
+  const pickWeather = async () => {
+    const list = await native.weatherApps();
+    if (list?.length) setApps(list); else await act(native.pickWeatherApp());
+  };
   const pickSound = async () => {
     const r = await native.pickSound(st.defaultAlarmSound, "Default alarm sound");
     if (r.picked) setAlarmSettings({ defaultAlarmSound: r.uri ?? null, defaultAlarmSoundName: r.uri ? r.name ?? null : null });
@@ -135,7 +142,7 @@ function AlarmSettingsSection() {
       <ListItem headline="Quiet until" supporting={formatTime(st.quietEnd)} onClick={() => setTime("qe")} />
     </>}
     <ListItem headline="Weather app" supporting={weatherApp ? `${weatherApp} — opens from the world clock` : "None — the world clock opens a weather page"}
-      onClick={() => void act(native.pickWeatherApp())}
+      onClick={() => void pickWeather()}
       trailing={weatherApp ? <IconButton icon="fClose" label="Forget the weather app" onClick={() => void act(native.clearWeatherApp())} /> : undefined} />
     <ListItem headline="Notification permission" supporting={perms.notifications ? "Allowed" : "Blocked — tap to fix"}
       onClick={() => void (perms.notifications ? native.openSettings("notifications") : ensureNotifications("Alarms, reminders and timers show and ring through notifications, so this app needs them allowed."))} />
@@ -143,6 +150,7 @@ function AlarmSettingsSection() {
     {!perms.exact && <ListItem headline="Alarms & reminders" supporting="Not allowed — tap to fix, or alarms may ring late" onClick={() => void native.openSettings("exact")} />}
     <ListItem headline="Battery optimization" supporting={perms.batteryExempt ? "Not optimized: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
     {perms.xiaomi && <XiaomiChecks />}
+    {apps && <WeatherAppSheet apps={apps} current={weatherApp} onClose={() => setApps(null)} />}
     {time && (
       <TimePickerDialog value={time === "task" ? st.defaultTaskTime : time === "qs" ? st.quietStart : st.quietEnd} onClose={() => setTime("")}
         onPick={(m) => setAlarmSettings(time === "task" ? { defaultTaskTime: m } : time === "qs" ? { quietStart: m } : { quietEnd: m })} />

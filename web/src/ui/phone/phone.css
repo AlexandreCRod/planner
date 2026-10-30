@@ -1624,3 +1624,18 @@ html.phone[data-theme="dark"] {
 .phone .pci-title { font-size: 15px; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .pci-sub { font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .pci-row { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 2px 16px 2px 26px; }
+
+/* Settings' weather app picker (83): a search bar over a list whose rows off screen skip layout. */
+.phone .ps-apps { display: flex; flex-direction: column; height: min(78vh, 640px); } /* fixed, so typing doesn't make the sheet jump */
+.phone .ps-apps-search { flex: none; display: flex; align-items: center; gap: 12px; height: 48px; margin: 4px 16px 8px; padding: 0 8px 0 16px; border-radius: 24px; background: var(--p-sc-highest); color: var(--muted); }
+.phone .ps-apps-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 16px; caret-color: var(--p-primary); }
+.phone .ps-apps-search input::placeholder { color: var(--muted); }
+.phone .ps-apps-search button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; padding: 0; }
+.phone .ps-apps-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 8px; }
+.phone .ps-app { content-visibility: auto; contain-intrinsic-size: auto 56px; position: relative; overflow: hidden; display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 0 24px; border: 0; background: none; color: var(--text); text-align: left; font-size: 16px; }
+.phone .ps-app .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .ps-app > svg { color: var(--p-primary); }
+.phone .ps-appicon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: var(--muted); }
+.phone .ps-appicon img { width: 40px; height: 40px; border-radius: 10px; }
+.phone .ps-apps-none { padding: 16px 24px; }
+.phone .ps-apps > .p-sheet-title { flex: none; }
