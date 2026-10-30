@@ -333,6 +333,8 @@ class AlarmService : Service() {
         val (i, d) = itemId to day
         CoroutineScope(Dispatchers.IO).launch {
             val item = Mirror.item(ctx, i) ?: return@launch
+            // A plain event has no ticks (247): nothing to save.
+            if (!item.completable) return@launch
             Mirror.markDone(ctx, i, if (item.isRecurring) d else (item.startDay ?: d))
             // Its other reminders for that day go too.
             AlarmScheduler.refreshItem(ctx, i)

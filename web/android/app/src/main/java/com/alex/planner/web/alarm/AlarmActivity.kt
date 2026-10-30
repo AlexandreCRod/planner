@@ -88,6 +88,8 @@ class AlarmActivity : ComponentActivity() {
         val text = intent.getStringExtra(EXTRA_TEXT).orEmpty()
         val isClock = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) != 0L
         val isTimer = intent.getLongExtra(ClockTools.EXTRA_TIMER, 0) != 0L
+        // Only what's ticked off (a task, or an event that's a routine) offers "Mark done", as its notifications do (247).
+        val completable = !isClock && !isTimer && Mirror.item(this, intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0))?.completable == true
         val accent = Mirror.settings(this).accent
         // A clock alarm shows the weather at this hour, from the forecast the page last pushed (Forecast.kt).
         val now = System.currentTimeMillis()
@@ -101,8 +103,8 @@ class AlarmActivity : ComponentActivity() {
                     onDismiss = { send(AlarmService.ACTION_DISMISS) },
                     onSnooze = { send(AlarmService.ACTION_SNOOZE) },
                     snoozeLabel = if (isTimer) "+1 min" else "Snooze",
-                    // Clock alarms and timers have nothing to tick off.
-                    onComplete = if (isClock || isTimer) null else { { send(AlarmService.ACTION_COMPLETE) } },
+                    // Clock alarms, timers and plain events have nothing to tick off.
+                    onComplete = if (!completable) null else { { send(AlarmService.ACTION_COMPLETE) } },
                 )
             }
         }
