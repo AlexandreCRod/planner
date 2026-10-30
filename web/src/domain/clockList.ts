@@ -1,7 +1,7 @@
 // The Clock page's alarm list (2.9): its filters (71), bundles of alarms with the same days (73, 110) and
 // skipping the next ring or tomorrow's (75). Pure, so it's unit-tested (test/clockList.test.ts). The alarm
 // schedule rules themselves are in alarms.ts.
-import { type Clockish, WEEKDAYS, WEEKEND, alarmDayMask } from "./alarms.ts";
+import { type Clockish, WEEKDAYS, WEEKEND, alarmDayMask, isRepeating, nextRing, ringsOnDay } from "./alarms.ts";
 
 // ---------- Filters (71) ----------
 
@@ -73,4 +73,72 @@ export function shiftBundle<T extends Clockish>(group: T[], to: number): T[] {
   const lo = Math.min(...times), hi = Math.max(...times);
   const delta = Math.max(-lo, Math.min(1439 - hi, to - minuteOf(group[0])));
   return group.map((a) => { const m = minuteOf(a) + delta; return { ...a, hour: Math.floor(m / 60), minute: m % 60 }; });
+}
+
+// ---------- Skip the next ring, or tomorrow's (75) ----------
+
+type Skippable = Clockish & { enabled: boolean };
+const ringAt = (day: number, minute: number) => {
+  const u = new Date(day * 86_400_000);
+  return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), Math.floor(minute / 60), minute % 60);
+};
+
+/**
+ * [a] skipping its ring on local day [day], or null when there's nothing to skip (it's off, doesn't ring
+ * that day, or that day's ring has passed). A repeating alarm adds the day to its skips (the engine reads
+ * them: ClockAlarms.kt); one that rings once is switched off, as ringing would have done.
+ */
+export function skipDay<T extends Skippable>(a: T, day: number, now: Date): T | null {
+  if (!a.enabled) return null;
+  if (!isRepeating(a)) {
+    const next = nextRing(a, now);
+    return next && epochOfDate(next) === day ? { ...a, enabled: false } : null;
+  }
+  if (!ringsOnDay(a, day) || ringAt(day, minuteOf(a)) <= now) return null;
+  return { ...a, skip: [...(a.skip ?? []), day].sort((x, y) => x - y) };
+}
+
+/** The day the first alarm of [group] that's on rings next, or null. */
+export function nextRingDay(group: Skippable[], now: Date): number | null {
+  let best: Date | null = null;
+  for (const a of group) {
+    if (!a.enabled) continue;
+    const at = nextRing(a, now);
+    if (at && (!best || at < best)) best = at;
+  }
+  return best ? epochOfDate(best) : null;
+}
+
+/** The alarms of [group] changed to skip local day [day] (only those that would ring then). */
+export function skipGroupOn<T extends Skippable>(group: T[], day: number, now: Date): T[] {
+  return group.map((a) => skipDay(a, day, now)).filter((a): a is T => a !== null);
+}
+
+/** "Skip next": the alarm, or the whole bundle, doesn't ring on the day it would next ring. */
+export function skipNext<T extends Skippable>(group: T[], now: Date): T[] {
+  const day = nextRingDay(group, now);
+  return day === null ? [] : skipGroupOn(group, day, now);
+}
+
+/** "Skip tomorrow": none of [group] rings tomorrow. */
+export const skipTomorrow = <T extends Skippable>(group: T[], now: Date): T[] => skipGroupOn(group, epochOfDate(now) + 1, now);
+
+/** The upcoming days [a] skips (that it would otherwise ring on), soonest first. */
+export function upcomingSkips(a: Clockish, today: number): number[] {
+  const plain = { ...a, skip: [], pausedUntil: null };
+  return (a.skip ?? []).filter((d) => d >= today && ringsOnDay(plain, d)).sort((x, y) => x - y);
+}
+
+/** [a] ringing as usual again: its upcoming skipped days cleared (a pause stays). Null when it skips none. */
+export function unskip<T extends Clockish>(a: T, today: number): T | null {
+  return upcomingSkips(a, today).length ? { ...a, skip: (a.skip ?? []).filter((d) => d < today) } : null;
+}
+
+/** The note for one skipped day: "Skips tomorrow", "Skips Fri 30"; for more, "Skips 3 days"; else "". */
+export function skipText(a: Clockish, today: number, date: (day: number) => string): string {
+  if (a.pausedUntil != null && a.pausedUntil > today) return "";
+  const days = upcomingSkips(a, today);
+  if (!days.length) return "";
+  if (days.length > 1) return `Skips ${days.length} days`;
+  return days[0] === today ? "Skips today" : days[0] === today + 1 ? "Skips tomorrow" : `Skips ${date(days[0])}`;
 }

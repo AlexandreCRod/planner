@@ -15,14 +15,17 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, shiftBundle, shownBy, toggleFilter } from "../../domain/clockList.ts";
+import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, nextRingDay, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
-import { BottomSheet, Switch, TextButton, showSnackbar } from "./m3.tsx";
+import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
+import { feel } from "./haptics.ts";
+import { TOUCH_SLOP } from "./press.ts";
+import { mouseMenu } from "./desk.ts";
 
 type Section = "alarm" | "timer" | "stopwatch" | "world";
 const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
@@ -66,8 +69,9 @@ const relative = (d: Date) => relativeDay(epochOf(d.getFullYear(), d.getMonth() 
 /** "Mon 20" (within a few weeks, the month goes without saying). */
 const shortDay = (day: number) => `${dayShort(weekday(day))} ${ymd(day).d}`;
 const todayNow = () => { const n = new Date(); return epochOf(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
-/** An alarm's repeat line, with a pause or skipped days after it. */
-const scheduleLine = (a: ClockAlarm, now: Date) => [repeatText(a, now, relative), a.enabled ? pauseText(a, todayNow(), shortDay) : ""].filter(Boolean).join(" · ");
+/** An alarm's repeat line, with a pause or skipped days after it ("Skips tomorrow", 75). */
+const scheduleLine = (a: ClockAlarm, now: Date) =>
+  [repeatText(a, now, relative), a.enabled ? skipText(a, todayNow(), shortDay) || pauseText(a, todayNow(), shortDay) : ""].filter(Boolean).join(" · ");
 
 // ---------- Asking for permissions, with the reason ----------
 
@@ -316,13 +320,14 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   // Task and event alarms only where they ring: on this phone, while they're turned on.
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
   const [calOpen, setCalOpen] = useState(false);
+  const [skipping, setSkipping] = useState<ClockAlarm[] | null>(null);
   return (
     <div className="pa-scroll">
       <PermissionCards />
       {!rings.rings && (
         <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
       )}
-      <NextAlarm alarms={alarms} calendar={cal} now={now} />
+      <NextAlarm alarms={alarms} calendar={cal} now={now} onSkip={(a) => setSkipping(bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.includes(a)) ?? [a])} />
       {cal.length > 0 && (
         <button className="pa-cal-line" onClick={() => setCalOpen(true)}>
           <MIcon name="oCalendarToday" size={18} />
@@ -338,23 +343,29 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
       {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
-        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} />
-        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} />)}
+        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
+      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined} /></Layer>}
     </div>
   );
 }
 
-function NextAlarm({ alarms, calendar, now }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date }) {
-  const rings: { at: Date; title?: string }[] = alarms.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null).map((at) => ({ at }));
+function NextAlarm({ alarms, calendar, now, onSkip }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date; onSkip: (a: ClockAlarm) => void }) {
+  const rings: { at: Date; title?: string; alarm?: ClockAlarm }[] = alarms.filter((a) => a.enabled)
+    .map((alarm) => ({ at: nextRing(alarm, now), alarm })).filter((r): r is { at: Date; alarm: ClockAlarm } => r.at !== null);
   // The calendar's next one too (the list is soonest first; a skipped one doesn't ring).
   const c = calendar.find((x) => !x.skipped);
   if (c) rings.push({ at: new Date(c.at), title: c.title.trim() || "Untitled" });
   if (!rings.length) return null;
-  const { at, title } = rings.reduce((x, y) => (y.at < x.at ? y : x));
+  const { at, title, alarm } = rings.reduce((x, y) => (y.at < x.at ? y : x));
   return (
     <div className="pa-next">
-      <div className="t-title-large">Alarm in {untilText(at, now)}</div>
+      <div className="pa-next-head">
+        <div className="t-title-large grow">Alarm in {untilText(at, now)}</div>
+        {/* The next clock alarm (or its bundle) can be skipped from here (75). */}
+        {alarm && <TextButton onClick={() => onSkip(alarm)}>Skip…</TextButton>}
+      </div>
       <div className="t-body-medium muted pa-line">{relative(at)} at {formatTime(at.getHours() * 60 + at.getMinutes())}{title ? ` · ${title}` : ""}</div>
     </div>
   );
@@ -444,9 +455,10 @@ function AlarmWeather({ a, now, fc }: { a: ClockAlarm; now: Date; fc: Hourly | n
   return <span className="pa-cardwx" aria-label={`${v.label}, ${v.text} when it rings`}><MIcon name={v.icon} size={18} />{v.text}</span>;
 }
 
-function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void }) {
+function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void; onHold: () => void }) {
+  const hold = useHold(onHold, onClick);
   return (
-    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" onClick={onClick}>
+    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" {...hold}>
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label pa-line">{a.label.trim()}</div>}
         <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
@@ -458,9 +470,10 @@ function AlarmCard({ a, now, fc, onClick }: { a: ClockAlarm; now: Date; fc: Hour
   );
 }
 
-function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
-  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void;
+function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
+  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
 }) {
+  const hold = useHold(onHold, onOpen);
   const on = group.filter((a) => a.enabled).length;
   const first = group[0], last = group[group.length - 1];
   const [picking, setPicking] = useState(false);
@@ -477,7 +490,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
   };
   return (
     <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
-      <div className="pa-bundle-head" role="button" onClick={onOpen}>
+      <div className="pa-bundle-head" role="button" {...hold}>
         <div className="grow">
           {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
           <div className="t-body-medium muted pa-bundle-count">
@@ -509,6 +522,92 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit }: {
       </div>
       {picking && <Layer><TimePickerDialog step={1} value={firstMin} onPick={moveTo} onClose={() => setPicking(false)} /></Layer>}
     </div>
+  );
+}
+
+/** Eats the click that may follow a lifted finger, wherever it lands (for the next 400 ms). */
+function swallowNextClick() {
+  const eat = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+  window.addEventListener("click", eat, { capture: true, once: true });
+  window.setTimeout(() => window.removeEventListener("click", eat, { capture: true }), 400);
+}
+
+/**
+ * A tap or a long press (a right-click with the mouse) on an alarm card: handlers to spread on it. A press
+ * on the held digits (their drum), a switch or the bundle's start time is theirs, not the card's.
+ */
+function useHold(onHold: () => void, onTap: () => void) {
+  const st = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
+  const cb = useRef({ onHold, onTap });
+  cb.current = { onHold, onTap };
+  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-bundle-start");
+  const cancel = () => { if (st.current) clearTimeout(st.current.timer); };
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      cancel();
+      if (theirs(e.target) || (e.pointerType === "mouse" && e.button !== 0)) { st.current = null; return; }
+      const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
+      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onHold(); }, 500);
+      st.current = p;
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const p = st.current;
+      if (p && !p.fired && (Math.abs(e.clientX - p.x) > TOUCH_SLOP || Math.abs(e.clientY - p.y) > TOUCH_SLOP)) { clearTimeout(p.timer); st.current = null; }
+    },
+    // After a hold the finger's lift mustn't land as a tap on what the hold opened (the sheet's scrim).
+    onPointerUp: () => { cancel(); if (st.current?.fired) swallowNextClick(); },
+    onPointerCancel: () => { cancel(); st.current = null; },
+    onClick: (e: React.MouseEvent) => { const p = st.current; st.current = null; if (!p?.fired && !theirs(e.target)) cb.current.onTap(); },
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); st.current = null; cb.current.onHold(); } },
+  };
+}
+
+/**
+ * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
+ * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
+ */
+function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: Date; onClose: () => void; onEdit?: () => void }) {
+  const today = todayNow();
+  const nextDay = nextRingDay(group, now);
+  const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
+  const back = group.map((a) => unskip(a, today)).filter((a): a is ClockAlarm => a !== null);
+  const first = group[0], last = group[group.length - 1];
+  const many = group.length > 1;
+  const title = many ? `${formatTime(first.hour * 60 + first.minute)} – ${formatTime(last.hour * 60 + last.minute)} · ${group.length} alarms`
+    : `${formatTime(first.hour * 60 + first.minute)}${first.label.trim() ? ` · ${first.label.trim()}` : ""}`;
+  const dayWord = (d: number) => (d === today ? "today" : d === today + 1 ? "tomorrow" : shortDay(d));
+  /** Saves [changed], with Undo putting back how they were. */
+  const apply = (changed: ClockAlarm[], text: string) => {
+    if (!changed.length) return;
+    const before = group.filter((a) => changed.some((c) => c.id === a.id));
+    void Promise.all(changed.map((a) => native.saveClock(a))).then(refreshAlarmState);
+    showSnackbar(text, "Undo", () => void Promise.all(before.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  };
+  const what = many ? "These alarms" : "It";
+  // The first ring of that day, for the "Skip next" line.
+  const nextAt = group.filter((a) => a.enabled).map((a) => nextRing(a, now)).filter((d): d is Date => d !== null).sort((x, y) => +x - +y)[0];
+  return (
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="pa-skip">
+        <div className="p-sheet-title">{title}</div>
+        {next.length > 0 && nextDay !== null && nextAt && (
+          <ListItem leading={<MIcon name="oAlarmOff" />} headline="Skip next" supporting={`${relative(nextAt)} at ${formatTime(nextAt.getHours() * 60 + nextAt.getMinutes())}`}
+            onClick={() => { close(); apply(next, `${what} won't ring ${dayWord(nextDay)}`); }} />
+        )}
+        {tomorrow.length > 0 && nextDay !== today + 1 && (
+          <ListItem leading={<MIcon name="oEventBusy" />} headline="Skip tomorrow" supporting={many ? `None of them rings ${shortDay(today + 1)}` : `It won't ring ${shortDay(today + 1)}`}
+            onClick={() => { close(); apply(tomorrow, `${what} won't ring tomorrow`); }} />
+        )}
+        {back.length > 0 && (
+          <ListItem leading={<MIcon name="oAlarm" />} headline="Ring as usual" supporting="Stop skipping days"
+            onClick={() => { close(); apply(back, many ? "These alarms ring as usual again" : "It rings as usual again"); }} />
+        )}
+        {!next.length && !tomorrow.length && !back.length && (
+          <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
+        )}
+        {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
+      </div>
+    )}</BottomSheet>
   );
 }
 

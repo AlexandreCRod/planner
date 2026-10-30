@@ -53,3 +53,43 @@ test("moving a bundle's heading time shifts every alarm, and the bundles form ag
   assert.equal(bundleAlarms(group, fri, 0).length, 3);
   assert.equal(bundleAlarms([...group, other], fri, 25).length, 1);
 });
+
+test("skip the next ring or tomorrow's, for an alarm or a whole bundle (75)", async () => {
+  const { skipDay, skipNext, skipTomorrow, unskip, skipText, upcomingSkips } = await import("../src/domain/clockList.ts");
+  const today = 20756; // Fri 30 Oct 2026
+  assert.equal(new Date(today * 86_400_000).getUTCDay(), 5);
+  const at = (h: number, m: number) => new Date(2026, 9, 30, h, m);
+  // A weekday alarm at 06:30, seen at 09:00 on Friday: next is Monday, tomorrow (Saturday) it doesn't ring.
+  const wk = alarm(6, 30, WEEKDAYS);
+  assert.deepEqual(skipNext([wk], fri).map((a) => a.skip), [[today + 3]]);
+  assert.deepEqual(skipTomorrow([wk], fri), []);
+  // Seen at 06:00, its next ring is today's.
+  assert.deepEqual(skipNext([wk], at(6, 0)).map((a) => a.skip), [[today]]);
+  // An every-day alarm at 21:45: next is tonight, tomorrow is Saturday's.
+  const ev = alarm(21, 45, 127);
+  assert.deepEqual(skipNext([ev], fri)[0].skip, [today]);
+  assert.deepEqual(skipTomorrow([ev], fri)[0].skip, [today + 1]);
+  // A one-off is switched off instead, only for the day it rings.
+  const once = alarm(13, 15);
+  assert.equal(skipNext([once], fri)[0].enabled, false);
+  assert.equal(skipTomorrow([once], fri).length, 0);
+  assert.equal(skipTomorrow([alarm(8, 0)], fri)[0].enabled, false); // 08:00 has passed: it rings tomorrow
+  // Off alarms and passed rings have nothing to skip.
+  assert.equal(skipDay(alarm(7, 0, 127, false), today + 1, fri), null);
+  assert.equal(skipDay(alarm(7, 0, 127), today, fri), null);
+  // A bundle at 06:30–06:50 seen at 06:35: the next ring is today's 06:40, so 06:40 and 06:50 skip today;
+  // 06:30 has rung already and is left alone.
+  const bundle = [alarm(6, 30, 127), alarm(6, 40, 127), alarm(6, 50, 127, false), alarm(6, 55, 127)];
+  const skipped = skipNext(bundle, at(6, 35));
+  assert.deepEqual(skipped.map((a) => [a.minute, a.skip]), [[40, [today]], [55, [today]]]);
+  assert.deepEqual(skipTomorrow(bundle, at(6, 35)).map((a) => a.minute), [30, 40, 55]);
+  // The card's note, and ringing as usual again.
+  const short = (d: number) => `Day ${d}`;
+  assert.equal(skipText({ ...wk, skip: [today + 3] }, today, short), `Skips Day ${today + 3}`);
+  assert.equal(skipText({ ...ev, skip: [today + 1] }, today, short), "Skips tomorrow");
+  assert.equal(skipText({ ...ev, skip: [today, today + 1] }, today, short), "Skips 2 days");
+  assert.equal(skipText({ ...wk, skip: [today + 1] }, today, short), ""); // Saturday: it doesn't ring then anyway
+  assert.deepEqual(upcomingSkips({ ...ev, skip: [today - 2, today + 1] }, today), [today + 1]);
+  assert.deepEqual(unskip({ ...ev, skip: [today - 2, today + 1] }, today)?.skip, [today - 2]);
+  assert.equal(unskip(ev, today), null);
+});
