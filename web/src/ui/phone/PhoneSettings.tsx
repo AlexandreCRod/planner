@@ -133,10 +133,31 @@ function AlarmSettingsSection() {
     <ListItem headline="Full-screen alarms" supporting={perms.fullScreen ? "Allowed" : "Not allowed — tap to fix"} onClick={() => void native.openSettings("fullScreen")} />
     {!perms.exact && <ListItem headline="Alarms & reminders" supporting="Not allowed — tap to fix, or alarms may ring late" onClick={() => void native.openSettings("exact")} />}
     <ListItem headline="Battery optimization" supporting={perms.batteryExempt ? "Not optimized: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
+    {perms.xiaomi && <XiaomiChecks />}
     {time && (
       <TimePickerDialog value={time === "task" ? st.defaultTaskTime : time === "qs" ? st.quietStart : st.quietEnd} onClose={() => setTime("")}
         onPick={(m) => setAlarmSettings(time === "task" ? { defaultTaskTime: m } : time === "qs" ? { quietStart: m } : { quietEnd: m })} />
     )}
+  </>;
+}
+
+/**
+ * Xiaomi's own switches, which the app can't read (194): Autostart (without it alarms aren't set again after
+ * a restart) and the battery saver set to "No restrictions" ("clear all" in recents can wipe every alarm
+ * otherwise). Each says what to do until it's been opened once, then just that it was checked.
+ */
+function XiaomiChecks() {
+  const [seen, setSeen] = useState(() => ({ autostart: localStorage.getItem("xiaomiAutostartSeen") === "1", battery: localStorage.getItem("xiaomiBatterySeen") === "1" }));
+  const open = (which: "autostart" | "xiaomiBattery") => {
+    localStorage.setItem(which === "autostart" ? "xiaomiAutostartSeen" : "xiaomiBatterySeen", "1");
+    setSeen((s) => ({ ...s, [which === "autostart" ? "autostart" : "battery"]: true }));
+    void native.openSettings(which);
+  };
+  return <>
+    <ListItem headline="Autostart (Xiaomi)" supporting={seen.autostart ? "Checked — keep it on so alarms come back after a restart" : "Turn it on for Planner, or alarms aren't set again after a restart"}
+      onClick={() => open("autostart")} />
+    <ListItem headline="Battery saver (Xiaomi)" supporting={seen.battery ? "Checked — keep it on No restrictions" : "Set Planner to No restrictions, or clearing recent apps can stop its alarms"}
+      onClick={() => open("xiaomiBattery")} />
   </>;
 }
 

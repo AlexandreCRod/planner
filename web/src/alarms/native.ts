@@ -16,7 +16,9 @@ export interface ClockTimer { id: number; durationMs: number; label: string; end
 export interface Stopwatch { startedAt: number | null; accumulatedMs: number; laps: number[] }
 export interface ClockToolsState { timers: ClockTimer[]; stopwatch: Stopwatch; zones: string[] }
 export interface RingState { rings: boolean }
-export interface Perms { notifications: boolean; fullScreen: boolean; exact: boolean; batteryExempt: boolean }
+/** xiaomi: a Xiaomi, Redmi or POCO phone (missing from engines before 2.9.1): Settings guides to its Autostart and battery saver. */
+export interface Perms { notifications: boolean; fullScreen: boolean; exact: boolean; batteryExempt: boolean; xiaomi?: boolean }
+export type SettingsScreen = "notifications" | "fullScreen" | "battery" | "exact" | "autostart" | "xiaomiBattery";
 /** What's ringing right now (AlarmService): an item's alarm, a clock alarm or a timer; ids are 0 when not that kind. */
 export interface Ringing { itemId: number; reminderId: number; day: number; clockId: number; timerId: number }
 export interface AlarmState {
@@ -55,7 +57,7 @@ interface Plugin {
   clearWeatherApp(): Promise<void>;
   openWeather(o: { url: string }): Promise<{ opened: string }>;
   requestNotifications(): Promise<{ granted: boolean }>;
-  openSettings(o: { which: "notifications" | "fullScreen" | "battery" | "exact" }): Promise<void>;
+  openSettings(o: { which: SettingsScreen }): Promise<void>;
   stopRinging(o: { action: "stop" | "snooze" }): Promise<void>;
   addListener(event: "changed" | "launch", fn: (e: { what?: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }
@@ -101,7 +103,7 @@ export const native = {
   clearWeatherApp: () => call((p) => p.clearWeatherApp(), undefined),
   openWeather: (url: string) => call((p) => p.openWeather({ url }), { opened: "" }),
   requestNotifications: () => call((p) => p.requestNotifications(), { granted: false }),
-  openSettings: (which: "notifications" | "fullScreen" | "battery" | "exact") => call((p) => p.openSettings({ which }), undefined),
+  openSettings: (which: SettingsScreen) => call((p) => p.openSettings({ which }), undefined),
   /** Stops what's ringing, or snoozes it. */
   stopRinging: (action: "stop" | "snooze") => call((p) => p.stopRinging({ action }), undefined),
 };

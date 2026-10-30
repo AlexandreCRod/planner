@@ -144,7 +144,15 @@ class AlarmPlugin : Plugin() {
     data class Ring(val rings: Boolean)
 
     @Serializable
-    data class Perms(val notifications: Boolean, val fullScreen: Boolean, val exact: Boolean, val batteryExempt: Boolean)
+    data class Perms(
+        val notifications: Boolean, val fullScreen: Boolean, val exact: Boolean, val batteryExempt: Boolean,
+        /**
+         * A Xiaomi, Redmi or POCO phone (194): its Autostart switch (without it the restart broadcast never
+         * arrives) and its battery saver ("clear all" in recents can wipe every alarm) can't be read, so
+         * Settings guides the user to them once.
+         */
+        val xiaomi: Boolean = false,
+    )
 
     @Serializable
     data class State(
@@ -189,6 +197,7 @@ class AlarmPlugin : Plugin() {
             fullScreen = Build.VERSION.SDK_INT < 34 || nm.canUseFullScreenIntent(),
             exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms(),
             batteryExempt = pm.isIgnoringBatteryOptimizations(context.packageName),
+            xiaomi = listOf(Build.MANUFACTURER, Build.BRAND).any { it.lowercase() in setOf("xiaomi", "redmi", "poco") },
         )
     }
 
@@ -483,10 +492,25 @@ class AlarmPlugin : Plugin() {
         call.resolve(JSObject().put("granted", getPermissionState("notifications") == PermissionState.GRANTED))
     }
 
-    /** Opens the system screen for "notifications", "fullScreen", "battery" or "exact". */
+    /**
+     * Opens the system screen for "notifications", "fullScreen", "battery" or "exact", or on a Xiaomi
+     * "autostart" and "xiaomiBattery" (its own screens, with the app's info page as the fallback).
+     */
     @PluginMethod
     fun openSettings(call: PluginCall) {
         val pkg = context.packageName
+        val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
+        val xiaomi = when (call.getString("which")) {
+            "autostart" -> Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"))
+            "xiaomiBattery" -> Intent().setComponent(ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"))
+                .putExtra("package_name", pkg).putExtra("package_label", "Planner")
+            else -> null
+        }
+        if (xiaomi != null) {
+            val a = activity
+            if (a == null || runCatching { a.startActivity(xiaomi) }.isFailure) runCatching { a?.startActivity(appInfo) }
+            return ok(call)
+        }
         val intent = when (call.getString("which")) {
             "fullScreen" -> if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$pkg")) else null
             "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
