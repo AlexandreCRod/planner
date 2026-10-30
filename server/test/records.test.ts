@@ -128,7 +128,7 @@ test("newer kinds with edit times: the later edit wins between devices of the sa
 });
 
 // Item 141: changes that carry the copy they started from merge field by field.
-import { FEATURES, conflictCopy, mergeFields, needsCopy, newItemId } from "../src/records.ts";
+import { FEATURES, conflictCopy, copyId, dayText, mergeFields, needsCopy } from "../src/records.ts";
 
 const note = (extra: Record<string, unknown> = {}) => ({
   id: 7, type: "NOTE", title: "Shopping", content: "<p>milk</p>", categoryId: 3, pinned: false, updatedAt: 10, deletedAt: null, ...extra,
@@ -139,7 +139,7 @@ test("edits of different fields on two devices both stand, with no clash", () =>
   const { merged, clashes } = mergeFields(base, note({ title: "Groceries", updatedAt: 20 }), note({ pinned: true, pinOrder: 1, updatedAt: 15 }), false);
   assert.deepEqual(clashes, []);
   assert.deepEqual(merged, note({ title: "Groceries", pinned: true, pinOrder: 1, updatedAt: 20 }));
-  assert.ok(!needsCopy("items", merged, clashes));
+  assert.ok(!needsCopy("items", merged, clashes, note()));
 });
 
 test("a field both sides changed goes to the winner, and a note's title or content clash asks for a copy", () => {
@@ -151,10 +151,12 @@ test("a field both sides changed goes to the winner, and a note's title or conte
   assert.equal(won.merged.content, "<p>milk, eggs</p>");
   assert.equal(won.merged.updatedAt, 30, "the later edit time is kept, never a clash");
   assert.equal(mergeFields(base, mine, theirs, false).merged.content, "<p>milk, bread</p>");
-  assert.ok(needsCopy("items", won.merged, won.clashes));
-  // Tasks and events merge the same way, but never get copies; nor does a clash of another field.
-  assert.ok(!needsCopy("items", { ...won.merged, type: "TASK" }, won.clashes));
-  assert.ok(!needsCopy("items", won.merged, ["color"]));
+  assert.ok(needsCopy("items", won.merged, won.clashes, theirs));
+  // Tasks and events merge the same way, but never get copies; nor does a clash of another field,
+  // nor a losing side with nothing in it.
+  assert.ok(!needsCopy("items", { ...won.merged, type: "TASK" }, won.clashes, theirs));
+  assert.ok(!needsCopy("items", won.merged, ["color"], theirs));
+  assert.ok(!needsCopy("items", won.merged, won.clashes, note({ title: " ", content: "<p><br></p>" })));
   // Both making the same change is no clash.
   assert.deepEqual(mergeFields(base, mine, { ...mine, updatedAt: 25 }, false).clashes, []);
 });
@@ -168,20 +170,49 @@ test("fields added or removed on one side merge too", () => {
 test("the conflicted copy keeps the losing title and content, the note's category, and is new and unpinned", () => {
   const merged = note({ content: "<p>mine</p>", pinned: true, pinOrder: 2, listOrder: 5 });
   const copy = conflictCopy(merged, note({ content: "<p>theirs</p>" }), 99, 1234);
-  assert.deepEqual(copy, note({ id: 99, title: "Shopping (conflicted copy)", content: "<p>theirs</p>", createdAt: 1234, updatedAt: 1234 }));
+  assert.deepEqual(copy, note({ id: 99, title: "Shopping (conflicted copy)", content: "<p>theirs</p>", noteDay: null, createdAt: 1234, updatedAt: 1234 }));
   assert.equal(conflictCopy(merged, note({ title: "  " }), 99, 1).title, "Conflicted copy");
-  const id = newItemId();
-  assert.ok(Number.isSafeInteger(id) && id >= 2 ** 40);
+});
+
+test("the copy's id comes from the note and the losing text, so a retry names the same copy", () => {
+  const id = copyId(7, note({ content: "<p>theirs</p>" }));
+  assert.ok(Number.isSafeInteger(id) && id >= 2 ** 40 && id < 2 ** 53);
+  assert.equal(copyId(7, note({ content: "<p>theirs</p>" })), id);
+  assert.notEqual(copyId(7, note({ content: "<p>other</p>" })), id);
+  assert.notEqual(copyId(8, note({ content: "<p>theirs</p>" })), id);
+});
+
+test("a daily note's copy is a plain note, titled by its date when it had no title", () => {
+  const daily = note({ title: "", noteDay: 20391 });
+  const copy = conflictCopy(daily, note({ title: "", content: "<p>theirs</p>" }), 99, 1);
+  assert.equal(dayText(20391), "30 Oct 2025");
+  assert.deepEqual([copy.title, copy.noteDay, copy.content], ["30 Oct 2025 (conflicted copy)", null, "<p>theirs</p>"]);
+  assert.equal(conflictCopy(daily, note({ title: "Plan" }), 99, 1).title, "Plan (conflicted copy)");
+});
+
+test("an edit beats a trashing: the note edited on one side stays out of the trash", () => {
+  const base = note();
+  const edited = note({ content: "<p>more</p>", updatedAt: 20 });
+  const trashed = note({ deletedAt: 30, updatedAt: 30 });
+  for (const wins of [true, false]) {
+    assert.equal(mergeFields(base, edited, trashed, wins).merged.deletedAt, null);
+    assert.equal(mergeFields(base, trashed, edited, wins).merged.deletedAt, null);
+    assert.equal(mergeFields(base, edited, trashed, wins).merged.content, "<p>more</p>");
+  }
+  // Trashing while the other side only pinned it: it goes to the trash.
+  assert.equal(mergeFields(base, trashed, note({ pinned: true }), true).merged.deletedAt, 30);
 });
 
 test("sync bodies keep a change's base only for edits, and refuse a malformed one", () => {
   const ok = parseSyncBody({ since: 0, changes: [
     { kind: "items", id: "7", data: note(), base: note({ title: "Old" }) },
     { kind: "items", id: "8", data: null, base: note({ id: 8 }) },
-    { kind: "items", id: "9", data: note({ id: 9 }) },
+    { kind: "items", id: "9", data: note({ id: 9 }), keep: "mine" },
+    { kind: "items", id: "7", data: note(), base: note(), keep: "mine" },
   ] });
   assert.ok(typeof ok !== "string");
-  assert.deepEqual(ok.changes.map((c) => c.base?.title ?? null), ["Old", null, null]);
+  assert.deepEqual(ok.changes.map((c) => c.base?.title ?? null), ["Old", null, null, "Shopping"]);
+  assert.deepEqual(ok.changes.map((c) => c.keep ?? null), [null, null, null, "mine"], "keep only goes with a base");
   assert.equal(typeof parseSyncBody({ since: 0, changes: [{ kind: "items", id: "7", data: note(), base: [1] }] }), "string");
   assert.ok((FEATURES as readonly string[]).includes("baseMerge"));
 });

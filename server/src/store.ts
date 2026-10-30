@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   FEATURES, type IncomingChange, type Kind, type PlannerRecord, type Snapshot,
-  canonical, clientWins, conflictCopy, deletionGuard, isPhone, keyOf, kindsIn, mergeFields, needsCopy, newItemId,
+  canonical, clientWins, conflictCopy, copyId, deletionGuard, isPhone, keyOf, kindsIn, mergeFields, needsCopy,
   recordsOf, syncDeletionGuard,
 } from "./records.ts";
 
@@ -209,26 +209,29 @@ export class PlannerStore extends DurableObject<Env> {
     const copies: { merged: PlannerRecord; loser: PlannerRecord }[] = [];
     let applied = 0;
     let conflicts = 0;
+    let made = 0;
     this.ctx.storage.transactionSync(() => {
       let seq = this.seq();
-      const write = (kind: Kind, id: string, data: string) => {
+      const write = (kind: Kind, id: string, data: string, phone = fromPhone) => {
         seq++;
         applied++;
         this.sql.exec(
           "INSERT OR REPLACE INTO records (kind, id, data, seq, deleted, phone) VALUES (?, ?, ?, ?, 0, ?)",
-          kind, id, data, seq, fromPhone ? 1 : 0,
+          kind, id, data, seq, phone ? 1 : 0,
         );
       };
       for (const c of changes) {
         const row = live(c.kind, c.id);
         const existing = row && row.deleted === 0 && row.data !== null ? (JSON.parse(row.data) as PlannerRecord) : null;
         if (c.base && c.data !== null && existing) {
-          const wins = clientWins(c.kind, c.data, existing, fromPhone, row!.phone === 1);
+          const wins = c.keep === "mine" || clientWins(c.kind, c.data, existing, fromPhone, row!.phone === 1);
           const { merged, clashes } = mergeFields(c.base, c.data, existing, wins);
           if (clashes.length) conflicts++;
-          if (needsCopy(c.kind, merged, clashes)) copies.push({ merged, loser: wins ? existing : c.data });
+          const loser = wins ? existing : c.data;
+          if (needsCopy(c.kind, merged, clashes, loser)) copies.push({ merged, loser });
           const data = canonical(merged);
-          if (data !== row!.data) write(c.kind, c.id, data);
+          // When the stored side won a clash, the record keeps its writer's mark, so the phone still wins later.
+          if (data !== row!.data) write(c.kind, c.id, data, clashes.length && !wins ? row!.phone === 1 : fromPhone);
           if (data === canonical(c.data)) kept.add(`${c.kind}\u0000${c.id}`);
           else if (data === row!.data && row!.seq <= since) resend.add(`${c.kind}\u0000${c.id}`);
           continue;
@@ -253,7 +256,9 @@ export class PlannerStore extends DurableObject<Env> {
       // tag changes).
       const now = Date.now();
       for (const { merged, loser } of copies) {
-        const id = newItemId();
+        const id = copyId(merged.id, loser);
+        if (live("items", String(id))) continue; // made already (a retry), and maybe edited or deleted since
+        made++;
         write("items", String(id), canonical(conflictCopy(merged, loser, id, now)));
         for (const t of this.sql
           .exec<{ data: string }>(
@@ -287,7 +292,7 @@ export class PlannerStore extends DurableObject<Env> {
     // The position is taken before anything else can run, so a sync arriving meanwhile can't be skipped.
     const seq = this.seq();
     if (applied > 0) await this.maybeKeepHistory();
-    return { ok: true, seq, applied, conflicts, copies: copies.length, changes: missing, features: FEATURES };
+    return { ok: true, seq, applied, conflicts, copies: made, changes: missing, features: FEATURES };
   }
 
   /** The current data in the same shape the Android app uses for backups. */
