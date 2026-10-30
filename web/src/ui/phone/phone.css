@@ -1030,7 +1030,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-wx { position: relative; overflow: hidden; flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px; margin-right: 4px; border: 0; border-radius: 20px; background: none; color: var(--muted); font-size: 14px; font-weight: 500; }
 .phone .pa-wx svg { color: var(--p-primary); }
 .phone .pa-zones { margin: 8px -24px 0; max-height: 360px; overflow-y: auto; }
-.phone .pa-zone { position: relative; overflow: hidden; display: flex; flex-direction: column; width: 100%; padding: 10px 24px; border: 0; background: none; text-align: left; color: var(--text); }
+/* About a thousand cities (78): rows off screen skip layout and paint until scrolled near. */
+.phone .pa-zone { content-visibility: auto; contain-intrinsic-size: auto 64px; position: relative; overflow: hidden; display: flex; flex-direction: column; width: 100%; padding: 10px 24px; border: 0; background: none; text-align: left; color: var(--text); }
 /* The item view's early alarm controls (EarlyAlarmControls): a neutral card per alarm. */
 .phone .pe-early { margin: 6px 16px; padding: 10px 6px 2px 14px; border-radius: 16px; background: var(--p-sc-high); }
 .phone .pe-early-text { display: flex; align-items: center; gap: 10px; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
