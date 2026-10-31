@@ -82,3 +82,37 @@ test("opened without a day, a delete means the next occurrence, not the series' 
   assert.equal(cur().deletedAt, null);
   assert.equal(occurrences(cur(), 20000, 20100).at(-1), 20063);
 });
+
+/** One changed day of [id], made as the app makes them; returns its id. */
+const changedDay = (id: number, day: number, to = day) => {
+  const cur = store.snapshot().byId.get(id)!;
+  return store.saveSeriesEdit("THIS", cur, day, { ...cur, startMin: 600 }, { movedTo: to });
+};
+/** Whether [id] is live, in the trash, or gone. */
+const state = (id: number) => {
+  const all = store.listOf<Item>("items").find((i) => i.id === id);
+  return !all ? "gone" : all.deletedAt === null ? "live" : "trash";
+};
+
+test("undo of deleting following from the first remaining day leaves a day deleted earlier in the trash", () => {
+  store.saveItem(series(91));
+  const earlier = changedDay(91, 20003);
+  store.trash(earlier);
+  const later = changedDay(91, 20005);
+  const undo = store.deleteFollowing(store.snapshot().byId.get(91)!, 20000);
+  assert.deepEqual([state(91), state(earlier), state(later)], ["trash", "trash", "trash"]);
+  undo();
+  assert.deepEqual([state(91), state(earlier), state(later)], ["live", "trash", "live"]);
+});
+
+test("a first occurrence moved on its own stays when everything after it is deleted", () => {
+  // Mondays from 20002; the first one was moved to the Tuesday, so it's a changed day, before the chosen one.
+  store.saveItem(series(92, { freq: "WEEKLY", startDay: 20002 }));
+  const moved = changedDay(92, 20002, 20003);
+  const after = changedDay(92, 20016);
+  const undo = store.deleteFollowing(store.snapshot().byId.get(92)!, 20009);
+  assert.deepEqual([state(92), state(moved), state(after)], ["trash", "live", "trash"]);
+  assert.ok(store.snapshot().items.some((i) => i.id === moved));
+  undo();
+  assert.deepEqual([state(92), state(moved), state(after)], ["live", "live", "live"]);
+});

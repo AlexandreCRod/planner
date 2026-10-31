@@ -337,23 +337,30 @@ export function deleteOccurrence(item: Item, day: number) {
   saveItem({ ...item, excludedDays: [...days].sort((a, b) => a - b).join(",") });
 }
 
+/** These items alone, none of what's attached to them, in or out of the trash. */
+function setTrashed(ids: number[], deletedAt: number | null) {
+  const now = Date.now();
+  for (const i of list<Item>("items")) if (ids.includes(i.id)) put("items", { ...i, deletedAt, updatedAt: now });
+  changed();
+}
+
 /**
  * Deletes [day] and every later occurrence (299): the series ends the day before, and single days changed
- * on their own from [day] on go with it. Nothing left before [day] means the whole series goes to the
- * trash. Returns what puts it all back.
+ * on their own from [day] on go with it. Nothing left before [day] means the series itself goes to the
+ * trash, but a single day changed to before [day] stays. Returns what puts back exactly what this took.
  */
 export function deleteFollowing(series: Item, day: number): () => void {
   const ended = endedBefore(series, day);
   const children = list<Item>("items").filter((i) => i.parentId === series.id && i.deletedAt === null && (i.startDay ?? -Infinity) >= day);
+  const taken = [...(ended ? [] : [series.id]), ...children.map((c) => c.id)];
   if (ended) saveItem(ended);
-  else trash(series.id);
-  for (const c of children) trash(c.id);
+  setTrashed(taken, Date.now());
   return () => {
     if (ended) {
       const cur = records.get(`items/${series.id}`) as Item | undefined;
       if (cur) saveItem({ ...cur, untilDay: series.untilDay });
-    } else restore(series.id);
-    for (const c of children) restore(c.id);
+    }
+    setTrashed(taken, null);
   };
 }
 
