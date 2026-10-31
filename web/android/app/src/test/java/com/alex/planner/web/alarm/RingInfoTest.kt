@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -16,6 +17,9 @@ import java.time.ZoneId
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class RingInfoTest {
+    /** These read 24-hour times; another class may have left the format on the phone's own. */
+    @Before fun use24h() { TimeFormat.use24h = true }
+
     private val zone = ZoneId.of("Europe/Lisbon")
     private val day = LocalDate.of(2026, 11, 4) // a Wednesday
     private val wed = 1 shl 2

@@ -30,7 +30,10 @@ class RingScreenTest {
 
     private val bundle = RingBundle(listOf(420, 430, 440, 450), 1, 440, listOf(StillToRing(440, clockId = 3), StillToRing(450, clockId = 4)), "s1")
 
-    @Before fun setUp() { rule.mainClock.autoAdvance = false }
+    @Before fun setUp() {
+        rule.mainClock.autoAdvance = false
+        TimeFormat.use24h = true
+    }
 
     private fun show(layout: RingLayout, stop: StopBy, bundle: RingBundle? = null, today: TodayCard? = null) {
         val c = RingContent(RingLook(layout, stop, true, 1), "Wake up", "Sat, 31 Oct", null, "Snooze · 10 min", bundle, today, null)
