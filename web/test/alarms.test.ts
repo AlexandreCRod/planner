@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  EVERY_DAY, WEEKDAYS, buildMirror, bundle, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
+  EVERY_DAY, WEEKDAYS, buildMirror, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
   stopwatchParts, untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
 } from "../src/domain/alarms.ts";
 import { epochOf, toTimestamp } from "../src/domain/dates.ts";
@@ -22,14 +22,6 @@ test("a one-off alarm rings today or tomorrow", () => {
 test("a repeating alarm skips to the next chosen day", () => {
   assert.deepEqual(hm(nextRing(clock(7, 0, WEEKDAYS), thuMorning)), [10, 16, 7, 0]); // Friday
   assert.deepEqual(hm(nextRing(clock(7, 0, WEEKDAYS), new Date(2026, 9, 16, 20, 0))), [10, 19, 7, 0]); // Monday
-});
-
-test("alarms within 29 minutes share a bundle", () => {
-  const names = (g: { hour: number; minute: number }[][]) => g.map((x) => x.map((a) => `${a.hour}:${a.minute}`));
-  assert.deepEqual(names(bundle([clock(7, 0), clock(6, 30), clock(6, 50), clock(6, 40), clock(9, 0), clock(9, 30)])),
-    [["6:30", "6:40", "6:50", "7:0"], ["9:0"], ["9:30"]]);
-  assert.deepEqual(names(bundle([clock(6, 0), clock(6, 29), clock(6, 58)])), [["6:0", "6:29", "6:58"]]);
-  assert.deepEqual(names(bundle([clock(6, 0), clock(6, 30)])), [["6:0"], ["6:30"]]);
 });
 
 test("repeat lines and the time until the next alarm", () => {
@@ -146,20 +138,6 @@ test("the stopwatch reads 00:00:00 at rest, two digits each", () => {
   assert.deepEqual(stopwatchParts(0), { main: "00:00:00", cs: "00" });
   assert.deepEqual(stopwatchParts(3_723_456), { main: "01:02:03", cs: "45" });
   assert.deepEqual(stopwatchParts(-5), { main: "00:00:00", cs: "00" });
-});
-
-test("the alarm filters: on or off, and ringing on weekdays or at the weekend", async () => {
-  const { alarmShown, WEEKDAYS, WEEKEND } = await import("../src/domain/alarms.ts");
-  const fri = new Date(2026, 9, 16, 12, 0); // a Friday, noon
-  const work = { hour: 7, minute: 0, days: WEEKDAYS, enabled: true };
-  const lie = { hour: 9, minute: 0, days: WEEKEND, enabled: false };
-  const both = { hour: 8, minute: 0, days: 0b0100001, enabled: true }; // Mon and Sat
-  const onceSat = { hour: 6, minute: 0, days: 0, enabled: true }; // 06:00 has passed: rings Saturday
-  const onceToday = { hour: 18, minute: 0, days: 0, enabled: true }; // rings this Friday
-  const f = (x: Parameters<typeof alarmShown>[0], k: Parameters<typeof alarmShown>[1]) => alarmShown(x, k, fri);
-  assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekdays")), [true, false, true, false, true]);
-  assert.deepEqual([work, lie, both, onceSat, onceToday].map((a) => f(a, "weekend")), [false, true, true, true, false]);
-  assert.deepEqual([f(work, "on"), f(lie, "on"), f(lie, "off"), f(lie, "all")], [true, false, true, true]);
 });
 
 test("specific dates, skipped days and a pause decide when an alarm rings", async () => {

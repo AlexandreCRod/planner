@@ -114,9 +114,6 @@ export interface CalendarAlarm {
 export const WEEKDAYS = 0b0011111;
 export const WEEKEND = 0b1100000;
 export const EVERY_DAY = 0b1111111;
-/** Alarms closer than this to the previous one share a bundle. */
-export const BUNDLE_GAP_MIN = 29;
-
 /**
  * A plain alarm clock's schedule (alarm/ClockAlarms.kt has the same rules). [days]: bit 0 = Monday ...
  * bit 6 = Sunday, 0 = rings once. [dates] (local epoch days), when there are any, replace the weekdays:
@@ -187,32 +184,6 @@ export function alarmDayMask(a: Clockish, now: Date): number {
   if (a.days !== 0) return a.days;
   const next = nextRing(a, now);
   return next ? 1 << dayIndex(next) : 0;
-}
-
-/** The Alarms page's filters: all, on, off, ringing on weekdays (Mon–Fri) or at the weekend. */
-export type AlarmFilter = "all" | "on" | "off" | "weekdays" | "weekend";
-export function alarmShown(a: Clockish & { enabled: boolean }, f: AlarmFilter, now: Date): boolean {
-  switch (f) {
-    case "all": return true;
-    case "on": return a.enabled;
-    case "off": return !a.enabled;
-    case "weekdays": return (alarmDayMask(a, now) & WEEKDAYS) !== 0;
-    case "weekend": return (alarmDayMask(a, now) & WEEKEND) !== 0;
-  }
-}
-
-/**
- * Splits alarms (sorted by time) into bundles: each alarm within 29 minutes of the previous one joins
- * its bundle, so 06:30, 06:55 and 07:20 travel together (AlarmsScreen.bundle).
- */
-export function bundle<T extends Clockish>(alarms: T[]): T[][] {
-  const out: T[][] = [];
-  for (const a of [...alarms].sort((x, y) => minuteOfDay(x) - minuteOfDay(y))) {
-    const last = out[out.length - 1];
-    if (last && minuteOfDay(a) - minuteOfDay(last[last.length - 1]) <= BUNDLE_GAP_MIN) last.push(a);
-    else out.push([a]);
-  }
-  return out;
 }
 
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
