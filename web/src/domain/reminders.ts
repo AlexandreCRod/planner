@@ -49,8 +49,17 @@ const WAKE_MAX = 12;
 /** The most alarms that fit: at most [WAKE_MAX], and none after the event starts. */
 export const wakeMax = (before: number, every: number) => Math.max(2, Math.min(WAKE_MAX, Math.floor(before / Math.max(1, every)) + 1));
 
+/** [p] as it can ring: never further apart than the start is from the event, so the last alarm is at the start at the latest. */
+export function fitWake(p: WakePlan): WakePlan {
+  const every = Math.max(1, Math.min(p.every, p.before));
+  return { before: p.before, every, count: Math.min(p.count, wakeMax(p.before, every)) };
+}
+
 /** Each alarm's minutes before the start, soonest ringing first. */
-export const wakeOffsets = (p: WakePlan) => Array.from({ length: Math.min(p.count, wakeMax(p.before, p.every)) }, (_, i) => p.before - i * p.every);
+export function wakeOffsets(p: WakePlan): number[] {
+  const { before, every, count } = fitWake(p);
+  return Array.from({ length: count }, (_, i) => before - i * every).filter((o) => o >= 0);
+}
 
 /** The plan in [list], or null without wake-up alarms. */
 export function wakePlan(list: readonly Reminder[]): WakePlan | null {

@@ -95,7 +95,8 @@ export function buildMirror(
     for (const k of ITEM_FIELDS) slim[k] = it[k];
     out.push(slim as MirrorPush["items"][number]);
     ids.add(it.id);
-    for (const r of list) rs.push({ id: r.id, itemId: r.itemId, offsetMin: r.offsetMin, type: r.type, soundUri: r.soundUri ?? null, ...(r.wake ? { wake: true } : {}) });
+    // A wake-up alarm saved after the start, by an older version, stays quiet (fitWake keeps new ones out).
+    for (const r of list) if (!(r.wake && r.offsetMin < 0)) rs.push({ id: r.id, itemId: r.itemId, offsetMin: r.offsetMin, type: r.type, soundUri: r.soundUri ?? null, ...(r.wake ? { wake: true } : {}) });
   }
   out.sort((a, b) => a.id - b.id);
   rs.sort((a, b) => a.id - b.id);

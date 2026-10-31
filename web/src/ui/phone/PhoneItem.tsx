@@ -34,7 +34,7 @@ import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
+import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, fitWake, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
 import { canBeRoutine, doneTiming, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
@@ -407,8 +407,9 @@ function WakeDialog({ value, onSave, onClose }: { value: WakePlan; onSave: (p: W
   const [before, setBefore] = useState(value.before);
   const [every, setEvery] = useState(value.every);
   const [count, setCount] = useState(value.count);
-  const most = wakeMax(before, every);
-  const plan = { before, every, count: Math.min(count, most) };
+  // Every stays within Start, however the two are changed, so no alarm can land after the event starts.
+  const plan = fitWake({ before, every, count });
+  const most = wakeMax(before, plan.every);
   return (
     <Dialog title="Wake-up alarms" onClose={onClose} actions={<>
       <span className="grow" />
@@ -416,7 +417,7 @@ function WakeDialog({ value, onSave, onClose }: { value: WakePlan; onSave: (p: W
       <TextButton onClick={() => { onSave(plan); onClose(); }}>Save</TextButton>
     </>}>
       <div className="pe-wake-row"><span className="grow">Start</span><SlideStepper value={before} onChange={(v) => setBefore(v ?? 15)} step={15} min={15} max={720} format={wakeSpan} unit="before" buttons label="How long before the event they start" /></div>
-      <div className="pe-wake-row"><span className="grow">Every</span><SlideStepper value={every} onChange={(v) => setEvery(v ?? 1)} step={1} min={1} max={60} unit="min" buttons label="Minutes between alarms" /></div>
+      <div className="pe-wake-row"><span className="grow">Every</span><SlideStepper value={plan.every} onChange={(v) => setEvery(v ?? 1)} step={1} min={1} max={Math.min(60, before)} unit="min" buttons label="Minutes between alarms" /></div>
       <div className="pe-wake-row"><span className="grow">Alarms</span><SlideStepper value={plan.count} onChange={(v) => setCount(v ?? 2)} step={1} min={2} max={most} buttons label="How many alarms" /></div>
       <div className="pe-small pe-lead-sum">They ring like clock alarms, and move with the event.</div>
     </Dialog>

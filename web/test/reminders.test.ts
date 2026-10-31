@@ -42,6 +42,33 @@ test("a row shows the strongest kind of reminder it has", () => {
   assert.equal(reminderKind([r("REMINDER"), r("ALARM")]), "ALARM");
 });
 
+test("wake-up alarms never ring after the event starts, whatever the window's controls are set to", async () => {
+  const { fitWake, wakeOffsets, withWakePlan } = await import("../src/domain/reminders.ts");
+  // The review's case: start 30 min before, every 60 min, the 2 alarms the stepper can't go below.
+  assert.deepEqual(wakeOffsets({ before: 30, every: 60, count: 2 }), [30, 0]);
+  assert.deepEqual(wakeOffsets({ before: 15, every: 60, count: 2 }), [15, 0]);
+  assert.deepEqual(withWakePlan([], { before: 30, every: 60, count: 2 }).map((r) => r.offsetMin), [30, 0]);
+  // Every setting the steppers reach: Start 15 min to 12 h, Every 1 to 60, 2 to 12 alarms.
+  for (let before = 15; before <= 720; before += 15) for (let every = 1; every <= 60; every++) for (let count = 2; count <= 12; count++) {
+    const plan = fitWake({ before, every, count });
+    const list = wakeOffsets(plan);
+    assert.ok(plan.every <= before && plan.count >= 2, `${before}/${every}/${count}`);
+    assert.equal(list.length, plan.count, `${before}/${every}/${count}: as many alarms as it says`);
+    assert.ok(list.every((o) => o >= 0), `${before}/${every}/${count} rings after the start: ${list}`);
+  }
+  // A plan that fits stays as it was.
+  assert.deepEqual(fitWake({ before: 120, every: 10, count: 4 }), { before: 120, every: 10, count: 4 });
+});
+
+test("a wake-up alarm saved after the start doesn't reach the engine; other alarms after the start still do", async () => {
+  const { buildMirror } = await import("../src/domain/alarms.ts");
+  const item = newItem({ id: 1, type: "EVENT", title: "Flight", startDay: 20000, startMin: 600 });
+  const r = (id: number, offsetMin: number, wake: boolean): Reminder => ({ id, itemId: 1, offsetMin, type: "ALARM", soundUri: null, wake });
+  const settings = { defaultTaskTime: 540, defaultAlarmSound: null, defaultAlarmSoundName: "Bell", snoozeMinutes: 10, upcomingAlarms: true, quietHoursEnabled: false, quietStart: 1320, quietEnd: 420 };
+  const m = buildMirror([item], new Map([[1, [r(1, 30, true), r(2, -30, true), r(3, -10, false)]]]), [], settings, "24", "dmy", "#00796B");
+  assert.deepEqual(m.reminders.map((x) => x.id), [1, 3]);
+});
+
 test("wake-up alarms: the plan becomes one alarm per time, none after the event starts (245)", async () => {
   const { wakeOffsets, wakePlan, wakeText, withWakePlan, wakeMax } = await import("../src/domain/reminders.ts");
   assert.deepEqual(wakeOffsets({ before: 120, every: 10, count: 4 }), [120, 110, 100, 90]);
