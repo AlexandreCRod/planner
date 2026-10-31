@@ -65,8 +65,9 @@ class AlarmService : Service() {
         fun ringMillis(settings: AlarmSettings, clockOrTimer: Boolean): Long =
             (if (clockOrTimer) settings.clockRingMinutes else settings.alarmRingMinutes).coerceIn(1, 60) * 60_000L
 
-        /** Whether it rings as long as a clock alarm: clock alarms (a series can choose less: 244) and timers. */
-        fun ringsLong(clockId: Long, timerId: Long, clock: ClockAlarm?) = timerId != 0L || (clockId != 0L && clock?.shortRing != true)
+        /** Whether it rings as long as a clock alarm: clock alarms (a series can choose less: 244), timers and wake-up alarms (245). */
+        fun ringsLong(clockId: Long, timerId: Long, clock: ClockAlarm?, reminder: Reminder?) =
+            timerId != 0L || (clockId != 0L && clock?.shortRing != true) || reminder?.wake == true
 
         fun stopIntent(context: Context, action: String) =
             PendingIntent.getService(
@@ -104,7 +105,7 @@ class AlarmService : Service() {
         var intent = startIntent
         if (intent == null) {
             val saved = RingState.load(this) ?: run { stopSelf(); return START_NOT_STICKY }
-            val long = ringsLong(saved.clockId, saved.timerId, ClockAlarms.get(this, saved.clockId))
+            val long = ringsLong(saved.clockId, saved.timerId, ClockAlarms.get(this, saved.clockId), Mirror.reminder(this, saved.reminderId))
             val left = RingState.left(saved.startedAt, ringMillis(Mirror.settings(this), long), System.currentTimeMillis())
             if (left <= 0L) {
                 itemId = saved.itemId; reminderId = saved.reminderId; clockId = saved.clockId; timerId = saved.timerId; ringText = saved.text
@@ -129,8 +130,8 @@ class AlarmService : Service() {
         // A second alarm while one rings (194): the first isn't silently replaced, it gets a missed notice,
         // and the ringing screen moves on to the new one (AlarmActivity.onNewIntent).
         val takeover = ringing != null
-        // The next alarm of a series taking over isn't a missed alarm: it's the same wake-up (244).
-        if (takeover && !sameSeries(clockId, intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0))) missedNotice()
+        // The next alarm of a series, or of an event's wake-up alarms, taking over isn't a missed alarm: it's the same wake-up.
+        if (takeover && !sameWakeUp(intent)) missedNotice()
         stopRinging()
         itemId = intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, 0)
         reminderId = intent.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0)
@@ -190,7 +191,7 @@ class AlarmService : Service() {
         startRinging(sound)
         listenToVolumeKeys()
         watchNotification()
-        val ringMs = ringMillis(Mirror.settings(this), ringsLong(clockId, timerId, clock))
+        val ringMs = ringMillis(Mirror.settings(this), ringsLong(clockId, timerId, clock, Mirror.reminder(this, reminderId)))
         handler.postDelayed({ timeout() }, RingState.left(startedAt, ringMs, now).coerceAtLeast(1_000))
         // Awake while it rings (the receiver's hold covered the start), and saved in case the app is killed.
         RingWakeLock.acquire(this, ringMs + 30_000)
@@ -201,9 +202,12 @@ class AlarmService : Service() {
         return START_STICKY
     }
 
-    private fun sameSeries(a: Long, b: Long): Boolean {
-        val series = ClockAlarms.get(this, a)?.series ?: return false
-        return ClockAlarms.get(this, b)?.series == series
+    /** Whether [next] is the next alarm of the series or wake-up alarms ringing now (244, 245). */
+    private fun sameWakeUp(next: Intent): Boolean {
+        val series = ClockAlarms.get(this, clockId)?.series
+        if (series != null) return ClockAlarms.get(this, next.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0))?.series == series
+        val other = Mirror.reminder(this, next.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0))
+        return other?.wake == true && other.itemId == itemId && Mirror.reminder(this, reminderId)?.wake == true
     }
 
     /**

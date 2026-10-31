@@ -30,7 +30,7 @@ export const titleKey = (t: string) =>
  * The frequent tasks or events: titles used at least [min] times (a repeating series is one item), the
  * most used first, then the latest. Each one is what its latest item was.
  */
-export function frequentItems(items: readonly Item[], reminders: ReadonlyMap<number, readonly { offsetMin: number; type: AlertType }[]>,
+export function frequentItems(items: readonly Item[], reminders: ReadonlyMap<number, readonly { offsetMin: number; type: AlertType; wake?: boolean }[]>,
   type: ItemType, min = 2): Frequent[] {
   const groups = new Map<string, Item[]>();
   for (const i of items) {
@@ -54,7 +54,8 @@ export function frequentItems(items: readonly Item[], reminders: ReadonlyMap<num
       startMin: timed ? last.startMin : null,
       durationMin: type === "EVENT" && timed && sameDay && last.endMin !== null && last.endMin > last.startMin! ? last.endMin - last.startMin! : null,
       allDay: type === "EVENT" && last.allDay,
-      alerts: (reminders.get(last.id) ?? []).map((r) => [r.offsetMin, r.type] as [number, AlertType]).sort((a, b) => b[0] - a[0]),
+      // Wake-up alarms (245) belong to that morning's event, and would come back as plain alarms.
+      alerts: (reminders.get(last.id) ?? []).filter((r) => !r.wake).map((r) => [r.offsetMin, r.type] as [number, AlertType]).sort((a, b) => b[0] - a[0]),
       place: (last.location ?? "").trim()
         ? { location: last.location, placeName: last.placeName ?? "", address: last.address ?? "", area: last.area ?? "", lat: last.lat ?? null, lng: last.lng ?? null }
         : null,

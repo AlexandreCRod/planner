@@ -34,7 +34,7 @@ import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { DEFAULT_REMINDER_MIN, defaultAlert, firstReminders, followDefaults, isDefaultReminders } from "../../domain/reminders.ts";
+import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
 import { canBeRoutine, doneTiming, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
@@ -335,7 +335,10 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
 function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
   alarms: boolean; all: Reminder[]; type: ItemType; timed: boolean; onChange: (r: Reminder[]) => void; onDate?: (day: number, min: number) => void;
 }) {
-  const mine = all.map((r, i) => [r, i] as const).filter(([r]) => (r.type === "ALARM") === alarms);
+  const mine = all.map((r, i) => [r, i] as const).filter(([r]) => !r.wake && (r.type === "ALARM") === alarms);
+  const wake = alarms ? wakePlan(all) : null;
+  const [wakeEdit, setWakeEdit] = useState<WakePlan | null>(null);
+  const wakeSound = all.find((r) => r.wake)?.soundUri ?? null;
   const [picking, setPicking] = useState<null | "date" | number>(null);
   const [custom, setCustom] = useState<number | null>(null);
   const icon = alarms ? "oAlarm" : "oNotifications";
@@ -374,12 +377,50 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
     <FieldRow icon={mine.length ? null : icon} onClick={() => onChange([...all, { id: 0, itemId: 0, offsetMin: timed ? DEFAULT_REMINDER_MIN : 0, type: alarms ? "ALARM" : defaultAlert(type), soundUri: null }])}>
       <span className="pe-label ph">{alarms ? "Add alarm" : "Add notification"}</span>
     </FieldRow>
+    {/* An event's wake-up alarms, one line whatever their number (245). */}
+    {wake && (
+      <FieldRow icon={null}>
+        <span className="grow pe-wake" role="button" onClick={() => setWakeEdit(wake)}>Wake-up alarms: {wakeText(wake)}</span>
+        {hasAlarms && (
+          <IconButton icon="oMusicNote" className={wakeSound ? "primary" : ""} label={wakeSound ? "Alarm sound (custom)" : "Alarm sound (default)"}
+            onClick={() => { void native.pickSound(wakeSound, "Alarm sound").then((p) => { if (p.picked) onChange(withWakePlan(all, wake, p.uri ?? null)); }); }} />
+        )}
+        <IconButton icon="fClose" label="Remove wake-up alarms" onClick={() => onChange(withWakePlan(all, null))} />
+      </FieldRow>
+    )}
+    {alarms && !wake && type === "EVENT" && timed && (
+      <FieldRow icon={null} onClick={() => setWakeEdit(WAKE_START)}>
+        <span className="pe-label ph">Add wake-up alarms</span>
+      </FieldRow>
+    )}
+    {wakeEdit && <WakeDialog value={wakeEdit} onSave={(p) => onChange(withWakePlan(all, p, wakeSound))} onClose={() => setWakeEdit(null)} />}
     {picking === "date" && <DatePickerDialog value={null} onClose={() => setPicking((p) => (p === "date" ? null : p))} onPick={(d) => setPicking(d)} />}
     {typeof picking === "number" && <TimePickerDialog step={alarms ? 1 : 5} value={null} onClose={() => setPicking(null)} onPick={(m) => { onDate?.(picking, m); setPicking(null); }} />}
     {custom !== null && all[custom] && (
       <CustomLeadDialog value={all[custom].offsetMin} onSave={(m) => set(custom, { ...all[custom], offsetMin: m })} onClose={() => setCustom(null)} />
     )}
   </>;
+}
+
+/** Wake-up alarms: when they start, how far apart, how many (245). */
+function WakeDialog({ value, onSave, onClose }: { value: WakePlan; onSave: (p: WakePlan) => void; onClose: () => void }) {
+  const [before, setBefore] = useState(value.before);
+  const [every, setEvery] = useState(value.every);
+  const [count, setCount] = useState(value.count);
+  const most = wakeMax(before, every);
+  const plan = { before, every, count: Math.min(count, most) };
+  return (
+    <Dialog title="Wake-up alarms" onClose={onClose} actions={<>
+      <span className="grow" />
+      <TextButton onClick={onClose}>Cancel</TextButton>
+      <TextButton onClick={() => { onSave(plan); onClose(); }}>Save</TextButton>
+    </>}>
+      <div className="pe-wake-row"><span className="grow">Start</span><SlideStepper value={before} onChange={(v) => setBefore(v ?? 15)} step={15} min={15} max={720} format={wakeSpan} unit="before" buttons label="How long before the event they start" /></div>
+      <div className="pe-wake-row"><span className="grow">Every</span><SlideStepper value={every} onChange={(v) => setEvery(v ?? 1)} step={1} min={1} max={60} unit="min" buttons label="Minutes between alarms" /></div>
+      <div className="pe-wake-row"><span className="grow">Alarms</span><SlideStepper value={plan.count} onChange={(v) => setCount(v ?? 2)} step={1} min={2} max={most} buttons label="How many alarms" /></div>
+      <div className="pe-small pe-lead-sum">They ring like clock alarms, and move with the event.</div>
+    </Dialog>
+  );
 }
 
 const LEAD_UNITS: [string, string, number][] = [["min", "Minutes", 1], ["hour", "Hours", 60], ["day", "Days", 1440], ["week", "Weeks", 10080]];
@@ -717,8 +758,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   // they're out of sight until it's unticked; they stay saved with it all the same.
   const alerts = !completable || !done;
   const forDay = isRecurring(item) && day !== null ? ` for ${(() => { const r = relativeDay(day); return ["Today", "Tomorrow", "Yesterday"].includes(r) ? r.toLowerCase() : r; })()}` : "";
-  const alertLines = (list: Reminder[], kind: string | null) => [...list].sort((a, b) => b.offsetMin - a.offsetMin)
-    .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin, item.startMin ?? defaultTaskTime).toLowerCase()}`).join("\n");
+  const alertLines = (list: Reminder[], kind: string | null) => {
+    const wake = wakePlan(list);
+    return [...[...list].filter((r) => !r.wake).sort((a, b) => b.offsetMin - a.offsetMin)
+      .map((r) => `${kind ?? (r.type === "REMINDER" ? "Notification" : "Notification (silent)")} · ${offsetLabel(r.offsetMin, item.startMin ?? defaultTaskTime).toLowerCase()}`),
+    ...(wake ? [`Wake-up alarms: ${wakeText(wake)}`] : [])].join("\n");
+  };
   const edit = () => go(`item/${id}?edit=1${occ !== null ? `&occ=${occ}` : ""}`);
   const duplicate = () => {
     duplicateSeed = { item: { ...item, id: 0, deletedAt: null }, reminders: reminders.map((r) => ({ ...r, id: 0 })), tags: tags.map((x) => x.name).join(" ") };

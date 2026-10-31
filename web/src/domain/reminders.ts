@@ -38,6 +38,46 @@ export function followDefaults(list: Reminder[], before: Item, after: Item): Rem
   return isDefaultReminders(list, before) ? firstReminders(after) : list;
 }
 
+// ---------- Wake-up alarms on an event (245) ----------
+
+/** "Start 2 h before, every 10 min, 4 alarms". Saved as one wake reminder per alarm, so each moves with the event. */
+export interface WakePlan { before: number; every: number; count: number }
+
+export const WAKE_START: WakePlan = { before: 120, every: 10, count: 4 };
+const WAKE_MAX = 12;
+
+/** The most alarms that fit: at most [WAKE_MAX], and none after the event starts. */
+export const wakeMax = (before: number, every: number) => Math.max(2, Math.min(WAKE_MAX, Math.floor(before / Math.max(1, every)) + 1));
+
+/** Each alarm's minutes before the start, soonest ringing first. */
+export const wakeOffsets = (p: WakePlan) => Array.from({ length: Math.min(p.count, wakeMax(p.before, p.every)) }, (_, i) => p.before - i * p.every);
+
+/** The plan in [list], or null without wake-up alarms. */
+export function wakePlan(list: readonly Reminder[]): WakePlan | null {
+  const offsets = list.filter((r) => r.wake).map((r) => r.offsetMin).sort((a, b) => b - a);
+  if (!offsets.length) return null;
+  return { before: offsets[0], every: Math.max(1, offsets[0] - (offsets[1] ?? offsets[0] - 10)), count: offsets.length };
+}
+
+/**
+ * [list] with its wake-up alarms now as [plan] (null: none). Those staying at the same time keep their ids, so
+ * what the engine knows about them (a skip, a snooze) stays; all take [plan]'s sound.
+ */
+export function withWakePlan(list: readonly Reminder[], plan: WakePlan | null, soundUri: string | null = null): Reminder[] {
+  const others = list.filter((r) => !r.wake);
+  if (!plan) return others;
+  const old = list.filter((r) => r.wake);
+  return [...others, ...wakeOffsets(plan).map((offsetMin): Reminder => ({
+    id: old.find((r) => r.offsetMin === offsetMin)?.id ?? 0, itemId: old[0]?.itemId ?? 0, offsetMin, type: "ALARM", soundUri, wake: true,
+  }))];
+}
+
+const spanText = (min: number) => (min < 60 ? `${min} min` : min % 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min / 60} h`);
+
+/** "start 2 h before, every 10 min, 4 alarms" */
+export const wakeText = (p: WakePlan) => `start ${spanText(p.before)} before, every ${spanText(p.every)}, ${p.count} alarms`;
+export { spanText as wakeSpan };
+
 /** The strongest kind among [list]: an alarm, then a reminder that pops up, then a silent one; null for none. */
 export function reminderKind(list: readonly Reminder[] | undefined): AlertType | null {
   if (!list?.length) return null;

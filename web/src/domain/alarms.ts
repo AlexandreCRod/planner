@@ -72,7 +72,7 @@ export function buildMirror(
     for (const k of ITEM_FIELDS) slim[k] = it[k];
     out.push(slim as MirrorPush["items"][number]);
     ids.add(it.id);
-    for (const r of list) rs.push({ id: r.id, itemId: r.itemId, offsetMin: r.offsetMin, type: r.type, soundUri: r.soundUri ?? null });
+    for (const r of list) rs.push({ id: r.id, itemId: r.itemId, offsetMin: r.offsetMin, type: r.type, soundUri: r.soundUri ?? null, ...(r.wake ? { wake: true } : {}) });
   }
   out.sort((a, b) => a.id - b.id);
   rs.sort((a, b) => a.id - b.id);

@@ -41,3 +41,24 @@ test("a row shows the strongest kind of reminder it has", () => {
   assert.equal(reminderKind([r("NOTIFICATION"), r("REMINDER")]), "REMINDER");
   assert.equal(reminderKind([r("REMINDER"), r("ALARM")]), "ALARM");
 });
+
+test("wake-up alarms: the plan becomes one alarm per time, none after the event starts (245)", async () => {
+  const { wakeOffsets, wakePlan, wakeText, withWakePlan, wakeMax } = await import("../src/domain/reminders.ts");
+  assert.deepEqual(wakeOffsets({ before: 120, every: 10, count: 4 }), [120, 110, 100, 90]);
+  assert.equal(wakeText({ before: 120, every: 10, count: 4 }), "start 2 h before, every 10 min, 4 alarms");
+  assert.equal(wakeText({ before: 90, every: 60, count: 2 }), "start 1 h 30 min before, every 1 h, 2 alarms");
+  assert.equal(wakeMax(30, 10), 4);
+  assert.deepEqual(wakeOffsets({ before: 30, every: 10, count: 9 }), [30, 20, 10, 0]);
+
+  const plain = { id: 5, itemId: 1, offsetMin: 30, type: "ALARM" as const, soundUri: null };
+  const on = withWakePlan([plain], { before: 120, every: 10, count: 3 }).map((r, i) => ({ ...r, id: r.id || 10 + i }));
+  assert.equal(on.filter((r) => r.wake).length, 3);
+  assert.ok(on.filter((r) => r.wake).every((r) => r.type === "ALARM"));
+  assert.deepEqual(wakePlan(on), { before: 120, every: 10, count: 3 });
+  assert.equal(wakePlan([plain]), null);
+  // Moved 10 min later: the two that stay at the same time keep their ids, the plain alarm stays, and removal leaves only it.
+  const moved = withWakePlan(on, { before: 110, every: 10, count: 3 });
+  assert.deepEqual(moved.filter((r) => r.wake).map((r) => [r.offsetMin, r.id]), [[110, 12], [100, 13], [90, 0]]);
+  assert.deepEqual(moved[0], plain);
+  assert.deepEqual(withWakePlan(on, null), [plain]);
+});

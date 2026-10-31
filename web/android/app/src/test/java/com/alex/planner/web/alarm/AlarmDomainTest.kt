@@ -23,6 +23,19 @@ import java.time.LocalDate
  * Also checks that the page's JSON (web record shapes, with fields the engine ignores) decodes.
  */
 class AlarmDomainTest {
+    /** 245: wake-up alarms are reminders, so moving the event takes all of them along. */
+    @org.junit.Test fun wakeUpAlarmsMoveWithTheEvent() {
+        val zone = java.time.ZoneId.of("Europe/Lisbon")
+        val day = java.time.LocalDate.of(2026, 11, 3)
+        val start = day.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val wakes = listOf(120, 110, 100, 90).mapIndexed { i, o -> Reminder(10L + i, 1, o, AlertType.ALARM, wake = true) }
+        fun ringsAt(min: Int) = AlarmScheduler.upcoming(
+            listOf(Item(1, ItemType.EVENT, "Flight", startDay = day.toEpochDay(), startMin = min)), wakes, { _, _ -> false }, start, 540, { _, at -> at }, 3, zone,
+        ).map { java.time.Instant.ofEpochMilli(it.at).atZone(zone).toLocalTime().toString() }
+        org.junit.Assert.assertEquals(listOf("06:00", "06:10", "06:20", "06:30"), ringsAt(8 * 60))
+        org.junit.Assert.assertEquals(listOf("07:30", "07:40", "07:50", "08:00"), ringsAt(9 * 60 + 30))
+    }
+
     @Test fun sharedRecurrenceCases() {
         val text = javaClass.classLoader!!.getResourceAsStream("schedule-cases.json")!!.bufferedReader().use { it.readText() }
         val cases = Json.parseToJsonElement(text).jsonObject["cases"]!!.jsonArray.map { it.jsonObject }

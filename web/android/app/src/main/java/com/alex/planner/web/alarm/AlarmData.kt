@@ -52,6 +52,8 @@ data class Reminder(
     val type: AlertType,
     /** Ringtone URI for alarms; null uses the default from settings. */
     val soundUri: String? = null,
+    /** One of an event's wake-up alarms (245): it rings like a clock alarm. */
+    val wake: Boolean = false,
 )
 
 @Serializable

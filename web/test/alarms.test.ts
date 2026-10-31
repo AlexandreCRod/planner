@@ -188,3 +188,15 @@ test("the notification card's choices reach the engine as numbers, anything odd 
   assert.deepEqual(cardChoices("1", "2", 0), { notificationCard: 1, notificationIcons: 2, bundleWindow: 0 });
   assert.deepEqual(cardChoices("x", "9", 5), { notificationCard: 1, notificationIcons: 1, bundleWindow: 5 });
 });
+
+test("the engine's copy says which alarms are wake-up alarms, and older reminders stay exactly as they were (245)", () => {
+  const ev = newItem({ type: "EVENT", id: 1, startDay: 100, startMin: 480 });
+  const settings = { defaultTaskTime: 540, defaultAlarmSound: null, defaultAlarmSoundName: null, snoozeMinutes: 10, upcomingAlarms: true, quietHoursEnabled: false, quietStart: 0, quietEnd: 0, alarmRingMinutes: 1, clockRingMinutes: 10 };
+  const reminders = new Map([[1, [
+    { id: 2, itemId: 1, offsetMin: 120, type: "ALARM" as const, soundUri: null, wake: true },
+    { id: 3, itemId: 1, offsetMin: 30, type: "ALARM" as const, soundUri: null },
+  ]]]);
+  const m = buildMirror([ev], reminders, [], settings, "24", "dmy", "#00796B");
+  assert.deepEqual(m.reminders[0], { id: 2, itemId: 1, offsetMin: 120, type: "ALARM", soundUri: null, wake: true });
+  assert.deepEqual(m.reminders[1], { id: 3, itemId: 1, offsetMin: 30, type: "ALARM", soundUri: null });
+});

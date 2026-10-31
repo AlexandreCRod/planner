@@ -232,6 +232,36 @@ class AlarmServiceTest {
         assertTrue(!missed("Series"))
     }
 
+    private fun withWakeUps() = Mirror.update(ctx) { m ->
+        m.copy(reminders = m.reminders + listOf(Reminder(13, 1, 120, AlertType.ALARM, wake = true), Reminder(14, 1, 110, AlertType.ALARM, wake = true)))
+    }
+
+    /** 245: a plain event alarm stops after 1 minute (timeoutLeavesAMissedNotice...); a wake-up alarm rings on. */
+    @Test fun aWakeUpAlarmRingsLikeAClockAlarm() {
+        withWakeUps()
+        ring(eventIntent(reminderId = 13))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(5))
+        assertEquals(13L, AlarmService.ringing?.reminderId)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(5).plusSeconds(1))
+        assertNull(AlarmService.ringing)
+        assertTrue(missed("Dentist"))
+    }
+
+    @Test fun theNextWakeUpAlarmTakesOverWithoutAMissedNotice() {
+        withWakeUps()
+        ring(eventIntent(reminderId = 13))
+        ring(eventIntent(reminderId = 14))
+        assertEquals(14L, AlarmService.ringing?.reminderId)
+        assertTrue(!missed("Dentist"))
+    }
+
+    @Test fun aPlainAlarmOfTheSameEventTakingOverStillLeavesAMissedNotice() {
+        withWakeUps()
+        ring(eventIntent(reminderId = 13))
+        ring(eventIntent(reminderId = 11))
+        assertTrue(missed("Dentist"))
+    }
+
     @Test fun afterTheAppIsKilledItRingsOnFromWhatWasSaved() {
         ring(eventIntent())
         val saved = RingState.load(ctx)!!

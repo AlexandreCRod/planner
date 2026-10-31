@@ -75,7 +75,12 @@ export interface Item {
 }
 
 export interface Completion { itemId: number; day: number; completedAt: number }
-export interface Reminder { id: number; itemId: number; offsetMin: number; type: AlertType; soundUri: string | null }
+export interface Reminder {
+  id: number; itemId: number; offsetMin: number; type: AlertType; soundUri: string | null;
+  /** One of an event's wake-up alarms (245): an ALARM that rings like a clock alarm and shows, with the others, as
+   *  one line. Missing on everything else; a device that doesn't know it sees plain alarms. */
+  wake?: boolean;
+}
 export interface Category {
   id: number; name: string; color: number; defaultAlert: AlertType;
   /** Counts as sport on Training (278, Settings): its events are games there. Missing until the user picks
