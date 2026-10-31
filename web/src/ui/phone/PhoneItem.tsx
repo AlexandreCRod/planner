@@ -4,7 +4,7 @@
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, nextOnOrAfter, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -12,7 +12,7 @@ import {
   NO_DAY, PRIORITIES, priorityColor, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
-  type EditScope, type Snapshot, addLink, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot,
+  type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot,
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
@@ -106,6 +106,13 @@ export function deleteOccurrenceWithUndo(item: Item, day: number) {
     const cur = snapshot().byId.get(item.id);
     if (cur) saveItem({ ...cur, excludedDays: parseIntList(cur.excludedDays).filter((d) => d !== day).join(",") });
   });
+}
+
+/** Deletes a repeating item for the scope picked in the dialog (299), with an Undo in each case. */
+export function deleteSeriesWithUndo(scope: EditScope, item: Item, day: number) {
+  if (scope === "THIS") deleteOccurrenceWithUndo(item, day);
+  else if (scope === "ALL") trashWithUndo(item);
+  else showSnackbar("This and following deleted", "Undo", deleteFollowing(item, day));
 }
 
 /** One editor row: an icon in the left column (or a gap, to line up with the row above) and its content. */
@@ -723,11 +730,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       <TopAppBar back title={isEvent ? "Event" : "Task"} actions={<>
         <IconButton icon="oContentCopy" label="Duplicate" onClick={duplicate} />
         <span className="p-menu-anchor">
-          <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(item) && occ !== null) setDeleteMenu(true); else { trashWithUndo(item); leave(); } }} />
-          <DropdownMenu open={deleteMenu} onClose={() => setDeleteMenu(false)} items={[
-            ...(occ !== null ? [{ label: `Only ${formatDate(occ)}`, icon: "oEventBusy", onClick: () => { deleteOccurrenceWithUndo(item, occ); leave(); } }] : []),
-            { label: "Whole series", icon: "oDelete", onClick: () => { trashWithUndo(item); leave(); } },
-          ]} />
+          <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(item) && day !== null) setDeleteMenu(true); else { trashWithUndo(item); leave(); } }} />
         </span>
       </>} />
       <div className="p-content pe-body">
@@ -834,6 +837,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <AlertsHint className="pad" />
         </>}</BottomSheet>
       )}
+      {deleteMenu && day !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, item, day); leave(); }} />}
       {pendingScope && <ScopeDialog title="Change" onCancel={() => setPendingScope(null)} onPick={(sc) => {
         const edited = pendingScope;
         setPendingScope(null);
@@ -1122,6 +1126,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   };
   if (saveRef) saveRef.current = () => save();
   /** Linking needs the item saved: a new one is saved first (as "Untitled" if it has no title). */
+  // The day a delete applies to: the one opened, or the next one when the item was opened without a day.
+  const deleteDay = !original ? null : occ ?? nextOnOrAfter(original, todayEpoch()) ?? original.startDay;
   const ensureSaved = () => {
     if (currentId) return currentId;
     const item = finalItem();
@@ -1137,11 +1143,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
       <TopAppBar className={header ? "nosat" : ""} title={isNew ? `New ${isEvent ? "event" : "task"}` : isEvent ? "Event" : "Task"} actions={<>
         {original && (
           <span className="p-menu-anchor">
-            <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(original) && occ !== null) setDeleteMenu(true); else { trashWithUndo(original); leaveAll(); } }} />
-            <DropdownMenu open={deleteMenu} onClose={() => setDeleteMenu(false)} items={[
-              ...(occ !== null ? [{ label: `Only ${formatDate(occ)}`, icon: "oEventBusy", onClick: () => { deleteOccurrenceWithUndo(original, occ); leaveAll(); } }] : []),
-              { label: "Whole series", icon: "oDelete", onClick: () => { trashWithUndo(original); leaveAll(); } },
-            ]} />
+            <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(original) && deleteDay !== null) setDeleteMenu(true); else { trashWithUndo(original); leaveAll(); } }} />
           </span>
         )}
         <button className="p-filled-btn pe-save" disabled={!d.title.trim()} onClick={() => save()}>Save</button>
@@ -1213,6 +1215,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
       </div>
 
       {colorDialog && <ColorPickerDialog title="Colour" selected={d.color} onClose={() => setColorDialog(false)} onPick={(c) => set({ color: c })} />}
+      {deleteMenu && original && deleteDay !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, original, deleteDay); leaveAll(); }} />}
       {scopeOpen && <ScopeDialog title="Save changes to" onCancel={() => setScopeOpen(false)} onPick={(sc) => { setScopeOpen(false); save(sc); }} />}
     </div>
   );

@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 import * as db from "./db.ts";
 import { newId, tagIdFor } from "../domain/ids.ts";
-import { parseDays } from "../domain/recurrence.ts";
+import { endedBefore, parseDays } from "../domain/recurrence.ts";
 import { doneTodosToTrash, expiredTrash, staleVersions } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
@@ -335,6 +335,26 @@ export function deleteOccurrence(item: Item, day: number) {
   const days = parseDays(item.excludedDays);
   days.add(day);
   saveItem({ ...item, excludedDays: [...days].sort((a, b) => a - b).join(",") });
+}
+
+/**
+ * Deletes [day] and every later occurrence (299): the series ends the day before, and single days changed
+ * on their own from [day] on go with it. Nothing left before [day] means the whole series goes to the
+ * trash. Returns what puts it all back.
+ */
+export function deleteFollowing(series: Item, day: number): () => void {
+  const ended = endedBefore(series, day);
+  const children = list<Item>("items").filter((i) => i.parentId === series.id && i.deletedAt === null && (i.startDay ?? -Infinity) >= day);
+  if (ended) saveItem(ended);
+  else trash(series.id);
+  for (const c of children) trash(c.id);
+  return () => {
+    if (ended) {
+      const cur = records.get(`items/${series.id}`) as Item | undefined;
+      if (cur) saveItem({ ...cur, untilDay: series.untilDay });
+    } else restore(series.id);
+    for (const c of children) restore(c.id);
+  };
 }
 
 export type EditScope = "THIS" | "FOLLOWING" | "ALL";
