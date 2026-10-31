@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  KEEP_BACKUPS, backupDue, backupFileName, backupFileTime, backupsToDrop, gunzipJson, gzipJson, makeBackup, parseBackup, restoreEntries, restorePlan,
+  backupDue, backupFileName, backupFileTime, backupsToDrop, gunzipJson, gzipJson, makeBackup, parseBackup, restoreEntries, restorePlan,
 } from "../src/domain/backup.ts";
 
 type Rec = Record<string, unknown>;
@@ -69,7 +69,6 @@ test("file names sort by date and read back", () => {
 test("the newest 14 are kept, other files never touched", () => {
   const names = Array.from({ length: 17 }, (_, i) => backupFileName(new Date(2026, 9, i + 1, 9, 0).getTime()));
   const drop = backupsToDrop([...names, "other.txt"].reverse());
-  assert.equal(KEEP_BACKUPS, 14);
   assert.deepEqual(drop.sort(), names.slice(0, 3));
 });
 

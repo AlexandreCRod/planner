@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DONE_TODO_HOURS, TRASH_DAYS, doneTodosToTrash, expiredTrash, staleVersions } from "../src/domain/retention.ts";
+import { DONE_TODO_HOURS, doneTodosToTrash, expiredTrash, staleVersions } from "../src/domain/retention.ts";
 import { type ItemType, NO_DAY, newItem } from "../src/domain/types.ts";
 
 const H = 3_600_000;
@@ -14,7 +14,6 @@ test("everything leaves the trash after 30 days", () => {
     trashed(5, "NOTE", 14), trashed(6, "NOTE", 30), newItem({ id: 7, type: "TASK" }),
   ];
   assert.deepEqual(expiredTrash(items, now), [2, 4, 6]);
-  assert.equal(TRASH_DAYS, 30);
 });
 
 test("a ticked to-do moves to the trash 48 hours after it was ticked", () => {

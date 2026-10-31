@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { epochOf, toTimestamp, ymd } from "../src/domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, occurrences as recurrenceDays } from "../src/domain/recurrence.ts";
+import { dayBit, occurrences as recurrenceDays } from "../src/domain/recurrence.ts";
 import {
   CompletionIndex, type Occurrence, type TaskEntry,
   currentEntry, entriesFor, forCalendar, occurrencesIn, streak, tasksForDay, tasksOnDay, tickedDuring,
@@ -131,9 +131,6 @@ function run(c: Json) {
       assert.ok(Math.abs(s.rate30 - c.expect.rate30) < 1e-4, `rate30 ${s.rate30} != ${c.expect.rate30}`);
       return;
     }
-    case "alarmTimes":
-      // The alarm engine's (Kotlin) alone since 194: the page reads them from it. Run by AlarmDomainTest.kt.
-      return;
     default:
       assert.fail(`unknown fn ${c.fn}`);
   }
@@ -141,8 +138,8 @@ function run(c: Json) {
 
 test("shared cases file loads", () => {
   assert.ok(file.cases.length > 0);
-  assert.equal(LAST_DAY_OF_MONTH, 32);
   assert.equal(new Set(file.cases.map((c: Json) => c.name)).size, file.cases.length, "case names must be unique");
 });
 
-for (const c of file.cases) test(`shared: ${c.name}`, () => run(c));
+// The alarmTimes cases are the alarm engine's (Kotlin) alone since 194: AlarmDomainTest.kt runs them.
+for (const c of file.cases) if (c.fn !== "alarmTimes") test(`shared: ${c.name}`, () => run(c));

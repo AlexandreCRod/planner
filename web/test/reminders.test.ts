@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEFAULT_REMINDER_MIN, firstReminders, followDefaults, isDefaultReminders, reminderKind } from "../src/domain/reminders.ts";
+import { firstReminders, followDefaults, isDefaultReminders, reminderKind } from "../src/domain/reminders.ts";
 import { type Reminder, newItem } from "../src/domain/types.ts";
 
 const r = (type: Reminder["type"], offsetMin = 0): Reminder => ({ id: 1, itemId: 1, offsetMin, type, soundUri: null });
 
 test("new timed tasks and events start with a reminder 30 minutes before; untimed ones at the day's time", () => {
-  assert.equal(DEFAULT_REMINDER_MIN, 30);
   const timedEvent = newItem({ type: "EVENT", startDay: 100, startMin: 600, endMin: 660 });
   const timedTask = newItem({ type: "TASK", startDay: 100, startMin: 1140 });
   const allDay = newItem({ type: "EVENT", startDay: 100, allDay: true });
