@@ -11,7 +11,7 @@ import { stripHtml } from "../domain/text.ts";
 import { logProblem } from "../problems.ts";
 import {
   type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
-  TYPE_COLORS, cssColor, isRecurring, newItem,
+  NO_DAY, TYPE_COLORS, cssColor, isRecurring, newItem,
 } from "../domain/types.ts";
 
 export const KINDS = [
@@ -248,7 +248,9 @@ export function saveItem(item: Item, opts: SaveOptions = {}): number {
   const now = Date.now();
   const isNew = item.id === 0;
   const saved: Item = { ...item, id: isNew ? newId() : item.id, createdAt: isNew ? now : item.createdAt, updatedAt: now };
+  const was = records.get(`items/${saved.id}`) as Item | undefined;
   put("items", saved);
+  if (was) moveTick(was, saved);
   const id = saved.id;
   if (opts.reminders) {
     for (const r of list<Reminder>("reminders")) if (r.itemId === id) del("reminders", r);
@@ -257,6 +259,16 @@ export function saveItem(item: Item, opts: SaveOptions = {}): number {
   if (opts.tags) setTags(id, opts.tags);
   changed();
   return id;
+}
+
+/** A one-time item's tick is kept on its own day: moved to another day, or given or losing a date, it stays ticked. */
+function moveTick(was: Item, now: Item) {
+  if (isRecurring(was) || isRecurring(now) || was.startDay === now.startDay) return;
+  const from = was.startDay ?? NO_DAY;
+  const tick = list<Completion>("completions").find((c) => c.itemId === now.id && c.day === from);
+  if (!tick) return;
+  del("completions", tick);
+  put("completions", { ...tick, day: now.startDay ?? NO_DAY });
 }
 
 function setTags(itemId: number, names: string[]) {

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Item, newItem } from "../src/domain/types.ts";
+import { type Completion, type Item, NO_DAY, newItem } from "../src/domain/types.ts";
+import { buildMirror } from "../src/domain/alarms.ts";
+import { tasksForDay } from "../src/domain/schedule.ts";
 import { dayBit, movedRule, occurrences } from "../src/domain/recurrence.ts";
 import { epochOf, weekday } from "../src/domain/dates.ts";
 
@@ -95,4 +97,56 @@ test("a yearly series on a chosen month follows the drag to another month", () =
   const s = add({ title: "Yearly", freq: "YEARLY", months: 1 << 10, startDay: nov });
   store.moveSeries("ALL", s, nov, drop(s, nov, jan));
   assert.deepEqual(shownDays("Yearly", nov, epochOf(2028, 12, 31)), [jan, epochOf(2028, 1, 15)]);
+});
+
+/** The engine's view of [id]: which days it counts as done, so which it won't ring. */
+const engineDone = (id: number) => {
+  const s = store.snapshot();
+  const settings = { defaultTaskTime: 540, defaultAlarmSound: null, defaultAlarmSoundName: "Bell", snoozeMinutes: 10, upcomingAlarms: true, quietHoursEnabled: false, quietStart: 1320, quietEnd: 420 };
+  return buildMirror(s.allItems, s.reminders, s.completions, settings, "24", "dmy", "#00796B").completions.filter((c) => c.itemId === id).map((c) => c.day);
+};
+const task = (title: string, startDay: number | null) => {
+  const r = { id: 0, itemId: 0, offsetMin: 30, type: "ALARM" as const, soundUri: null };
+  const id = store.saveItem(newItem({ type: "TASK", title, startDay, startMin: 600 }), { reminders: [r] });
+  return store.snapshot().byId.get(id)!;
+};
+
+test("a ticked task dragged to another day stays ticked there, and the engine won't ring it", () => {
+  const t = task("Ticked", MON);
+  store.toggleCompletion(t.id, MON, true);
+  const when = store.listOf<Completion>("completions").find((c) => c.itemId === t.id)!.completedAt;
+  store.saveItem({ ...t, startDay: MON + 3 });
+  const s = store.snapshot();
+  assert.deepEqual(tasksForDay(s.items, s.done, MON + 3, MON + 3).filter((e) => e.item.id === t.id).map((e) => e.status), ["DONE"]);
+  assert.deepEqual(engineDone(t.id), [MON + 3]);
+  // When it was really done doesn't change: the two days until it goes to the trash still count from then.
+  assert.equal(store.listOf<Completion>("completions").find((c) => c.itemId === t.id)!.completedAt, when);
+});
+
+test("a task that wasn't ticked stays unticked when it moves, and a tick left on another day isn't touched", () => {
+  const t = task("Open", MON);
+  store.toggleCompletion(t.id, MON + 9, true);
+  store.saveItem({ ...t, startDay: MON + 3 });
+  assert.deepEqual(engineDone(t.id), [MON + 9]);
+});
+
+test("a ticked to-do given a date stays ticked, and one whose date is cleared too", () => {
+  const t = task("No date", null);
+  store.toggleCompletion(t.id, NO_DAY, true);
+  store.saveItem({ ...t, startDay: MON });
+  assert.deepEqual(engineDone(t.id), [MON]);
+  store.saveItem({ ...store.snapshot().byId.get(t.id)!, startDay: null });
+  assert.deepEqual(engineDone(t.id), [NO_DAY]);
+});
+
+test("changing a ticked task's time keeps the tick, and a repeating task's ticks stay on their days", () => {
+  const t = task("Time", MON);
+  store.toggleCompletion(t.id, MON, true);
+  store.saveItem({ ...t, startMin: 700 });
+  assert.deepEqual(engineDone(t.id), [MON]);
+  const rid = store.saveItem(newItem({ type: "TASK", title: "Rep", startDay: MON, freq: "DAILY" }));
+  const r = store.snapshot().byId.get(rid)!;
+  store.toggleCompletion(r.id, MON + 1, true);
+  store.saveItem({ ...r, startDay: MON + 1 });
+  assert.deepEqual(store.listOf<Completion>("completions").filter((c) => c.itemId === r.id).map((c) => c.day), [MON + 1]);
 });
