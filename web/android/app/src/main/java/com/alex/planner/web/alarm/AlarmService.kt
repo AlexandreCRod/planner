@@ -420,8 +420,8 @@ class AlarmService : Service() {
 
     private fun stopTheRest() {
         val ctx = applicationContext
-        val rest = RingInfo.bundle(this, clockId, reminderId, itemId, day)?.rest.orEmpty()
-        CoroutineScope(Dispatchers.IO).launch { RingInfo.stopRest(ctx, rest) }
+        val bundle = RingInfo.bundle(this, clockId, reminderId, itemId, day)
+        CoroutineScope(Dispatchers.IO).launch { RingInfo.stopRest(ctx, bundle) }
         finishAlarm()
     }
 

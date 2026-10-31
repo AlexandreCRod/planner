@@ -247,6 +247,53 @@ class UpcomingNoticeTest {
         assertTrue(ClockAlarms.snoozes(ctx).isEmpty())
     }
 
+    @Test fun stopTheRestAlsoQuietsTheBundlesSnooze() {
+        // A series: the first rang and was snoozed; Stop the rest comes from the second, while it rings.
+        val rang = clockIn(-5, id = 1).copy(series = 5)
+        val ringing = clockIn(-1, id = 2).copy(series = 5)
+        val last = clockIn(10, id = 3).copy(series = 5)
+        listOf(rang, ringing, last).forEach { ClockAlarms.save(ctx, it) }
+        ClockAlarms.snooze(ctx, 1, 15)
+        RingInfo.stopRest(ctx, RingInfo.bundle(ctx, 2, 0, 0, 0))
+        assertEquals("the snooze doesn't ring", null, snoozeSet(1))
+        assertTrue(ClockAlarms.snoozes(ctx).isEmpty())
+        restart()
+        assertEquals("nor after a restart", null, snoozeSet(1))
+        assertEquals("the last one skips the day", 1, ClockAlarms.get(ctx, 3)!!.skip.size)
+    }
+
+    @Test fun stopTheRestQuietsAOneOffSnoozedAheadOfItsTime() {
+        val first = clockIn(5, days = 0, id = 1).copy(series = 5)
+        val ringing = clockIn(-1, id = 2).copy(series = 5)
+        val last = clockIn(10, id = 3).copy(series = 5)
+        listOf(first, ringing, last).forEach { ClockAlarms.save(ctx, it) }
+        ClockAlarms.snoozeEarly(ctx, 1, ClockAlarms.nextRingAt(first)!!, 10)
+        RingInfo.stopRest(ctx, RingInfo.bundle(ctx, 2, 0, 0, 0))
+        assertEquals(null, snoozeSet(1))
+    }
+
+    @Test fun stopTheRestLeavesAnotherBundlesSnoozeAlone() {
+        val a = clockIn(-1, id = 1).copy(series = 5)
+        val b = clockIn(10, id = 2).copy(series = 5)
+        val other = clockIn(-3, id = 3)
+        listOf(a, b, other).forEach { ClockAlarms.save(ctx, it) }
+        ClockAlarms.snooze(ctx, 3, 15)
+        RingInfo.stopRest(ctx, RingInfo.bundle(ctx, 1, 0, 0, 0))
+        assertNotNull(snoozeSet(3))
+    }
+
+    @Test fun stopTheRestQuietsASnoozedWakeUpAlarm() {
+        val t = LocalDateTime.now().plusHours(1)
+        val day = t.toLocalDate().toEpochDay()
+        val item = Item(1, ItemType.EVENT, "Flight", startDay = day, startMin = t.hour * 60 + t.minute)
+        val (rang, ringing, last) = listOf(70L to 70, 71L to 62, 72L to 50).map { (id, off) -> Reminder(id, 1, off, AlertType.ALARM, wake = true) }
+        Mirror.update(ctx) { MirrorData(items = listOf(item), reminders = listOf(rang, ringing, last)) }
+        AlarmScheduler.snooze(ctx, item, rang, day, 15, AlarmScheduler.originalAt(item, t.toLocalDate(), 70, 540))
+        assertNotNull(AlarmOverrides.ringSnooze(ctx, 70))
+        RingInfo.stopRest(ctx, RingInfo.bundle(ctx, 0, 71, 1, day))
+        assertEquals(null, AlarmOverrides.ringSnooze(ctx, 70))
+    }
+
     @Test fun skippingAnOutOfDateTimeLeavesTheAlarmAlone() {
         val a = clockIn(30)
         ClockAlarms.save(ctx, a)

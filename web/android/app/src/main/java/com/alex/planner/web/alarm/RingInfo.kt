@@ -52,6 +52,8 @@ data class RingBundle(
     val rest: List<StillToRing>,
     /** Tells this bundle from others of the day: which one had the morning's first ring. */
     val key: String,
+    /** Those of the bundle waiting on a snooze: quieted with the rest, or they ring again after it. */
+    val snoozed: List<StillToRing> = emptyList(),
 ) {
     /** "Alarm 2 of 4 · next 07:20" */
     val line get() = "Alarm ${index + 1} of ${times.size}" + (next?.let { " · next ${formatTime(it)}" } ?: "")
@@ -64,13 +66,14 @@ object RingBundles {
         a.rangAt?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() == day } == true
 
     /** The clock alarms [id] rings with today, or null when it rings alone: its series, or its bundle as on the Clock page. */
-    fun forClock(all: List<ClockAlarm>, id: Long, window: Int, now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault()): RingBundle? {
+    fun forClock(all: List<ClockAlarm>, id: Long, window: Int, now: LocalDateTime, zone: ZoneId = ZoneId.systemDefault(), snoozed: Set<Long> = emptySet()): RingBundle? {
         val me = all.firstOrNull { it.id == id } ?: return null
         val day = now.toLocalDate()
         val nowMin = now.hour * 60 + now.minute
-        // A one-off that rang switched itself off: it still counts, as one of this morning's. One still on with its time past is tomorrow's.
+        // A one-off that rang switched itself off: it still counts, as one of this morning's, and so does one
+        // snoozed ahead of its time. One still on with its time past is tomorrow's.
         val today = all.filter { a ->
-            a.id == id || rangOn(a, day, zone) || (a.enabled && if (a.repeating) a.ringsOn(day) else a.minuteOfDay > nowMin)
+            a.id == id || a.id in snoozed || rangOn(a, day, zone) || (a.enabled && if (a.repeating) a.ringsOn(day) else a.minuteOfDay > nowMin)
         }.sortedBy { it.minuteOfDay }
         val group = if (me.series != null) today.filter { it.series == me.series } else {
             val at = day.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -84,20 +87,21 @@ object RingBundles {
             chains.firstOrNull { c -> c.any { it.id == id } }.orEmpty()
         }
         if (group.size < 2) return null
-        val later = group.filter { it.minuteOfDay > nowMin }
+        val later = group.filter { it.minuteOfDay > nowMin && (it.enabled || it.id !in snoozed) }
         return RingBundle(
             times = group.map { it.minuteOfDay },
             index = group.indexOfFirst { it.id == id },
             next = later.firstOrNull()?.minuteOfDay,
             rest = later.filter { it.enabled && it.id != id }.map { StillToRing(it.minuteOfDay, clockId = it.id) },
             key = me.series?.let { "s$it" } ?: "c${group.first().id}",
+            snoozed = group.filter { it.id in snoozed }.map { StillToRing(it.minuteOfDay, clockId = it.id) },
         )
     }
 
     /** An event's wake-up alarms for its occurrence on [day] (245), as they ring now; null if [reminderId] isn't one of several. */
     fun forWakeUp(
         item: Item, reminders: List<Reminder>, reminderId: Long, day: Long, defaultTime: Int, now: Long,
-        adjust: (Long, Long) -> Long?, zone: ZoneId = ZoneId.systemDefault(),
+        adjust: (Long, Long) -> Long?, zone: ZoneId = ZoneId.systemDefault(), snoozed: (Long) -> Boolean = { false },
     ): RingBundle? {
         val date = day.toDate()
         val wakes = reminders.filter { it.itemId == item.id && it.wake }.sortedByDescending { it.offsetMin }
@@ -112,6 +116,7 @@ object RingBundles {
             next = later.firstOrNull()?.let { minute(it.second) },
             rest = later.filter { it.first.id != reminderId }.map { (r, at) -> StillToRing(minute(at), reminderId = r.id, original = at) },
             key = "w${item.id}",
+            snoozed = wakes.filter { snoozed(it.first.id) }.map { (r, at) -> StillToRing(minute(at), reminderId = r.id, original = at) },
         )
     }
 }
@@ -166,15 +171,26 @@ object Morning {
 object RingInfo {
     fun bundle(context: Context, clockId: Long, reminderId: Long, itemId: Long, day: Long): RingBundle? = runCatching {
         val settings = Mirror.settings(context)
-        if (clockId != 0L) return@runCatching RingBundles.forClock(ClockAlarms.all(context), clockId, settings.bundleWindow, LocalDateTime.now())
+        val now = System.currentTimeMillis()
+        if (clockId != 0L) return@runCatching RingBundles.forClock(ClockAlarms.all(context), clockId, settings.bundleWindow, LocalDateTime.now(),
+            snoozed = ClockAlarms.snoozes(context).filterValues { it > now }.keys)
         if (reminderId == 0L || Mirror.reminder(context, reminderId)?.wake != true) return@runCatching null
         val item = Mirror.item(context, itemId) ?: return@runCatching null
-        RingBundles.forWakeUp(item, Mirror.current(context).reminders, reminderId, day, settings.defaultTaskTime, System.currentTimeMillis(), { r, at -> AlarmOverrides.adjusted(context, r, at) })
+        RingBundles.forWakeUp(item, Mirror.current(context).reminders, reminderId, day, settings.defaultTaskTime, now, { r, at -> AlarmOverrides.adjusted(context, r, at) },
+            snoozed = { AlarmOverrides.ringSnooze(context, it) != null })
     }.getOrNull()
 
-    /** The rest of a bundle stays quiet this time: the same as Skip on each one's notice. */
-    fun stopRest(context: Context, rest: List<StillToRing>) {
-        for (s in rest) runCatching {
+    /** Nothing of [bundle] rings again from a snooze. */
+    fun dropSnoozes(context: Context, bundle: RingBundle?) {
+        for (s in bundle?.snoozed.orEmpty()) runCatching {
+            if (s.clockId != 0L) ClockAlarms.cancelSnooze(context, s.clockId) else AlarmScheduler.cancelSnooze(context, s.reminderId)
+        }
+    }
+
+    /** The rest of a bundle stays quiet this time, the snoozed ones too: the same as Skip on each one's notice. */
+    fun stopRest(context: Context, bundle: RingBundle?) {
+        dropSnoozes(context, bundle)
+        for (s in bundle?.rest.orEmpty()) runCatching {
             if (s.clockId != 0L) {
                 val a = ClockAlarms.get(context, s.clockId) ?: return@runCatching
                 ClockAlarms.skip(context, a.id, ClockAlarms.nextRingAt(a) ?: return@runCatching)

@@ -260,6 +260,24 @@ class CardTest {
         ClockAlarms.reload()
     }
 
+    @Test fun skipAllAlsoDropsASnoozeOfTheBundle() {
+        ClockAlarms.reload()
+        val first = java.time.LocalDateTime.now().plusMinutes(10)
+        val list = (0..1L).map { i -> first.plusMinutes(i * 10).let { ClockAlarm(i + 1, it.hour, it.minute, label = "Wake up", days = 127) } }
+        list.forEach { ClockAlarms.save(ctx, it); ClockAlarms.notice(ctx, it.id, ClockAlarms.nextRingAt(it)!!) }
+        // It rang five minutes ago, and was snoozed.
+        val rang = java.time.LocalDateTime.now().minusMinutes(5).let { ClockAlarm(9, it.hour, it.minute, label = "Wake up", days = 127) }
+        ClockAlarms.save(ctx, rang)
+        ClockAlarms.snooze(ctx, 9, 15)
+        val intent = shadowOf(lines().single().actions[1].actionIntent).savedIntent
+        AlarmReceiver().onReceive(ctx, intent)
+        val until = System.currentTimeMillis() + 3_000
+        while ((ClockAlarms.get(ctx, 2)!!.skip.isEmpty() || ClockAlarms.snoozes(ctx).isNotEmpty()) && System.currentTimeMillis() < until) Thread.sleep(20)
+        assertEquals(1, ClockAlarms.get(ctx, 2)!!.skip.size)
+        assertTrue(ClockAlarms.snoozes(ctx).isEmpty())
+        ClockAlarms.reload()
+    }
+
     @Test fun theListLooksButtonsSayWhatABundlesDo() {
         look(card = 2)
         ClockAlarms.reload()

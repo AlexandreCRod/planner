@@ -265,7 +265,7 @@ object ClockAlarms {
         runCatching { cancelNotice(context, id) }
     }
 
-    private fun cancelSnooze(context: Context, id: Long) {
+    fun cancelSnooze(context: Context, id: Long) {
         cancelPending(context, id, snooze = true)
         clearSnooze(context, id)
     }

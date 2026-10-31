@@ -91,7 +91,10 @@ class AlarmReceiver : BroadcastReceiver() {
             ACTION_CARD_TICK -> { Card.refresh(context); return }
             ACTION_CARD_DISMISS -> { Card.dismissed(context, intent.getStringExtra(EXTRA_KEYS).orEmpty()); return }
             ACTION_CLOCK_SKIP_ALL -> {
-                intent.getStringExtra(EXTRA_KEYS).orEmpty().split(',').forEach { e ->
+                val keys = intent.getStringExtra(EXTRA_KEYS).orEmpty().split(',')
+                // Asked first: a skipped alarm no longer counts as today's.
+                keys.firstOrNull()?.substringBefore(':')?.toLongOrNull()?.let { RingInfo.dropSnoozes(context, RingInfo.bundle(context, it, 0, 0, 0)) }
+                keys.forEach { e ->
                     val id = e.substringBefore(':').toLongOrNull() ?: return@forEach
                     val at = e.substringAfter(':').toLongOrNull() ?: return@forEach
                     ClockAlarms.skip(context, id, at)
