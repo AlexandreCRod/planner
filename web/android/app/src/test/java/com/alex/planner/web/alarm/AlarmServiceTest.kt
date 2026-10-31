@@ -107,6 +107,36 @@ class AlarmServiceTest {
         assertNull(AlarmService.ringing)
     }
 
+    /** 295: Android or a phone's shade may refuse a swipe on an ongoing notification. */
+    @Test fun theRingingNotificationIsntMarkedOngoing() {
+        val n = shadowOf(ring(eventIntent())).lastForegroundNotification
+        assertEquals(0, n.flags and Notification.FLAG_ONGOING_EVENT)
+        assertNotNull(n.fullScreenIntent)
+    }
+
+    /** 295: a swipe whose delete intent never arrived. */
+    @Test fun theNotificationGoingStopsItEvenIfTheSwipeWasntDelivered() {
+        ring(clockIntent())
+        val nm = shadowOf(ctx.getSystemService(NotificationManager::class.java))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(77L, AlarmService.ringing?.clockId) // showing: it rings on
+        ctx.getSystemService(NotificationManager::class.java).cancelAll()
+        assertTrue(nm.allNotifications.isEmpty())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        assertEquals(77L, AlarmService.ringing?.clockId) // missing once isn't enough
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertNull(AlarmService.ringing)
+        assertTrue(!missed("Wake up"))
+    }
+
+    /** With notifications blocked the alarm has no card at all, and must ring all the same. */
+    @Test fun aNotificationThatNeverShowedDoesntStopIt() {
+        ring(clockIntent())
+        ctx.getSystemService(NotificationManager::class.java).cancelAll()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(5))
+        assertEquals(77L, AlarmService.ringing?.clockId)
+    }
+
     @Test fun timeoutLeavesAMissedNoticeForAnEventAlarm() {
         ring(eventIntent())
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(1).plusSeconds(1))

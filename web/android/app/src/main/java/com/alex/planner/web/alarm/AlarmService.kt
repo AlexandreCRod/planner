@@ -1,5 +1,6 @@
 package com.alex.planner.web.alarm
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -37,7 +38,7 @@ import kotlinx.coroutines.launch
  * Rings an alarm on the alarm audio stream (audible in silent and vibrate mode) until stopped or snoozed,
  * showing [AlarmActivity] full screen. It can always be stopped: Stop on the screen and in the
  * notification, a volume button (on the screen, and while only the notification shows: see
- * [listenToVolumeKeys]), swiping the notification away, or the item's own window ([ringing], AlarmPlugin.stopRinging).
+ * [listenToVolumeKeys]), swiping the notification away (its delete intent, and [watchNotification]), or the item's own window ([ringing], AlarmPlugin.stopRinging).
  * Gives up after the minutes set in Settings ([AlarmSettings.alarmRingMinutes] for events and tasks,
  * [AlarmSettings.clockRingMinutes] for clock alarms and timers) and leaves a missed-alarm notice.
  * (Copied from the native app's AlarmService.)
@@ -52,6 +53,7 @@ class AlarmService : Service() {
         /** When it began ringing (a restart after the app was killed carries on from then). */
         const val EXTRA_STARTED = "startedAt"
         private const val NOTIF_ID = 777_000
+        private const val NOTIFICATION_CHECK_MS = 1_000L
 
         /** What's ringing now (ids are 0 when not that kind), for the page's item window. */
         data class Ringing(val itemId: Long, val reminderId: Long, val day: Long, val clockId: Long, val timerId: Long)
@@ -155,7 +157,8 @@ class AlarmService : Service() {
             .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setOngoing(true)
+            // Not marked ongoing (295): Android keeps a foreground service's notification out of "Clear all"
+            // anyway, and a phone's own shade may refuse the swipe on an ongoing one.
             .setFullScreenIntent(fullPi, true)
             .setContentIntent(fullPi)
             .addAction(0, "Stop", stopIntent(this, ACTION_DISMISS))
@@ -180,6 +183,7 @@ class AlarmService : Service() {
         if (takeover && AlarmActivity.showing) runCatching { startActivity(full) }
         startRinging(sound)
         listenToVolumeKeys()
+        watchNotification()
         val ringMs = ringMillis(Mirror.settings(this), clockId != 0L || timerId != 0L)
         handler.postDelayed({ timeout() }, RingState.left(startedAt, ringMs, now).coerceAtLeast(1_000))
         // Awake while it rings (the receiver's hold covered the start), and saved in case the app is killed.
@@ -188,6 +192,25 @@ class AlarmService : Service() {
         ringing = Ringing(itemId, reminderId, day, clockId, timerId)
         AlarmEvents.changed("ringing")
         return START_STICKY
+    }
+
+    /**
+     * The safety net for a swipe (295). The notification's delete intent is how a swipe arrives, but it's
+     * one intent, and a phone's battery rules can drop it: then the card is gone and nothing is left to stop
+     * the sound with. So while it rings, the notification being gone also stops it. It must have shown first
+     * (with notifications blocked it never does, and the alarm must still ring), and be missing twice in a
+     * row, so a moment's doubt can't silence an alarm; an error while checking counts as still there.
+     */
+    private fun watchNotification() {
+        var seen = false
+        var missing = 0
+        lateinit var check: Runnable
+        check = Runnable {
+            val shown = runCatching { getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == NOTIF_ID } }.getOrDefault(true)
+            if (shown) { seen = true; missing = 0 } else if (seen) missing++
+            if (missing >= 2) finishAlarm() else handler.postDelayed(check, NOTIFICATION_CHECK_MS)
+        }
+        handler.postDelayed(check, NOTIFICATION_CHECK_MS)
     }
 
     /**

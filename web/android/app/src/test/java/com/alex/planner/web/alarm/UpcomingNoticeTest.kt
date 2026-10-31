@@ -53,7 +53,7 @@ class UpcomingNoticeTest {
         val a = clockIn(5 * 60)
         ClockAlarms.save(ctx, a)
         val notice = set(AlarmReceiver.ACTION_CLOCK_UPCOMING).single()
-        assertEquals(ClockAlarms.nextRingAt(a)!! - AlarmScheduler.UPCOMING_NOTICE_MS, notice.triggerAtMs)
+        assertEquals(ClockAlarms.nextRingAt(a)!! - 2 * 3_600_000L, notice.triggerAtMs)
         assertEquals(AlarmManager.RTC_WAKEUP, notice.type)
         assertTrue("allowed in Doze", notice.allowWhileIdle)
         assertEquals("exact: no window", 0L, notice.windowLengthMs)
