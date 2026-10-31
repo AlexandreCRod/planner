@@ -164,6 +164,89 @@ class UpcomingNoticeTest {
         assertNotNull(ClockAlarms.snoozes(ctx)[8])
     }
 
+    /** The snooze queued for clock alarm [id], if any, as AlarmManager holds it. */
+    private fun snoozeSet(id: Long) = set(AlarmReceiver.ACTION_CLOCK).firstOrNull {
+        val i = shadowOf(it.operation).savedIntent
+        i.getBooleanExtra(AlarmReceiver.EXTRA_SNOOZE, false) && i.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0) == id
+    }
+
+    /** What a restart does: AlarmManager forgets everything, then the boot receiver sets it all again. */
+    private fun restart() {
+        shadowOf(am).scheduledAlarms.toList().forEach { am.cancel(it.operation!!) }
+        ClockAlarms.reload()
+        ClockAlarms.rescheduleAll(ctx)
+    }
+
+    @Test fun aOneOffSnoozedFromTheNoticeStillRingsAfterARestart() {
+        val once = clockIn(60, days = 0)
+        ClockAlarms.save(ctx, once)
+        val at = ClockAlarms.nextRingAt(once)!!
+        ClockAlarms.snoozeEarly(ctx, once.id, at, 10)
+        restart()
+        assertEquals(at + 10 * 60_000L, snoozeSet(once.id)?.triggerAtMs)
+        assertEquals(at + 10 * 60_000L, ClockAlarms.snoozes(ctx)[once.id])
+        // Its next ring stays off: only the snooze comes back.
+        assertEquals(1, set(AlarmReceiver.ACTION_CLOCK).size)
+    }
+
+    @Test fun aOneOffSnoozedWhileRingingStillRingsAfterARestart() {
+        val once = clockIn(60, days = 0)
+        ClockAlarms.save(ctx, once)
+        ClockAlarms.afterRing(ctx, once.id)
+        ClockAlarms.snooze(ctx, once.id, 10)
+        val until = ClockAlarms.snoozes(ctx).getValue(once.id)
+        restart()
+        assertEquals(until, snoozeSet(once.id)?.triggerAtMs)
+    }
+
+    @Test fun theSnoozeSurvivesSettingTheAlarmsAgainWithoutARestart() {
+        // A time change, an update, or the notice setting changing: AlarmManager still holds the snooze.
+        val once = clockIn(60, days = 0)
+        ClockAlarms.save(ctx, once)
+        val at = ClockAlarms.nextRingAt(once)!!
+        ClockAlarms.snoozeEarly(ctx, once.id, at, 10)
+        ClockAlarms.rescheduleAll(ctx)
+        assertEquals(at + 10 * 60_000L, snoozeSet(once.id)?.triggerAtMs)
+    }
+
+    @Test fun anAlarmWhoseDatesHaveAllComeKeepsItsSnoozeToo() {
+        val today = LocalDateTime.now().toLocalDate().toEpochDay()
+        val t = LocalDateTime.now().minusHours(1)
+        val dated = ClockAlarm(9, t.hour, t.minute, dates = listOf(today - 1))
+        ClockAlarms.save(ctx, dated)
+        ClockAlarms.snooze(ctx, 9, 10)
+        restart()
+        assertNotNull(snoozeSet(9))
+    }
+
+    @Test fun editingASnoozedOneOffThatsOffKeepsTheSnooze() {
+        val once = clockIn(60, days = 0)
+        ClockAlarms.save(ctx, once)
+        ClockAlarms.snoozeEarly(ctx, once.id, ClockAlarms.nextRingAt(once)!!, 10)
+        ClockAlarms.save(ctx, ClockAlarms.get(ctx, once.id)!!.copy(label = "Other"))
+        assertNotNull(snoozeSet(once.id))
+    }
+
+    @Test fun switchingAnAlarmOffStillDropsItsSnooze() {
+        val a = clockIn(60)
+        ClockAlarms.save(ctx, a)
+        ClockAlarms.snooze(ctx, a.id, 10)
+        ClockAlarms.save(ctx, a.copy(enabled = false))
+        assertEquals(null, snoozeSet(a.id))
+        assertTrue(ClockAlarms.snoozes(ctx).isEmpty())
+        restart()
+        assertEquals(null, snoozeSet(a.id))
+    }
+
+    @Test fun deletingAnAlarmDropsItsSnooze() {
+        val once = clockIn(60, days = 0)
+        ClockAlarms.save(ctx, once)
+        ClockAlarms.snoozeEarly(ctx, once.id, ClockAlarms.nextRingAt(once)!!, 10)
+        ClockAlarms.delete(ctx, once.id)
+        assertEquals(null, snoozeSet(once.id))
+        assertTrue(ClockAlarms.snoozes(ctx).isEmpty())
+    }
+
     @Test fun skippingAnOutOfDateTimeLeavesTheAlarmAlone() {
         val a = clockIn(30)
         ClockAlarms.save(ctx, a)

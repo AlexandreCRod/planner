@@ -87,8 +87,10 @@ object ClockAlarms {
     }
 
     fun save(context: Context, alarm: ClockAlarm) {
+        // An alarm that was already off (a one-off waiting on its snooze) can be edited without losing the snooze.
+        val wasOff = get(context, alarm.id)?.enabled == false
         synchronized(lock) { store(context, all(context).filterNot { it.id == alarm.id } + alarm) }
-        schedule(context, alarm)
+        schedule(context, alarm, keepSnooze = wasOff)
     }
 
     fun delete(context: Context, id: Long) {
@@ -109,10 +111,13 @@ object ClockAlarms {
         return null
     }
 
-    /** Sets every alarm again (after a restart, an update, a clock change), and the snoozes still to ring (194). */
+    /**
+     * Sets every alarm again (after a restart, an update, a clock change), and the snoozes still to ring (194).
+     * A one-off is off once it rang or was snoozed ahead, so its snooze is the only ring it has left.
+     */
     fun rescheduleAll(context: Context) {
         val list = load(context)
-        list.forEach { schedule(context, it) }
+        list.forEach { schedule(context, it, keepSnooze = true) }
         val now = System.currentTimeMillis()
         for ((id, until) in snoozes(context)) {
             if (list.none { it.id == id }) clearSnooze(context, id)
@@ -120,9 +125,10 @@ object ClockAlarms {
         }
     }
 
-    fun schedule(context: Context, a: ClockAlarm) {
-        if (!a.enabled) { cancel(context, a.id); return }
-        val next = nextRing(a) ?: run { cancel(context, a.id); return }
+    fun schedule(context: Context, a: ClockAlarm, keepSnooze: Boolean = false) {
+        val off = { if (keepSnooze) cancelNextRing(context, a.id) else cancel(context, a.id) }
+        if (!a.enabled) { off(); return }
+        val next = nextRing(a) ?: run { off(); return }
         val at = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         set(context, a.id, at, snooze = false)
         Armed.putClock(context, a.id, at)
@@ -249,10 +255,23 @@ object ClockAlarms {
     }
 
     fun cancel(context: Context, id: Long) {
-        val am = context.getSystemService(AlarmManager::class.java)
-        listOf(false, true).forEach { s -> pending(context, id, s, create = false)?.let { am.cancel(it); it.cancel() } }
-        clearSnooze(context, id)
+        cancelNextRing(context, id)
+        cancelSnooze(context, id)
+    }
+
+    private fun cancelNextRing(context: Context, id: Long) {
+        cancelPending(context, id, snooze = false)
         Armed.removeClock(context, id)
         runCatching { cancelNotice(context, id) }
+    }
+
+    private fun cancelSnooze(context: Context, id: Long) {
+        cancelPending(context, id, snooze = true)
+        clearSnooze(context, id)
+    }
+
+    private fun cancelPending(context: Context, id: Long, snooze: Boolean) {
+        val am = context.getSystemService(AlarmManager::class.java)
+        pending(context, id, snooze, create = false)?.let { am.cancel(it); it.cancel() }
     }
 }
