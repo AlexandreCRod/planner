@@ -76,6 +76,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 /* No will-change: the pager is only its own layer while it moves (see slide() in PhoneApp). */
 .phone .p-track { position: absolute; inset: 0; }
 .phone .p-page { position: absolute; top: 0; bottom: 0; width: 100%; overflow: hidden; contain: layout paint style; background: var(--bg); }
+/* A sideways swipe anywhere on a page is the app's (300): the browser only scrolls up and down, except in
+   the rows that scroll sideways themselves, which say so below. */
+.phone .p-page, .phone .p-page * { touch-action: pan-y; }
 
 .phone .p-bar {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; display: flex;
@@ -374,7 +377,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 
 /* ---------- Shared M3 pieces (chrome.tsx) ---------- */
 /* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
-.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
 .phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }

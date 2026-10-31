@@ -7,7 +7,7 @@
 // per frame, at sub-pixel offsets, through the layers' style (no React render during the drag).
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
-import { swallowNextClick } from "./gesture.ts";
+import { type SwipeHandlers, claimSwipe, swallowNextClick } from "./gesture.ts";
 import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { FLICK, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
 import { deskPager } from "./desk.ts";
@@ -16,6 +16,55 @@ import { deskPager } from "./desk.ts";
 export const SNAP_VELOCITY = FLICK;
 /** Inner pagers move this much further than the finger, so a short swipe turns a page. */
 export const SWIPE_GAIN = 1.2;
+
+/**
+ * Settings > "Swipe pages to change tab" (300), on by default: a sideways swipe on a page changes tab, and
+ * days and weeks change on the top bar. Off, the pages change the day or week, as before.
+ */
+export const SWIPE_TABS_KEY = "swipeTabs";
+export const swipeTabs = () => { try { return localStorage.getItem(SWIPE_TABS_KEY) !== "false"; } catch { return true; } };
+/** Settings > "Bottom bar changes days and weeks" (300), off by default; only while the pages change tabs. */
+export const BAR_DAYS_KEY = "barDays";
+export const barDays = () => { try { return swipeTabs() && localStorage.getItem(BAR_DAYS_KEY) === "true"; } catch { return false; } };
+
+/** Places that keep a sideways drag to themselves: the tab pager and the pagers on the way never start there. */
+export const NO_SWIPE = "input, textarea, [contenteditable], .p-switch, .pa-noswipe, .pg-chart, .p-slide, .tw-col, .pg-resize, .p-menu, .p-menu-scrim, .p-sheet-root";
+
+/** A pager moved from outside (the top bar, the bottom bar's option, the ‹ › buttons), with its own slide. */
+export interface PageTurner {
+  /** A drag begins. */
+  start(): void;
+  /** The finger is [dx] px from where the drag began. */
+  move(dx: number): void;
+  /** Let go at [vx] px/ms. */
+  end(vx: number): void;
+  /** One page that way, as if flicked. */
+  turn(dir: 1 | -1): void;
+}
+/** The day pager of Today and whichever view the Calendar shows. */
+export const turners: Record<string, { current: PageTurner | null }> = { today: { current: null }, calendar: { current: null } };
+
+/**
+ * The top bar's swipe: what useHorizontalSwipe needs to drive a page's turner. With no turner there (the
+ * Agenda has no pager) a swipe past the middle or a flick calls [step] when the finger lifts.
+ */
+export function turnerSwipe(key: string, step: (dir: 1 | -1) => void, width: () => number): SwipeHandlers {
+  const t = turners[key];
+  let from = 0;
+  return {
+    accept: () => swipeTabs(),
+    onStart: () => { t.current?.start(); from = 0; },
+    onMove: (dx) => {
+      if (!from) from = Math.sign(dx) * TOUCH_SLOP; // from where the slop ran out, as a pager's drag
+      t.current?.move(dx - from);
+    },
+    onEnd: (dx, vx) => {
+      if (t.current) { t.current.end(vx); return; }
+      const dir = pageTarget(dx, vx, width());
+      if (dir) step(dir);
+    },
+  };
+}
 
 /**
  * Which page to settle on after a drag of [dx] px at [vx] px/ms on pages [w] px wide: 1 for the next
@@ -52,8 +101,12 @@ export interface PagerOptions {
   canStep?: (dir: 1 | -1) => boolean;
   /** Told where the pages are as they move (px, negative towards the next page), e.g. to move a tab indicator. */
   onMove?: (x: number, w: number) => void;
-  /** At the first or last page, a drag towards no page is left alone (for a row's own swipe) instead of giving a little. */
-  yieldAtEdge?: boolean;
+  /** At the first or last page, a drag towards no page is left alone (for a row's own swipe, or the tab pager) instead of giving a little. */
+  yieldAtEdge?: boolean | (() => boolean);
+  /** Whether the pager's own area takes swipes now; when not, it's only moved through [turner]. Left out: always. */
+  pages?: () => boolean;
+  /** Filled with the way to move this pager from outside while it's mounted. */
+  turner?: { current: PageTurner | null };
   /** Told when a settle has finished (after onStep, if it turned), e.g. to put a tab indicator back. */
   onSettled?: () => void;
 }
@@ -77,6 +130,13 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     let cw = 0;
     const width = () => cw || (cw = o.current.width?.() ?? el.clientWidth);
 
+    /** Where the pages go for a finger [dx] px from the start: past the first or last page, only a little. */
+    const dragged = (dx: number) => {
+      const w = width();
+      let x = SWIPE_GAIN * dx;
+      if (x && o.current.canStep && !o.current.canStep(x < 0 ? 1 : -1)) x = rubberBand(x, w);
+      return Math.max(-w, Math.min(w, x));
+    };
     const place = (x: number) => {
       const t = x ? `translate3d(${x}px,0,0)` : "";
       for (const l of o.current.layers()) if (l) l.style.transform = t;
@@ -114,16 +174,14 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
         if (selectingText()) { g.done = true; return; }
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
-        if (o.current.yieldAtEdge && o.current.canStep && !o.current.canStep(dx < 0 ? 1 : -1)) { g.done = true; return; }
+        const yields = typeof o.current.yieldAtEdge === "function" ? o.current.yieldAtEdge() : o.current.yieldAtEdge;
+        if (yields && o.current.canStep && !o.current.canStep(dx < 0 ? 1 : -1)) { g.done = true; return; }
         g.dragging = true;
+        claimSwipe(e.pointerId);
         el.addEventListener("touchmove", onTouchMove, { passive: false });
         g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
       }
-      const w = width();
-      let x = SWIPE_GAIN * (e.clientX - g.x0);
-      // Past the first or last page the content only gives a little, like a rubber band.
-      if (x && o.current.canStep && !o.current.canStep(x < 0 ? 1 : -1)) x = rubberBand(x, w);
-      g.dx = Math.max(-w, Math.min(w, x));
+      g.dx = dragged(e.clientX - g.x0);
       write(g.dx);
     };
     const onUp = (e: PointerEvent) => {
@@ -142,6 +200,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      if (o.current.pages && !o.current.pages()) return;
       if (o.current.allow && !o.current.allow(e.target as Element)) return;
       if (textTouch(e.target)) return; // selecting or editing text: the browser's
       // A finger landing while a page is still settling finishes that at once.
@@ -156,14 +215,26 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
     el.addEventListener("pointerdown", onDown, { passive: true });
     // The mouse and keyboard: ← → (while this is the pager in view) and a sideways trackpad swipe turn
     // one page, on the same spring, as if flicked.
-    const undoDesk = deskPager(el, (dir) => {
-      if (g?.dragging) return;
+    const turn = (dir: 1 | -1) => {
+      if (g?.dragging) return false;
       if (stopAnim) { stopAnim(); finishAnim?.(); }
-      if (o.current.canStep && !o.current.canStep(dir)) return;
+      if (o.current.canStep && !o.current.canStep(dir)) return false;
       cw = 0;
       settle(0, 0, dir);
-    }, (t) => !o.current.allow || o.current.allow(t));
+      return true;
+    };
+    const undoDesk = deskPager(el, turn, (t) => !o.current.allow || o.current.allow(t), () => !o.current.pages || o.current.pages());
+    let tx = 0;
+    const turner: PageTurner = {
+      start: () => { if (stopAnim) { stopAnim(); finishAnim?.(); } cw = 0; tx = 0; },
+      move: (dx) => { tx = dragged(dx); write(tx); },
+      end: (vx) => { settle(tx, SWIPE_GAIN * vx); },
+      turn,
+    };
+    const slot = o.current.turner;
+    if (slot) slot.current = turner;
     return () => {
+      if (slot?.current === turner) slot.current = null;
       stop(); stopAnim?.(); write.cancel(); undoDesk();
       el.removeEventListener("pointerdown", onDown);
     };

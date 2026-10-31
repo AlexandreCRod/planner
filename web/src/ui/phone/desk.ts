@@ -7,11 +7,11 @@ import { WheelPager, deskAction, typingTarget } from "./keys.ts";
 
 // ---------- Pagers ----------
 
-interface Pager { el: HTMLElement; step: (dir: 1 | -1) => void }
+interface Pager { el: HTMLElement; step: (dir: 1 | -1) => boolean | void }
 const pagers = new Set<Pager>();
 
 /** Whether a box between [t] and [root] scrolls sideways itself (a chip row): its wheel is its own. */
-function scrollsSideways(t: Element, root: Element): boolean {
+export function scrollsSideways(t: Element, root: Element): boolean {
   for (let n: Element | null = t; n && n !== root; n = n.parentElement) {
     if (n.scrollWidth > n.clientWidth + 1) {
       const o = getComputedStyle(n).overflowX;
@@ -38,18 +38,19 @@ function pagerInView(): Pager | null {
   return best;
 }
 
+/** Wheel events a pager inside has already turned a page for: the pagers around it leave them. */
+const turned = new WeakSet<WheelEvent>();
+
 /**
- * Makes [el] a pager for the mouse and keyboard: ← and → turn it while it's the one in view, and a
- * sideways trackpad swipe (or Shift+wheel) over it turns one page; a row inside that scrolls sideways
- * keeps its own, as does anything [allow] turns down. [step] turns one page with the pager's own slide.
+ * A sideways trackpad swipe (or Shift+wheel) over [el] turns one page; a row inside that scrolls sideways
+ * keeps its own, as does anything [allow] turns down. [step] returning false means there's no page that
+ * way, so the swipe goes on to the pager around this one. [on]: whether it listens at the moment.
  * Returns the undo.
  */
-export function deskPager(el: HTMLElement, step: (dir: 1 | -1) => void, allow?: (t: Element) => boolean): () => void {
-  const p: Pager = { el, step };
-  pagers.add(p);
+export function deskWheel(el: HTMLElement, step: (dir: 1 | -1) => boolean | void, allow?: (t: Element) => boolean, on?: () => boolean): () => void {
   const wheel = new WheelPager();
   const onWheel = (e: WheelEvent) => {
-    if (e.ctrlKey) return; // a zoom
+    if (e.ctrlKey || turned.has(e) || (on && !on())) return; // a zoom, or someone else's
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientWidth : 1;
     const dx = e.deltaX * unit, dy = e.deltaY * unit;
     if (Math.abs(dx) > Math.abs(dy)) {
@@ -59,10 +60,22 @@ export function deskPager(el: HTMLElement, step: (dir: 1 | -1) => void, allow?: 
       if (e.cancelable) e.preventDefault();
     }
     const dir = wheel.feed(dx, dy, e.timeStamp);
-    if (dir) step(dir);
+    if (dir && step(dir) !== false) turned.add(e);
   };
   el.addEventListener("wheel", onWheel, { passive: false });
-  return () => { pagers.delete(p); el.removeEventListener("wheel", onWheel); };
+  return () => el.removeEventListener("wheel", onWheel);
+}
+
+/**
+ * Makes [el] a pager for the mouse and keyboard: ← and → turn it while it's the one in view, and a
+ * sideways trackpad swipe over it turns one page (deskWheel, listening while [wheelOn] says so).
+ * Returns the undo.
+ */
+export function deskPager(el: HTMLElement, step: (dir: 1 | -1) => boolean | void, allow?: (t: Element) => boolean, wheelOn?: () => boolean): () => void {
+  const p: Pager = { el, step };
+  pagers.add(p);
+  const undoWheel = deskWheel(el, step, allow, wheelOn);
+  return () => { pagers.delete(p); undoWheel(); };
 }
 
 // ---------- Right-click ----------

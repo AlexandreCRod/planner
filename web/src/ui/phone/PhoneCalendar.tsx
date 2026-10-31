@@ -21,7 +21,8 @@ import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, type Men
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
-import { SWIPE_GAIN, pageTarget, spring, useSwipePager } from "./pager.ts";
+import { type PageTurner, SWIPE_GAIN, pageTarget, spring, swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
+import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
 import { useLook } from "./looks.ts";
 import { TOUCH_SLOP } from "./press.ts";
@@ -99,6 +100,9 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const step = (dir: number) => setAnchor(
     mode === "day" ? anchor + dir : mode === "3day" ? anchor + 3 * dir : mode === "week" || mode === "agenda" ? anchor + 7 * dir
       : mode === "month" ? addMonths(anchor, dir) : addMonths(anchor, 12 * dir));
+  /** One range that way, with the swipe's slide (the Agenda has no pager to slide). */
+  const turn = (dir: 1 | -1) => { if (turners.calendar.current) turners.calendar.current.turn(dir); else step(dir); };
+  const head = useHorizontalSwipe<HTMLElement>(turnerSwipe("calendar", turn, () => window.innerWidth));
   const { y, m } = ymd(anchor);
   const weekStart = startOfWeek(anchor, mondayFirst());
   const title = mode === "year" ? String(y) : mode === "day" ? formatDateShort(anchor) : mode === "month" || mode === "agenda" ? `${monthLong(m)} ${y}`
@@ -125,18 +129,18 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   return (
     <div className="p-scaffold p-cal">
       <div className="p-statusbar" />
-      <header className="p-calhead">
+      <header className="p-calhead" ref={head}>
         <h2 className="t-title-medium">{title}</h2>
-        <IconButton icon="fArrowBack" label="Previous" onClick={() => step(-1)} />
+        <IconButton icon="fArrowBack" label="Previous" onClick={() => turn(-1)} />
         <IconButton icon="oToday" label="Today" onClick={() => setAnchor(todayEpoch())} />
-        <IconButton icon="fArrowForward" label="Next" onClick={() => step(1)} />
+        <IconButton icon="fArrowForward" label="Next" onClick={() => turn(1)} />
         <div className="p-menu-anchor">
           <IconButton icon="oViewAgenda" label="View" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={menuItems} />
         </div>
       </header>
       <div className="p-calbody">
-        {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
+        {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
           onDayHeader={(d) => { setAnchor(d); setMode("day"); }} onDayNote={(d) => openDailyNote(s, d)} />}
         {mode === "month" && <MonthView s={s} items={items} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
@@ -191,7 +195,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
   const t = todayEpoch();
   const strip = useRef<HTMLDivElement>(null);
   const pager = useSwipePager<HTMLDivElement>({
-    layers: () => [strip.current], onStep: (dir) => onStep(dir),
+    layers: () => [strip.current], onStep: (dir) => onStep(dir), pages: () => !swipeTabs(), turner: turners.calendar,
   });
   const months = [monthOf(addMonths(anchor, -1)), monthOf(anchor), monthOf(addMonths(anchor, 1))];
   const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
@@ -316,7 +320,7 @@ function YearView({ s, items, anchor, onStep, onMonth }: { s: Snapshot; items: I
   const t = todayEpoch();
   const strip = useRef<HTMLDivElement>(null);
   const pager = useSwipePager<HTMLDivElement>({
-    layers: () => [strip.current], onStep: (dir) => onStep(dir),
+    layers: () => [strip.current], onStep: (dir) => onStep(dir), pages: () => !swipeTabs(), turner: turners.calendar,
   });
   return (
     <div className="p-yearview" ref={pager}>
@@ -421,8 +425,8 @@ interface Gesture {
   flung: boolean;
 }
 
-function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
-  s: Snapshot; items: Item[]; first: number; count: number; onStep: (dir: number) => void;
+function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
+  s: Snapshot; items: Item[]; first: number; count: number; onStep: (dir: number) => void; turn: (dir: 1 | -1) => void;
   onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
@@ -430,6 +434,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
   const days = useMemo(() => Array.from({ length: count }, (_, i) => first + i), [first, count]);
   const t = todayEpoch();
   const scroller = useRef<HTMLDivElement>(null);
+  // The days' row is part of the top bar for swipes: that's where the dates are.
+  const headRow = useHorizontalSwipe<HTMLDivElement>(turnerSwipe("calendar", turn, () => window.innerWidth));
   const layer = useRef<HTMLDivElement>(null);
   const headDays = useRef<HTMLDivElement>(null);
   const allDayDays = useRef<HTMLDivElement>(null);
@@ -653,6 +659,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     const lift = () => {
       if (!g || !g.block) return;
       g.lifted = true;
+      claimSwipe(g.id);
       feel("pickup");
       g.block.classList.add("lifted");
       el.classList.add("dragging");
@@ -719,7 +726,8 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
         g.moved = true;
         clearTimeout(g.timer);
         if (g.mouse && g.block) { lift(); return; }
-        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.2) { g.swiping = true; g.x0 += Math.sign(g.dx) * TOUCH_SLOP; g.dx = e.clientX - g.x0; swipeTo(g); }
+        // (A sideways swipe here changes tab by default: the tab pager takes it, 300.)
+        if (Math.abs(g.dx) > Math.abs(g.dy) * 1.2 && !swipeTabs()) { g.swiping = true; g.x0 += Math.sign(g.dx) * TOUCH_SLOP; g.dx = e.clientX - g.x0; swipeTo(g); }
       }
     };
 
@@ -847,11 +855,24 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
 
     // ----- Mouse and keyboard: ← → and a sideways trackpad swipe turn the days, as a flick would;
     // Ctrl+wheel (a trackpad's pinch) zooms like two fingers, about the pointer.
-    const undoDesk = deskPager(el, (dir) => {
+    const stepRange = (dir: 1 | -1) => {
       if (g || pinch) return;
       if (settling) { settling.stop(); settling.end(); }
       settleSwipe(0, 0, dir);
-    });
+    };
+    const undoDesk = deskPager(el, stepRange, undefined, () => !swipeTabs());
+    let turnX = 0;
+    const turner: PageTurner = {
+      start: () => { if (settling) { settling.stop(); settling.end(); } turnX = 0; },
+      move: (dx) => {
+        const w = layer.current?.clientWidth ?? 300;
+        turnX = Math.max(-w, Math.min(w, SWIPE_GAIN * dx));
+        writeLayers(turnX);
+      },
+      end: (vx) => settleSwipe(turnX, SWIPE_GAIN * vx),
+      turn: stepRange,
+    };
+    turners.calendar.current = turner;
     let zoomTarget = 0, zoomY = 0, saveTimer = 0;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey || g?.lifted || pinch) return;
@@ -887,6 +908,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
     el.addEventListener("touchcancel", onTouchEnd, { passive: true });
     el.addEventListener("contextmenu", noMenu);
     return () => {
+      if (turners.calendar.current === turner) turners.calendar.current = null;
       end();
       settling?.stop();
       cancelAnimationFrame(zoomRaf);
@@ -912,7 +934,7 @@ function TimeGrid({ s, items, first, count, onStep, onNewAt, pending, noteDays, 
 
   return (
     <div className="pg">
-      <div className="pg-head">
+      <div className="pg-head" ref={headRow}>
         <div className="pg-gutter" />
         <div className="pg-head-days"><div className="pg-strip" ref={headDays}>
           {[0, 1, 2].map((k) => <span key={`l${k}`} className="pg-rangeline" style={{ left: `${(k * 100) / 3}%` }} />)}

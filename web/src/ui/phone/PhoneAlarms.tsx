@@ -21,7 +21,7 @@ import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from 
 import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
-import { spring, useSwipePager } from "./pager.ts";
+import { spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
@@ -223,6 +223,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
     canStep: (d) => idx.current + d >= 0 && idx.current + d <= LAST,
     onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; placeIndicator(idx.current - x / w); },
     allow: (t) => !t.closest(".p-switch, input, textarea, .pa-noswipe"),
+    yieldAtEdge: swipeTabs,
   });
 
   const newAlarm = () => {

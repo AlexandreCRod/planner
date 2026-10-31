@@ -26,7 +26,7 @@ import { go, replaceRoute } from "../shared/common.tsx";
 import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, xDomain } from "./chartMath.ts";
 import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
-import { spring, useSwipePager } from "./pager.ts";
+import { NO_SWIPE, spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
 import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
@@ -159,7 +159,8 @@ function TabsPager({ index, setIndex, children }: { index: number; setIndex: (i:
     canStep: (d) => idx.current + d >= 0 && idx.current + d <= TABS.length - 1,
     onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
     onSettled: () => track.current?.(null),
-    allow: (el) => !el.closest("input, textarea"),
+    allow: (el) => !el.closest(NO_SWIPE),
+    yieldAtEdge: swipeTabs,
   });
   return (
     <div className="pg-list">

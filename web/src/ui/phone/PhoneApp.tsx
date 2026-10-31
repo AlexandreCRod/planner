@@ -1,6 +1,6 @@
 // The phone shell: pages side by side like a ViewPager, a Material bottom bar that drags them (a finger
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
-// Like the native HomeScreen, the pages themselves don't turn sideways (their swipes change the day).
+// A sideways swipe anywhere on a page changes tab too (300); inner pagers, rows and charts go first.
 // In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
 // top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
 import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
@@ -17,8 +17,9 @@ import { PhoneItemEditorPage, PhoneItemView } from "./PhoneItem.tsx";
 import { MIcon, TabGlyph, openSearch } from "./chrome.tsx";
 import { SnackbarHost } from "./m3.tsx";
 import { DrumHost } from "./TimeWheel.tsx";
-import { swallowNextClick } from "./gesture.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { clearSwipeClaim, swallowNextClick, swipeClaimed } from "./gesture.ts";
+import { rowDragging } from "./rowDrag.ts";
+import { LONG_PRESS, TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendarImport } from "./CalendarImport.tsx";
@@ -29,11 +30,11 @@ import "./phone.css";
 import "./wide.css";
 import { App as CapApp } from "@capacitor/app";
 import { isNative, useWide } from "../../platform.ts";
-import { setDeskHandlers } from "./desk.ts";
+import { deskWheel, scrollsSideways, setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { BAR_GAIN, barSwipeReversed, barTarget, useKeepTasksTab } from "./pager.ts";
-import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, springAt } from "./motion.ts";
+import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
+import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, springAt } from "./motion.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
@@ -126,6 +127,12 @@ class ShellPos {
   grab() { if (this.anim || this.chase) this.stop(); }
   /** At once (a tap on a tab). */
   jump(i: number) { this.stop(); this.moving = false; this.target = i; this.draw(i); }
+  /** Directly under a finger on the pages, already once per frame: [p] in pages. */
+  drag(p: number) {
+    this.stop();
+    this.moving = true;
+    this.draw(p);
+  }
   /** Follows a finger: [target] in pages. */
   follow(target: number) {
     this.anim?.stop(); this.anim = null;
@@ -273,6 +280,102 @@ export function PhoneApp() {
     return () => window.removeEventListener("hashchange", on);
   }, []);
   useLayoutEffect(() => watchNavButtons(), []);
+  // The pages' own swipe (300). This is the last gesture in line: everything inside the page sees the finger
+  // first and claims it (gesture.ts), so this only takes what nobody wanted. The pages move once per frame
+  // through the shell's transform, at the finger's own speed times the pagers' gain, and past the first or
+  // last tab give a little, like the other pagers. A later guard (275) goes in `refused`.
+  const swipeState = useRef({ settle: (_i: number, _v?: number) => {}, noteOpen: false });
+  useEffect(() => {
+    const el = pagerEl.current;
+    if (!el) return;
+    let g: { id: number; x0: number; y0: number; t0: number; from: number; w: number; p: number; dragging: boolean; vt: VelocityTracker } | null = null;
+    const write = frameWriter((p: number) => pos.drag(p));
+    const noScroll = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
+    const stop = () => {
+      g = null;
+      el.removeEventListener("touchmove", noScroll);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    /** The finger wasn't for the pages: if it caught them moving, they go on to where they were going. */
+    const leave = () => { stop(); if (!pos.resting) swipeState.current.settle(pos.target); };
+    const refused = (t: Element) => !!t.closest(NO_SWIPE) || textTouch(t) || scrollsSideways(t, el);
+    const onMove = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      g.vt.addEvent(e, "x");
+      if (!g.dragging) {
+        const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+        if (swipeClaimed(g.id) || rowDragging() || selectingText()) { leave(); return; }
+        if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { leave(); return; } // a scroll
+        if (Math.abs(dx) <= TOUCH_SLOP) return;
+        // A finger that stayed still that long was a long press: what it picked up is its own.
+        if (e.timeStamp - g.t0 > LONG_PRESS) { leave(); return; }
+        g.dragging = true;
+        g.x0 += Math.sign(dx) * TOUCH_SLOP; // like Compose, the drag starts from where the slop ran out
+        el.addEventListener("touchmove", noScroll, { passive: false });
+      }
+      let p = g.from - (SWIPE_GAIN * (e.clientX - g.x0)) / g.w;
+      if (p < 0) p = rubberBand(p * g.w, g.w) / g.w;
+      else if (p > pos.last) p = pos.last + rubberBand((p - pos.last) * g.w, g.w) / g.w;
+      g.p = clamp(p, g.from - 1, g.from + 1);
+      write(g.p);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      const cur = g;
+      if (!cur.dragging) { leave(); return; }
+      stop();
+      write.cancel();
+      swallowNextClick();
+      const vx = -SWIPE_GAIN * cur.vt.velocity(e.timeStamp); // towards the next tab
+      pos.drag(cur.p);
+      swipeState.current.settle(barTarget(Math.round(cur.from), cur.p, vx, pos.last), vx / cur.w);
+    };
+    const onCancel = (e: PointerEvent) => {
+      if (!g || e.pointerId !== g.id) return;
+      const cur = g;
+      if (!cur.dragging) { leave(); return; }
+      stop();
+      write.cancel();
+      swipeState.current.settle(clamp(Math.round(cur.p), 0, pos.last), 0);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.isPrimary) clearSwipeClaim();
+      if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0) || !swipeTabs()) return;
+      if (swipeState.current.noteOpen || refused(e.target as Element)) return;
+      pos.grab();
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, from: pos.p, w: el.clientWidth || 1, p: pos.p, dragging: false, vt: new VelocityTracker() };
+      g.vt.add(e.timeStamp, e.clientX);
+      window.addEventListener("pointermove", onMove, { passive: true });
+      window.addEventListener("pointerup", onUp, { passive: true });
+      window.addEventListener("pointercancel", onCancel, { passive: true });
+    };
+    // A second finger is a pinch (the calendar's zoom), not a swipe.
+    const onTwo = (e: TouchEvent) => {
+      if (!g || e.touches.length < 2) return;
+      const cur = g;
+      stop();
+      write.cancel();
+      if (cur.dragging || !pos.resting) swipeState.current.settle(clamp(Math.round(pos.p), 0, pos.last), 0);
+    };
+    // A sideways trackpad swipe does the same (inner pagers first; ← → stay with the day and the week).
+    const undoWheel = deskWheel(el, (dir) => {
+      const i = clamp(Math.round(pos.target) + dir, 0, pos.last);
+      if (i === Math.round(pos.target)) return false;
+      swipeState.current.settle(i, 0);
+      return true;
+    }, (t) => !refused(t) && !swipeState.current.noteOpen, swipeTabs);
+    el.addEventListener("pointerdown", onDown, { passive: true });
+    el.addEventListener("touchstart", onTwo, { passive: true });
+    return () => {
+      stop();
+      write.cancel();
+      undoWheel();
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("touchstart", onTwo);
+    };
+  }, [pos]);
 
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
@@ -381,6 +484,7 @@ export function PhoneApp() {
     }
   }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  swipeState.current = { settle, noteOpen: route === "note" };
   const overlay = routeTab < 0 && route !== "" ? route : null;
   const noteShown = route === "note" && !!dock;
   // While writing, the keyboard covers the bar: the note takes the whole screen.
@@ -582,7 +686,8 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
     // The tab width is measured once, as the finger lands, not on every move.
     // dir: 1 when the pages follow the finger along the bar (the indicator under it), -1 when reversed
     // in Settings (a slide to the right goes back, as a swipe on the pages does).
-    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1 } | null = null;
+    // turner: Settings has the bar change days and weeks (300), on a page that has them.
+    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1; turner: PageTurner | null } | null = null;
     const tabW = () => g?.w ?? el.clientWidth / tabsRef.current.length;
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -596,8 +701,12 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
-      if (!g.sliding) { pill.current?.classList.remove("pop"); g.x0 += Math.sign(dx) * TOUCH_SLOP; }
+      if (!g.sliding) {
+        g.x0 += Math.sign(dx) * TOUCH_SLOP;
+        if (g.turner) g.turner.start(); else pill.current?.classList.remove("pop");
+      }
       g.sliding = true;
+      if (g.turner) { g.turner.move(e.clientX - g.x0); return; }
       // The pages go a little further than the finger, so a short slide turns a page.
       pos.follow(clamp(g.from + (g.dir * BAR_GAIN * (e.clientX - g.x0)) / tabW(), 0, pos.last));
     };
@@ -608,7 +717,10 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
     };
     const up = (e: PointerEvent) => {
       if (!g) return;
-      if (g.sliding) {
+      if (g.sliding && g.turner) {
+        swallowNextClick();
+        g.turner.end(e.type === "pointerup" ? g.vt.velocity(e.timeStamp) : 0);
+      } else if (g.sliding) {
         swallowNextClick();
         const at = clamp(g.from + (g.dir * BAR_GAIN * (g.lastX - g.x0)) / tabW(), 0, pos.last);
         const vx = g.dir * g.vt.velocity(e.timeStamp);
@@ -625,7 +737,9 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       pos.grab();
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: barSwipeReversed() ? -1 : 1 };
+      const days = barDays();
+      const turner = days ? turners[tabsRef.current[Math.round(pos.p)]?.key]?.current ?? null : null;
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner };
       g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });

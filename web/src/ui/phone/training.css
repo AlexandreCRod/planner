@@ -263,13 +263,13 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-md a.web { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .phone .tr-md strong { font-weight: 600; }
 .phone .tr-md code { padding: 0 4px; border-radius: 4px; background: var(--p-sc-low, var(--surface-2)); font-size: 13px; }
-.phone .tr-md pre { overflow-x: auto; padding: 8px 12px; border-radius: 8px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .tr-md pre { touch-action: pan-x pan-y; overflow-x: auto; padding: 8px 12px; border-radius: 8px; background: var(--p-sc-low, var(--surface-2)); }
 .phone .tr-md pre code { padding: 0; background: none; }
 .phone .tr-md hr { margin: 16px 0; border: 0; border-top: 1px solid var(--line); }
 .phone .tr-md blockquote { margin: 8px 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .phone .tr-md details { margin: 8px 0; padding: 4px 12px; border-radius: 8px; background: var(--p-sc-low, var(--surface-2)); }
 .phone .tr-md summary { padding: 6px 0; color: var(--p-primary); font-weight: 500; cursor: pointer; }
-.phone .tr-md-table { overflow-x: auto; margin: 8px 0; }
+.phone .tr-md-table { touch-action: pan-x pan-y; overflow-x: auto; margin: 8px 0; }
 .phone .tr-md table { border-collapse: collapse; font-size: 14px; }
 .phone .tr-md :is(th, td) { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .phone .tr-md .tr-flash { background: var(--p-sec-container); transition: none; }

@@ -13,7 +13,8 @@ import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "../shared/common.tsx";
 import { AppBarActions, IconButton, MIcon, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
-import { useSwipePager } from "./pager.ts";
+import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
+import { useHorizontalSwipe } from "./gesture.ts";
 import { mouseMenu } from "./desk.ts";
 import { TodosSheet, openTodos } from "./PhoneLists.tsx";
 import { StreaksSheet } from "./StreaksSheet.tsx";
@@ -433,18 +434,24 @@ export function PhoneToday() {
     onStep: (dir) => show(dayRef.current + dir),
     // The routines row scrolls sideways itself when it overflows; there it wins over the day swipe.
     allow: (el) => { const row = el.closest<HTMLElement>(".p-rchips"); return !row || row.scrollWidth <= row.clientWidth + 1; },
+    // The pages change tab (300): the day changes on the top bar, unless Settings says otherwise.
+    pages: () => !swipeTabs(),
+    turner: turners.today,
   });
+  /** One day that way, with the swipe's slide. */
+  const turn = (dir: 1 | -1) => { if (turners.today.current) turners.today.current.turn(dir); else show(day + dir); };
+  const head = useHorizontalSwipe<HTMLElement>(turnerSwipe("today", turn, () => window.innerWidth));
 
   return (
     <div className="p-scaffold">
-      <header className="p-appbar tall">
+      <header className="p-appbar tall" ref={head}>
         <div className="p-dayrow">
-          <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => show(day - 1)} />
+          <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => turn(-1)} />
           <button className="p-dayswitch" aria-label="Go to a day" onClick={() => setPicking(true)}>
             <span className="big">{word ?? WEEKDAYS[weekday(day) - 1]}</span>
             <span className="small">{word ? formatDate(day) : formatDateShort(day)}</span>
           </button>
-          <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => show(day + 1)} />
+          <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => turn(1)} />
         </div>
         <span className="grow" />
         <TestChip />
