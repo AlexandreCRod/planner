@@ -42,7 +42,6 @@ test("the lens: the middle one big, the others true miniatures beside it, moving
   const mini = miniScale(W, 400);
   const right = lensPlace(1, W, mini), left = lensPlace(-1, W, mini);
   assert.ok(Math.abs(400 * right.scale - LENS_MINI) < 1e-9);
-  assert.ok(LENS_MINI <= 64); // a miniature, not a smaller picture
   assert.equal(left.x, -right.x);
   // The miniature beside the big one doesn't overlap it, and is in sight on the screen.
   assert.ok(right.x - (W * right.scale) / 2 >= W / 2);

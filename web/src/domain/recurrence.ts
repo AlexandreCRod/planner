@@ -74,6 +74,16 @@ export function previousBefore(item: Item, before: number, maxDays = 400): numbe
   return null;
 }
 
+/**
+ * The series ended the day before [day] ("This and following" on delete), or null when no occurrence
+ * comes before [day], so nothing of the series would be left.
+ */
+export function endedBefore(item: Item, day: number): Item | null {
+  const start = item.startDay;
+  if (start === null || previousBefore(item, day, Infinity) === null) return null;
+  return { ...item, untilDay: item.untilDay !== null ? Math.min(item.untilDay, day - 1) : day - 1 };
+}
+
 export const dayLabel = (d: number) => (d === LAST_DAY_OF_MONTH ? "last day" : ordinal(d));
 
 export function describe(item: Item): string {

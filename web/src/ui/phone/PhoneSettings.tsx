@@ -22,7 +22,7 @@ import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
-import { BAR_REVERSED_KEY, barSwipeReversed, setKeepTasksTab, useKeepTasksTab } from "./pager.ts";
+import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
@@ -239,6 +239,8 @@ export function PhoneSettings() {
   const [accent, setAccent] = useState((localStorage.getItem("accent") ?? "#1a73e8").toLowerCase());
   const [pureBlack, setPureBlack] = useState(localStorage.getItem("pureBlack") === "true");
   const [barReversed, setBarReversed] = useState(barSwipeReversed());
+  const [swipesTabs, setSwipesTabs] = useState(swipeTabs());
+  const [barChangesDays, setBarChangesDays] = useState(barDays());
   const keepTasks = useKeepTasksTab();
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
@@ -286,7 +288,11 @@ export function PhoneSettings() {
           </div>
         </div>
         <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
-        {!wide && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
+        <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change by swiping on the top bar" : "Swiping a page changes the day or week"}
+          checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
+        {!wide && swipesTabs && <SwitchRow title="Bottom bar changes days and weeks" supporting="On Today and Calendar, sliding along the bar changes the day or week"
+          checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}
+        {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
           : "Sliding right along the bar goes to the page on the right, the indicator under the finger"} checked={barReversed}
           onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
         <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}

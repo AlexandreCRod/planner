@@ -4,6 +4,16 @@
 // No pointer capture and no preventDefault: the browser keeps vertical scrolling (touch-action: pan-y).
 import { useEffect, useRef } from "react";
 import { TOUCH_SLOP, swallowClick, textTouch } from "./press.ts";
+import { VelocityTracker } from "./motion.ts";
+
+// One owner per finger: whatever takes a drag says so here, and the tab pager (PhoneApp), which is last in
+// line, leaves that finger alone. Inner gestures see the finger first (their listeners are added first).
+let claimed: number | null = null;
+/** This finger's drag is taken (an inner pager, a row's swipe, a block being moved). */
+export const claimSwipe = (id: number) => { claimed = id; };
+export const swipeClaimed = (id: number) => claimed === id;
+/** A new finger: nothing is taken yet. (A mouse keeps the same id all the time.) */
+export const clearSwipeClaim = () => { claimed = null; };
 
 export interface SwipeHandlers {
   /** The drag has started (past the slop). */
@@ -28,9 +38,9 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    let g: { id: number; x0: number; y0: number; dragging: boolean; done: boolean; vx: number; lastX: number; lastT: number } | null = null;
+    let g: { id: number; x0: number; y0: number; dragging: boolean; done: boolean; vt: VelocityTracker; lastX: number } | null = null;
 
-    const finish = (cancelled: boolean) => {
+    const finish = (cancelled: boolean, t = 0) => {
       if (!g) return;
       const cur = g;
       g = null;
@@ -39,30 +49,31 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
       window.removeEventListener("pointercancel", onCancel);
       if (cur.dragging) {
         if (!cancelled) swallowNextClick();
-        h.current.onEnd(cur.lastX - cur.x0, cancelled ? 0 : cur.vx);
+        h.current.onEnd(cur.lastX - cur.x0, cancelled ? 0 : cur.vt.velocity(t));
       }
     };
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id || g.done) return;
       const dx = e.clientX - g.x0, dy = e.clientY - g.y0;
-      const dt = e.timeStamp - g.lastT;
-      if (dt > 0) { g.vx = 0.7 * ((e.clientX - g.lastX) / dt) + 0.3 * g.vx; g.lastT = e.timeStamp; }
+      g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       if (!g.dragging) {
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
         if (h.current.accept && !h.current.accept(dx)) { g.done = true; return; }
         g.dragging = true;
+        claimSwipe(e.pointerId);
         h.current.onStart?.();
       }
       h.current.onMove(dx);
     };
-    const onUp = (e: PointerEvent) => { if (g && e.pointerId === g.id) finish(false); };
+    const onUp = (e: PointerEvent) => { if (g && e.pointerId === g.id) finish(false, e.timeStamp); };
     const onCancel = (e: PointerEvent) => { if (g && e.pointerId === g.id) finish(true); };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       if (textTouch(e.target)) return; // selecting or editing text: the browser's
-      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vx: 0, lastX: e.clientX, lastT: e.timeStamp };
+      g = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dragging: false, done: false, vt: new VelocityTracker(), lastX: e.clientX };
+      g.vt.add(e.timeStamp, e.clientX);
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });
       window.addEventListener("pointercancel", onCancel, { passive: true });

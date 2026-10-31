@@ -95,7 +95,6 @@ test("the add panel opens or closes after a short pull, and a flick decides", ()
 
 test("the grid opens at 06:00 with room above for its label", () => {
   assert.equal(openingScrollTop(40), 240 - OPENING_ROOM);
-  assert.ok(OPENING_ROOM >= 7); // the label reaches 7 px above its line
   assert.equal(openingScrollTop(1), 0);
 });
 

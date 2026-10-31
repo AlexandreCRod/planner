@@ -76,6 +76,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 /* No will-change: the pager is only its own layer while it moves (see slide() in PhoneApp). */
 .phone .p-track { position: absolute; inset: 0; }
 .phone .p-page { position: absolute; top: 0; bottom: 0; width: 100%; overflow: hidden; contain: layout paint style; background: var(--bg); }
+/* A sideways swipe anywhere on a page is the app's (300): the browser only scrolls up and down, except in
+   the rows that scroll sideways themselves, which say so below. */
+.phone .p-page, .phone .p-page * { touch-action: pan-y; }
 
 .phone .p-bar {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; display: flex;
@@ -374,7 +377,7 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 
 /* ---------- Shared M3 pieces (chrome.tsx) ---------- */
 /* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
-.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
 .phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
@@ -481,6 +484,9 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .pg-bar { position: absolute; top: calc(1px + var(--lane) * 17px); margin: 0; box-sizing: border-box; pointer-events: auto; }
 .phone .p-mcell { flex: 1; min-width: 0; padding: 2px; box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--line) 50%, transparent); overflow: hidden; }
 .phone .p-mcell.sel { background: color-mix(in srgb, var(--p-primary-container) 45%, transparent); }
+/* A chip being dragged (298): it follows the finger over the days; the day under it is marked. */
+.phone .p-mcell.drop { box-shadow: inset 0 0 0 2px var(--p-primary); }
+.phone .p-mchip-lift { position: fixed; z-index: 60; margin: 0; pointer-events: none; opacity: .92; will-change: transform; box-shadow: 0 8px 18px rgb(0 0 0 / .3), 0 2px 5px rgb(0 0 0 / .2); }
 .phone .p-mnum-row { display: flex; align-items: center; color: var(--muted); }
 .phone .p-mnum { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12px; line-height: 16px; color: var(--text); }
 .phone .p-mnum.out { color: color-mix(in srgb, var(--muted) 50%, transparent); }
@@ -1481,11 +1487,7 @@ html.phone[data-theme="dark"] {
 .phone .p-notelayer { bottom: calc(var(--bar-h) + var(--sab)); z-index: 29; }
 .phone .p-root.note-kb .p-notelayer { bottom: 0; }
 .phone .p-root.note-kb > .p-bar { visibility: hidden; }
-.phone .p-notelayer.away { pointer-events: none; animation: p-note-away .2s cubic-bezier(.3, 0, .8, .15) forwards; }
-@keyframes p-note-away {
-  from { transform: none; opacity: 1; }
-  to { transform: translate3d(0, 38%, 0) scale(.6); opacity: 0; visibility: hidden; }
-}
+.phone .p-notelayer.away { pointer-events: none; visibility: hidden; animation: none; }
 .phone .p-notelayer .p-content.ps, .phone .p-notelayer .pn-scroll { padding-bottom: 16px; }
 
 /* The chip: the note put away, above the bar on every page (left of the + button). */
@@ -1500,9 +1502,9 @@ html.phone[data-theme="dark"] {
 .phone .p-notechip {
   pointer-events: auto; max-width: 100%; min-width: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px;
   border-radius: 24px; background: var(--p-sc-high); color: var(--text); touch-action: pan-y; user-select: none; -webkit-user-select: none;
-  box-shadow: 0 2px 4px rgb(0 0 0 / .14), 0 4px 12px rgb(0 0 0 / .12); animation: p-chip-in .26s cubic-bezier(.2, 0, 0, 1);
+  box-shadow: 0 2px 4px rgb(0 0 0 / .14), 0 4px 12px rgb(0 0 0 / .12); animation: p-chip-in .2s cubic-bezier(.2, 0, 0, 1) .12s both;
 }
-@keyframes p-chip-in { from { transform: translate3d(0, 24px, 0) scale(.9); opacity: 0; } }
+@keyframes p-chip-in { from { transform: scale(.9); opacity: 0; } }
 .phone .p-notechip-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--p-primary); }
 .phone .p-notechip-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
 .phone .p-notechip-x { flex: none; width: 40px; height: 40px; }
