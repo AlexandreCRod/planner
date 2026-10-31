@@ -75,7 +75,7 @@ data class AlarmSettings(
     val clockFormat: Int = 0,
     /** See [TimeFormat.dateStyle]. */
     val dateFormat: Int = 0,
-    /** Index into [accents], for the ringing screen. */
+    /** The accent chosen in Settings, as an index. Unused since the ringing screen took the app's own colours (246). */
     val accent: Int = 0,
     /** How long an event or task alarm rings before it stops by itself, in minutes. */
     val alarmRingMinutes: Int = 1,
@@ -87,6 +87,14 @@ data class AlarmSettings(
     val notificationIcons: Int = 1,
     /** Clock alarms with the same days this many minutes apart share a line (the Clock page's bundles). */
     val bundleWindow: Int = 19,
+    /** The ringing screen's look (Looks to try, 246): 1 A, 2 B; 0 (a page that hasn't said yet) is the plain one. See [RingLook]. */
+    val ringLayout: Int = 0,
+    /** 1 slide, 2 hold, 3 tap. */
+    val ringStop: Int = 0,
+    /** Show what's coming up. */
+    val ringComing: Boolean = false,
+    /** Which icon set stop and snooze use, 1 to 3. */
+    val ringIcons: Int = 1,
 )
 
 @Serializable
@@ -99,6 +107,8 @@ data class MirrorData(
     val pendingDone: List<Completion> = emptyList(),
     /** Reminders that may have something set with AlarmManager, so ones that disappear get cancelled. */
     val scheduled: List<Long> = emptyList(),
+    /** The next days' events and what's left to do, for the ringing screen's Today card (246). */
+    val agenda: List<AgendaDay> = emptyList(),
 )
 
 /** What the page sends: everything but the engine's own bookkeeping. */
@@ -108,6 +118,7 @@ data class MirrorPush(
     val reminders: List<Reminder> = emptyList(),
     val completions: List<Completion> = emptyList(),
     val settings: AlarmSettings = AlarmSettings(),
+    val agenda: List<AgendaDay> = emptyList(),
 )
 
 val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
@@ -159,7 +170,7 @@ object Mirror {
      */
     fun replace(context: Context, push: MirrorPush): MirrorData = update(context) { old ->
         val done = (push.completions + old.pendingDone).distinct()
-        old.copy(items = push.items, reminders = push.reminders, completions = done, settings = push.settings)
+        old.copy(items = push.items, reminders = push.reminders, completions = done, settings = push.settings, agenda = push.agenda)
     }
 
     fun settings(context: Context) = current(context).settings

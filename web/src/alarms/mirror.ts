@@ -4,9 +4,11 @@
 // items that have reminders, cut down to their scheduling fields, their reminders and completions, and
 // the alarm settings. Things ticked natively (a notification's "Done", the ringing screen's "Mark done")
 // come back here and are saved like any tick, so they sync.
-import { type MirrorPush, buildMirror, cardChoices } from "../domain/alarms.ts";
-import { clockFormat, dateStyle } from "../domain/dates.ts";
+import { type MirrorPush, buildMirror, cardChoices, ringChoices } from "../domain/alarms.ts";
+import { buildAgenda } from "../domain/agenda.ts";
+import { clockFormat, dateStyle, today } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
+import { carryOver } from "../store/prefs.ts";
 import { go } from "../ui/shared/common.tsx";
 import { look, onLooks } from "../ui/phone/looks.ts";
 import { clockPrefs, onClockPrefs } from "./clockPrefs.ts";
@@ -22,7 +24,15 @@ function current(): MirrorPush {
   let accent = "#1a73e8";
   try { accent = localStorage.getItem("accent") ?? accent; } catch { /* default */ }
   const push = buildMirror(s.allItems, s.reminders, s.completions, alarmSettings(), clockFormat(), dateStyle(), accent);
-  return { ...push, settings: { ...push.settings, ...cardChoices(look("notifCard"), look("notifIcons"), clockPrefs().bundleWindow) } };
+  return {
+    ...push,
+    agenda: buildAgenda(s.items, s.done, today(), carryOver()),
+    settings: {
+      ...push.settings,
+      ...cardChoices(look("notifCard"), look("notifIcons"), clockPrefs().bundleWindow),
+      ...ringChoices(look("ringLayout"), look("ringStop"), look("ringComing"), look("ringIcons")),
+    },
+  };
 }
 
 /** Sends the data if it changed since the last push (or always, with [force]). */

@@ -262,6 +262,61 @@ class AlarmServiceTest {
         assertTrue(missed("Dentist"))
     }
 
+    private fun series(vararg minutes: Int) = minutes.mapIndexed { i, m -> ClockAlarm(200L + i, m / 60, m % 60, label = "Series", days = 127, series = 8) }.onEach { ClockAlarms.save(ctx, it) }
+    private val nowMinute get() = java.time.LocalTime.now().let { it.hour * 60 + it.minute }.coerceIn(30, 1400)
+
+    /** 246: the pop-up keeps plain buttons, and says where it sits in the bundle. */
+    @Test fun theRingingNotificationHasTheBundleLine() {
+        val m = nowMinute
+        series(m - 10, m, m + 10)
+        val n = shadowOf(ring(clockIntent(201))).lastForegroundNotification
+        val text = n.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertTrue(text, text.startsWith("Alarm 2 of 3 · next "))
+        assertEquals(listOf("Stop", "Snooze"), n.actions.map { it.title.toString() })
+    }
+
+    @Test fun anAlarmOnItsOwnHasNoBundleLine() {
+        val n = shadowOf(ring(eventIntent())).lastForegroundNotification
+        assertEquals("Today at 23:59", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    }
+
+    /** 246: Stop the rest stops this one, and the rest of the series skip that day, and only that day. */
+    @Test fun stopTheRestStopsThisOneAndSkipsTheRest() {
+        val m = nowMinute
+        val (first, ringing, next, last) = series(m - 20, m, m + 5, m + 10)
+        ring(clockIntent(ringing.id))
+        action(AlarmService.ACTION_DISMISS_REST)
+        assertNull(AlarmService.ringing)
+        val today = LocalDate.now().toEpochDay()
+        waitFor("the rest skipped") { listOf(next, last).all { today in ClockAlarms.get(ctx, it.id)!!.skip } }
+        assertTrue(ClockAlarms.get(ctx, first.id)!!.skip.isEmpty())
+        assertTrue(ClockAlarms.get(ctx, next.id)!!.enabled)
+    }
+
+    @Test fun stopTheRestSkipsTheOthersOfAnEventsWakeUpAlarms() {
+        val soon = LocalDate.now().toEpochDay()
+        val m = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+        Mirror.update(ctx) { d ->
+            d.copy(items = d.items + Item(5, ItemType.EVENT, "Flight", startDay = soon, startMin = (m + 60).coerceAtMost(1439)),
+                reminders = listOf(Reminder(21, 5, 60, AlertType.ALARM, wake = true), Reminder(22, 5, 30, AlertType.ALARM, wake = true), Reminder(23, 5, 15, AlertType.ALARM, wake = true)))
+        }
+        ring(eventIntent(Mirror.item(ctx, 5)!!, 21))
+        action(AlarmService.ACTION_DISMISS_REST)
+        val flight = Mirror.item(ctx, 5)!!
+        val at = AlarmScheduler.originalAt(flight, LocalDate.now(), 30, 540)
+        waitFor("the others stay quiet") { AlarmOverrides.adjusted(ctx, 22, at) == null }
+    }
+
+    /** 246: the count needs to tell a one-off that rang from one switched off. */
+    @Test fun anAlarmThatRangRemembersIt() {
+        val once = ClockAlarm(90, 7, 0)
+        ClockAlarms.save(ctx, once)
+        ClockAlarms.afterRing(ctx, 90)
+        val a = ClockAlarms.get(ctx, 90)!!
+        assertTrue(!a.enabled)
+        assertTrue(a.rangAt != null)
+    }
+
     @Test fun afterTheAppIsKilledItRingsOnFromWhatWasSaved() {
         ring(eventIntent())
         val saved = RingState.load(ctx)!!

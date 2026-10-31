@@ -92,6 +92,31 @@ export const LOOKS = {
     ["2", "Sound", "Alarm clock, speaker, speaker off"],
     ["3", "Soft", "Ringing bell, speech bubble, moon"],
   ] },
+  /**
+   * The ringing screen (246). Kotlin draws it (alarm/RingLayouts.kt); alarms/mirror.ts hands it these four.
+   * A: a big thin clock, the bundle as dots, a Snooze pill. B: two big buttons, the bundle card, Stop the rest.
+   */
+  ringLayout: { page: "Ringing screen", title: "Layout", pick: "A", choices: [
+    ["A", "A", "A big, thin clock, and a Snooze pill"],
+    ["B", "B", "Two big buttons, the alarms of a bundle, Stop the rest"],
+  ] },
+  /** The "Today" card on the morning's first alarm, and B's "Next" line. */
+  ringComing: { page: "Ringing screen", title: "Show what's coming up", pick: "on", choices: [
+    ["on", "On", "A Today card on the morning's first alarm"],
+    ["off", "Off", "Only the alarm"],
+  ] },
+  /** How a touch stops it. The volume keys and the notification always stop it too. */
+  ringStop: { page: "Ringing screen", title: "How to stop", pick: "slide", choices: [
+    ["slide", "Slide", "Slide the round button across"],
+    ["hold", "Hold", "Press and hold for a moment"],
+    ["tap", "Tap", "One tap"],
+  ] },
+  /** The stop and snooze icons (RingLayouts.kt, ringIcon). */
+  ringIcons: { page: "Ringing screen", title: "Icons", pick: "1", choices: [
+    ["1", "Alarm", "Alarm clock off, alarm clock with Zs"],
+    ["2", "Plain", "A cross, a moon"],
+    ["3", "Bell", "Bell off, an hourglass"],
+  ] },
 } as const satisfies Record<string, Look>;
 
 export type LookKey = keyof typeof LOOKS;

@@ -47,6 +47,11 @@ class AlarmActivityTest {
         .putExtra(AlarmActivity.EXTRA_TITLE, title).putExtra(AlarmActivity.EXTRA_TEXT, "Today at 10:00")
         .putExtra(AlarmReceiver.EXTRA_ITEM, itemId).putExtra(ClockAlarms.EXTRA_CLOCK, clockId)
 
+    private fun look(layout: Int, stop: Int, coming: Boolean = true) =
+        Mirror.update(ctx) { it.copy(settings = AlarmSettings(clockFormat = 1, ringLayout = layout, ringStop = stop, ringComing = coming)) }
+
+    private fun open(i: Intent) = Robolectric.buildActivity(AlarmActivity::class.java, i).setup().get()
+
     private fun nextServiceAction(): String? = shadowOf(ctx as android.app.Application).nextStartedService?.action
 
     @Test fun volumeDownStopsAnEventAlarm() {
@@ -78,6 +83,45 @@ class AlarmActivityTest {
         assertTrue(completable(screen(itemId = 2)))    // a task
         assertTrue(completable(screen(itemId = 3)))    // a routine event
         assertFalse(completable(screen(clockId = 77))) // a clock alarm
+    }
+
+    /** 246: the look is read when it opens; one that's bad never gets in the way. */
+    @Test fun aBadLookOpensThePlainScreenAndItStillStops() {
+        look(layout = 42, stop = 1)
+        val a = open(screen(clockId = 77))
+        assertEquals(RingLook.PLAIN, a.look)
+        a.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
+        assertEquals(AlarmService.ACTION_DISMISS, nextServiceAction())
+    }
+
+    @Test fun theChosenLookOpensAndAVolumeButtonStopsItThereToo() {
+        for ((layout, stop) in listOf(1 to 1, 1 to 2, 2 to 1, 2 to 3)) {
+            look(layout, stop)
+            val a = open(screen(clockId = 77))
+            assertEquals(layout == 2, a.look?.layout == RingLayout.B)
+            a.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
+            assertEquals(AlarmService.ACTION_DISMISS, nextServiceAction())
+            assertTrue(a.isFinishing)
+        }
+    }
+
+    /** Over the lock screen: the screen asks to show there and to turn the display on, for every look. */
+    @Test fun itShowsOverTheLockScreenInEveryLook() {
+        look(1, 1)
+        val a = open(screen(clockId = 77))
+        assertTrue(shadowOf(a).turnScreenOn)
+        assertTrue(shadowOf(a).showWhenLocked)
+    }
+
+    @Test fun theScreenSaysWhereItSitsInTheBundle() {
+        look(1, 1)
+        val now = java.time.LocalTime.now().let { it.hour * 60 + it.minute }.coerceIn(10, 1400)
+        ClockAlarms.reload()
+        val series = listOf(now - 10, now, now + 10).mapIndexed { i, m -> ClockAlarm(100L + i, m / 60, m % 60, days = 127, series = 3) }
+        series.forEach { ClockAlarms.save(ctx, it) }
+        val a = open(screen(clockId = 101))
+        series.forEach { ClockAlarms.delete(ctx, it.id) }
+        assertTrue(a.bundleLine, a.bundleLine!!.startsWith("Alarm 2 of 3 · next "))
     }
 
     @Test fun aSecondAlarmUpdatesTheScreen() {

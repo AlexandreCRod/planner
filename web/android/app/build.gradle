@@ -93,6 +93,10 @@ dependencies {
     // Robolectric: the alarm service and ringing screen run in unit tests (195).
     testImplementation 'org.robolectric:robolectric:4.16'
     testImplementation 'androidx.test:core:1.7.0'
+    // The ringing screen's slide and hold, by real touches, in the same tests (246).
+    testImplementation platform('androidx.compose:compose-bom:2025.06.00')
+    testImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

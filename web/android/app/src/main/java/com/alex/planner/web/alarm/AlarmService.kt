@@ -50,6 +50,8 @@ class AlarmService : Service() {
         const val ACTION_DISMISS = "com.alex.planner.web.ALARM_DISMISS"
         const val ACTION_SNOOZE = "com.alex.planner.web.ALARM_SNOOZE"
         const val ACTION_COMPLETE = "com.alex.planner.web.ALARM_COMPLETE"
+        /** Stop, and the bundle's other alarms stay quiet this time (the ringing screen's Stop the rest). */
+        const val ACTION_DISMISS_REST = "com.alex.planner.web.ALARM_DISMISS_REST"
         /** When it began ringing (a restart after the app was killed carries on from then). */
         const val EXTRA_STARTED = "startedAt"
         private const val NOTIF_ID = 777_000
@@ -120,6 +122,7 @@ class AlarmService : Service() {
         when (intent.action) {
             ACTION_DISMISS -> { finishAlarm(); return START_NOT_STICKY }
             ACTION_SNOOZE -> { snoozeAndStop(); return START_NOT_STICKY }
+            ACTION_DISMISS_REST -> { stopTheRest(); return START_NOT_STICKY }
             ACTION_COMPLETE -> {
                 // Only for the item the screen showed: if another alarm took over meanwhile, nothing is ticked.
                 val shown = intent.getLongExtra(AlarmReceiver.EXTRA_ITEM, itemId)
@@ -160,7 +163,8 @@ class AlarmService : Service() {
         val notification = NotificationCompat.Builder(this, Notifications.CH_ALARM)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText(text)
+            // The pop-up keeps plain buttons; in a bundle it says where this one sits (246).
+            .setContentText(listOfNotNull(text.ifBlank { null }, RingInfo.bundle(this, clockId, reminderId, itemId, day)?.line).joinToString(" · "))
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             // Not marked ongoing (295): Android keeps a foreground service's notification out of "Clear all"
@@ -409,6 +413,13 @@ class AlarmService : Service() {
                 AlarmScheduler.snooze(ctx, item, reminder, d, Mirror.settings(ctx).snoozeMinutes, o)
             }
         }
+        finishAlarm()
+    }
+
+    private fun stopTheRest() {
+        val ctx = applicationContext
+        val rest = RingInfo.bundle(this, clockId, reminderId, itemId, day)?.rest.orEmpty()
+        CoroutineScope(Dispatchers.IO).launch { RingInfo.stopRest(ctx, rest) }
         finishAlarm()
     }
 

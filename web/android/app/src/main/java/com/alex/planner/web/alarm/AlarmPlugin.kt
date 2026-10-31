@@ -320,6 +320,8 @@ class AlarmPlugin : Plugin() {
         val text = call.getString("json") ?: return call.reject("json missing")
         var a = runCatching { json.decodeFromString(ClockAlarm.serializer(), text) }.getOrElse { return call.reject("bad json") }
         if (a.id == 0L) a = a.copy(id = System.currentTimeMillis())
+        // The page doesn't keep this: it may be saving what it read before the alarm rang.
+        ClockAlarms.get(context, a.id)?.rangAt?.let { a = a.copy(rangAt = it) }
         ClockAlarms.save(context, a)
         call.resolve(JSObject().put("id", a.id))
     }

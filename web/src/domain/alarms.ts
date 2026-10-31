@@ -1,6 +1,7 @@
 // The Alarms page's rules, ported from the native app (alarm/ClockAlarms.kt, ClockTools.kt and
 // ui/alarms/AlarmsScreen.kt), plus what the page sends to the alarm engine. Pure, so it's unit-tested
 // (test/alarms.test.ts).
+import type { AgendaDay } from "./agenda.ts";
 import type { Completion, Item, Reminder } from "./types.ts";
 
 // ---------- The engine's copy of the data ----------
@@ -35,7 +36,9 @@ export interface MirrorPush {
   items: Pick<Item, (typeof ITEM_FIELDS)[number]>[];
   reminders: Reminder[];
   completions: { itemId: number; day: number }[];
-  settings: Omit<AlarmSettings, "defaultAlarmSoundName"> & { clockFormat: number; dateFormat: number; accent: number } & Partial<CardChoices>;
+  settings: Omit<AlarmSettings, "defaultAlarmSoundName"> & { clockFormat: number; dateFormat: number; accent: number } & Partial<CardChoices> & Partial<RingChoices>;
+  /** What the ringing screen's Today card shows (246). */
+  agenda?: AgendaDay[];
 }
 
 /** The notification card's choices, as the engine takes them (218, 254; TypeScript decides, Kotlin draws). */
@@ -51,6 +54,26 @@ export interface CardChoices {
 /** From the looks' values ("1", "2") and the Clock page's bundle window; anything odd is the default. */
 export function cardChoices(card: string, icons: string, bundleWindow: number): CardChoices {
   return { notificationCard: card === "2" ? 2 : 1, notificationIcons: icons === "2" ? 2 : icons === "3" ? 3 : 1, bundleWindow };
+}
+
+/** The ringing screen's choices, as the engine takes them (246, 254). Its plain layout (0) is what it falls back on. */
+export interface RingChoices {
+  /** 1 A: the calm clock; 2 B: two big buttons. */
+  ringLayout: number;
+  /** 1 slide, 2 hold, 3 tap. */
+  ringStop: number;
+  /** Show what's coming up. */
+  ringComing: boolean;
+  /** The icon set for stop and snooze, 1 to 3. */
+  ringIcons: number;
+}
+
+/** From the looks' values; anything odd is the pick. */
+export function ringChoices(layout: string, stop: string, coming: string, icons: string): RingChoices {
+  return {
+    ringLayout: layout === "B" ? 2 : 1, ringStop: stop === "hold" ? 2 : stop === "tap" ? 3 : 1, ringComing: coming !== "off",
+    ringIcons: icons === "2" ? 2 : icons === "3" ? 3 : 1,
+  };
 }
 
 /**

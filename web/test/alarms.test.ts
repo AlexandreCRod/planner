@@ -200,3 +200,10 @@ test("the engine's copy says which alarms are wake-up alarms, and older reminder
   assert.deepEqual(m.reminders[0], { id: 2, itemId: 1, offsetMin: 120, type: "ALARM", soundUri: null, wake: true });
   assert.deepEqual(m.reminders[1], { id: 3, itemId: 1, offsetMin: 30, type: "ALARM", soundUri: null });
 });
+
+test("the ringing screen's choices reach the engine as numbers; anything odd is the pick (246)", async () => {
+  const { ringChoices } = await import("../src/domain/alarms.ts");
+  assert.deepEqual(ringChoices("B", "hold", "off", "3"), { ringLayout: 2, ringStop: 2, ringComing: false, ringIcons: 3 });
+  assert.deepEqual(ringChoices("A", "tap", "on", "2"), { ringLayout: 1, ringStop: 3, ringComing: true, ringIcons: 2 });
+  assert.deepEqual(ringChoices("?", "?", "?", "?"), { ringLayout: 1, ringStop: 1, ringComing: true, ringIcons: 1 });
+});

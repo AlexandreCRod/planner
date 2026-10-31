@@ -41,6 +41,8 @@ data class ClockAlarm(
     val series: Long? = null,
     /** Rings only as long as a calendar alarm (a series can choose this); otherwise as long as a clock alarm. */
     val shortRing: Boolean = false,
+    /** When it last rang: a one-off that rang is off, and this tells it from one switched off (the bundle count, 246). */
+    val rangAt: Long? = null,
 ) {
     val minuteOfDay get() = hour * 60 + minute
     fun repeatsOn(d: DayOfWeek) = days and (1 shl (d.value - 1)) != 0
@@ -223,8 +225,8 @@ object ClockAlarms {
 
     /** After ringing: a one-off alarm (or one whose dates have all come) switches itself off, a repeating one queues its next day. */
     fun afterRing(context: Context, id: Long) {
-        val a = get(context, id) ?: return
-        if (!a.repeating || nextRing(a) == null) save(context, a.copy(enabled = false)) else schedule(context, a)
+        val a = get(context, id)?.copy(rangAt = System.currentTimeMillis()) ?: return
+        save(context, if (!a.repeating || nextRing(a) == null) a.copy(enabled = false) else a)
     }
 
     private fun pending(context: Context, id: Long, snooze: Boolean, create: Boolean): PendingIntent? {
