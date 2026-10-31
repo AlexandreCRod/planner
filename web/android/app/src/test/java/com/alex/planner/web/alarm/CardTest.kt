@@ -240,10 +240,11 @@ class CardTest {
         assertEquals("3 alarms · Rings", row.extras.getString(Notification.EXTRA_TEXT))
         assertEquals("Skip all", row.actions[1].title.toString())
         // "Skip all", as Android delivers it.
-        AlarmReceiver().onReceive(ctx, shadowOf(row.actions[1].actionIntent).savedIntent)
+        val intent = shadowOf(row.actions[1].actionIntent).savedIntent
+        AlarmReceiver().onReceive(ctx, intent)
         val until = System.currentTimeMillis() + 3_000
-        while (lines().isNotEmpty() && System.currentTimeMillis() < until) Thread.sleep(20)
-        assertTrue(alarms.all { ClockAlarms.get(ctx, it.id)!!.skip.size == 1 })
+        while ((ClockAlarms.get(ctx, 3)!!.skip.isEmpty() || lines().isNotEmpty()) && System.currentTimeMillis() < until) Thread.sleep(20)
+        assertEquals(listOf(1, 1, 1), alarms.map { ClockAlarms.get(ctx, it.id)!!.skip.size })
         assertTrue(lines().isEmpty())
         ClockAlarms.reload()
     }
