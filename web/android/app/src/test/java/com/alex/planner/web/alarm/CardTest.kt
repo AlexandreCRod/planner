@@ -58,6 +58,17 @@ class CardTest {
         assertEquals(Card.Kind.RING, Card.kind(l))
     }
 
+    /** 244: a series is one row however far apart it rings, even with bundles turned off; other alarms stay out. */
+    @Test fun aSeriesIsOneRowWhateverTheBundleWindow() {
+        fun clock(id: Long, start: Long, a: ClockAlarm) = Line("c$id", clockId = id, name = "Wake up", start = start, bundle = Card.daysKey(a, start), alerts = listOf(LineAlert(0, AlertType.ALARM, start, start)))
+        val one = clock(1, at(9), ClockAlarm(1, 9, 0, series = 5, days = 31))
+        val two = clock(2, at(9, 40), ClockAlarm(2, 9, 40, series = 5, days = 31))
+        val other = clock(3, at(9, 30), ClockAlarm(3, 9, 30, days = 31))
+        val rows = Card.rows(listOf(one, other, two), 0, now)
+        assertEquals(listOf(listOf("c1", "c2"), listOf("c3")), rows.map { r -> r.lines.map { it.key } })
+        assertEquals("2 alarms · Rings", rows[0].text)
+    }
+
     @Test fun theMockupsOtherLines() {
         assertEquals("Rings at 10:00", Card.lineText(line(LineAlert(1, AlertType.ALARM, at(10), at(10))), now))
         val popUp = line(LineAlert(1, AlertType.REMINDER, at(8, 50), at(8, 50), offsetMin = 10), start = at(9))

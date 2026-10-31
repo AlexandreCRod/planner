@@ -37,6 +37,10 @@ data class ClockAlarm(
     val skip: List<Long> = emptyList(),
     /** A repeating alarm is quiet until this day (the first day it rings again). */
     val pausedUntil: Long? = null,
+    /** The series it was made in, with the others of that series (244): one bundle, one switch. */
+    val series: Long? = null,
+    /** Rings only as long as a calendar alarm (a series can choose this); otherwise as long as a clock alarm. */
+    val shortRing: Boolean = false,
 ) {
     val minuteOfDay get() = hour * 60 + minute
     fun repeatsOn(d: DayOfWeek) = days and (1 shl (d.value - 1)) != 0

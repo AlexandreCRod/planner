@@ -13,6 +13,8 @@ export interface ClockAlarm {
   id: number; hour: number; minute: number; label: string; days: number; enabled: boolean; color: number; sound: string | null;
   /** Chosen dates (local epoch days) instead of weekdays; days skipped; paused until (first day back): domain/alarms.ts. */
   dates?: number[]; skip?: number[]; pausedUntil?: number | null;
+  /** The series it belongs to (244); shortRing: it rings only as long as a calendar alarm (missing: as a clock alarm does). */
+  series?: number | null; shortRing?: boolean;
 }
 /** A countdown (ClockTools.kt): running, it keeps when it ends; paused, what's left. */
 export interface ClockTimer { id: number; durationMs: number; label: string; endAt: number | null; remainingMs: number }

@@ -1003,6 +1003,13 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-days { flex: 1; display: flex; justify-content: space-between; }
 .phone .pa-days button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--p-outline); background: none; color: var(--text); font-size: 14px; font-weight: 500; padding: 0; position: relative; overflow: hidden; }
 .phone .pa-days button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
+.phone .pa-series-row .grow, .phone .pa-series-long .grow, .phone .pa-series-every .grow, .phone .pa-series-to .grow { flex: 1; min-width: 0; }
+.phone .pa-series-to { padding-left: 72px; min-height: 48px; }
+.phone .pa-series-every { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px 0 72px; color: var(--text); }
+.phone .pa-series-sum { padding: 0 24px 8px 72px; }
+.phone .pa-series-sum.bad { color: var(--danger); }
+.phone .pa-series-long { padding-left: 72px; }
+.phone .pa-series-sub { display: block; }
 .phone .pa-days-text { display: flex; align-items: center; min-height: 40px; padding: 0 12px 4px 72px; }
 .phone .pa-days-text .grow { flex: 1; }
 .phone .pa-dates { flex: 1; min-width: 0; height: 40px; border: 0; padding: 0; background: none; color: var(--text); text-align: left; position: relative; overflow: hidden; }

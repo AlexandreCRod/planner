@@ -79,6 +79,7 @@ object Card {
     /** Comes round at most this long after its time: past it, an alert that never went off is dropped. */
     private const val LATE_MS = 10 * 60_000L
     private const val LIST_MAX = 7
+    private const val SERIES_KEY = "s:"
     private val lock = Any()
 
     enum class Kind { RING, POPS, SILENT }
@@ -154,7 +155,8 @@ object Card {
         val open = HashMap<String, MutableList<Line>>()
         for (l in lines.sortedWith(compareBy({ it.start }, { it.key }))) {
             val b = open[l.bundle]
-            if (l.bundle.isNotEmpty() && b != null && window > 0 && (l.start - b.last().start) / 60_000 <= window) { b += l; continue }
+            val joins = l.bundle.startsWith(SERIES_KEY) || (window > 0 && (l.start - (b?.last()?.start ?: 0L)) / 60_000 <= window)
+            if (l.bundle.isNotEmpty() && b != null && joins) { b += l; continue }
             val fresh = mutableListOf(l)
             groups += fresh
             if (l.bundle.isNotEmpty()) open[l.bundle] = fresh
@@ -191,8 +193,9 @@ object Card {
         return endDate.atStartOfDay(zone).plusMinutes(end.toLong()).toInstant().toEpochMilli()
     }
 
-    /** A clock alarm's days as a key: daysKey in clockList.ts. */
+    /** A clock alarm's days as a key: daysKey in clockList.ts. A series (244) is its own bundle, as there. */
     fun daysKey(a: ClockAlarm, at: Long, zone: ZoneId = ZoneId.systemDefault()): String = when {
+        a.series != null -> "$SERIES_KEY${a.series}"
         a.dates.isNotEmpty() -> "d:" + a.dates.sorted().joinToString(",")
         a.days != 0 -> "w:${a.days}"
         else -> "o:" + Instant.ofEpochMilli(at).atZone(zone).toLocalDate().toEpochDay()

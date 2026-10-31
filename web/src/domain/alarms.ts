@@ -120,7 +120,11 @@ export const EVERY_DAY = 0b1111111;
  * it rings on those dates only. A repeating alarm (weekdays or dates) can skip chosen days ([skip]) or
  * be paused until a day ([pausedUntil]: the first day it rings again). Kept on the phone only.
  */
-export interface Clockish { hour: number; minute: number; days: number; dates?: number[]; skip?: number[]; pausedUntil?: number | null }
+export interface Clockish {
+  hour: number; minute: number; days: number; dates?: number[]; skip?: number[]; pausedUntil?: number | null;
+  /** The series it belongs to (244: alarms made in one go, one bundle whatever the bundle window); missing on the rest. */
+  series?: number | null;
+}
 const minuteOfDay = (a: Clockish) => a.hour * 60 + a.minute;
 /** Monday = 0 ... Sunday = 6 (the days mask's bits). */
 const dayIndex = (d: Date) => (d.getDay() + 6) % 7;

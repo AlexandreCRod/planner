@@ -15,14 +15,16 @@ import { useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { CLOCK_FILTERS, type ClockFilter, bundleAlarms, nextRingDay, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
+import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
+import { useAlarmSettings } from "../../alarms/settings.ts";
 import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
+import { SlideStepper } from "./SlideStepper.tsx";
 import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
@@ -270,7 +272,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           { label: "Add a world clock", icon: "oPublic", onClick: () => { show(3); setAddZone(true); } },
         ]} />
       </div>
-      {editing && <Layer><AlarmEditor alarm={editing.alarm} isNew={editing.isNew} onClose={() => setEditing(null)} /></Layer>}
+      {editing && <Layer><AlarmEditor alarm={editing.alarm} isNew={editing.isNew} group={seriesOf(editing.alarm, st.alarms)} onClose={() => setEditing(null)} /></Layer>}
       {newTimer && <Layer><NewTimerDialog onClose={() => setNewTimer(false)} /></Layer>}
       {addZone && <Layer><ZonePickerDialog local={st.zone} onClose={() => setAddZone(false)} /></Layer>}
     </div>
@@ -307,6 +309,9 @@ function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void;
 // ---------- Alarms ----------
 
 const save = (a: ClockAlarm) => act(native.saveClock(a));
+
+/** The alarms of [a]'s series, in time order; none if it isn't in one (244). */
+const seriesOf = (a: ClockAlarm, all: ClockAlarm[]) => (a.series == null ? [] : all.filter((x) => x.series === a.series).sort((x, y) => x.hour * 60 + x.minute - (y.hour * 60 + y.minute)));
 
 function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   alarms: ClockAlarm[]; zone: string; rings: { rings: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
@@ -477,6 +482,8 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
   const hold = useHold(onHold, onOpen);
   const on = group.filter((a) => a.enabled).length;
   const first = group[0], last = group[group.length - 1];
+  // A series has the one switch (244): its rows only open the editor, for the whole series.
+  const series = first.series != null;
   const [picking, setPicking] = useState(false);
   const firstMin = first.hour * 60 + first.minute;
   /** The heading time moved: every alarm in the bundle moves as much (110), with Undo. */
@@ -495,7 +502,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
         <div className="grow">
           {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
           <div className="t-body-medium muted pa-bundle-count">
-            <span>{group.length} alarms · {on} on</span>
+            <span>{series ? [first.label.trim(), `${group.length} alarms`, `every ${seriesPlan(group).every} min`].filter(Boolean).join(" · ") : `${group.length} alarms · ${on} on`}</span>
             <AlarmWeather a={group.find((a) => a.enabled) ?? first} now={now} fc={fc} />
           </div>
           {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
@@ -516,7 +523,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
                 <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
               </div>
-              <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
+              {!series && <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />}
             </div>
           ))}
         </div>
@@ -612,9 +619,23 @@ function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: 
   );
 }
 
-/** New or changed alarm: the time on scroll wheels (220), the days, a label and the sound (AlarmEditor). */
-function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: boolean; onClose: () => void }) {
-  const [minute, setMinute] = useState(alarm.hour * 60 + alarm.minute);
+/**
+ * New or changed alarm: the time on scroll wheels (220), the days, a label and the sound (AlarmEditor); or,
+ * with Series on, from that time to another, every so many minutes (244). [group]: the series it opened
+ * from, which it edits as a whole.
+ */
+function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNew: boolean; group: ClockAlarm[]; onClose: () => void }) {
+  const rings = useAlarmSettings();
+  const plan0 = group.length ? seriesPlan(group) : null;
+  const [minute, setMinute] = useState(plan0?.from ?? alarm.hour * 60 + alarm.minute);
+  const [isSeries, setIsSeries] = useState(plan0 !== null);
+  const [to, setTo] = useState(plan0?.to ?? Math.min(1439, alarm.hour * 60 + alarm.minute + 60));
+  const [every, setEvery] = useState(plan0?.every ?? 10);
+  const [longRing, setLongRing] = useState(!alarm.shortRing);
+  const [pickTo, setPickTo] = useState(false);
+  const plan: SeriesPlan = { from: minute, to, every };
+  const problem = isSeries ? seriesProblem(plan) : null;
+  const times = seriesTimes(plan);
   const [label, setLabel] = useState(alarm.label);
   const [days, setDays] = useState(alarm.days);
   const [dates, setDates] = useState<number[]>(alarm.dates ?? []);
@@ -634,10 +655,33 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
     <BottomSheet onClose={onClose}>{(close) => (
       <div className="pa-editor">
         <div className="pa-editor-head">
-          <span className="t-title-medium grow">{isNew ? "New alarm" : "Alarm"}</span>
-          {!isNew && <TextButton className="icon" onClick={() => { void act(native.deleteClock(alarm.id)); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
+          <span className="t-title-medium grow">{isSeries ? "Alarm series" : isNew ? "New alarm" : "Alarm"}</span>
+          {!isNew && <TextButton className="icon" onClick={() => { void act(Promise.all((group.length ? group : [alarm]).map((a) => native.deleteClock(a.id)))); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
         </div>
         <div className="pa-wheels"><TimeWheels step={1} value={minute} onChange={setMinute} /></div>
+        <div className="pa-erow pa-series-row">
+          <MIcon name="oSchedule" />
+          <span className="t-body-large grow">{isSeries ? `From ${formatTime(minute)}` : "Series of alarms"}</span>
+          <Switch checked={isSeries} label="Series of alarms" onChange={setIsSeries} />
+        </div>
+        {isSeries && <>
+          <button className="pa-erow pa-series-to" onClick={() => setPickTo(true)}>
+            <span className="t-body-large grow">Until {formatTime(to)}</span>
+          </button>
+          <div className="pa-series-every">
+            <span className="t-body-large grow">Every</span>
+            <SlideStepper value={every} onChange={(v) => setEvery(v ?? 1)} step={1} min={1} max={120} unit="min" buttons label="Minutes between alarms" />
+          </div>
+          <div className={`pa-series-sum t-body-small ${problem ? "bad" : "muted"}`}>{problem ?? `${times.length} alarms · last at ${formatTime(times[times.length - 1])}`}</div>
+          <div className="pa-erow pa-series-long">
+            <span className="grow">
+              <span className="t-body-large">Ring like a clock alarm</span>
+              <span className="t-body-small muted pa-series-sub">{longRing ? `Each rings up to ${rings.clockRingMinutes} min` : `Each rings ${rings.alarmRingMinutes} min, like a calendar alarm`}</span>
+            </span>
+            <Switch checked={longRing} label="Ring like a clock alarm" onChange={setLongRing} />
+          </div>
+        </>}
+        <div className="p-divider" />
         <div className="pa-erow">
           <MIcon name="fRepeat" />
           {dates.length ? (
@@ -688,14 +732,27 @@ function AlarmEditor({ alarm, isNew, onClose }: { alarm: ClockAlarm; isNew: bool
         <div className="p-divider" />
         <div className="p-sheet-buttons">
           <TextButton onClick={close}>Cancel</TextButton>
-          <button className="p-filled-btn" onClick={() => {
+          <button className="p-filled-btn" disabled={problem !== null} onClick={() => {
             const a = tidySchedule({ ...alarm, hour: Math.floor(minute / 60), minute: minute % 60, label: label.trim(), days, sound, enabled: true, dates, skip, pausedUntil }, today);
             close();
-            void ensureNotifications("This alarm rings at its time even with the app closed, through a notification.").then(() => save(a));
+            void ensureNotifications("This alarm rings at its time even with the app closed, through a notification.").then(async () => {
+              if (!isSeries) {
+                // A series turned back into one alarm: the rest of it goes.
+                await Promise.all(group.filter((x) => x.id !== alarm.id).map((x) => native.deleteClock(x.id)));
+                return save({ ...a, series: null, shortRing: false });
+              }
+              const stamp = Date.now();
+              const made = buildSeries({ ...a, shortRing: !longRing }, plan, group.length ? group : isNew ? [] : [alarm], alarm.series ?? stamp, stamp);
+              // One after the other: each save sets an alarm and rewrites the engine's list.
+              for (const id of made.remove) await native.deleteClock(id);
+              for (const x of made.save) await native.saveClock(x);
+              await refreshAlarmState();
+            });
           }}>Save</button>
         </div>
       </div>
     )}</BottomSheet>
+    {pickTo && <TimePickerDialog step={1} value={to} onPick={setTo} onClose={() => setPickTo(false)} />}
     {picker === "dates" && <MultiDatePickerDialog title="Ring on these dates" value={dates} from={today} onPick={setDates} onClose={() => setPicker(null)} />}
     {picker === "skip" && <MultiDatePickerDialog title="Skip these days" value={skip} from={today} onPick={(d) => { setSkip(d); if (d.length) setPausedUntil(null); }} onClose={() => setPicker(null)} />}
     {picker === "until" && <DatePickerDialog value={pausedUntil ?? today + 7} onPick={(d) => { setPausedUntil(d > today ? d : null); setSkip([]); }} onClose={() => setPicker(null)} />}

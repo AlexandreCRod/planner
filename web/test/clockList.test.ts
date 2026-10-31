@@ -104,3 +104,42 @@ test("the weather app picker's search: by name or package, accents ignored, star
   assert.deepEqual(filterApps(apps, "ipma").map((a) => a.label), ["IPMA Météo"]);
   assert.deepEqual(filterApps(apps, "zzz"), []);
 });
+
+test("a series is one bundle: whatever the window, whatever else is near it (244)", async () => {
+  const { bundleAlarms } = await import("../src/domain/clockList.ts");
+  const a = alarm(7, 0, 0, true, { series: 5 }), b = alarm(7, 40, 0, true, { series: 5 }), c = alarm(7, 20, 0, true, { series: 5 });
+  const plain = alarm(7, 5), other = alarm(7, 10, 0, true, { series: 6 });
+  const names = (g: { hour: number; minute: number }[][]) => g.map((b) => b.map((a) => a.hour * 60 + a.minute));
+  // The plain 07:05 doesn't join though it's within the window, and a window of 0 doesn't split the series.
+  assert.deepEqual(names(bundleAlarms([a, plain, b, c, other], fri)), [[420, 440, 460], [425], [430]]);
+  assert.deepEqual(names(bundleAlarms([a, b, c], fri, 0)), [[420, 440, 460]]);
+  // Partly rung, a one-off series stays together: 07:00 has passed (so it's tomorrow's) and 12:00 is today's.
+  const noon = alarm(12, 0, 0, true, { series: 7 }), early = alarm(7, 0, 0, true, { series: 7 });
+  assert.equal(bundleAlarms([early, noon], fri).length, 1);
+});
+
+test("a series' times: 07:00 to 08:00 every 10 min is seven alarms; the end is a limit (244)", async () => {
+  const { seriesTimes, seriesProblem, SERIES_MAX } = await import("../src/domain/clockList.ts");
+  assert.deepEqual(seriesTimes({ from: 420, to: 480, every: 10 }), [420, 430, 440, 450, 460, 470, 480]);
+  assert.deepEqual(seriesTimes({ from: 420, to: 475, every: 20 }), [420, 440, 460]);
+  assert.equal(seriesProblem({ from: 420, to: 480, every: 10 }), null);
+  assert.match(seriesProblem({ from: 480, to: 420, every: 10 })!, /after the start/);
+  assert.match(seriesProblem({ from: 420, to: 425, every: 10 })!, /only one/);
+  assert.match(seriesProblem({ from: 0, to: 600, every: 1 })!, new RegExp(`Up to ${SERIES_MAX}`));
+  assert.equal(seriesProblem({ from: 420, to: 420 + SERIES_MAX - 1, every: 1 }), null);
+});
+
+test("editing a series keeps the alarms still at their times, adds new ones and drops the rest (244)", async () => {
+  const { buildSeries, seriesPlan } = await import("../src/domain/clockList.ts");
+  const base = { id: 1, hour: 7, minute: 0, days: WEEKDAYS, enabled: false, label: "Wake" };
+  const was = [{ ...base, id: 1, series: 9 }, { ...base, id: 2, minute: 10, series: 9 }, { ...base, id: 3, minute: 20, series: 9 }];
+  assert.deepEqual(seriesPlan(was), { from: 420, to: 440, every: 10 });
+  const { save, remove } = buildSeries(was[0], { from: 430, to: 450, every: 10 }, was, 9, 1000);
+  assert.deepEqual(save.map((a) => [a.id, a.hour, a.minute]), [[2, 7, 10], [3, 7, 20], [1000, 7, 30]]);
+  assert.deepEqual(remove, [1]);
+  // All on again, with the same days and label, in the same series.
+  assert.ok(save.every((a) => a.enabled && a.days === WEEKDAYS && a.label === "Wake" && a.series === 9));
+  // A new one takes ids one after the other, none repeated.
+  const fresh = buildSeries({ ...base, id: 0 }, { from: 420, to: 440, every: 10 }, [], 50, 50);
+  assert.deepEqual(fresh.save.map((a) => a.id), [50, 51, 52]);
+});

@@ -207,6 +207,31 @@ class AlarmServiceTest {
         assertEquals(77L, AlarmService.ringing?.clockId)
     }
 
+    private fun clockIntent(id: Long) = clockIntent().putExtra(ClockAlarms.EXTRA_CLOCK, id)
+
+    /** 244: a series set to ring only as long as a calendar alarm stops after that 1 minute; by default it's 10. */
+    @Test fun aSeriesRingsLikeAClockAlarmUnlessToldOtherwise() {
+        ClockAlarms.save(ctx, ClockAlarm(78, 7, 10, label = "Long", series = 5))
+        ClockAlarms.save(ctx, ClockAlarm(79, 7, 20, label = "Short", series = 6, shortRing = true))
+        ring(clockIntent(78))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(5))
+        assertEquals(78L, AlarmService.ringing?.clockId)
+        action(AlarmService.ACTION_DISMISS)
+        ring(clockIntent(79))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(1).plusSeconds(1))
+        assertNull(AlarmService.ringing)
+    }
+
+    /** 244: 07:00 still ringing when 07:05 of the same series comes is one wake-up, not a missed alarm. */
+    @Test fun theNextAlarmOfASeriesTakesOverWithoutAMissedNotice() {
+        ClockAlarms.save(ctx, ClockAlarm(78, 7, 0, label = "Series", series = 5))
+        ClockAlarms.save(ctx, ClockAlarm(79, 7, 5, label = "Series", series = 5))
+        ring(clockIntent(78))
+        ring(clockIntent(79))
+        assertEquals(79L, AlarmService.ringing?.clockId)
+        assertTrue(!missed("Series"))
+    }
+
     @Test fun afterTheAppIsKilledItRingsOnFromWhatWasSaved() {
         ring(eventIntent())
         val saved = RingState.load(ctx)!!
