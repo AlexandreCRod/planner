@@ -226,6 +226,36 @@ class CardTest {
         assertEquals("Skip next alarm", n.actions.first().title.toString())
     }
 
+    private fun wakeUps(): List<ClockAlarm> {
+        val first = java.time.LocalDateTime.now().plusMinutes(30)
+        val list = (0..2L).map { i -> first.plusMinutes(i * 10).let { ClockAlarm(i + 1, it.hour, it.minute, label = "Wake up", days = 127) } }
+        list.forEach { ClockAlarms.save(ctx, it); ClockAlarms.notice(ctx, it.id, ClockAlarms.nextRingAt(it)!!) }
+        return list
+    }
+
+    @Test fun aBundlesRowSkipsOneOrAll() {
+        ClockAlarms.reload()
+        val alarms = wakeUps()
+        val row = lines().single()
+        assertEquals("3 alarms · Rings", row.extras.getString(Notification.EXTRA_TEXT))
+        assertEquals("Skip all", row.actions[1].title.toString())
+        // "Skip all", as Android delivers it.
+        AlarmReceiver().onReceive(ctx, shadowOf(row.actions[1].actionIntent).savedIntent)
+        val until = System.currentTimeMillis() + 3_000
+        while (lines().isNotEmpty() && System.currentTimeMillis() < until) Thread.sleep(20)
+        assertTrue(alarms.all { ClockAlarms.get(ctx, it.id)!!.skip.size == 1 })
+        assertTrue(lines().isEmpty())
+        ClockAlarms.reload()
+    }
+
+    @Test fun theListLooksButtonsSayWhatABundlesDo() {
+        look(card = 2)
+        ClockAlarms.reload()
+        wakeUps()
+        assertEquals("Skip all", posted().single().actions[1].title.toString())
+        ClockAlarms.reload()
+    }
+
     @Test fun switchingTheLookRedrawsIt() {
         data()
         Card.notice(ctx, tese, alarm, today.toEpochDay(), at(23, 50), at(23, 50), snoozed = false)

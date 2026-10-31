@@ -9,7 +9,7 @@ import { clockFormat, dateStyle } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
 import { go } from "../ui/shared/common.tsx";
 import { look, onLooks } from "../ui/phone/looks.ts";
-import { clockPrefs } from "./clockPrefs.ts";
+import { clockPrefs, onClockPrefs } from "./clockPrefs.ts";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
 import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";
@@ -60,6 +60,7 @@ export function startAlarmMirror() {
   subscribe(soon);
   onAlarmSettings(soon);
   onLooks(soon);
+  onClockPrefs(soon);
   onNative("changed", (what) => {
     if (what === "done" || what === "resume") void takeDone();
     if (what === "resume") pushMirror();

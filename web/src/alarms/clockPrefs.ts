@@ -17,6 +17,9 @@ const KEY = "clockPrefs";
 let cache: ClockPrefs | null = null;
 const listeners = new Set<() => void>();
 
+/** Calls [fn] when these change (the engine's card bundles clock alarms by the same window). */
+export function onClockPrefs(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; }
+
 export function clockPrefs(): ClockPrefs {
   if (cache) return cache;
   let saved: Partial<ClockPrefs> = {};

@@ -460,7 +460,8 @@ object Card {
         // The next alarm's two buttons, and the oldest task not ticked yet.
         val acts = ArrayList<Button>()
         if (next != null) buttons(context, next, settings.snoozeMinutes).filter { it.label != "Done" }.take(2).forEachIndexed { i, btn ->
-            acts += Button(if (i == 0) "Skip next alarm" else "Snooze it", btn.pi)
+            // A bundle's own buttons say what they do ("Skip 07:00", "Skip all").
+            acts += if (next.lines.size > 1) btn else Button(if (i == 0) "Skip next alarm" else "Snooze it", btn.pi)
         }
         rows.firstOrNull { r -> r.lines.first().completable && now >= r.lines.first().start }?.let { r ->
             buttons(context, r, settings.snoozeMinutes).firstOrNull { it.label == "Done" }?.let { acts += Button("${r.name} done", it.pi) }
