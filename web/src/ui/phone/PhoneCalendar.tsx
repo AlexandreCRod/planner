@@ -5,6 +5,7 @@
 // empty slot, and slides sideways like a pager to the days before and after. Month and Year slide the
 // same way.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
 import { carryOver } from "../../store/prefs.ts";
@@ -23,9 +24,10 @@ import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { type PageTurner, SWIPE_GAIN, pageTarget, spring, swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
+import { EdgeHold, dropColumn, edgeOf } from "./edgeTurn.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
 import { useLook } from "./looks.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
 import { setEventEnd } from "./eventTime.ts";
@@ -194,9 +196,140 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
   const now = useNow();
   const t = todayEpoch();
   const strip = useRef<HTMLDivElement>(null);
+  const settled = useRef<() => void>(() => {});
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [strip.current], onStep: (dir) => onStep(dir), pages: () => !swipeTabs(), turner: turners.calendar,
+    onSettled: () => settled.current(),
   });
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  const snap = useRef(s);
+  snap.current = s;
+  // An item's chip held, or dragged with the mouse (298): it lifts and follows the finger over the days, the
+  // day under it marked; held at the left or right edge, the months turn under it; dropped, it moves there,
+  // keeping its time. A repeating one asks which days, as in the time grid.
+  useEffect(() => {
+    const el = pager.current;
+    if (!el) return;
+    let d: {
+      id: number; chip: HTMLElement; item: Item; from: number; x0: number; y0: number; x: number; y: number; timer: number; raf: number; mouse: boolean;
+      lifted: boolean; float: HTMLElement | null; cells: { el: HTMLElement; day: number; r: DOMRect }[]; over: HTMLElement | null; sliding: boolean; drop: boolean;
+      left: number; right: number; edge: EdgeHold;
+    } | null = null;
+    const noScroll = (e: TouchEvent) => { if (d?.lifted && e.cancelable) e.preventDefault(); };
+    const measure = () => {
+      if (!d) return;
+      d.cells = [...el.querySelectorAll<HTMLElement>(".p-hpanel.cur .p-mcell")].map((c) => ({ el: c, day: Number(c.dataset.day), r: c.getBoundingClientRect() }));
+      const r = el.getBoundingClientRect();
+      d.left = r.left; d.right = r.right;
+    };
+    const cellAt = () => d?.sliding ? null : d?.cells.find((c) => d!.x >= c.r.left && d!.x < c.r.right && d!.y >= c.r.top && d!.y < c.r.bottom) ?? null;
+    const mark = () => {
+      if (!d) return;
+      const c = cellAt()?.el ?? null;
+      if (c === d.over) return;
+      d.over?.classList.remove("drop");
+      c?.classList.add("drop");
+      if (c && d.over) feel("tick");
+      d.over = c;
+    };
+    const frame = frameWriter(() => {
+      if (!d?.float) return;
+      d.float.style.transform = `translate3d(${d.x - d.x0}px,${d.y - d.y0}px,0) scale(1.03)`;
+      mark();
+    });
+    const stop = () => {
+      if (!d) return;
+      clearTimeout(d.timer);
+      cancelAnimationFrame(d.raf);
+      frame.cancel();
+      d.float?.remove();
+      d.over?.classList.remove("drop");
+      d.chip.style.opacity = "";
+      d = null;
+      el.removeEventListener("touchmove", noScroll);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    const finish = () => {
+      if (!d) return;
+      const c = cellAt(), { item, from } = d;
+      swallowClick(400);
+      stop();
+      if (!c || c.day === from) return;
+      feel("settle");
+      const edited = movedToDay(item, from, c.day);
+      if (isRecurring(item)) setPendingMove({ series: item, day: from, edited });
+      else saveItem(edited);
+    };
+    const watchEdge = (t: number) => {
+      if (!d) return;
+      const dir = d.sliding ? 0 : d.edge.feed(edgeOf(d.x, d.left, d.right), t);
+      if (dir && turners.calendar.current) {
+        d.sliding = true;
+        d.over?.classList.remove("drop");
+        d.over = null;
+        feel("tick");
+        turners.calendar.current.turn(dir);
+      }
+      d.raf = requestAnimationFrame(watchEdge);
+    };
+    settled.current = () => {
+      if (!d?.lifted || !d.sliding) return;
+      d.sliding = false;
+      measure();
+      mark();
+      if (d.drop) finish();
+    };
+    const lift = () => {
+      if (!d) return;
+      d.lifted = true;
+      feel("pickup");
+      measure();
+      const r = d.chip.getBoundingClientRect();
+      const f = d.chip.cloneNode(true) as HTMLElement;
+      f.classList.add("p-mchip-lift");
+      Object.assign(f.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${Math.max(r.width, 48)}px` });
+      document.body.appendChild(f);
+      d.float = f;
+      d.chip.style.opacity = ".35";
+      frame(0);
+      d.raf = requestAnimationFrame(watchEdge);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!d || e.pointerId !== d.id) return;
+      d.x = e.clientX; d.y = e.clientY;
+      if (d.lifted) { claimSwipe(d.id); frame(0); return; }
+      if (Math.hypot(d.x - d.x0, d.y - d.y0) <= TOUCH_SLOP) return;
+      if (d.mouse) { claimSwipe(d.id); clearTimeout(d.timer); lift(); return; }
+      stop(); // a swipe or a scroll, not a hold
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!d || e.pointerId !== d.id) return;
+      if (!d.lifted) { stop(); return; }
+      if (d.sliding) { d.drop = true; return; } // the months finish turning first (settled)
+      finish();
+    };
+    const onCancel = (e: PointerEvent) => { if (d && e.pointerId === d.id) stop(); };
+    const onDown = (e: PointerEvent) => {
+      if (d || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+      const chip = (e.target as Element).closest<HTMLElement>(".p-hpanel.cur .p-mchip[data-id]");
+      const item = chip && snap.current.byId.get(Number(chip.dataset.id));
+      if (!chip || !item) return;
+      d = {
+        id: e.pointerId, chip, item, from: Number(chip.dataset.day), x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, raf: 0, mouse: isMouse(e),
+        lifted: false, float: null, cells: [], over: null, sliding: false, drop: false, left: 0, right: 0, edge: new EdgeHold(),
+        timer: window.setTimeout(() => { claimSwipe(e.pointerId); lift(); }, LONG_PRESS_MS),
+      };
+      el.addEventListener("touchmove", noScroll, { passive: false });
+      window.addEventListener("pointermove", onMove, { passive: true });
+      window.addEventListener("pointerup", onUp, { passive: true });
+      window.addEventListener("pointercancel", onCancel, { passive: true });
+    };
+    // In the capture phase: this has to see the finger before the pager does.
+    el.addEventListener("pointerdown", onDown, { passive: true, capture: true });
+    return () => { stop(); el.removeEventListener("pointerdown", onDown, { capture: true }); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const months = [monthOf(addMonths(anchor, -1)), monthOf(anchor), monthOf(addMonths(anchor, 1))];
   const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
   return (
@@ -220,6 +353,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
         {dayList.map((o) => <OccurrenceRow key={`${o.item.id}_${o.day}`} o={o} s={s} now={now} />)}
         <div style={{ height: 88 }} />
       </div>
+      {pendingMove && <MoveScope move={pendingMove} onDone={() => setPendingMove(null)} />}
     </div>
   );
 }
@@ -262,7 +396,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
               const own = list.filter((o) => o.endDay === o.day).slice(0, maxShown - room);
               const more = list.length - own.length - barsShownOver(lanes, col, maxShown);
               return (
-                <div key={d} className={`p-mcell ${d === selected ? "sel" : ""}`} role="button" {...press(d)}>
+                <div key={d} className={`p-mcell ${d === selected ? "sel" : ""}`} data-day={d} role="button" {...press(d)}>
                   <div className="p-mnum-row">
                     <span className={`p-mnum ${d === t ? "today" : ""} ${ymd(d).m !== month ? "out" : ""}`}>{ymd(d).d}</span>
                     {noteDays.has(d) && <MIcon name="oEditNote" size={11} />}
@@ -273,7 +407,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
                     const c = o.overdue ? "var(--danger)" : s.colorOf(o.item);
                     const isTask = o.item.type === "TASK";
                     return (
-                      <span key={keyOf(o)} className={`p-mchip ${isTask ? "task" : ""}`} style={{
+                      <span key={keyOf(o)} className={`p-mchip ${isTask ? "task" : ""}`} data-id={o.item.id} data-day={o.day} style={{
                         ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined,
                       }}>{displayTitle(o.item)}</span>
                     );
@@ -297,6 +431,8 @@ function useLongPress(onLong: (d: number) => void, onTap: (d: number) => void) {
   cb.current = { onLong, onTap };
   return (d: number) => ({
     onPointerDown: (e: React.PointerEvent) => {
+      // A held chip is picked up (MonthView); only the day around it adds an event.
+      if ((e.target as Element).closest(".p-mchip[data-id]")) { st.current = null; return; }
       const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
       p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onLong(d); }, 500);
       st.current = p;
@@ -423,6 +559,35 @@ interface Gesture {
   resize: boolean;
   /** Landed while the hours were still scrolling (a fling): that touch only stops them. */
   flung: boolean;
+  /** The block picked up, with its place when it was (the days under it can turn, 298). */
+  info: { p: Placed; di: number } | null;
+  /** Once the days have turned under it: a copy that stays with the finger, whatever days are drawn. */
+  carrier: HTMLElement | null;
+  edge: EdgeHold;
+  left: number; right: number;
+}
+
+interface PendingMove { series: Item; day: number; edited: Item }
+
+/** Which days a moved repeating item's move is for. */
+function MoveScope({ move, onDone }: { move: PendingMove; onDone: () => void }) {
+  return (
+    <ScopeDialog title="Move repeating item" onCancel={onDone} onPick={(scope: EditScope) => {
+      const { series, day, edited } = move;
+      if (scope === "THIS") saveSeriesEdit("THIS", series, day, edited);
+      else {
+        const delta = (edited.startDay ?? day) - day;
+        const shifted = { ...series, startDay: (series.startDay ?? day) + delta, endDay: series.endDay !== null ? series.endDay + delta : null, startMin: edited.startMin, endMin: edited.endMin };
+        saveSeriesEdit(scope, series, day, scope === "FOLLOWING" ? { ...shifted, startDay: edited.startDay, endDay: edited.endDay } : shifted);
+      }
+      onDone();
+    }} />
+  );
+}
+
+/** The item with its day [from] moved to [to], keeping its time and how many days it runs. */
+function movedToDay(item: Item, from: number, to: number): Item {
+  return { ...item, startDay: to, endDay: item.endDay !== null ? to + (item.endDay - (item.startDay ?? from)) : null };
 }
 
 function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
@@ -445,8 +610,9 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
   const pendingScroll = useRef<number | null>(null);
   const [now, setNow] = useState(nowMinutes());
   useEffect(() => { const i = setInterval(() => setNow(nowMinutes()), 60_000); return () => clearInterval(i); }, []);
-  const [ghost, setGhost] = useState<{ key: string; start: number; dDay: number; length: number; color: string; isTask: boolean } | null>(null);
-  const [pendingMove, setPendingMove] = useState<{ series: Item; day: number; edited: Item } | null>(null);
+  /** [col]: the column in view it lands in. */
+  const [ghost, setGhost] = useState<{ start: number; col: number; length: number; color: string; isTask: boolean } | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
 
   // The days before and after are drawn too, off to each side, so a sideways swipe drags real days in
   // (like a pager) instead of empty space. Index `count` is the first day in view.
@@ -570,7 +736,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
   const clearAfterRender = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     const el = clearAfterRender.current;
-    if (el) { el.style.transform = ""; el.classList.remove("lifted"); clearAfterRender.current = null; }
+    if (el) { el.style.transform = ""; el.style.visibility = ""; el.classList.remove("lifted"); clearAfterRender.current = null; }
   });
 
   // The new event's slot stays in view above the add panel.
@@ -624,23 +790,38 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
     };
 
     const updateDrag = () => {
-      if (!g || !g.block) return;
-      const info = placed.current.get(g.key);
-      if (!info) return;
+      if (!g || !g.block || !g.info) return;
       const dy = g.dy + (el.scrollTop - g.scroll0);
-      g.block.style.transform = `translate3d(${g.dx}px,${dy}px,0) scale(1.03)`;
-      const { p, di } = info;
+      (g.carrier ?? g.block).style.transform = `translate3d(${g.dx}px,${dy}px,0) scale(1.03)`;
+      const { p, di } = g.info;
       const px = pxRef.current;
       const dMin = Math.round(dy / px / 15) * 15;
       const start = Math.max(0, Math.min(DAY_MIN - 15, p.start + dMin));
-      const dDay = Math.max(-di, Math.min(daysRef.current.length - 1 - di, Math.round(g.dx / colW())));
+      const col = dropColumn(di, g.dx, colW(), daysRef.current.length);
+      const dDay = daysRef.current[col] - p.o.day;
       const snap = `${start}|${dDay}`;
       if (snap !== g.snap) {
         if (g.snap) feel("tick");
         g.snap = snap;
         const isTask = p.o.item.type === "TASK";
-        setGhost({ key: g.key, start, dDay, length: p.end - p.start, color: props.current.s.colorOf(p.o.item), isTask });
+        setGhost({ start, col, length: p.end - p.start, color: props.current.s.colorOf(p.o.item), isTask });
       }
+    };
+
+    /** The days are about to turn under the block: a copy over the grid stays with the finger instead. */
+    const carry = (cur: Gesture) => {
+      const b = cur.block, host = layer.current?.parentElement;
+      if (cur.carrier || !b || !host) return;
+      const r = b.getBoundingClientRect(), h = host.getBoundingClientRect();
+      const dy = cur.dy + (el.scrollTop - cur.scroll0);
+      const c = b.cloneNode(true) as HTMLElement;
+      Object.assign(c.style, {
+        left: `${r.left + r.width / 2 - h.left - cur.dx - b.offsetWidth / 2}px`, top: `${r.top + r.height / 2 - h.top - dy - b.offsetHeight / 2}px`,
+        width: `${b.offsetWidth}px`, height: `${b.offsetHeight}px`, pointerEvents: "none",
+      });
+      host.appendChild(c);
+      cur.carrier = c;
+      b.style.visibility = "hidden";
     };
 
     // While dragging near the top or bottom edge, the grid scrolls by itself.
@@ -652,14 +833,21 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       if (g.y < r.top + edge) v = -Math.ceil((r.top + edge - g.y) / 4);
       else if (g.y > r.bottom - edge) v = Math.ceil((g.y - (r.bottom - edge)) / 4);
       if (v) { el.scrollTop += v; updateDrag(); }
+      // Held at the left or right edge, the days turn to the next or previous range (298).
+      const dir = settling ? 0 : g.edge.feed(edgeOf(g.x, g.left, g.right), performance.now());
+      if (dir) { carry(g); feel("tick"); settleSwipe(0, 0, dir); }
       g.raf = requestAnimationFrame(autoScroll);
     };
 
     // The long-press lift: a soft pick-up, as an Android drag-and-drop; each slot passed ticks, landing settles.
     const lift = () => {
       if (!g || !g.block) return;
+      g.info = placed.current.get(g.key) ?? null;
+      if (!g.info) return;
       g.lifted = true;
       claimSwipe(g.id);
+      const box = (layer.current?.parentElement ?? el).getBoundingClientRect();
+      g.left = box.left; g.right = box.right;
       feel("pickup");
       g.block.classList.add("lifted");
       el.classList.add("dragging");
@@ -682,7 +870,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       if (snap !== g.snap) {
         if (g.snap) feel("tick");
         g.snap = snap;
-        setGhost({ key: g.key, start: p.start, dDay: 0, length: endMin - p.start, color: props.current.s.colorOf(p.o.item), isTask: false });
+        setGhost({ start: p.start, col: info.di, length: endMin - p.start, color: props.current.s.colorOf(p.o.item), isTask: false });
       }
     };
 
@@ -691,6 +879,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       clearTimeout(g.timer);
       cancelAnimationFrame(g.raf);
       el.classList.remove("dragging");
+      g.carrier?.remove();
       g = null;
     };
 
@@ -705,6 +894,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0, mouse: isMouse(e),
         resize: !!block && isMouse(e) && !!(e.target as HTMLElement).closest(".pg-resize"),
         flung: !isMouse(e) && performance.now() - lastScroll < 120,
+        info: null, carrier: null, edge: new EdgeHold(), left: 0, right: 0,
       };
       g.vt.add(e.timeStamp, e.clientX);
       if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
@@ -742,7 +932,10 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         done = true;
         settling = null;
         moveLayers(-dir * w);
-        if (dir) props.current.onStep(dir); // the new days render there, then the offset is dropped
+        // The new days render there, then the offset is dropped. (At once with a block in the air: it's now
+        // over a different day.)
+        if (dir && g?.lifted) { flushSync(() => props.current.onStep(dir)); updateDrag(); }
+        else if (dir) props.current.onStep(dir);
         else moveLayers(0);
       };
       settling = { stop: spring(dx, -dir * w, vx, moveLayers, finish), end: finish };
@@ -763,7 +956,9 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         return;
       }
       if (cur.lifted) {
-        const info = placed.current.get(cur.key);
+        // Let go while the days are turning: they finish now, so it lands in the days it's over.
+        if (settling) { settling.stop(); settling.end(); }
+        const info = cur.info;
         const snap = cur.snap.split("|").map(Number);
         setGhost(null);
         if (info && cur.block) {
@@ -772,13 +967,15 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
           feel("settle");
           if (!dMin && !dDay) {
             // Not moved: back into place.
-            cur.block.animate([{ transform: cur.block.style.transform }, { transform: "none" }], { duration: 160, easing: "ease-out" });
+            if (!cur.carrier) cur.block.animate([{ transform: cur.block.style.transform }, { transform: "none" }], { duration: 160, easing: "ease-out" });
             cur.block.style.transform = "";
+            cur.block.style.visibility = "";
             cur.block.classList.remove("lifted");
           } else {
             const edited = moved(p.o, dDay, dMin);
             if (isRecurring(p.o.item)) {
               cur.block.style.transform = "";
+              cur.block.style.visibility = "";
               cur.block.classList.remove("lifted");
               setPendingMove({ series: p.o.item, day: p.o.day, edited });
             } else {
@@ -811,7 +1008,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       if (!g || e.pointerId !== g.id) return;
       // The browser took the finger for scrolling.
       if (g.swiping) settleSwipe(g.sx, 0);
-      if (g.lifted && g.block) { g.block.style.transform = ""; g.block.classList.remove("lifted"); setGhost(null); }
+      if (g.lifted && g.block) { g.block.style.transform = ""; g.block.style.visibility = ""; g.block.classList.remove("lifted"); setGhost(null); }
       if (g.resize) { if (g.block) g.block.style.height = ""; setGhost(null); }
       end();
     };
@@ -1001,17 +1198,12 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
                 <DayColumn key={d} left={`${(d - base) * colPct}%`} width={`${colPct}%`} blocks={timed[j]} s={s} pxPerMin={pxPerMin} compact={compact}
                   now={d === t ? now : null} />
               ))}
-              {ghost && (() => {
-                const info = placed.current.get(ghost.key);
-                if (!info) return null;
-                const di = info.di + ghost.dDay;
-                return (
-                  <div className="pg-ghost" style={{
-                    left: `${(first - base + di) * colPct}%`, width: `${colPct}%`, top: ghost.start * pxPerMin, height: Math.max(18, ghost.length * pxPerMin),
-                    ["--c" as string]: ghost.color,
-                  }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
-                );
-              })()}
+              {ghost && (
+                <div className="pg-ghost" style={{
+                  left: `${(first - base + ghost.col) * colPct}%`, width: `${colPct}%`, top: ghost.start * pxPerMin, height: Math.max(18, ghost.length * pxPerMin),
+                  ["--c" as string]: ghost.color,
+                }}>{ghost.isTask ? formatTime(ghost.start) : `${formatTime(ghost.start)}–${formatTime(Math.min(DAY_MIN - 1, ghost.start + ghost.length))}`}</div>
+              )}
               {/* Where the new event goes, while the panel is open: its outline in its colour (the look
                   picked in looks.ts), with the title typed so far and its times. Its handles drag to change
                   the times (AddPanel takes the finger, over its scrim). */}
@@ -1033,18 +1225,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         {/* A little room under the 24:00 line, so it shows clear of the bottom edge. */}
         <div style={{ height: END_ROOM }} />
       </div>
-      {pendingMove && (
-        <ScopeDialog title="Move repeating item" onCancel={() => setPendingMove(null)} onPick={(scope: EditScope) => {
-          const { series, day, edited } = pendingMove;
-          if (scope === "THIS") saveSeriesEdit("THIS", series, day, edited);
-          else {
-            const delta = (edited.startDay ?? day) - day;
-            const shifted = { ...series, startDay: (series.startDay ?? day) + delta, endDay: series.endDay !== null ? series.endDay + delta : null, startMin: edited.startMin, endMin: edited.endMin };
-            saveSeriesEdit(scope, series, day, scope === "FOLLOWING" ? { ...shifted, startDay: edited.startDay, endDay: edited.endDay } : shifted);
-          }
-          setPendingMove(null);
-        }} />
-      )}
+      {pendingMove && <MoveScope move={pendingMove} onDone={() => setPendingMove(null)} />}
     </div>
   );
 }
