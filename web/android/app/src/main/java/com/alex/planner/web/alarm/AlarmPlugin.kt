@@ -432,10 +432,55 @@ class AlarmPlugin : Plugin() {
         return c to (p.getString("label", null) ?: c.packageName)
     }
 
-    /**
-     * Lets the user pick the weather app in Android's own app picker, so this app never lists the
-     * installed apps itself; only the one picked is remembered.
-     */
+    @Serializable
+    data class LaunchApp(val component: String, val label: String)
+
+    private fun launchers() = context.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+
+    /** The phone's apps for the page's own picker (83): only their names leave this call, and only for that sheet. */
+    @PluginMethod
+    fun weatherApps(call: PluginCall) {
+        Thread {
+            runCatching {
+                val pm = context.packageManager
+                launchers().map { LaunchApp(ComponentName(it.activityInfo.packageName, it.activityInfo.name).flattenToString(), it.loadLabel(pm).toString()) }
+                    .sortedBy { it.label.lowercase() }
+            }.onSuccess { ok(call, json.encodeToString(ListSerializer(LaunchApp.serializer()), it)) }
+                .onFailure { call.reject("can't list apps") }
+        }.start()
+    }
+
+    /** One app's icon as a small PNG data URL, off the main thread; nothing for an app that's gone. */
+    @PluginMethod
+    fun appIcon(call: PluginCall) {
+        val c = call.getString("component")?.let(ComponentName::unflattenFromString) ?: return call.reject("component missing")
+        Thread {
+            val png = runCatching {
+                val d = context.packageManager.getActivityIcon(c)
+                val size = 96
+                val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(bmp)
+                d.setBounds(0, 0, size, size)
+                d.draw(canvas)
+                val out = java.io.ByteArrayOutputStream()
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+            }.getOrNull()
+            call.resolve(JSObject().apply { if (png != null) put("png", png) })
+        }.start()
+    }
+
+    /** Keeps the app picked in the page's sheet: Clock's weather opens it from now on. */
+    @PluginMethod
+    fun setWeatherApp(call: PluginCall) {
+        val component = call.getString("component") ?: return call.reject("component missing")
+        val label = call.getString("label") ?: return call.reject("label missing")
+        weatherPrefs().edit().putString("component", component).putString("label", label).apply()
+        AlarmEvents.changed("weather")
+        ok(call)
+    }
+
+    /** Android's own app picker, the page's fallback when the list above comes back empty. */
     @PluginMethod
     fun pickWeatherApp(call: PluginCall) {
         val pick = Intent(Intent.ACTION_PICK_ACTIVITY)
@@ -453,8 +498,7 @@ class AlarmPlugin : Plugin() {
         call ?: return
         val c = result.data?.component
         if (result.resultCode != android.app.Activity.RESULT_OK || c == null) return call.resolve(JSObject().put("picked", false))
-        // Android hides other apps from this one (no app list is asked for), so the picked app's own name
-        // usually can't be read; a name made from its package stands in ("com.google.android.deskclock": "Deskclock").
+        // If the app's own name can't be read, one made from its package stands in ("com.google.android.deskclock": "Deskclock").
         val label = runCatching { context.packageManager.getActivityInfo(c, 0).loadLabel(context.packageManager).toString() }.getOrNull()
             ?: nameFromPackage(c.packageName)
         weatherPrefs().edit().putString("component", c.flattenToString()).putString("label", label).apply()
