@@ -7,7 +7,7 @@
 // per frame, at sub-pixel offsets, through the layers' style (no React render during the drag).
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
-import { type SwipeHandlers, claimSwipe, swallowNextClick } from "./gesture.ts";
+import { type SwipeHandlers, claimSwipe, swallowNextClick, swipeClaimed } from "./gesture.ts";
 import { TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { FLICK, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand } from "./motion.ts";
 import { deskPager } from "./desk.ts";
@@ -171,7 +171,7 @@ export function useSwipePager<T extends HTMLElement>(opts: PagerOptions) {
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       if (!g.dragging) {
-        if (selectingText()) { g.done = true; return; }
+        if (selectingText() || swipeClaimed(e.pointerId)) { g.done = true; return; } // or a drag already has this finger
         if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
         if (Math.abs(dx) <= TOUCH_SLOP) return;
         const yields = typeof o.current.yieldAtEdge === "function" ? o.current.yieldAtEdge() : o.current.yieldAtEdge;

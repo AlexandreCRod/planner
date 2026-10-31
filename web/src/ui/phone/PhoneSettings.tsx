@@ -289,7 +289,7 @@ export function PhoneSettings() {
         </div>
         <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
         <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change by swiping on the top bar" : "Swiping a page changes the day or week"}
-          checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); }} />
+          checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
         {!wide && swipesTabs && <SwitchRow title="Bottom bar changes days and weeks" supporting="On Today and Calendar, sliding along the bar changes the day or week"
           checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}
         {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
