@@ -334,13 +334,16 @@ private fun LayoutB(c: RingContent, a: RingActions) {
         c.today?.let { Spacer(Modifier.height(12.dp)); Today(it) }
     }, bottom = {
         val icons = c.look.icons
+        // "Snooze · 10 min" on two lines.
+        val snooze = c.snooze.substringBefore(" · ")
+        val small = c.snooze.substringAfter(" · ", "")
         if (c.look.stop == StopBy.SLIDE) {
-            BigButton(Modifier.fillMaxWidth().height(96.dp), snoozeIcon(icons), c.snooze, "", Container, TextColour, Primary, a.snooze)
+            BigButton(Modifier.fillMaxWidth().height(96.dp), snoozeIcon(icons), snooze, small, Container, TextColour, Primary, a.snooze)
             Spacer(Modifier.height(12.dp))
             Stopper(c.look, a.stop)
         } else {
             Row(Modifier.fillMaxWidth().height(160.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                BigButton(Modifier.weight(1f).height(160.dp), snoozeIcon(icons), c.snooze, "", Container, TextColour, Primary, a.snooze)
+                BigButton(Modifier.weight(1f).height(160.dp), snoozeIcon(icons), snooze, small, Container, TextColour, Primary, a.snooze)
                 BigStop(c.look, stopSmall, a.stop)
             }
         }
@@ -411,8 +414,11 @@ private fun Stopper(look: RingLook, stop: () -> Unit, tall: Boolean = false) {
         val mod = if (tall) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().height(if (look.stop == StopBy.SLIDE) 68.dp else 64.dp)
         if (look.stop == StopBy.SLIDE) SlideTrack(mod, stopIcon(look.icons), stop) { failed++ }
         else HoldButton(mod, stopIcon(look.icons), stop) { failed++ }
-        if (StopBackup.shows(if (late) StopBackup.AFTER_MS else 0L, failed)) {
-            TextButton(onClick = stop, modifier = Modifier.padding(top = 4.dp).height(48.dp).testTag("backupStop")) { Text("Stop", fontSize = 15.sp) }
+        // Its room is kept from the start: coming up, it mustn't move the track from under the next try.
+        Box(Modifier.padding(top = 4.dp).height(48.dp), contentAlignment = Alignment.Center) {
+            if (StopBackup.shows(if (late) StopBackup.AFTER_MS else 0L, failed)) {
+                TextButton(onClick = stop, modifier = Modifier.testTag("backupStop")) { Text("Stop", fontSize = 15.sp) }
+            }
         }
     }
 }

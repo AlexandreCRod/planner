@@ -275,6 +275,14 @@ class AlarmServiceTest {
         assertEquals(listOf("Stop", "Snooze"), n.actions.map { it.title.toString() })
     }
 
+    /** Found on the emulator: the screen wasn't told which wake-up alarm rang, so it showed no bundle. */
+    @Test fun theScreenIsToldWhichAlarmAndDay() {
+        val n = shadowOf(ring(eventIntent(reminderId = 11))).lastForegroundNotification
+        val i = shadowOf(n.fullScreenIntent).savedIntent
+        assertEquals(11L, i.getLongExtra(AlarmReceiver.EXTRA_REMINDER, 0))
+        assertEquals(today, i.getLongExtra(AlarmReceiver.EXTRA_DAY, 0))
+    }
+
     @Test fun anAlarmOnItsOwnHasNoBundleLine() {
         val n = shadowOf(ring(eventIntent())).lastForegroundNotification
         assertEquals("Today at 23:59", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())

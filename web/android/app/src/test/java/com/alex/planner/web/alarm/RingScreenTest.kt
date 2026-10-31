@@ -67,6 +67,17 @@ class RingScreenTest {
         assertEquals(1, stops)
     }
 
+    /** Found on the emulator: the backup coming up moved the track, and the next slide missed it. */
+    @Test fun theTrackStaysWhereItIsWhenThePlainStopComesUp() {
+        show(RingLayout.A, StopBy.SLIDE)
+        val before = rule.onNodeWithTag("slide").fetchSemanticsNode().boundsInRoot
+        slide("slide", 0.4f)
+        rule.onNodeWithTag("backupStop").assertIsDisplayed()
+        assertEquals(before, rule.onNodeWithTag("slide").fetchSemanticsNode().boundsInRoot)
+        slide("slide", 1f)
+        assertEquals(1, stops)
+    }
+
     /** No touch ever arrives on the track: the backup still comes. */
     @Test fun aPlainStopComesUpByItselfAfterAWhile() {
         show(RingLayout.A, StopBy.SLIDE)
@@ -109,7 +120,7 @@ class RingScreenTest {
 
     @Test fun layoutBStopsByATapAndSnoozesByATap() {
         show(RingLayout.B, StopBy.TAP, bundle)
-        rule.onNodeWithText("Snooze · 10 min").performClick()
+        rule.onNodeWithText("Snooze").performClick()
         tick()
         assertEquals(1, snoozes)
         rule.onNodeWithTag("stop").performClick()

@@ -155,6 +155,8 @@ class AlarmService : Service() {
             putExtra(AlarmActivity.EXTRA_TITLE, title)
             putExtra(AlarmActivity.EXTRA_TEXT, text)
             putExtra(AlarmReceiver.EXTRA_ITEM, itemId)
+            putExtra(AlarmReceiver.EXTRA_REMINDER, reminderId)
+            putExtra(AlarmReceiver.EXTRA_DAY, day)
             putExtra(ClockAlarms.EXTRA_CLOCK, clockId)
             putExtra(ClockTools.EXTRA_TIMER, timerId)
             putExtra(AlarmActivity.EXTRA_COLOR, clock?.color ?: -1)
