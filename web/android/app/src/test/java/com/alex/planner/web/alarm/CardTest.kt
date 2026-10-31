@@ -144,6 +144,37 @@ class CardTest {
     private val alarm = Reminder(12, 1, 0, AlertType.ALARM)
     private fun data() = Mirror.update(ctx) { it.copy(items = listOf(tese), reminders = listOf(reminder, alarm)) }
 
+    @Test fun aStartedTasksLineGoesWhenTheTaskIsTrashed() {
+        data()
+        Card.started(ctx, tese, today.toEpochDay(), show = true, popUp = false)
+        assertEquals(1, lines().size)
+        // The page leaves a trashed item out of what it sends.
+        Mirror.update(ctx) { it.copy(items = emptyList(), reminders = emptyList()) }
+        AlarmScheduler.rescheduleAll(ctx)
+        assertTrue(lines().isEmpty())
+        assertNull(summary())
+    }
+
+    @Test fun onlyTheLineOfTheItemThatLeftGoes() {
+        val other = Item(2, ItemType.TASK, "Water", startDay = today.toEpochDay(), startMin = 23 * 60 + 55)
+        val otherAlarm = Reminder(21, 2, 0, AlertType.ALARM)
+        Mirror.update(ctx) { it.copy(items = listOf(tese, other), reminders = listOf(reminder, alarm, otherAlarm)) }
+        Card.started(ctx, tese, today.toEpochDay(), show = true, popUp = false)
+        Card.started(ctx, other, today.toEpochDay(), show = true, popUp = false)
+        Card.clockNotice(ctx, ClockAlarm(5, 23, 59, label = "Late"), at(23, 59))
+        assertEquals(3, lines().size)
+        Mirror.update(ctx) { it.copy(items = listOf(other), reminders = listOf(otherAlarm)) }
+        AlarmScheduler.rescheduleAll(ctx)
+        assertEquals(listOf("Late", "Water"), titles().map { it!!.substringBefore(" ·") }.sorted())
+    }
+
+    @Test fun aStartedTasksLineStaysWhileItsStillThere() {
+        data()
+        Card.started(ctx, tese, today.toEpochDay(), show = true, popUp = false)
+        AlarmScheduler.rescheduleAll(ctx)
+        assertEquals(1, lines().size)
+    }
+
     @Test fun oneLinePerItemUpdatedInPlaceInOneGroup() {
         data()
         val due = at(23, 30)

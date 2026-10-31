@@ -286,6 +286,11 @@ object Card {
     /** [itemId]'s line goes: it was ticked. */
     fun dropItem(context: Context, itemId: Long) = change(context) { list -> list.filterNot { it.key == itemKey(itemId) } }
 
+    /** Lines of items no longer in [ids] go: they were trashed, or lost their reminders, so nothing else will end them. */
+    fun keepItems(context: Context, ids: Set<Long>) {
+        if (lines(context).any { it.itemId != 0L && it.itemId !in ids }) change(context) { list -> list.filter { it.itemId == 0L || it.itemId in ids } }
+    }
+
     fun clockNotice(context: Context, a: ClockAlarm, at: Long) = change(context) { list ->
         put(list, Line(
             key = clockKey(a.id), clockId = a.id, name = a.label.trim().ifBlank { "Alarm" }, start = at, bundle = daysKey(a, at),

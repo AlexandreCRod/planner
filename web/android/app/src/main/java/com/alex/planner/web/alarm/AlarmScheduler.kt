@@ -254,6 +254,7 @@ object AlarmScheduler {
         }
         m.scheduled.filter { it !in live }.forEach { cancel(context, it); Shown.forget(context, it) }
         if (m.scheduled.toSet() != live) Mirror.update(context) { it.copy(scheduled = live.toList()) }
+        Card.keepItems(context, m.items.filter { it.deletedAt == null }.map { it.id }.toSet())
     }
 
     /** [original]: when the occurrence snoozed was due (0 if not known), so the snooze can be taken back if it moves. */
