@@ -24,7 +24,7 @@ import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { type PageTurner, SWIPE_GAIN, pageTarget, spring, swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
-import { EdgeHold, dropColumn, edgeOf } from "./edgeTurn.ts";
+import { EdgeHold, dropColumn, edgeOf, edgeZone } from "./edgeTurn.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
 import { useLook } from "./looks.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
@@ -264,7 +264,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
     };
     const watchEdge = (t: number) => {
       if (!d) return;
-      const dir = d.sliding ? 0 : d.edge.feed(edgeOf(d.x, d.left, d.right), t);
+      const dir = d.sliding ? 0 : d.edge.feed(edgeOf(d.x, d.left, d.right, edgeZone((d.right - d.left) / 7)), t, d.x);
       if (dir && turners.calendar.current) {
         d.sliding = true;
         d.over?.classList.remove("drop");
@@ -828,7 +828,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       else if (g.y > r.bottom - edge) v = Math.ceil((g.y - (r.bottom - edge)) / 4);
       if (v) { el.scrollTop += v; updateDrag(); }
       // Held at the left or right edge, the days turn to the next or previous range (298).
-      const dir = settling ? 0 : g.edge.feed(edgeOf(g.x, g.left, g.right), performance.now());
+      const dir = settling ? 0 : g.edge.feed(edgeOf(g.x, g.left, g.right, edgeZone(colW())), performance.now(), g.x);
       if (dir) { carry(g); feel("tick"); settleSwipe(0, 0, dir); }
       g.raf = requestAnimationFrame(autoScroll);
     };
