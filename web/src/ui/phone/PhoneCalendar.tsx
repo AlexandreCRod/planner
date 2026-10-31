@@ -13,7 +13,7 @@ import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { isRoutineItem } from "../../domain/routines.ts";
 import { parseDays } from "../../domain/recurrence.ts";
 import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
-import { type EditScope, saveItem, saveSeriesEdit, type Snapshot, useSnapshot } from "../../store/store.ts";
+import { type EditScope, moveSeries, saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { type Placed, layoutDay } from "../shared/dayLayout.ts";
 import { EventRow, TaskRow, go, openItem, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
@@ -573,13 +573,7 @@ interface PendingMove { series: Item; day: number; edited: Item }
 function MoveScope({ move, onDone }: { move: PendingMove; onDone: () => void }) {
   return (
     <ScopeDialog title="Move repeating item" onCancel={onDone} onPick={(scope: EditScope) => {
-      const { series, day, edited } = move;
-      if (scope === "THIS") saveSeriesEdit("THIS", series, day, edited);
-      else {
-        const delta = (edited.startDay ?? day) - day;
-        const shifted = { ...series, startDay: (series.startDay ?? day) + delta, endDay: series.endDay !== null ? series.endDay + delta : null, startMin: edited.startMin, endMin: edited.endMin };
-        saveSeriesEdit(scope, series, day, scope === "FOLLOWING" ? { ...shifted, startDay: edited.startDay, endDay: edited.endDay } : shifted);
-      }
+      moveSeries(scope, move.series, move.day, move.edited);
       onDone();
     }} />
   );

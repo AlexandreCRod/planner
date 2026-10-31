@@ -121,3 +121,23 @@ export function describe(item: Item): string {
   }
   return item.untilDay !== null ? `${base} until ${formatDate(item.untilDay)}` : base;
 }
+
+/**
+ * The repeat rule once occurrence [from] has moved to [to], with the others moving the same way: the
+ * chosen weekdays, days of the month and months turn with it (otherwise the moved day isn't a day the
+ * series falls on, and drops out), and its skipped days and its end stay with the days they were for.
+ */
+export function movedRule(item: Item, from: number, to: number): Pick<Item, "weekDays" | "monthDays" | "months" | "untilDay" | "excludedDays"> {
+  const delta = to - from;
+  const a = ymd(from), b = ymd(to);
+  const turn = (mask: number, by: number, bits: number) => ((mask << by) | (mask >> (bits - by))) & ((1 << bits) - 1);
+  const list = parseIntList(item.monthDays);
+  const monthDays = list.length === 1 ? [b.d] : list.map((d) => (d === LAST_DAY_OF_MONTH ? d : ((d - 1 + b.d - a.d + 31) % 31) + 1));
+  return {
+    weekDays: turn(item.weekDays, ((delta % 7) + 7) % 7, 7),
+    monthDays: delta ? monthDays.join(",") : item.monthDays,
+    months: turn(item.months, (b.m - a.m + 12) % 12, 12),
+    untilDay: item.untilDay !== null ? item.untilDay + delta : null,
+    excludedDays: delta ? parseIntList(item.excludedDays).map((d) => d + delta).join(",") : item.excludedDays,
+  };
+}

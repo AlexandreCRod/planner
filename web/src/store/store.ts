@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 import * as db from "./db.ts";
 import { newId, tagIdFor } from "../domain/ids.ts";
-import { endedBefore, parseDays } from "../domain/recurrence.ts";
+import { endedBefore, movedRule, parseDays } from "../domain/recurrence.ts";
 import { doneTodosToTrash, expiredTrash, staleVersions } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
@@ -359,8 +359,11 @@ export function deleteFollowing(series: Item, day: number): () => void {
 
 export type EditScope = "THIS" | "FOLLOWING" | "ALL";
 
-/** Same three choices as the phone when changing one occurrence of a repeating item. */
-export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edited: Item, opts: SaveOptions = {}) {
+/**
+ * Same three choices as the phone when changing one occurrence of a repeating item. [opts.movedTo]: the
+ * day the occurrence was moved to. Without it, an [edited] that still has the series' first day keeps [day].
+ */
+export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edited: Item, opts: SaveOptions & { movedTo?: number } = {}) {
   const s = snapshot();
   const reminders = opts.reminders ?? s.reminders.get(series.id) ?? [];
   const tags = opts.tags ?? (s.tagsByItem.get(series.id) ?? []).map((t) => t.name);
@@ -370,7 +373,7 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
   if (scope === "THIS") {
     const wasDone = s.done.isDone(series.id, day);
     deleteOccurrence(series, day);
-    const startDay = edited.startDay !== series.startDay ? edited.startDay : day;
+    const startDay = opts.movedTo ?? (edited.startDay !== series.startDay ? edited.startDay : day);
     const newIdNum = saveItem(
       // A single changed day of a routine is still that routine's day: it keeps the mark (and stays on
       // Today's checklist instead of the series' own day), and a tick it already had comes with it.
@@ -384,9 +387,24 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
   }
   if (day <= (series.startDay ?? day)) return saveItem({ ...edited, id: series.id }, { reminders, tags });
   saveItem({ ...series, untilDay: day - 1 });
-  const id = saveItem({ ...edited, id: 0, startDay: day, endDay: day + span, parentId: null }, { reminders: freshReminders, tags });
+  const to = opts.movedTo ?? day;
+  const id = saveItem({ ...edited, id: 0, startDay: to, endDay: to + span, parentId: null }, { reminders: freshReminders, tags });
   addLink(id, series.id);
   return id;
+}
+
+/**
+ * A dragged occurrence of [series] at [day], dropped as [edited]: only that one, or it and the later
+ * ones, or all of them, moved the same way and at its new time.
+ */
+export function moveSeries(scope: EditScope, series: Item, day: number, edited: Item) {
+  const to = edited.startDay ?? day;
+  if (scope === "THIS") return saveSeriesEdit("THIS", series, day, edited, { movedTo: to });
+  const delta = to - day;
+  return saveSeriesEdit(scope, series, day, {
+    ...series, ...movedRule(series, day, to), startDay: (series.startDay ?? day) + delta,
+    endDay: series.endDay !== null ? series.endDay + delta : null, startMin: edited.startMin, endMin: edited.endMin,
+  }, { movedTo: to });
 }
 
 export function addLink(a: number, b: number) {

@@ -4,7 +4,7 @@
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, nextOnOrAfter, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, nextOnOrAfter, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -750,7 +750,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const toSeries = (edited: Item): Item => {
     const first = item.startDay, nd = edited.startDay;
     if (!isRecurring(item) || first === null || nd === null || shownStart === null) return edited;
-    return { ...edited, startDay: first + (nd - shownStart), endDay: edited.endDay !== null ? edited.endDay - shownStart + first : null };
+    return { ...edited, ...movedRule(item, shownStart, nd), startDay: first + (nd - shownStart), endDay: edited.endDay !== null ? edited.endDay - shownStart + first : null };
   };
   const completion = item.startDay === null ? NO_DAY : isRecurring(item) ? (day ?? item.startDay) : item.startDay;
   const done = s.done.isDone(id, completion);
@@ -887,8 +887,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         const edited = pendingScope;
         setPendingScope(null);
         if (occ === null) return;
-        const change = sc === "THIS" ? { ...edited, startDay: edited.startDay ?? occ } : sc === "FOLLOWING" ? edited : toSeries(edited);
-        saveSeriesEdit(sc, item, occ, change);
+        const to = edited.startDay ?? occ;
+        const change = sc === "THIS" ? { ...edited, startDay: to } : sc === "FOLLOWING" ? { ...edited, ...movedRule(item, occ, to) } : toSeries(edited);
+        saveSeriesEdit(sc, item, occ, change, { movedTo: to });
         // "This" and "following" make a new item; this view's occurrence is gone from the series.
         if (sc !== "ALL") leave();
       }} />}
@@ -1165,7 +1166,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
     if (item.routine && !canBeRoutine(item)) item.routine = false;
     if (original && scope && occ !== null) {
       const edited = scope === "THIS" ? { ...item, startDay: item.startDay !== original.startDay ? item.startDay : occ } : item;
-      saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList() });
+      const movedTo = item.startDay !== null && item.startDay !== original.startDay ? item.startDay : undefined;
+      saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList(), movedTo });
     } else saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
     onClose();
   };
