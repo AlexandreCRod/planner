@@ -96,8 +96,11 @@ class AlarmPlugin : Plugin() {
     fun sync(call: PluginCall) {
         val text = call.getString("json") ?: return call.reject("json missing")
         val push = runCatching { json.decodeFromString(MirrorPush.serializer(), text) }.getOrElse { return call.reject("bad json: ${it.message}") }
+        val noticesWere = Mirror.settings(context).upcomingAlarms
         Mirror.replace(context, push)
         AlarmScheduler.rescheduleAll(context)
+        // Clock alarms' notices follow the same setting (their rings don't depend on it).
+        if (noticesWere != push.settings.upcomingAlarms) ClockAlarms.rescheduleAll(context)
         // The Alarms page reads its calendar alarms from here again.
         AlarmEvents.changed("mirror")
         ok(call)

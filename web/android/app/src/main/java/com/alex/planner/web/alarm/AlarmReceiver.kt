@@ -28,6 +28,10 @@ class AlarmReceiver : BroadcastReceiver() {
         const val ACTION_START = "com.alex.planner.web.START"
         /** A clock alarm (the Alarms page) is due. */
         const val ACTION_CLOCK = "com.alex.planner.web.CLOCK"
+        /** Posts a clock alarm's upcoming notice, and that notice's buttons. */
+        const val ACTION_CLOCK_UPCOMING = "com.alex.planner.web.CLOCK_UPCOMING"
+        const val ACTION_CLOCK_EARLY_SNOOZE = "com.alex.planner.web.CLOCK_EARLY_SNOOZE"
+        const val ACTION_CLOCK_EARLY_STOP = "com.alex.planner.web.CLOCK_EARLY_STOP"
         /** A timer (the Alarms page) is up, and its notification's buttons. */
         const val ACTION_TIMER = "com.alex.planner.web.TIMER"
         const val ACTION_TIMER_PAUSE = "com.alex.planner.web.TIMER_PAUSE"
@@ -73,6 +77,10 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             RingWakeLock.acquire(context, 60_000)
             ContextCompat.startForegroundService(context, svc)
+            return
+        }
+        if (intent.action in setOf(ACTION_CLOCK_UPCOMING, ACTION_CLOCK_EARLY_SNOOZE, ACTION_CLOCK_EARLY_STOP)) {
+            handleClockNotice(context, intent)
             return
         }
         if (intent.action in setOf(ACTION_TIMER, ACTION_TIMER_PAUSE, ACTION_TIMER_RESUME, ACTION_TIMER_CANCEL, ACTION_TIMER_PLUS)) {
@@ -179,6 +187,22 @@ class AlarmReceiver : BroadcastReceiver() {
                     if (Armed.horizon(context) != Long.MAX_VALUE) AlarmScheduler.rescheduleAll(context)
                     else AlarmScheduler.scheduleItem(context, item, listOf(reminder))
                 }
+            }
+        }
+    }
+
+    private fun handleClockNotice(context: Context, intent: Intent) {
+        val id = intent.getLongExtra(ClockAlarms.EXTRA_CLOCK, 0)
+        val at = intent.getLongExtra(EXTRA_AT, 0)
+        when (intent.action) {
+            ACTION_CLOCK_UPCOMING -> ClockAlarms.notice(context, id, at)
+            ACTION_CLOCK_EARLY_STOP -> ClockAlarms.skip(context, id, at)
+            ACTION_CLOCK_EARLY_SNOOZE -> {
+                val settings = Mirror.settings(context)
+                val a = ClockAlarms.get(context, id) ?: return
+                // Too close to ringing: show the notice again, now with Stop only.
+                if (AlarmScheduler.canSnoozeEarly(at)) ClockAlarms.snoozeEarly(context, id, at, settings.snoozeMinutes)
+                else Notifications.showClockUpcoming(context, a, at, settings.snoozeMinutes)
             }
         }
     }

@@ -25,6 +25,7 @@ object Notifications {
     const val CH_STARTING = "starting"
     private const val TAG_UPCOMING = "upcoming"
     private const val TAG_STARTING = "starting"
+    private const val TAG_CLOCK_UPCOMING = "clock-upcoming"
 
     const val EXTRA_OPEN_ITEM = "openItemId"
     /** Opens a section of the Alarms page ("alarm", "timer"...). */
@@ -155,6 +156,46 @@ object Notifications {
 
     fun cancelUpcoming(context: Context, reminderId: Long) =
         NotificationManagerCompat.from(context).cancel(TAG_UPCOMING, smallId(reminderId))
+
+    /** The same notice for a clock alarm (219). */
+    fun showClockUpcoming(context: Context, a: ClockAlarm, at: Long, snoozeMinutes: Int) {
+        val time = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        val b = NotificationCompat.Builder(context, CH_UPCOMING)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Upcoming alarm · ${a.label.trim().ifBlank { "Alarm" }}")
+            .setContentText(relativeDayLabel(time.toLocalDate()) + " at " + formatTime(time.hour * 60 + time.minute))
+            .setContentIntent(openSectionIntent(context, "alarm", 3))
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+            .setWhen(at)
+            .setShowWhen(true)
+        if (AlarmScheduler.canSnoozeEarly(at)) {
+            b.addAction(0, "Snooze ${snoozeMinutes}m", clockActionIntent(context, AlarmReceiver.ACTION_CLOCK_EARLY_SNOOZE, a.id, at))
+        }
+        b.addAction(0, "Stop", clockActionIntent(context, AlarmReceiver.ACTION_CLOCK_EARLY_STOP, a.id, at))
+        val nm = NotificationManagerCompat.from(context)
+        if (nm.areNotificationsEnabled()) {
+            try {
+                nm.notify(TAG_CLOCK_UPCOMING, smallId(a.id), b.build())
+                Shown.put(context, Shown.CLOCK, a.id, 0L, at)
+            } catch (_: SecurityException) {
+            }
+        }
+    }
+
+    fun cancelClockUpcoming(context: Context, id: Long) =
+        NotificationManagerCompat.from(context).cancel(TAG_CLOCK_UPCOMING, smallId(id))
+
+    private fun clockActionIntent(context: Context, action: String, id: Long, at: Long): PendingIntent {
+        val i = Intent(context, AlarmReceiver::class.java).apply {
+            this.action = action
+            data = Uri.parse("planner-alarm://clock/$id/${action.substringAfterLast('.')}")
+            putExtra(ClockAlarms.EXTRA_CLOCK, id)
+            putExtra(AlarmReceiver.EXTRA_AT, at)
+        }
+        return PendingIntent.getBroadcast(context, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
 
     /**
      * "Starting now" for [item]: a quiet pop-up while the phone is in use, otherwise (locked, screen off, or

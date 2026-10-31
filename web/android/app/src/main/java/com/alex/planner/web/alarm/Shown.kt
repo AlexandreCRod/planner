@@ -14,6 +14,8 @@ object Shown {
     const val NOTIFICATION = "n:"
     const val UPCOMING = "u:"
     const val SNOOZE = "s:"
+    /** A clock alarm's upcoming notice, by the alarm's id (its [Occ.original]: when it rings). */
+    const val CLOCK = "c:"
     private val KINDS = listOf(NOTIFICATION, UPCOMING, SNOOZE)
 
     data class Occ(val day: Long, val original: Long)

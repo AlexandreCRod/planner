@@ -120,6 +120,73 @@ object ClockAlarms {
         val at = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         set(context, a.id, at, snooze = false)
         Armed.putClock(context, a.id, at)
+        // Only the notice: whatever goes wrong with it, the alarm above is set.
+        runCatching { scheduleNotice(context, a, at) }
+    }
+
+    /** When [a] rings next, in milliseconds, or null. */
+    fun nextRingAt(a: ClockAlarm): Long? = nextRing(a)?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+
+    /**
+     * Queues the notice for 2 hours before [at] (219: clock alarms never had one). One already showing for
+     * another time is out of date (the alarm moved, was skipped, or rang), so it goes.
+     */
+    private fun scheduleNotice(context: Context, a: ClockAlarm, at: Long) {
+        Shown.get(context, Shown.CLOCK, a.id)?.let { if (it.original != at) takeBackNotice(context, a.id) }
+        if (!Mirror.settings(context).upcomingAlarms) { cancelNotice(context, a.id); return }
+        val pi = noticePending(context, a.id, at, create = true) ?: return
+        AlarmScheduler.setNotice(context, AlarmScheduler.noticeAt(at), pi)
+    }
+
+    private fun noticePending(context: Context, id: Long, at: Long, create: Boolean): PendingIntent? {
+        val intent = Intent(context, AlarmReceiver::class.java)
+            .setAction(AlarmReceiver.ACTION_CLOCK_UPCOMING)
+            .setData(Uri.parse("planner-alarm://clock/$id/notice"))
+            .putExtra(EXTRA_CLOCK, id)
+            .putExtra(AlarmReceiver.EXTRA_AT, at)
+        val flags = PendingIntent.FLAG_IMMUTABLE or if (create) PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_NO_CREATE
+        return PendingIntent.getBroadcast(context, 0, intent, flags)
+    }
+
+    private fun cancelNotice(context: Context, id: Long) {
+        val am = context.getSystemService(AlarmManager::class.java)
+        noticePending(context, id, 0L, create = false)?.let { am.cancel(it); it.cancel() }
+        takeBackNotice(context, id)
+    }
+
+    private fun takeBackNotice(context: Context, id: Long) {
+        Notifications.cancelClockUpcoming(context, id)
+        Shown.remove(context, Shown.CLOCK, id)
+    }
+
+    /** The notice is due: shows it, unless the alarm changed since it was set or it was shown before. */
+    fun notice(context: Context, id: Long, at: Long) {
+        val a = get(context, id) ?: return
+        if (!a.enabled || at <= System.currentTimeMillis() || nextRingAt(a) != at) return
+        val settings = Mirror.settings(context)
+        if (!settings.upcomingAlarms) return
+        // Negative: a clock alarm's id is in a different series from a reminder's.
+        if (!AlarmOverrides.firstNotice(context, -id, at)) return
+        Notifications.showClockUpcoming(context, a, at, settings.snoozeMinutes)
+    }
+
+    /**
+     * Doesn't ring at [at], from the notice: a repeating alarm skips that day (the page's Skip next, 75),
+     * one that rings once is switched off. Does nothing if the alarm has moved on since.
+     */
+    fun skip(context: Context, id: Long, at: Long) {
+        val a = get(context, id) ?: return
+        if (nextRingAt(a) != at) { takeBackNotice(context, id); return }
+        val day = java.time.Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        save(context, if (a.repeating) a.copy(skip = a.skip + day) else a.copy(enabled = false))
+    }
+
+    /** Rings [minutes] after [at] instead of at [at], from the notice. */
+    fun snoozeEarly(context: Context, id: Long, at: Long, minutes: Int) {
+        skip(context, id, at)
+        val until = at + minutes * 60_000L
+        setSnoozes(context, snoozes(context) + (id to until))
+        set(context, id, until, snooze = true)
     }
 
     fun snooze(context: Context, id: Long, minutes: Int) {
@@ -179,5 +246,6 @@ object ClockAlarms {
         listOf(false, true).forEach { s -> pending(context, id, s, create = false)?.let { am.cancel(it); it.cancel() } }
         clearSnooze(context, id)
         Armed.removeClock(context, id)
+        runCatching { cancelNotice(context, id) }
     }
 }

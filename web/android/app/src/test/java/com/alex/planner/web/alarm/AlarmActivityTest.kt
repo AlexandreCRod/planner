@@ -29,6 +29,8 @@ class AlarmActivityTest {
     private val today = LocalDate.now().toEpochDay()
 
     @Before fun setUp() {
+        // The screen pulses for ever: with animations on, Robolectric's idle() never comes back from its frames.
+        android.provider.Settings.Global.putFloat(ctx.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         Mirror.reload()
         Mirror.update(ctx) {
             MirrorData(items = listOf(

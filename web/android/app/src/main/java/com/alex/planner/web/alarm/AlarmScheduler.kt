@@ -19,6 +19,21 @@ object AlarmScheduler {
     /** How long before an alarm its upcoming notice (with Snooze / Stop) appears. */
     const val UPCOMING_NOTICE_MS = 2 * 3_600_000L
 
+    /** When the notice for an alarm ringing at [ringsAt] is due: 2 hours before, or in a moment if that's past. */
+    fun noticeAt(ringsAt: Long, now: Long = System.currentTimeMillis()) = maxOf(ringsAt - UPCOMING_NOTICE_MS, now + 1_000)
+
+    /**
+     * Sets a notice for exactly [at] (219). The inexact call used before may come up to 75% of the wait late
+     * (3 hours for one set 4 hours ahead), and Doze and HyperOS stretch it further, so the notice could come
+     * after its alarm had rung, and then it says nothing. Not an alarm clock: a notice wakes no one, and it
+     * shouldn't take the status bar's next-alarm icon.
+     */
+    fun setNotice(context: Context, at: Long, pi: PendingIntent) {
+        val am = context.getSystemService(AlarmManager::class.java)
+        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+        if (canExact) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi) else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+    }
+
     /** From how long before an alarm its task or event offers Snooze / Stop. */
     const val EARLY_CONTROL_MS = 23 * 3_600_000L
 
@@ -297,7 +312,6 @@ object AlarmScheduler {
 
     /** Queues the upcoming-alarm notice for 2 hours before [fire] (or right away if that's past). */
     private fun scheduleNotice(context: Context, item: Item, r: Reminder, fire: Fire) {
-        val am = context.getSystemService(AlarmManager::class.java)
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = AlarmReceiver.ACTION_UPCOMING
             data = address(r.id, false, AlarmReceiver.ACTION_UPCOMING)
@@ -308,8 +322,7 @@ object AlarmScheduler {
             putExtra(AlarmReceiver.EXTRA_ORIGINAL, fire.originalMillis)
         }
         val pi = pending(context, r.id, false, intent) ?: return
-        val at = maxOf(fire.atMillis - UPCOMING_NOTICE_MS, System.currentTimeMillis() + 1_000)
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        setNotice(context, noticeAt(fire.atMillis), pi)
     }
 
     private fun cancelNotice(context: Context, reminderId: Long) {
