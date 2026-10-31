@@ -974,6 +974,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-alarm { display: flex; align-items: center; gap: 12px; padding: 9px 18px 10px; }
 .phone .pa-time48 { font-size: 40px; line-height: 46px; font-weight: 400; white-space: nowrap; }
 .phone .pa-time36 { font-size: 32px; line-height: 38px; font-weight: 400; white-space: nowrap; }
+.phone .pa-bundle-head .grow { min-width: 0; container-type: inline-size; }
+.phone .pa-time36.h12 { font-size: min(32px, 10cqw); }
 .phone .pa-time24 { font-size: 24px; line-height: 32px; font-weight: 400; }
 .phone .pa-time52 { font-size: 52px; line-height: 56px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .phone .pa-time26 { flex: none; font-size: 26px; line-height: 32px; font-variant-numeric: tabular-nums; }
@@ -1006,8 +1008,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-days button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--p-outline); background: none; color: var(--text); font-size: 14px; font-weight: 500; padding: 0; position: relative; overflow: hidden; }
 .phone .pa-days button.on { border-color: transparent; background: var(--p-primary); color: var(--p-on-primary); }
 .phone .pe-wake { min-width: 0; white-space: normal; }
-.pe-wake-row { display: flex; align-items: center; gap: 12px; min-height: 56px; }
-.pe-wake-row .grow { flex: 1; min-width: 0; }
+.pe-wake-row { margin-top: 12px; }
+.phone .pe-wake-row .p-slide-num { height: 36px; font-size: 28px; line-height: 36px; white-space: nowrap; }
 .phone .pa-series-row .grow, .phone .pa-series-long .grow, .phone .pa-series-every .grow, .phone .pa-series-to .grow { flex: 1; min-width: 0; }
 .phone .pa-series-to { padding-left: 72px; min-height: 48px; }
 .phone .pa-series-every { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px 0 72px; color: var(--text); }

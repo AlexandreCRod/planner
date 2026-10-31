@@ -416,7 +416,7 @@ function WakeDialog({ value, onSave, onClose }: { value: WakePlan; onSave: (p: W
       <TextButton onClick={onClose}>Cancel</TextButton>
       <TextButton onClick={() => { onSave(plan); onClose(); }}>Save</TextButton>
     </>}>
-      <div className="pe-wake-row"><span className="grow">Start</span><SlideStepper value={before} onChange={(v) => setBefore(v ?? 15)} step={15} min={15} max={720} format={wakeSpan} unit="before" buttons label="How long before the event they start" /></div>
+      <div className="pe-wake-row"><span className="grow">Start before</span><SlideStepper value={before} onChange={(v) => setBefore(v ?? 15)} step={15} min={15} max={720} format={wakeSpan} buttons label="How long before the event they start" /></div>
       <div className="pe-wake-row"><span className="grow">Every</span><SlideStepper value={plan.every} onChange={(v) => setEvery(v ?? 1)} step={1} min={1} max={Math.min(60, before)} unit="min" buttons label="Minutes between alarms" /></div>
       <div className="pe-wake-row"><span className="grow">Alarms</span><SlideStepper value={plan.count} onChange={(v) => setCount(v ?? 2)} step={1} min={2} max={most} buttons label="How many alarms" /></div>
       <div className="pe-small pe-lead-sum">They ring like clock alarms, and move with the event.</div>

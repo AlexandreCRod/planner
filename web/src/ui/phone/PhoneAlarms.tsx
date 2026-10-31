@@ -484,6 +484,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
   const first = group[0], last = group[group.length - 1];
   // A series has the one switch (244): its rows only open the editor, for the whole series.
   const series = first.series != null;
+  const h24 = use24h();
   const [picking, setPicking] = useState(false);
   const firstMin = first.hour * 60 + first.minute;
   /** The heading time moved: every alarm in the bundle moves as much (110), with Undo. */
@@ -506,7 +507,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
             <AlarmWeather a={group.find((a) => a.enabled) ?? first} now={now} fc={fc} />
           </div>
           {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
-          <div className="pa-time36">
+          <div className={`pa-time36 ${h24 ? "" : "h12"}`}>
             <span className="pa-bundle-start" role="button" aria-label="Move the whole bundle" onClick={(e) => { e.stopPropagation(); setPicking(true); }}>
               <HeldTime step={1} min={firstMin} onChange={moveTo} />
             </span> – {formatTime(last.hour * 60 + last.minute)}
@@ -565,7 +566,12 @@ function useHold(onHold: () => void, onTap: () => void) {
     // After a hold the finger's lift mustn't land as a tap on what the hold opened (the sheet's scrim).
     onPointerUp: () => { cancel(); if (st.current?.fired) swallowNextClick(); },
     onPointerCancel: () => { cancel(); st.current = null; },
-    onClick: (e: React.MouseEvent) => { const p = st.current; st.current = null; if (!p?.fired && !theirs(e.target)) cb.current.onTap(); },
+    // A tap on the digits is the card's (306): only their hold is theirs, and it swallows its own click.
+    onClick: (e: React.MouseEvent) => {
+      const p = st.current;
+      st.current = null;
+      if (!p?.fired && !(e.target instanceof Element && e.target.closest(".p-switch, .pa-bundle-start"))) cb.current.onTap();
+    },
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); st.current = null; cb.current.onHold(); } },
   };
 }
