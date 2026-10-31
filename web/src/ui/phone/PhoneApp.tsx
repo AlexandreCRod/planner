@@ -485,6 +485,16 @@ export function PhoneApp() {
   }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
 
   swipeState.current = { settle, noteOpen: route === "note" };
+  // The note shrinks toward its chip as it's put away, and grows out of it when it's brought back (297).
+  const noteLayer = useRef<HTMLDivElement>(null);
+  const chipWas = useRef<ReturnType<typeof chipBox>>(null);
+  useLayoutEffect(() => {
+    const el = noteLayer.current;
+    if (!el) return;
+    const box = minimized ? chipBox() : chipWas.current;
+    chipWas.current = null;
+    if (box) noteMorph(el, box, !minimized);
+  }, [minimized]);
   const overlay = routeTab < 0 && route !== "" ? route : null;
   const noteShown = route === "note" && !!dock;
   // While writing, the keyboard covers the bar: the note takes the whole screen.
@@ -542,7 +552,7 @@ export function PhoneApp() {
 
   const todosSheet = useTodosSheetOpen();
   const todoTab = useTodoTabShown();
-  const noteChip = dock ? <NoteChip key={dock.n} hash={dock.hash} onOpen={() => { location.hash = dock.hash; }} onClose={() => { setDock(null); setMinimized(false); }} /> : null;
+  const noteChip = dock ? <NoteChip key={dock.n} hash={dock.hash} onOpen={() => { chipWas.current = chipBox(); location.hash = dock.hash; }} onClose={() => { setDock(null); setMinimized(false); }} /> : null;
 
   return (
     <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[shown].key === "notes" ? "notes-split" : ""} ${TABS[shown].key === "training" ? "on-training" : ""} ${TABS[shown].key === "tasks" && todoTab ? "on-todo" : ""} ${overlay === "tasks" ? "over-tasks" : ""}`}>
@@ -574,7 +584,7 @@ export function PhoneApp() {
         </button>
       )}
       {dock && (
-        <div className={`p-overlay p-notelayer ${noteShown ? "" : "away"}`} aria-hidden={!noteShown}>
+        <div ref={noteLayer} className={`p-overlay p-notelayer ${noteShown ? "" : "away"}`} aria-hidden={!noteShown}>
           <PhoneNote key={dock.n} id={dock.id} day={dock.day} shown={noteShown}
             onSaved={(nid) => setDock((d) => (d && d.n === dock.n ? { ...d, hash: d.hash.replace(/^#\/note\/[^?]*/, `#/note/${nid}`) } : d))} />
           {noteKb && <div className="p-navstrip" aria-hidden="true" />}
@@ -785,6 +795,37 @@ function watchNavButtons(): () => void {
   ro.observe(probe);
   window.addEventListener("resize", check);
   return () => { ro.disconnect(); window.removeEventListener("resize", check); probe.remove(); };
+}
+
+/**
+ * The open note going into its chip (297), or out of it ([back]): the layer shrinks onto the place [to] and
+ * fades as it gets there, on transform and opacity alone, so nothing is laid out while it moves.
+ */
+function noteMorph(el: HTMLElement, to: { left: number; top: number; width: number; height: number }, back: boolean) {
+  const r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const small = `translate3d(${to.left - r.left}px,${to.top - r.top}px,0) scale(${to.width / r.width},${to.height / r.height})`;
+  const big = "translate3d(0,0,0) scale(1,1)";
+  // Set around the animation, not in it: only transform and opacity keep it on the compositor. The layer
+  // stays visible for it, and its usual entrance (p-in) keeps out of the way.
+  el.style.visibility = "visible";
+  el.style.transformOrigin = "0 0";
+  el.style.animation = "none";
+  const a = el.animate(back
+    ? [{ transform: small, opacity: 0 }, { opacity: 1, offset: 0.45 }, { transform: big, opacity: 1 }]
+    : [{ transform: big, opacity: 1 }, { opacity: 1, offset: 0.55 }, { transform: small, opacity: 0 }],
+  { duration: back ? 260 : 230, easing: back ? "cubic-bezier(.2, 0, 0, 1)" : "cubic-bezier(.3, 0, .2, 1)" });
+  const done = () => { el.style.visibility = ""; el.style.transformOrigin = ""; };
+  a.onfinish = done;
+  a.oncancel = done;
+}
+
+/** Where the chip sits, whatever it's doing: measured on its place, its own entrance doesn't count. */
+function chipBox(): { left: number; top: number; width: number; height: number } | null {
+  const chip = document.querySelector<HTMLElement>(".p-notechip"), place = chip?.parentElement;
+  if (!chip || !place) return null;
+  const p = place.getBoundingClientRect();
+  return { left: p.left, top: p.bottom - chip.offsetHeight, width: chip.offsetWidth, height: chip.offsetHeight };
 }
 
 /**

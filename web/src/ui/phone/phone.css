@@ -1487,11 +1487,7 @@ html.phone[data-theme="dark"] {
 .phone .p-notelayer { bottom: calc(var(--bar-h) + var(--sab)); z-index: 29; }
 .phone .p-root.note-kb .p-notelayer { bottom: 0; }
 .phone .p-root.note-kb > .p-bar { visibility: hidden; }
-.phone .p-notelayer.away { pointer-events: none; animation: p-note-away .2s cubic-bezier(.3, 0, .8, .15) forwards; }
-@keyframes p-note-away {
-  from { transform: none; opacity: 1; }
-  to { transform: translate3d(0, 38%, 0) scale(.6); opacity: 0; visibility: hidden; }
-}
+.phone .p-notelayer.away { pointer-events: none; visibility: hidden; animation: none; }
 .phone .p-notelayer .p-content.ps, .phone .p-notelayer .pn-scroll { padding-bottom: 16px; }
 
 /* The chip: the note put away, above the bar on every page (left of the + button). */
@@ -1506,9 +1502,9 @@ html.phone[data-theme="dark"] {
 .phone .p-notechip {
   pointer-events: auto; max-width: 100%; min-width: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px;
   border-radius: 24px; background: var(--p-sc-high); color: var(--text); touch-action: pan-y; user-select: none; -webkit-user-select: none;
-  box-shadow: 0 2px 4px rgb(0 0 0 / .14), 0 4px 12px rgb(0 0 0 / .12); animation: p-chip-in .26s cubic-bezier(.2, 0, 0, 1);
+  box-shadow: 0 2px 4px rgb(0 0 0 / .14), 0 4px 12px rgb(0 0 0 / .12); animation: p-chip-in .2s cubic-bezier(.2, 0, 0, 1) .12s both;
 }
-@keyframes p-chip-in { from { transform: translate3d(0, 24px, 0) scale(.9); opacity: 0; } }
+@keyframes p-chip-in { from { transform: scale(.9); opacity: 0; } }
 .phone .p-notechip-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--p-primary); }
 .phone .p-notechip-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
 .phone .p-notechip-x { flex: none; width: 40px; height: 40px; }
