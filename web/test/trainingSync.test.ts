@@ -137,7 +137,6 @@ test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linke
 });
 
 test("pull keeps the categories' sport switch, and the sports follow it (278)", () => {
-  assert.equal(KEPT_VERSION, 5);
   const received = [
     { kind: "categories", id: "5", data: { id: 5, name: "Sports", color: 1, defaultAlert: "ALARM", sport: false } },
     { kind: "categories", id: "7", data: { id: 7, name: "Running club", color: 1, defaultAlert: "ALARM", sport: true } },

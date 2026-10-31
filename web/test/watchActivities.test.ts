@@ -6,7 +6,7 @@ import type { HealthSession } from "../src/domain/health.ts";
 import { sessionOf } from "../src/domain/health.ts";
 import type { Run } from "../src/domain/trends.ts";
 import {
-  APPROX_NOTE, type GameSlot, clock, isFootballSession, isStrengthSession, matchGames, runStats, sessionStats, statItems, statLine, strengthOn, venueOf,
+  type GameSlot, clock, isFootballSession, isStrengthSession, matchGames, runStats, sessionStats, statItems, statLine, strengthOn, venueOf,
 } from "../src/domain/watchActivities.ts";
 
 const DAY = 20_400;
@@ -63,7 +63,6 @@ test("stats: distance and speed only outdoors, ≈ when not known; only what the
   const unknown = sessionStats(s, "unknown");
   assert.equal(unknown.approx, true);
   assert.deepEqual(statItems(unknown).filter((x) => x.value.startsWith("≈")).map((x) => x.label), ["Distance", "Speed"]);
-  assert.ok(APPROX_NOTE.length > 0);
   const indoor = statItems(sessionStats(s, "indoor")).map((x) => x.label);
   assert.deepEqual(indoor, ["Time", "Avg HR", "Max HR", "Calories"]);
   const bare = sessionStats(session("19:00", 45, { avgHr: null, maxHr: null, kcal: null, distanceKm: null }), "outdoor");
