@@ -13,7 +13,7 @@ import { FONTS } from "../shared/noteStyle.ts";
 import { IconButton, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, contentColor } from "./m3.tsx";
-import { FLICK, GLIDE_SPRING, VelocityTracker, animateSpring } from "./motion.ts";
+import { FLICK, GLIDE_SPRING, VelocityTracker, animateSpring, frameWriter } from "./motion.ts";
 
 let pending: number | null = null;
 /** The next note opened shows note [id] in its panel (Swap). */
@@ -81,12 +81,17 @@ export function NotePeek({ id, host, onSwap, onClose }: { id: number; host: () =
     animateSpring(h, 0, 0, (y) => { el.style.transform = y > 0.5 ? `translate3d(0,${y}px,0)` : ""; }, () => { el.style.transform = ""; }, { ...GLIDE_SPRING, damping: 1 });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const size = (px: number) => { if (box.current) box.current.style.height = `${px}px`; };
+  // The drag changes the panel's height, which lays the note above it out again: once per frame at most.
+  const size = useRef(frameWriter((px: number) => { if (box.current) box.current.style.height = `${px}px`; })).current;
+  /** The panel moved [y] px down from its place: no layout, so the note above stays put while it glides. */
+  const shift = (y: number) => { if (box.current) box.current.style.transform = y > 0.5 ? `translate3d(0,${y}px,0)` : ""; };
   const close = (from: number, v: number) => {
     if (closing.current) return;
     closing.current = true;
     feel("settle");
-    animateSpring(from, 0, -v, (x) => size(Math.max(0, x)), onClose, { ...GLIDE_SPRING, damping: 1 });
+    size.cancel();
+    if (box.current) box.current.style.height = `${from}px`;
+    animateSpring(0, from, v, shift, onClose, { ...GLIDE_SPRING, damping: 1 });
   };
 
   const onDown = (e: React.PointerEvent<HTMLElement>) => {
@@ -112,7 +117,10 @@ export function NotePeek({ id, host, onSwap, onClose }: { id: number; host: () =
     if (d.h < MIN_H - 24 || (v > 2 * FLICK && d.h < d.h0)) { close(d.h, v); return; }
     const to = Math.max(MIN_H, Math.min(most(), d.h));
     setH(to);
-    if (to !== d.h) animateSpring(d.h, to, -v, size, () => size(to), GLIDE_SPRING);
+    size.cancel();
+    if (box.current) box.current.style.height = `${to}px`;
+    // Up to its size at once, starting from where the finger left it, so only the transform moves.
+    if (to !== d.h) animateSpring(to - d.h, 0, v, shift, () => shift(0), GLIDE_SPRING);
   };
 
   if (!note) return null;
