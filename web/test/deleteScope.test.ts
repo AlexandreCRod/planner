@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Item, newItem } from "../src/domain/types.ts";
-import { endedBefore, occurrences } from "../src/domain/recurrence.ts";
+import { endedBefore, occurrenceDay, occurrences } from "../src/domain/recurrence.ts";
 
 // The store saves to localStorage and schedules a redraw; small stand-ins are enough here.
 const kept = new Map<string, string>();
@@ -61,4 +61,24 @@ test("deleting following from the first day trashes the series, and undo brings 
   const back = store.snapshot().byId.get(52)!;
   assert.equal(back.deletedAt, null);
   assert.equal(back.untilDay, null);
+});
+
+test("opened without a day, a delete means the next occurrence, not the series' first", () => {
+  const today = 20070;
+  const weekly = series(81, { freq: "WEEKLY", title: "Weekly" });
+  assert.equal(occurrenceDay(weekly, null, today), 20070);
+  assert.equal(occurrenceDay(weekly, null, today + 1), 20077);
+  // A day it was opened on wins, and a series that's over falls back to its first day.
+  assert.equal(occurrenceDay(weekly, 20014, today), 20014);
+  assert.equal(occurrenceDay({ ...weekly, untilDay: 20007 }, null, today), 20000);
+
+  // The whole path: "This occurrence only" takes today's and leaves the first; "This and following" keeps the past.
+  store.saveItem(weekly);
+  const cur = () => store.snapshot().byId.get(81)!;
+  const day = occurrenceDay(cur(), null, today)!;
+  store.deleteOccurrence(cur(), day);
+  assert.deepEqual(occurrences(cur(), 20000, 20077), [20000, 20007, 20014, 20021, 20028, 20035, 20042, 20049, 20056, 20063, 20077]);
+  store.deleteFollowing(cur(), occurrenceDay(cur(), null, today)!);
+  assert.equal(cur().deletedAt, null);
+  assert.equal(occurrences(cur(), 20000, 20100).at(-1), 20063);
 });

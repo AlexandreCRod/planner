@@ -4,7 +4,7 @@
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, nextOnOrAfter, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -744,6 +744,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   // Tasks are ticked off, and events that are routines.
   const completable = !isEvent || routine;
   const shownStart = day ?? item.startDay;
+  // The day a delete applies to. An event opened without a day shows its first date, but a delete means the
+  // next occurrence, as in the editor; a task's [day] is already the one it's asking about.
+  const deleteDay = isEvent && !routine ? occurrenceDay(item, occ, t) : day;
   const commit = (edited: Item) => saveItem(edited);
   const commitReminders = (list: Reminder[]) => saveItem(item, { reminders: list });
   /** A date change made on the shown day of a series, as the same move of the series' first day. */
@@ -775,7 +778,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       <TopAppBar back title={isEvent ? "Event" : "Task"} actions={<>
         <IconButton icon="oContentCopy" label="Duplicate" onClick={duplicate} />
         <span className="p-menu-anchor">
-          <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(item) && day !== null) setDeleteMenu(true); else { trashWithUndo(item); leave(); } }} />
+          <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(item) && deleteDay !== null) setDeleteMenu(true); else { trashWithUndo(item); leave(); } }} />
         </span>
       </>} />
       <div className="p-content pe-body">
@@ -882,7 +885,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <AlertsHint className="pad" />
         </>}</BottomSheet>
       )}
-      {deleteMenu && day !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, item, day); leave(); }} />}
+      {deleteMenu && deleteDay !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, item, deleteDay); leave(); }} />}
       {pendingScope && <ScopeDialog title="Change" onCancel={() => setPendingScope(null)} onPick={(sc) => {
         const edited = pendingScope;
         setPendingScope(null);
@@ -1174,7 +1177,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   if (saveRef) saveRef.current = () => save();
   /** Linking needs the item saved: a new one is saved first (as "Untitled" if it has no title). */
   // The day a delete applies to: the one opened, or the next one when the item was opened without a day.
-  const deleteDay = !original ? null : occ ?? nextOnOrAfter(original, todayEpoch()) ?? original.startDay;
+  const deleteDay = !original ? null : occurrenceDay(original, occ, todayEpoch());
   const ensureSaved = () => {
     if (currentId) return currentId;
     const item = finalItem();

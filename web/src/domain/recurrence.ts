@@ -66,6 +66,10 @@ export function nextOnOrAfter(item: Item, from: number): number | null {
   return null;
 }
 
+/** The occurrence an item opened on [occ] means: that one, or the next one when it was opened without a day. */
+export const occurrenceDay = (item: Item, occ: number | null, today: number): number | null =>
+  occ ?? nextOnOrAfter(item, today) ?? item.startDay;
+
 export function previousBefore(item: Item, before: number, maxDays = 400): number | null {
   const start = item.startDay;
   if (start === null) return null;
