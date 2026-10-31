@@ -101,6 +101,8 @@ class AlarmPlugin : Plugin() {
         AlarmScheduler.rescheduleAll(context)
         // Clock alarms' notices follow the same setting (their rings don't depend on it).
         if (noticesWere != push.settings.upcomingAlarms) ClockAlarms.rescheduleAll(context)
+        // The look, the icons, the bundle window, the clock format.
+        Card.refresh(context)
         // The Alarms page reads its calendar alarms from here again.
         AlarmEvents.changed("mirror")
         ok(call)

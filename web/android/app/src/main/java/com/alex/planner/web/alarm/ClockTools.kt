@@ -178,7 +178,7 @@ object ClockTools {
         }
         b.addAction(0, "+1 min", action(context, AlarmReceiver.ACTION_TIMER_PLUS, t.id))
         b.addAction(0, "Cancel", action(context, AlarmReceiver.ACTION_TIMER_CANCEL, t.id))
-        Notifications.notify(context, notificationId(t.id), b)
+        Notifications.notify(context, notificationId(t.id), b, t.endAt ?: now)
     }
 
     // ---- Stopwatch ----

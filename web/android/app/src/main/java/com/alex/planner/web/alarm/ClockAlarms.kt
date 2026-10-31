@@ -155,7 +155,7 @@ object ClockAlarms {
     }
 
     private fun takeBackNotice(context: Context, id: Long) {
-        Notifications.cancelClockUpcoming(context, id)
+        Card.dropClock(context, id)
         Shown.remove(context, Shown.CLOCK, id)
     }
 
@@ -167,7 +167,8 @@ object ClockAlarms {
         if (!settings.upcomingAlarms) return
         // Negative: a clock alarm's id is in a different series from a reminder's.
         if (!AlarmOverrides.firstNotice(context, -id, at)) return
-        Notifications.showClockUpcoming(context, a, at, settings.snoozeMinutes)
+        Card.clockNotice(context, a, at)
+        Shown.put(context, Shown.CLOCK, a.id, 0L, at)
     }
 
     /**

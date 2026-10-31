@@ -23,9 +23,6 @@ object Notifications {
     const val CH_TIMER = "timers"
     /** "Starting now" when an item starts: pops up, but without a sound. */
     const val CH_STARTING = "starting"
-    private const val TAG_UPCOMING = "upcoming"
-    private const val TAG_STARTING = "starting"
-    private const val TAG_CLOCK_UPCOMING = "clock-upcoming"
 
     const val EXTRA_OPEN_ITEM = "openItemId"
     /** Opens a section of the Alarms page ("alarm", "timer"...). */
@@ -65,8 +62,8 @@ object Notifications {
                     enableVibration(false)
                 },
                 // Default importance (but silent) so Snooze / Stop show without expanding the notification.
-                NotificationChannel(CH_UPCOMING, "Upcoming alarms", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Shown 2 hours before an alarm, to snooze or stop it early"
+                NotificationChannel(CH_UPCOMING, "Coming up", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Planner's card: what's coming up in the next 2 hours, without a sound"
                     setSound(null, null)
                     enableVibration(false)
                 },
@@ -93,101 +90,18 @@ object Notifications {
         return PendingIntent.getActivity(context, code, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    fun show(
-        context: Context,
-        item: Item,
-        reminderId: Long,
-        day: Long,
-        type: AlertType,
-        text: String,
-        quiet: Boolean,
-        snoozeMinutes: Int,
-    ) {
-        val channel = when {
-            type == AlertType.NOTIFICATION -> CH_NOTIFY
-            quiet -> CH_QUIET
-            else -> CH_REMIND
-        }
-        val b = NotificationCompat.Builder(context, channel)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(item.title.ifBlank { "Untitled" })
-            .setContentText(text)
-            .setContentIntent(openItemIntent(context, item.id))
-            .setAutoCancel(true)
-            .setCategory(if (item.type == ItemType.EVENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(if (type == AlertType.NOTIFICATION || quiet) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
-        if (type == AlertType.REMINDER) {
-            b.addAction(0, "Snooze ${snoozeMinutes}m", actionIntent(context, AlarmReceiver.ACTION_SNOOZE, item.id, reminderId, day))
-        }
-        if (item.completable) {
-            b.addAction(0, "Done", actionIntent(context, AlarmReceiver.ACTION_DONE, item.id, reminderId, day))
-        }
-        notify(context, smallId(reminderId), b)
+    /** The line for a reminder that came due (Card): a pop-up unless it's silent or [quiet]. */
+    fun show(context: Context, item: Item, r: Reminder, day: Long, original: Long, quiet: Boolean) = Card.fired(context, item, r, day, original, quiet)
+
+    /** The line for what's coming, 2 hours before (Card). */
+    fun showUpcoming(context: Context, item: Item, r: Reminder, day: Long, at: Long, original: Long, snoozed: Boolean) {
+        Card.notice(context, item, r, day, at, original, snoozed)
+        Shown.put(context, Shown.UPCOMING, r.id, day, original)
     }
 
-    /** The quiet notice before an alarm: when it will ring, with Snooze and Stop buttons. */
-    fun showUpcoming(context: Context, item: Item, reminderId: Long, day: Long, at: Long, original: Long, snoozed: Boolean, snoozeMinutes: Int) {
-        val time = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
-        val whenText = relativeDayLabel(time.toLocalDate()) + " at " + formatTime(time.hour * 60 + time.minute)
-        val b = NotificationCompat.Builder(context, CH_UPCOMING)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Upcoming alarm · ${item.title.ifBlank { "Untitled" }}")
-            .setContentText(if (snoozed) "Snoozed to $whenText" else whenText)
-            .setContentIntent(openItemIntent(context, item.id))
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOnlyAlertOnce(true)
-            .setWhen(at)
-            .setShowWhen(true)
-        // Within 15 minutes of ringing, the alarm can only be stopped.
-        if (AlarmScheduler.canSnoozeEarly(at)) {
-            b.addAction(0, "Snooze ${snoozeMinutes}m", actionIntent(context, AlarmReceiver.ACTION_EARLY_SNOOZE, item.id, reminderId, day, original))
-        }
-        b.addAction(0, "Stop", actionIntent(context, AlarmReceiver.ACTION_EARLY_STOP, item.id, reminderId, day, original))
-        val nm = NotificationManagerCompat.from(context)
-        if (nm.areNotificationsEnabled()) {
-            try {
-                nm.notify(TAG_UPCOMING, smallId(reminderId), b.build())
-                Shown.put(context, Shown.UPCOMING, reminderId, day, original)
-            } catch (_: SecurityException) {
-            }
-        }
-    }
+    fun cancelUpcoming(context: Context, reminderId: Long) = Card.dropUpcoming(context, reminderId)
 
-    fun cancelUpcoming(context: Context, reminderId: Long) =
-        NotificationManagerCompat.from(context).cancel(TAG_UPCOMING, smallId(reminderId))
-
-    /** The same notice for a clock alarm (219). */
-    fun showClockUpcoming(context: Context, a: ClockAlarm, at: Long, snoozeMinutes: Int) {
-        val time = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
-        val b = NotificationCompat.Builder(context, CH_UPCOMING)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Upcoming alarm · ${a.label.trim().ifBlank { "Alarm" }}")
-            .setContentText(relativeDayLabel(time.toLocalDate()) + " at " + formatTime(time.hour * 60 + time.minute))
-            .setContentIntent(openSectionIntent(context, "alarm", 3))
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOnlyAlertOnce(true)
-            .setWhen(at)
-            .setShowWhen(true)
-        if (AlarmScheduler.canSnoozeEarly(at)) {
-            b.addAction(0, "Snooze ${snoozeMinutes}m", clockActionIntent(context, AlarmReceiver.ACTION_CLOCK_EARLY_SNOOZE, a.id, at))
-        }
-        b.addAction(0, "Stop", clockActionIntent(context, AlarmReceiver.ACTION_CLOCK_EARLY_STOP, a.id, at))
-        val nm = NotificationManagerCompat.from(context)
-        if (nm.areNotificationsEnabled()) {
-            try {
-                nm.notify(TAG_CLOCK_UPCOMING, smallId(a.id), b.build())
-                Shown.put(context, Shown.CLOCK, a.id, 0L, at)
-            } catch (_: SecurityException) {
-            }
-        }
-    }
-
-    fun cancelClockUpcoming(context: Context, id: Long) =
-        NotificationManagerCompat.from(context).cancel(TAG_CLOCK_UPCOMING, smallId(id))
-
-    private fun clockActionIntent(context: Context, action: String, id: Long, at: Long): PendingIntent {
+    fun clockActionIntent(context: Context, action: String, id: Long, at: Long): PendingIntent {
         val i = Intent(context, AlarmReceiver::class.java).apply {
             this.action = action
             data = Uri.parse("planner-alarm://clock/$id/${action.substringAfterLast('.')}")
@@ -198,42 +112,15 @@ object Notifications {
     }
 
     /**
-     * "Starting now" for [item]: a quiet pop-up while the phone is in use, otherwise (locked, screen off, or
-     * quiet hours) a plain entry in the shade. Goes by itself after a while.
+     * [item] starts: its line says so, as a quiet pop-up while the phone is in use and otherwise (locked,
+     * screen off, or quiet hours) silently. [show]: a line appears even if it had none.
      */
-    fun showStarting(context: Context, item: Item, day: Long, quiet: Boolean) {
+    fun showStarting(context: Context, item: Item, day: Long, quiet: Boolean, show: Boolean) {
         val power = context.getSystemService(android.os.PowerManager::class.java)
         val keyguard = context.getSystemService(android.app.KeyguardManager::class.java)
         val inUse = power?.isInteractive == true && keyguard?.isKeyguardLocked != true
-        val popUp = inUse && !quiet
-        val start = item.startMin ?: return
-        val b = NotificationCompat.Builder(context, if (popUp) CH_STARTING else CH_NOTIFY)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(item.title.ifBlank { "Untitled" })
-            .setContentText("Starting now · ${formatTime(start)}")
-            .setContentIntent(openItemIntent(context, item.id))
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .setTimeoutAfter(STARTING_SHOWN_MS)
-            .setCategory(if (item.type == ItemType.EVENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
-            .setPriority(if (popUp) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
-        if (item.completable) {
-            b.addAction(0, "Done", actionIntent(context, AlarmReceiver.ACTION_DONE, item.id, 0L, day, key = "start-${item.id}"))
-        }
-        val nm = NotificationManagerCompat.from(context)
-        if (nm.areNotificationsEnabled()) {
-            try {
-                nm.notify(TAG_STARTING, smallId(item.id), b.build())
-            } catch (_: SecurityException) {
-            }
-        }
+        Card.started(context, item, day, show, popUp = show && inUse && !quiet)
     }
-
-    /** How long "Starting now" stays in the shade. */
-    private const val STARTING_SHOWN_MS = 30 * 60_000L
-
-    fun cancelStarting(context: Context, itemId: Long) =
-        NotificationManagerCompat.from(context).cancel(TAG_STARTING, smallId(itemId))
 
     /** [key] tells the buttons' intents apart (by default the reminder; "Starting now" has none). */
     fun actionIntent(context: Context, action: String, itemId: Long, reminderId: Long, day: Long, original: Long = 0L, key: String = reminderId.toString()): PendingIntent {
@@ -248,15 +135,21 @@ object Notifications {
         return PendingIntent.getBroadcast(context, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    fun notify(context: Context, id: Int, b: NotificationCompat.Builder) {
+    /** A timer's or a missed alarm's notification, in the card's group, sorted by [at] (218). */
+    fun notify(context: Context, id: Int, b: NotificationCompat.Builder, at: Long = System.currentTimeMillis()) {
         val nm = NotificationManagerCompat.from(context)
         if (nm.areNotificationsEnabled()) {
             try {
+                Card.join(context, b, at)
                 nm.notify(id, b.build())
             } catch (_: SecurityException) {
             }
+            Card.refresh(context)
         }
     }
 
-    fun cancel(context: Context, id: Int) = NotificationManagerCompat.from(context).cancel(id)
+    fun cancel(context: Context, id: Int) {
+        NotificationManagerCompat.from(context).cancel(id)
+        Card.refresh(context)
+    }
 }

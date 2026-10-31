@@ -32,6 +32,12 @@ class AlarmReceiver : BroadcastReceiver() {
         const val ACTION_CLOCK_UPCOMING = "com.alex.planner.web.CLOCK_UPCOMING"
         const val ACTION_CLOCK_EARLY_SNOOZE = "com.alex.planner.web.CLOCK_EARLY_SNOOZE"
         const val ACTION_CLOCK_EARLY_STOP = "com.alex.planner.web.CLOCK_EARLY_STOP"
+        /** Skips every alarm of a bundle's line ([EXTRA_KEYS]: "id:at,id:at"). */
+        const val ACTION_CLOCK_SKIP_ALL = "com.alex.planner.web.CLOCK_SKIP_ALL"
+        /** Lines swiped away ([EXTRA_KEYS]), and the card's own timer. */
+        const val ACTION_CARD_DISMISS = "com.alex.planner.web.CARD_DISMISS"
+        const val ACTION_CARD_TICK = "com.alex.planner.web.CARD_TICK"
+        const val EXTRA_KEYS = "keys"
         /** A timer (the Alarms page) is up, and its notification's buttons. */
         const val ACTION_TIMER = "com.alex.planner.web.TIMER"
         const val ACTION_TIMER_PAUSE = "com.alex.planner.web.TIMER_PAUSE"
@@ -69,6 +75,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (!alarm.enabled) return
                 ClockAlarms.afterRing(context, id)
             }
+            // After it's on its way, its line goes (afterRing leaves a bundle's others alone).
             val svc = Intent(context, AlarmService::class.java).apply {
                 putExtra(ClockAlarms.EXTRA_CLOCK, id)
                 // The alarm's title is the ringing screen's title (AlarmService); here only whether it's a snooze.
@@ -77,7 +84,20 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             RingWakeLock.acquire(context, 60_000)
             ContextCompat.startForegroundService(context, svc)
+            Card.dropClock(context, id)
             return
+        }
+        when (intent.action) {
+            ACTION_CARD_TICK -> { Card.refresh(context); return }
+            ACTION_CARD_DISMISS -> { Card.dismissed(context, intent.getStringExtra(EXTRA_KEYS).orEmpty()); return }
+            ACTION_CLOCK_SKIP_ALL -> {
+                intent.getStringExtra(EXTRA_KEYS).orEmpty().split(',').forEach { e ->
+                    val id = e.substringBefore(':').toLongOrNull() ?: return@forEach
+                    val at = e.substringAfter(':').toLongOrNull() ?: return@forEach
+                    ClockAlarms.skip(context, id, at)
+                }
+                return
+            }
         }
         if (intent.action in setOf(ACTION_CLOCK_UPCOMING, ACTION_CLOCK_EARLY_SNOOZE, ACTION_CLOCK_EARLY_STOP)) {
             handleClockNotice(context, intent)
@@ -104,14 +124,14 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (at <= System.currentTimeMillis()) return
                 if (isDone()) return
                 if (!AlarmOverrides.firstNotice(context, reminder.id, original)) return
-                Notifications.showUpcoming(context, item, reminder.id, day, at, original, snoozed = at != original, settings.snoozeMinutes)
+                Notifications.showUpcoming(context, item, reminder, day, at, original, snoozed = at != original)
             }
             ACTION_EARLY_SNOOZE -> {
                 if (reminder == null) return
                 val current = AlarmOverrides.adjusted(context, reminder.id, original) ?: return
                 if (!AlarmScheduler.canSnoozeEarly(current)) {
                     // Too close to ringing: show the notice again, now with Stop only.
-                    Notifications.showUpcoming(context, item, reminder.id, day, current, original, snoozed = current != original, settings.snoozeMinutes)
+                    Notifications.showUpcoming(context, item, reminder, day, current, original, snoozed = current != original)
                     return
                 }
                 val later = current + settings.snoozeMinutes * 60_000L
@@ -129,21 +149,19 @@ class AlarmReceiver : BroadcastReceiver() {
             }
             ACTION_DONE -> {
                 Mirror.markDone(context, item.id, completionDay)
-                Notifications.cancel(context, smallId(reminderId))
-                Notifications.cancelStarting(context, item.id)
+                Card.dropItem(context, item.id)
                 // Everything else out for that day goes too (other reminders, snoozes, notices).
                 AlarmScheduler.refreshItem(context, item.id)
             }
             ACTION_SNOOZE -> {
                 val occ = Shown.get(context, Shown.NOTIFICATION, reminderId)
-                Notifications.cancel(context, smallId(reminderId))
+                Card.dropFired(context, reminderId)
                 Shown.remove(context, Shown.NOTIFICATION, reminderId)
                 if (reminder != null) AlarmScheduler.snooze(context, item, reminder, day, settings.snoozeMinutes, occ?.original ?: 0L)
             }
             ACTION_START -> handleStart(context, item, day, intent.getLongExtra(EXTRA_AT, 0L))
             ACTION_FIRE -> {
                 if (!intent.getBooleanExtra(EXTRA_SNOOZE, false)) Armed.removeReminder(context, reminderId)
-                Notifications.cancelUpcoming(context, reminderId)
                 Shown.remove(context, Shown.UPCOMING, reminderId)
                 val snoozed = intent.getBooleanExtra(EXTRA_SNOOZE, false)
                 // A snooze carries no time of its own: the occurrence's comes from when it was snoozed.
@@ -152,17 +170,17 @@ class AlarmReceiver : BroadcastReceiver() {
                     AlarmOverrides.clearRingSnooze(context, reminderId)
                     Shown.remove(context, Shown.SNOOZE, reminderId)
                 }
-                if (reminder == null || item.deletedAt != null) return
+                if (reminder == null || item.deletedAt != null) { Notifications.cancelUpcoming(context, reminderId); return }
                 // Unless turned off in Settings (see RingDevice).
-                if (!RingDevice.ringsEvents(context)) return
+                if (!RingDevice.ringsEvents(context)) { Notifications.cancelUpcoming(context, reminderId); return }
                 val done = Mirror.doneDays(context, item.id)
                 // Ticked, moved or started meanwhile (a snooze can outlive its occurrence): nothing to say.
                 val stale = AlarmScheduler.noLongerApplies(item, reminder, day, occOriginal, done, settings.defaultTaskTime)
                 val started = snoozed && reminder.offsetMin > 0 && !item.allDay && item.startMin != null &&
                     AlarmScheduler.originalAt(item, day.toDate(), 0, settings.defaultTaskTime) <= System.currentTimeMillis()
                 if (!isDone() && !stale && !started) {
-                    val text = describe(item.startMin, item.allDay, day)
                     if (reminder.type == AlertType.ALARM) {
+                        val text = describe(item.startMin, item.allDay, day)
                         val svc = Intent(context, AlarmService::class.java).apply {
                             putExtra(EXTRA_ITEM, item.id)
                             putExtra(EXTRA_REMINDER, reminder.id)
@@ -173,14 +191,17 @@ class AlarmReceiver : BroadcastReceiver() {
                         }
                         RingWakeLock.acquire(context, 60_000)
             ContextCompat.startForegroundService(context, svc)
+                        // It rings in a card of its own: its line leaves the group.
+                        Notifications.cancelUpcoming(context, reminderId)
                     } else {
                         val quiet = settings.quietHoursEnabled && inQuietHours(settings.quietStart, settings.quietEnd)
-                        Notifications.show(context, item, reminder.id, day, reminder.type, text, quiet, settings.snoozeMinutes)
+                        // The same line changes, so its notice isn't taken back first.
+                        Notifications.show(context, item, reminder, day, occOriginal, quiet)
                         Shown.put(context, Shown.NOTIFICATION, reminder.id, day, occOriginal)
                     }
                     // A reminder before the start: at the start it's cleared, and "Starting now" may show.
                     if (reminder.offsetMin > 0) AlarmScheduler.scheduleStart(context, item, day)
-                }
+                } else Notifications.cancelUpcoming(context, reminderId)
                 // Queue the next occurrence of this reminder (snoozes are one-offs). With too many to set at once,
                 // everything is looked at again, so the next nearest get set (194).
                 if (!snoozed) {
@@ -199,10 +220,9 @@ class AlarmReceiver : BroadcastReceiver() {
             ACTION_CLOCK_EARLY_STOP -> ClockAlarms.skip(context, id, at)
             ACTION_CLOCK_EARLY_SNOOZE -> {
                 val settings = Mirror.settings(context)
-                val a = ClockAlarms.get(context, id) ?: return
-                // Too close to ringing: show the notice again, now with Stop only.
+                // Too close to ringing: its line is drawn again, now without Snooze.
                 if (AlarmScheduler.canSnoozeEarly(at)) ClockAlarms.snoozeEarly(context, id, at, settings.snoozeMinutes)
-                else Notifications.showClockUpcoming(context, a, at, settings.snoozeMinutes)
+                else Card.refresh(context)
             }
         }
     }
@@ -238,8 +258,8 @@ class AlarmReceiver : BroadcastReceiver() {
 
     /**
      * [item] starts ([at] when it was set for; the item may have moved since). Its reminders from before
-     * the start are over: their notifications, snoozes and notices go, and an alarm put off past the start
-     * won't ring. Reminders set for after the start (negative offsets) are left alone: they're still to come.
+     * the start are over: their snoozes and notices go, and an alarm put off past the start won't ring. What
+     * went off stays in its line, which goes when the event ends or the task is ticked (218). Reminders set for after the start (negative offsets) are left alone: they're still to come.
      * Then a gentle "Starting now", unless something of its own rings at the start.
      */
     private fun handleStart(context: Context, item: Item, day: Long, at: Long) {
@@ -251,7 +271,7 @@ class AlarmReceiver : BroadcastReceiver() {
         if (start != at && start > now) { AlarmScheduler.scheduleStart(context, item, day); return }
         val reminders = Mirror.current(context).reminders.filter { it.itemId == item.id }
         for (r in reminders.filter { it.offsetMin > 0 }) {
-            for (kind in listOf(Shown.NOTIFICATION, Shown.SNOOZE, Shown.UPCOMING)) {
+            for (kind in listOf(Shown.SNOOZE, Shown.UPCOMING)) {
                 if (Shown.get(context, kind, r.id)?.day == day) Shown.takeBack(context, kind, r.id)
             }
             if (r.type == AlertType.ALARM) {
@@ -263,11 +283,11 @@ class AlarmReceiver : BroadcastReceiver() {
                 }
             }
         }
-        if (start < now - 10 * 60_000L) return // long started (the phone was off): no "now"
         val done = Mirror.doneDays(context, item.id)
-        if (!AlarmScheduler.startingNow(item, reminders, day, done)) return
+        // Long started (the phone was off): no "now".
+        val now10 = start >= now - 10 * 60_000L
         val quiet = settings.quietHoursEnabled && inQuietHours(settings.quietStart, settings.quietEnd)
-        Notifications.showStarting(context, item, day, quiet)
+        Notifications.showStarting(context, item, day, quiet, show = now10 && AlarmScheduler.startingNow(item, reminders, day, done))
     }
 
     private fun inQuietHours(start: Int, end: Int): Boolean {

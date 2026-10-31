@@ -211,7 +211,7 @@ object AlarmScheduler {
                 continue
             }
             set(context, item, r, fire.day.epoch(), fire.atMillis, snooze = false, original = fire.originalMillis)
-            if (r.type == AlertType.ALARM && settings.upcomingAlarms) scheduleNotice(context, item, r, fire)
+            if (settings.upcomingAlarms) scheduleNotice(context, item, r, fire)
             else cancelNotice(context, r.id)
         }
         // A snooze still to ring is set again: a restart clears AlarmManager, and a reminder with no next
@@ -245,7 +245,7 @@ object AlarmScheduler {
             val item = items[itemId]
             if (item == null || item.deletedAt != null) {
                 rs.forEach { cancel(context, it.id); Shown.forget(context, it.id) }
-                Notifications.cancelStarting(context, itemId)
+                Card.dropItem(context, itemId)
             }
             else {
                 scheduleItem(context, item, rs)

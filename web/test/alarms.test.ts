@@ -203,3 +203,10 @@ test("an alarm's weather is the forecast for the hour it rings", async () => {
 
 // Task and event alarms for the Alarms page are worked out by the engine now (194): AlarmSchedulerTest.kt and
 // the "alarmTimes" cases of shared/schedule-cases.json.
+
+test("the notification card's choices reach the engine as numbers, anything odd as the default (218)", async () => {
+  const { cardChoices } = await import("../src/domain/alarms.ts");
+  assert.deepEqual(cardChoices("2", "3", 19), { notificationCard: 2, notificationIcons: 3, bundleWindow: 19 });
+  assert.deepEqual(cardChoices("1", "2", 0), { notificationCard: 1, notificationIcons: 2, bundleWindow: 0 });
+  assert.deepEqual(cardChoices("x", "9", 5), { notificationCard: 1, notificationIcons: 1, bundleWindow: 5 });
+});

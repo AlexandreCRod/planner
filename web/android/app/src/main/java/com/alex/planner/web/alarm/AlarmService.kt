@@ -166,6 +166,7 @@ class AlarmService : Service() {
             // Newer Androids let a ringing alarm's notification be swiped away: that stops it, so it
             // never rings on with nothing left to stop it with.
             .setDeleteIntent(stopIntent(this, ACTION_DISMISS))
+            .also { Card.ringingStyle(this, it, title) }
             .build()
         // Started from the foreground-service start the receiver made, so this must come straight away.
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
@@ -191,6 +192,7 @@ class AlarmService : Service() {
         RingState.save(this, RingState.Saved(itemId, reminderId, day, original, clockId, timerId, text, sound, startedAt))
         ringing = Ringing(itemId, reminderId, day, clockId, timerId)
         AlarmEvents.changed("ringing")
+        redrawCard()
         return START_STICKY
     }
 
@@ -424,6 +426,13 @@ class AlarmService : Service() {
         sendBroadcast(Intent(AlarmActivity.ACTION_CLOSE).setPackage(packageName))
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+        redrawCard()
+    }
+
+    /** Off this thread: the card is never allowed to hold up the sound. */
+    private fun redrawCard() {
+        val ctx = applicationContext
+        CoroutineScope(Dispatchers.IO).launch { Card.refresh(ctx) }
     }
 
     override fun onDestroy() {

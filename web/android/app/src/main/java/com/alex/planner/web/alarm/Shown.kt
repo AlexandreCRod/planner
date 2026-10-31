@@ -39,7 +39,7 @@ object Shown {
     /** Takes back what's out for [reminderId] (of whichever kind) and forgets it. */
     fun takeBack(context: Context, kind: String, reminderId: Long) {
         when (kind) {
-            NOTIFICATION -> Notifications.cancel(context, smallId(reminderId))
+            NOTIFICATION -> Card.dropFired(context, reminderId)
             UPCOMING -> Notifications.cancelUpcoming(context, reminderId)
             SNOOZE -> AlarmScheduler.cancelSnooze(context, reminderId)
         }
@@ -66,7 +66,7 @@ object Shown {
         if (item.completable) {
             val today = java.time.LocalDate.now().epoch()
             val day = if (item.isRecurring) today else item.startDay
-            if (day in done) Notifications.cancelStarting(context, item.id)
+            if (day in done) Card.dropItem(context, item.id)
         }
         val ringing = AlarmService.ringing
         if (ringing != null && ringing.itemId == item.id && item.completable) {

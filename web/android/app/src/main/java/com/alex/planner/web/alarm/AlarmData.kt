@@ -24,6 +24,8 @@ data class Item(
     val startDay: Long? = null,
     val startMin: Int? = null,
     val endDay: Long? = null,
+    /** Its end, for the notification card (218); missing from pages before 2.9.2. */
+    val endMin: Int? = null,
     val allDay: Boolean = false,
     val freq: Freq = Freq.NONE,
     val interval: Int = 1,
@@ -77,6 +79,12 @@ data class AlarmSettings(
     val alarmRingMinutes: Int = 1,
     /** The same for clock alarms and timers. */
     val clockRingMinutes: Int = 10,
+    /** The notification card's look (Looks to try, 254): 1 Android's group, 2 one plain list. */
+    val notificationCard: Int = 1,
+    /** Which icon set the card's lines use, 1 to 3. */
+    val notificationIcons: Int = 1,
+    /** Clock alarms with the same days this many minutes apart share a line (the Clock page's bundles). */
+    val bundleWindow: Int = 19,
 )
 
 @Serializable

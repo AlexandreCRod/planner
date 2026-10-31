@@ -77,6 +77,21 @@ export const LOOKS = {
     ["B", "B", "A small ⓘ by the name opens a half sheet"],
     ["C", "C", "The name as a link with ›, opening the same sheet"],
   ] },
+  /**
+   * The notification card (218): 1, Android's group, a row per item with its own buttons and swipe; 2, one
+   * card with a plain list, buttons for the next alarm only. Kotlin draws it (alarm/Card.kt); alarms/mirror.ts
+   * hands it the choice.
+   */
+  notifCard: { page: "Notifications", title: "Coming-up card", pick: "1", choices: [
+    ["1", "Rows", "A row per item, each with its own buttons and swipe"],
+    ["2", "List", "One card with a plain list; buttons for the next alarm"],
+  ] },
+  /** The right-hand icon on the card's rows (218): rings, pops up, silent. Set 1 is the mockup's. */
+  notifIcons: { page: "Notifications", title: "Row icons", pick: "1", choices: [
+    ["1", "Bells", "Alarm clock, bell, quiet bell"],
+    ["2", "Sound", "Alarm clock, speaker, speaker off"],
+    ["3", "Soft", "Ringing bell, speech bubble, moon"],
+  ] },
 } as const satisfies Record<string, Look>;
 
 export type LookKey = keyof typeof LOOKS;
@@ -106,6 +121,9 @@ export function setLook<K extends LookKey>(k: K, v: ValueOf<K>) {
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const getVersion = () => version;
+
+/** Calls [fn] when any look changes (for what lives outside the components). */
+export function onLooks(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; }
 
 /** A look's value, kept current. */
 export function useLook<K extends LookKey>(k: K): ValueOf<K> {

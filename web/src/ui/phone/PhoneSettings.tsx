@@ -129,7 +129,7 @@ function AlarmSettingsSection() {
     <ChoiceRow title="Clock alarms and timers ring for" value={String(st.clockRingMinutes)} options={CLOCK_RING_CHOICES.map(minutesChoice)}
       onPick={(v) => setAlarmSettings({ clockRingMinutes: Number(v) })} />
     <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
-      supporting="2 hours before an alarm, a notification lets you snooze or stop it. From 23 hours before, the task or event itself has those buttons" />
+      supporting="2 hours before an alarm or reminder, a line in Planner's card says what's coming, with buttons to skip or snooze an alarm. From 23 hours before, the task or event itself has those buttons" />
     <ChoiceRow title="Default alarm filter" value={clock.defaultFilter ?? "all"} options={[["all", "None: every alarm"], ...CLOCK_FILTERS]}
       onPick={(v) => setClockPrefs({ defaultFilter: v === "all" ? null : v as typeof clock.defaultFilter })} />
     <ChoiceRow title="Bundle alarms" value={String(clock.bundleWindow)}

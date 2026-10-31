@@ -27,6 +27,8 @@ class BootReceiver : BroadcastReceiver() {
                 AlarmScheduler.rescheduleAll(ctx)
                 ClockAlarms.rescheduleAll(ctx)
                 ClockTools.rescheduleAll(ctx)
+                // A restart clears notifications: the card comes back from its own record.
+                Card.refresh(ctx)
                 // The home-screen widgets go by the date, so a clock change redraws them (once unlocked).
                 com.alex.planner.web.widget.Widgets.update(ctx)
             } finally {

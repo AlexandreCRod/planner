@@ -141,8 +141,7 @@ object Missed {
         if (r.type == AlertType.ALARM) {
             show(context, smallId(r.id), item.title.ifBlank { "Alarm" }, whenText(at), Notifications.openItemIntent(context, item.id))
         } else {
-            val text = relativeDayLabel(day.toDate()) + if (!item.allDay && item.startMin != null) " at ${formatTime(item.startMin)}" else ""
-            Notifications.show(context, item, r.id, day, r.type, text, quiet = true, settings.snoozeMinutes)
+            Notifications.show(context, item, r, day, original, quiet = true)
             Shown.put(context, Shown.NOTIFICATION, r.id, day, original)
         }
     }

@@ -25,7 +25,7 @@ export interface AlarmSettings {
 }
 
 /** The fields of an item the engine schedules with (its Item class). */
-const ITEM_FIELDS = ["id", "type", "title", "startDay", "startMin", "endDay", "allDay", "freq", "interval", "weekDays",
+const ITEM_FIELDS = ["id", "type", "title", "startDay", "startMin", "endDay", "endMin", "allDay", "freq", "interval", "weekDays",
   "monthDays", "months", "untilDay", "excludedDays", "deletedAt", "routine"] as const;
 
 /** The native accents, in order (the engine's ringing screen takes the index). */
@@ -35,7 +35,22 @@ export interface MirrorPush {
   items: Pick<Item, (typeof ITEM_FIELDS)[number]>[];
   reminders: Reminder[];
   completions: { itemId: number; day: number }[];
-  settings: Omit<AlarmSettings, "defaultAlarmSoundName"> & { clockFormat: number; dateFormat: number; accent: number };
+  settings: Omit<AlarmSettings, "defaultAlarmSoundName"> & { clockFormat: number; dateFormat: number; accent: number } & Partial<CardChoices>;
+}
+
+/** The notification card's choices, as the engine takes them (218, 254; TypeScript decides, Kotlin draws). */
+export interface CardChoices {
+  /** 1 Android's group, a row per item; 2 one plain list. */
+  notificationCard: number;
+  /** The icon set for rings, pops up and silent, 1 to 3. */
+  notificationIcons: number;
+  /** Clock alarms with the same days this close share a line, as on the Clock page. */
+  bundleWindow: number;
+}
+
+/** From the looks' values ("1", "2") and the Clock page's bundle window; anything odd is the default. */
+export function cardChoices(card: string, icons: string, bundleWindow: number): CardChoices {
+  return { notificationCard: card === "2" ? 2 : 1, notificationIcons: icons === "2" ? 2 : icons === "3" ? 3 : 1, bundleWindow };
 }
 
 /**

@@ -46,7 +46,8 @@ class UpcomingNoticeTest {
 
     private fun set(action: String) = shadowOf(am).scheduledAlarms.filter { shadowOf(it.operation).savedIntent.action == action }
 
-    private fun shown(): List<Notification> = shadowOf(nm).allNotifications
+    /** The card's lines, without its summary. */
+    private fun shown(): List<Notification> = shadowOf(nm).allNotifications.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
     private fun titles() = shown().map { it.extras.getString(Notification.EXTRA_TITLE) }
 
     @Test fun aClockAlarmQueuesItsNoticeTwoHoursBeforeExactly() {
@@ -79,8 +80,8 @@ class UpcomingNoticeTest {
         val a = clockIn(30)
         ClockAlarms.save(ctx, a)
         ClockAlarms.notice(ctx, a.id, ClockAlarms.nextRingAt(a)!!)
-        assertEquals(listOf("Upcoming alarm · Wake up"), titles())
-        assertEquals(listOf("Snooze 10m", "Stop"), shown().single().actions.map { it.title.toString() })
+        assertTrue(titles().single()!!.startsWith("Wake up · "))
+        assertEquals(listOf("Skip", "Snooze 10m"), shown().single().actions.map { it.title.toString() })
     }
 
     @Test fun itShowsOnceAndOnlyWhileItsStillTrue() {

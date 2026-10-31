@@ -4,10 +4,12 @@
 // items that have reminders, cut down to their scheduling fields, their reminders and completions, and
 // the alarm settings. Things ticked natively (a notification's "Done", the ringing screen's "Mark done")
 // come back here and are saved like any tick, so they sync.
-import { type MirrorPush, buildMirror } from "../domain/alarms.ts";
+import { type MirrorPush, buildMirror, cardChoices } from "../domain/alarms.ts";
 import { clockFormat, dateStyle } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
 import { go } from "../ui/shared/common.tsx";
+import { look, onLooks } from "../ui/phone/looks.ts";
+import { clockPrefs } from "./clockPrefs.ts";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
 import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";
@@ -19,7 +21,8 @@ function current(): MirrorPush {
   const s = snapshot();
   let accent = "#1a73e8";
   try { accent = localStorage.getItem("accent") ?? accent; } catch { /* default */ }
-  return buildMirror(s.allItems, s.reminders, s.completions, alarmSettings(), clockFormat(), dateStyle(), accent);
+  const push = buildMirror(s.allItems, s.reminders, s.completions, alarmSettings(), clockFormat(), dateStyle(), accent);
+  return { ...push, settings: { ...push.settings, ...cardChoices(look("notifCard"), look("notifIcons"), clockPrefs().bundleWindow) } };
 }
 
 /** Sends the data if it changed since the last push (or always, with [force]). */
@@ -56,6 +59,7 @@ export function startAlarmMirror() {
   const soon = () => { clearTimeout(timer); timer = window.setTimeout(() => pushMirror(), 300); };
   subscribe(soon);
   onAlarmSettings(soon);
+  onLooks(soon);
   onNative("changed", (what) => {
     if (what === "done" || what === "resume") void takeDone();
     if (what === "resume") pushMirror();
