@@ -193,7 +193,8 @@ class AlarmService : Service() {
         }
         // The ringing screen, when it's showing, shows the new alarm at once (the full-screen intent
         // only opens it the first time).
-        if (takeover && AlarmActivity.showing) runCatching { startActivity(full) }
+        // So does a preview of it (311): a real alarm takes the screen from a sample.
+        if ((takeover && AlarmActivity.showing) || RingPreviewActivity.showing) runCatching { startActivity(full) }
         startRinging(sound)
         listenToVolumeKeys()
         watchNotification()

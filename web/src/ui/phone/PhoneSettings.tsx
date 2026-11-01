@@ -29,6 +29,7 @@ import { applyPureBlack } from "./theme.ts";
 import { TimePickerDialog } from "./pickers.tsx";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { type LaunchApp, act, hasAlarms, native, useAlarmState } from "../../alarms/native.ts";
+import { ringChoices } from "../../domain/alarms.ts";
 import { WeatherAppSheet } from "./WeatherAppSheet.tsx";
 import { CLOCK_FILTERS } from "../../domain/clockList.ts";
 import { BUNDLE_WINDOW_CHOICES, setClockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
@@ -514,11 +515,18 @@ export function PhoneLooks() {
           {i > 0 && <div className="p-hr" />}
           <SectionHeader>{page}</SectionHeader>
           {keys.filter((k) => LOOKS[k].page === page).map((k) => <LookRow key={k} k={k} />)}
+          {page === "Ringing screen" && isNative && <div className="ps-pad ps-look"><OutlinedButton onClick={previewRing}>Preview</OutlinedButton></div>}
         </div>)}
         <div className="p-endspace" />
       </div>
     </Scaffold>
   );
+}
+
+/** The look chosen, full screen with sample text: nothing rings and nothing is set (311). */
+async function previewRing() {
+  const { opened } = await native.previewRing(ringChoices(look("ringLayout"), look("ringStop"), look("ringComing"), look("ringIcons")));
+  if (!opened) showSnackbar("Not while an alarm is ringing");
 }
 
 function LookRow({ k }: { k: LookKey }) {

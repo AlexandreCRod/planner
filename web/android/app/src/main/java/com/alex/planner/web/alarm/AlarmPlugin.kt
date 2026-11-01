@@ -109,6 +109,16 @@ class AlarmPlugin : Plugin() {
     }
 
     /** Completions ticked natively (notification "Done", ringing screen "Mark done"), for the page to save. */
+    /** Settings > Looks to try: the ringing screen's look, full screen, with sample text; not over an alarm ringing now. */
+    @PluginMethod
+    fun previewRing(call: PluginCall) {
+        val a = activity
+        val opened = a != null && AlarmService.ringing == null && runCatching {
+            a.startActivity(RingPreviewActivity.intent(a, call.getInt("ringLayout") ?: 0, call.getInt("ringStop") ?: 0, call.getBoolean("ringComing") ?: false, call.getInt("ringIcons") ?: 1))
+        }.isSuccess
+        call.resolve(JSObject().put("opened", opened))
+    }
+
     @PluginMethod
     fun takeDone(call: PluginCall) = ok(call, json.encodeToString(ListSerializer(Completion.serializer()), Mirror.takePendingDone(context)))
 

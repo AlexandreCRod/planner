@@ -74,6 +74,11 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/AlarmTheme" />
+        <activity
+            android:name=".alarm.RingPreviewActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/AlarmTheme" />
 
         <service
             android:name=".alarm.AlarmService"

@@ -3,7 +3,7 @@
 import { registerPlugin } from "@capacitor/core";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../platform.ts";
-import type { CalendarAlarm } from "../domain/alarms.ts";
+import type { CalendarAlarm, RingChoices } from "../domain/alarms.ts";
 import type { LaunchApp } from "../domain/apps.ts";
 
 export type { LaunchApp };
@@ -38,6 +38,7 @@ export interface Control { kind: "soon" | "skipped" | "rang"; reminderId: number
 
 interface Plugin {
   sync(o: { json: string }): Promise<void>;
+  previewRing(o: RingChoices): Promise<{ opened: boolean }>;
   takeDone(): Promise<{ json: string }>;
   takeLaunch(): Promise<{ itemId?: number; section?: string }>;
   widgets(o: { json: string }): Promise<void>;
@@ -83,6 +84,8 @@ async function call<T>(fn: (p: Plugin) => Promise<T>, fallback: T): Promise<T> {
 
 export const native = {
   sync: (payload: unknown) => call((p) => p.sync({ json: JSON.stringify(payload) }), undefined),
+  /** The ringing screen's look, full screen, with sample text (311). Whether it opened: not while an alarm rings. */
+  previewRing: (c: RingChoices) => call((p) => p.previewRing(c), { opened: false }),
   takeDone: async () => JSON.parse((await call((p) => p.takeDone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   takeLaunch: () => call((p) => p.takeLaunch(), {}),
   forecast: (json: string) => call((p) => p.forecast({ json }), undefined),
