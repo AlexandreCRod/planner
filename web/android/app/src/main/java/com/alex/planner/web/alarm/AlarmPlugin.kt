@@ -353,6 +353,11 @@ class AlarmPlugin : Plugin() {
             ClockTools.startTimer(context, ms, call.getString("label") ?: "")
             return ok(call)
         }
+        if (action == "restore") {
+            val text = call.getString("json") ?: return call.reject("json missing")
+            runCatching { ClockTools.restoreTimer(context, text) }.onFailure { return call.reject("bad json") }
+            return ok(call)
+        }
         val id = call.num("id") ?: return call.reject("id missing")
         val t = ClockTools.timer(context, id) ?: return ok(call)
         when (action) {

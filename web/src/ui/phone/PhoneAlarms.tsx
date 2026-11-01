@@ -804,7 +804,7 @@ function TimersPane({ timers: all, active, onNew }: { timers: ClockTimer[]; acti
     setLeaving((l) => new Set([...l, t.id]));
     if (!wait) { commit(); showSnackbar("Timer deleted"); return; }
     showSnackbar("Timer deleted", "Undo", () => {
-      if (done) { void act(native.timer("start", { durationMs: left, label: t.label })); return; } // the app was put away meanwhile
+      if (done) { void act(native.timer("restore", { json: JSON.stringify(t) })); return; } // the app was put away meanwhile
       done = true;
       offFlush();
       stay(t.id);

@@ -104,6 +104,9 @@ object ClockTools {
         saveTimer(context, ClockTimer(id = now, durationMs = durationMs, label = label).start(now))
     }
 
+    /** Undo of a delete: [text] is the timer as the page read it, and it comes back just so (same id, paused or still counting). */
+    fun restoreTimer(context: Context, text: String) = saveTimer(context, json.decodeFromString(ClockTimer.serializer(), text))
+
     fun deleteTimer(context: Context, id: Long) {
         change(context) { s -> s.copy(timers = s.timers.filterNot { it.id == id }) }
         disarm(context, id)
