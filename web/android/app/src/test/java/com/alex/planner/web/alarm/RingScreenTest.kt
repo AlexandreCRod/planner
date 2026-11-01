@@ -1,12 +1,16 @@
 package com.alex.planner.web.alarm
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -15,6 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * The ringing screen's layouts by real touches (246): each way to stop works, stops once, and one that fails
@@ -212,6 +217,33 @@ class RingScreenTest {
         rule.onNodeWithText("Today").assertIsDisplayed()
         rule.onNodeWithText("Dentist").assertIsDisplayed()
         rule.onNodeWithText("2 routines, 3 tasks").assertIsDisplayed()
+    }
+
+    private fun left(text: String) = rule.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.left
+
+    private fun layout(text: String): TextLayoutResult {
+        val layouts = mutableListOf<TextLayoutResult>()
+        rule.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single()
+    }
+
+    /** Whether [text] is drawn whole, nothing wrapped away or cut off. */
+    private fun whole(text: String) = !layout(text).hasVisualOverflow
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE) // real text widths
+    @Test fun aTwelveHourTimeOnTheTodayCardIsNotCutOff() {
+        show(RingLayout.A, StopBy.SLIDE, today = TodayCard(listOf(TodayRow("12:30 PM", "Dentist", false), TodayRow("9:05 AM", "Tese", true)), null))
+        assertTrue(whole("12:30 PM"))
+        assertTrue(whole("9:05 AM"))
+        assertEquals(left("Dentist"), left("Tese"), 0.5f)
+        assertTrue(left("12:30 PM") + layout("12:30 PM").getLineRight(0) < left("Dentist"))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun twentyFourHourTimesKeepTheirColumnOnTheTodayCard() {
+        show(RingLayout.A, StopBy.SLIDE, today = TodayCard(listOf(TodayRow("07:00", "Dentist", false)), null))
+        val column = with(rule.density) { 64.dp.toPx() }
+        assertEquals(column, left("Dentist") - left("07:00"), 1f)
     }
 
     @Test fun thePlainLayoutHasPlainButtons() {

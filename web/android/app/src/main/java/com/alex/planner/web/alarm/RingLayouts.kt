@@ -70,7 +70,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -299,9 +301,14 @@ private fun Pill(icon: ImageVector?, label: String, onClick: () -> Unit) {
 private fun Today(t: TodayCard) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Raised).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Today", fontSize = 13.sp, color = Muted)
+        // The time column fits its longest time ("12:30 PM", at any font size), so the titles still line up.
+        val timeStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        val measurer = rememberTextMeasurer()
+        val widest = t.rows.maxOfOrNull { measurer.measure(it.time, timeStyle, softWrap = false).size.width } ?: 0
+        val timeColumn = maxOf(64.dp, with(LocalDensity.current) { widest.toDp() } + 8.dp)
         t.rows.forEach { r ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.time, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(64.dp), maxLines = 1)
+                Text(r.time, style = timeStyle, modifier = Modifier.width(timeColumn), maxLines = 1, softWrap = false)
                 Text(r.title, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (r.rings) Text("rings", fontSize = 13.sp, color = Muted, modifier = Modifier.padding(start = 8.dp))
             }
