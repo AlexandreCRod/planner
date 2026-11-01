@@ -8,6 +8,7 @@ test("a session or a view is a sub view of Training; the week is not", () => {
   assert.equal(trainingSub(q("s=gym-1")), true);
   assert.equal(trainingSub(q("view=docs&doc=a.md")), true);
   assert.equal(trainingSub(q("view=progress")), true);
+  assert.equal(trainingSub(q("view=week")), true);      // the plan is one tap deeper than the overview (301): back closes it
   assert.equal(trainingSub(q("d=20380")), false);
   assert.equal(trainingSub(q("")), false);
 });
@@ -17,6 +18,7 @@ test("a session opened from Today gets the Training week under it, on the same d
   assert.equal(trainingBase("calendar", "training", q("s=run-2&p=hm")), "#/training?p=hm");
   assert.equal(trainingBase("item", "training", q("view=progress&tab=runs")), "#/training");
   assert.equal(trainingBase("", "training", q("s=gym-1")), "#/training");
+  assert.equal(trainingBase("", "training", q("view=week")), "#/training");
 });
 
 test("from within Training, or to the week itself, nothing is added", () => {

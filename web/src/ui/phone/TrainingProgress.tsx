@@ -247,7 +247,7 @@ function rpeAt(tr: Training, id: string, p: LiftPoint): number | null {
 }
 
 /** Each exercise worth a row: the tracked ones in any plan, then any only in the history; with its points. */
-function liftsShown(tr: Training): { id: string; name: string; added: boolean; pts: LiftPoint[] }[] {
+export function liftsShown(tr: Training): { id: string; name: string; added: boolean; pts: LiftPoint[] }[] {
   const plans = tr.plans.map((p) => p.plan);
   const ids = [...allExercises(tr).values()].filter((e) => e.trackBests).map((e) => e.id);
   for (const s of tr.pastSets) if (!ids.includes(s.exerciseId)) ids.push(s.exerciseId);
@@ -258,7 +258,7 @@ function liftsShown(tr: Training): { id: string; name: string; added: boolean; p
 }
 
 /** Whether an exercise is drawn by its estimated max (else by its top set). */
-const byMax = (added: boolean, pts: readonly LiftPoint[]) => !added && pts.some((p) => p.e1rm !== null);
+export const byMax = (added: boolean, pts: readonly LiftPoint[]) => !added && pts.some((p) => p.e1rm !== null);
 
 function liftRows(tr: Training, since: number | null): Row[] {
   const rows = liftsShown(tr).map(({ id, name, added, pts }): Row => {
@@ -381,7 +381,7 @@ export function LiftCards({ tr, lp, id }: { tr: Training; lp: LoadedPlan; id: st
 /** Every weigh-in shown: the user's own, the history's and the scale's from Health Connect (266). */
 const allWeights = (tr: Training) => bodyWeights(tr.weighIns, [...tr.pastWeighIns, ...healthWeighIns(tr.healthDays)], tr.hiddenWeighIns);
 
-function weightData(tr: Training) {
+export function weightData(tr: Training) {
   const all = allWeights(tr);
   return { all, trend: weightTrend(all) };
 }

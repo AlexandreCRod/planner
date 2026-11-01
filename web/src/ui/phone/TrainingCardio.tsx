@@ -35,6 +35,9 @@ let keptView: View = "runs";
 let keptRange: WindowKey = "3M";
 let keptMetric: Metric = "Distance";
 
+/** Opens the tab on this view: the overview's Runs and Futsal tiles (301). */
+export const showCardio = (v: View) => { keptView = v; };
+
 export interface CardioState {
   view: View; setView: (v: View) => void; range: WindowKey; setRange: (k: WindowKey) => void; metric: Metric; setMetric: (m: Metric) => void; count: boolean; setCount: (v: boolean) => void;
   /** How many windows back the charts, the tiles and the lists are (302). */

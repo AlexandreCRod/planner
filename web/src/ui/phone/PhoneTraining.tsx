@@ -1,12 +1,13 @@
-// The Training page (#/training): the active plan a phase at a time, as the plan session wrote it.
-// The phase strip at the top; the phase's summary, notes and placement rules; To place (sessions without a
+// The Training page (#/training) opens on the overview (TrainingOverview.tsx, 301); the week plan is one tap
+// deeper (?view=week, and the routes a session or a day opens): the active plan a phase at a time, as the plan
+// session wrote it. The phase strip at the top; the phase's summary, notes and placement rules; To place (sessions without a
 // day: tap one, then tap a day); then each day with its sessions and futsal. A placed session can be held
 // and dragged to another day (or back to To place). The ring on a row ticks it done, and a small "how it
 // went" row opens under it and closes by itself. A tap on a row opens the session (TrainingSession.tsx):
 // over the week on the phone, beside it in a wide window. Progress (TrainingProgress.tsx) and the documents are
 // in the top bar. Placing a session or futsal on a day that breaks one of the phase's rules opens a sheet that
 // says so (it's never blocked), and a row shows "⚠ 1 rule" while it breaks one.
-// Above the week, the sleep line (last night, the 7-day average, resting HR, HRV; a tap opens Progress on
+// Above the week plan, the sleep line (last night, the 7-day average, resting HR, HRV; a tap opens Progress on
 // Sleep), and two quiet markers: a moon on a key run (quality or long) after a night under 6 h, and a small
 // heart on a day whose resting HR is up 7+ on its 7-day average two mornings running (domain/sleep.ts).
 // Also here: Today's training line and the calendar's light marks.
@@ -19,7 +20,8 @@ import {
   type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, futsalLogId, leftToPlace, phaseIndexAt,
   phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
 } from "../../domain/training.ts";
-import { type ColourKind, type WeekBar, colourKind, fmtKm, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
+import { todayCard } from "../../domain/trainingToday.ts";
+import { type ColourKind, colourKind, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
 import { type SleepNight, fmtSleep, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
@@ -36,6 +38,7 @@ import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingFind } from "./TrainingFind.tsx";
+import { OverviewTiles, TodayRow, WeekBarView } from "./TrainingOverview.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { Scale, gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
@@ -76,27 +79,87 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
     );
   }
   const view = query.get("view");
+  /** A page over the rest; "week" isn't one, it's the plan itself. */
+  const over = view && view !== "week" ? view : null;
   const sid = query.get("s");
   const readOnly = lp !== active;
   const d = query.get("d");
   // A session moved from its own page (over the week, on a phone) onto a day that breaks a rule.
   const moved = (sid: string, day: number, undo: () => void) => { const w = checkPlaced(lp, { session: sid }, day, undo); if (w) setMovedWarn(w); return !!w; };
+  const deep = view === "week" || !!sid || !!d;
+  const week = <TrainingWeek tr={tr} lp={lp} t={t} wide={wide} sessionId={over ? null : sid} readOnly={readOnly} planId={planId} focusDay={d ? Number(d) : null} />;
   return <>
-    <TrainingWeek tr={tr} lp={lp} t={t} wide={wide} sessionId={view ? null : sid} readOnly={readOnly} planId={planId} focusDay={d ? Number(d) : null} />
-    {!wide && sid && !view && (
+    {readOnly ? week : <>
+      <TrainingHome tr={tr} lp={lp} t={t} planId={planId} />
+      {deep && !over && <div className="tr-layer tr-plan">{week}</div>}
+    </>}
+    {!wide && sid && !over && (
       <div className="tr-layer"><SessionView key={sid} tr={tr} lp={lp} sessionId={sid} readOnly={readOnly} onClose={() => history.back()} onMoved={moved} /></div>
     )}
     {movedWarn && <PlacementSheet tr={tr} lp={lp} warn={movedWarn} onMoved={setMovedWarn} onClose={() => setMovedWarn(null)} />}
-    {view && (
+    {over && (
       <div className="tr-layer full">
-        {view === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
-          : view === "progress" || view === "bests" ? <TrainingProgress tr={tr} lp={lp} query={query} planId={planId} />
-          : view === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
-          : view === "find" ? <TrainingFind tr={tr} lp={lp} planId={planId} />
+        {over === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
+          : over === "progress" || over === "bests" ? <TrainingProgress tr={tr} lp={lp} query={query} planId={planId} />
+          : over === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
+          : over === "find" ? <TrainingFind tr={tr} lp={lp} planId={planId} />
           : null}
       </div>
     )}
   </>;
+}
+
+/**
+ * What the tab opens on (301): today's row, the week's bar that leads to the plan, and the tiles. Log ticks what's
+ * waiting and asks how it went under the row, as a tick on the week does; Start opens the session, where it's logged.
+ */
+function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: number; planId: string | null }) {
+  const { plan } = lp;
+  const [asked, setAsked] = useState<string | null>(null);
+  useWatchRunTicks(false);
+  const scaffold = (children: ReactNode) => (
+    <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
+      <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
+      <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
+      <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
+    </>}>{children}</Scaffold>
+  );
+  if (!plan.phases.length) return scaffold(<EmptyHint>This plan has no phases yet.</EmptyHint>);
+  const phase = phaseIndexAt(plan, t), ph = plan.phases[phase];
+  const bar = weekBar(phaseView(plan, phase, tr.entries, tr.entries.values()).days, tr.runs);
+  const card = todayCard(plan, tr.entries, t);
+  const openWeek = () => { feel("tick"); go(`training?view=week${planQ(planId)}`); };
+  const openToday = () => {
+    feel("tick");
+    if (card.kind === "session" || (card.kind === "done" && card.session)) go(`training?s=${encodeURIComponent((card.kind === "session" ? card.session : card.session!).id)}${planQ(planId)}`);
+    else if (card.kind === "game" || card.kind === "done") go(`training?d=${t}${planQ(planId)}`);
+    else openWeek();
+  };
+  const log = () => {
+    feel("confirm");
+    if (card.kind === "session") { setAsked(card.entry.id); setSessionStatus(lp, card.session, "done", t); }
+    else if (card.kind === "game" && card.game.itemId !== undefined && card.game.day !== null) { setAsked(card.game.id); tickGame({ itemId: card.game.itemId, day: card.game.day }, true); }
+  };
+  // What was just logged, once it's done, asks how it went.
+  const askedS = sessionsOnDay(plan, t, tr.entries).find((x) => x.entry.id === asked && x.entry.status === "done");
+  const askedG = asked ? tr.entries.get(asked) : undefined;
+  return scaffold(
+    <div className={`p-content tr-home ${trainingLookClass()}`}>
+      <UpdateNotice tr={tr} lp={lp} readOnly={false} />
+      <HealthCard />
+      <div className="tr-home-in">
+        <TodayRow tr={tr} card={card} t={t} onOpen={openToday} onStart={openToday} onLog={log} />
+        {askedS ? <AskRow lp={lp} s={askedS.session} e={askedS.entry} onDone={() => setAsked(null)} />
+          : askedG?.kind === "futsal" && askedG.status === "done" ? <GameAskRow plan={plan} e={askedG} onDone={() => setAsked(null)} /> : null}
+        <button className="tr-wk" onClick={openWeek}>
+          <span className="top"><span>{t >= ph.start && t <= ph.end ? "This week" : phaseNames(ph.name)[0]}</span><MIcon name="fKeyboardArrowRight" size={20} /></span>
+          {bar.segments.length > 0 ? <WeekBarView bar={bar} totalKm={summaryKm(ph.summary)} /> : <span className="tr-bar-text"><span>Nothing placed yet</span></span>}
+        </button>
+        <OverviewTiles tr={tr} t={t} onOpen={(q) => { feel("tick"); go(`training?view=progress&${q}${planQ(planId)}`); }} />
+      </div>
+      <div className="p-endspace" />
+    </div>,
+  );
 }
 
 // The phase looked at and the list's scroll, kept while the page is away (a document, the session).
@@ -260,11 +323,11 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   );
 
   return (
-    <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
+    <Scaffold title={<span className="tr-title">{long || short}<span className="sub">{plan.name}</span></span>} back flush actions={readOnly ? <>
       <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
-    </>}>
+    </> : undefined}>
       {wide ? (
         <div className="tr-split">
           {week}
@@ -272,7 +335,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
             {sessionId
               ? <SessionView key={sessionId} tr={tr} lp={lp} sessionId={sessionId} readOnly={readOnly} closeIcon
                   onMoved={(sid, day, undo) => { const w = check({ session: sid }, day, undo); if (w) setWarn(w); return !!w; }}
-                  onClose={() => replaceRoute(`training${planId ? `?p=${encodeURIComponent(planId)}` : ""}`)} />
+                  onClose={() => replaceRoute(`training?view=week${planQ(planId)}`)} />
               : <div className="tr-side-hint"><MIcon name="oDirectionsRun" size={40} /><span>Open a session to see its card and log it here</span></div>}
           </div>
         </div>
@@ -283,20 +346,6 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
       {warn && <PlacementSheet tr={tr} lp={lp} warn={warn} onMoved={setWarn} onClose={() => setWarn(null)} />}
     </Scaffold>
   );
-}
-
-/**
- * Under the week's title: a short bar per session or futsal game on its days, filling in its kind's colour
- * when done, then how many are done and the km run so far (of the week's planned km, when it has one).
- */
-function WeekBarView({ bar, totalKm }: { bar: WeekBar; totalKm: string | null }) {
-  const km = totalKm ? `${fmtKm(bar.km)} of ${totalKm}` : bar.km > 0 ? `${fmtKm(bar.km)} km` : "";
-  return <>
-    <div className="tr-bar" aria-hidden="true">
-      {bar.segments.map((g, i) => <i key={i} className={`${g.kind ? `k-${g.kind}` : ""} ${g.done ? "done" : ""}`} />)}
-    </div>
-    <div className="tr-bar-text"><span>{bar.done} of {bar.segments.length} done</span><span>{km}</span></div>
-  </>;
 }
 
 /** A session's icon in a soft circle of its kind's colour (other kinds keep the plain icon colour). */

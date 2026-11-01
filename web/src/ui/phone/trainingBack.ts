@@ -1,11 +1,11 @@
-// Back on the Training page (277): a session or a document open on it closes to the Training week, never to
-// the tab or page it was opened from. Pure, so it's tested (test/trainingBack.test.ts).
+// Back on the Training page (277): a session or a document open on it closes to Training, never to the tab or
+// page it was opened from. Pure, so it's tested (test/trainingBack.test.ts).
 
-/** A session, a document or another view open on the Training page: back closes it before leaving the page. */
+/** A session, the week plan, a document or another view open on the Training page: back closes it before leaving the page. */
 export const trainingSub = (q: URLSearchParams) => q.has("s") || q.has("view");
 
 /**
- * The Training week to put under a sub view opened from outside the page (Today's Training line opens a
+ * The Training page to put under a sub view opened from outside the page (Today's Training line opens a
  * session straight away; a link or a cold start may open one too): its route (keeping the plan and the day),
  * or null when the step back already leads to Training. [from] is the route shown before ("" at start).
  */

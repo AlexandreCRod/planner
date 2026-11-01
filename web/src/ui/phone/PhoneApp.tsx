@@ -422,7 +422,7 @@ export function PhoneApp() {
     const ghost = old && page ? stillCopy(old, page) : null;
     if (key === "today") resetToday();
     if (key === "calendar") resetCalendar();
-    // Training: back to its week, with any session or document put away.
+    // Training: back to its overview, with the week, any session or document put away.
     if (key === "training" && trainingQ.current.toString()) {
       history.replaceState(null, "", "#/training");
       window.dispatchEvent(new HashChangeEvent("hashchange"));
