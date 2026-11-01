@@ -93,9 +93,19 @@ object ClockAlarms {
         schedule(context, alarm, keepSnooze = wasOff)
     }
 
-    fun delete(context: Context, id: Long) {
+    /** Deletes it, snooze and all. Returns when that snooze would have rung, for the page's Undo (null: none). */
+    fun delete(context: Context, id: Long): Long? {
+        val snoozed = snoozes(context)[id]
         synchronized(lock) { store(context, all(context).filterNot { it.id == id }) }
         cancel(context, id)
+        return snoozed
+    }
+
+    /** Undo of a delete, after the alarm is saved back: its snooze rings as it would have, or at once if it came due meanwhile. */
+    fun restoreSnooze(context: Context, id: Long, until: Long) {
+        val at = maxOf(until, System.currentTimeMillis() + 1_000)
+        setSnoozes(context, snoozes(context) + (id to at))
+        set(context, id, at, snooze = true)
     }
 
     /** The next time [a] rings after [now], or null if it won't (its dates are all past): nextRing in alarms.ts. */

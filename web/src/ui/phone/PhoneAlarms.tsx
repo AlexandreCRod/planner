@@ -484,8 +484,10 @@ const toggleOpen = (open: Record<number, boolean>, group: ClockAlarm[]) => {
 
 /** Deletes an alarm or a whole bundle or series, with Undo putting them back as they were. */
 function deleteAlarms(group: ClockAlarm[]) {
-  void act(Promise.all(group.map((a) => native.deleteClock(a.id))));
-  showSnackbar(group.length === 1 ? "Alarm deleted" : `${group.length} alarms deleted`, "Undo", () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  const gone = Promise.all(group.map((a) => native.deleteClock(a.id)));
+  void act(gone);
+  showSnackbar(group.length === 1 ? "Alarm deleted" : `${group.length} alarms deleted`, "Undo",
+    () => void gone.then((taken) => Promise.all(group.map((a, i) => native.saveClock(a, taken[i].snoozeUntil)))).then(refreshAlarmState));
 }
 
 function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {

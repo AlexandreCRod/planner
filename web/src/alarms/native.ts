@@ -51,9 +51,9 @@ interface Plugin {
   earlySnooze(o: { reminderId: number; original: number }): Promise<void>;
   earlyStop(o: { reminderId: number; original: number }): Promise<void>;
   resetAlarm(o: { reminderId: number; original: number | null }): Promise<void>;
-  saveClock(o: { json: string }): Promise<{ id: number }>;
-  deleteClock(o: { id: number }): Promise<void>;
-  timer(o: { action: string; id?: number; durationMs?: number; label?: string }): Promise<void>;
+  saveClock(o: { json: string; snoozeUntil?: number }): Promise<{ id: number }>;
+  deleteClock(o: { id: number }): Promise<{ snoozeUntil?: number }>;
+  timer(o: { action: string; id?: number; durationMs?: number; label?: string; json?: string }): Promise<void>;
   stopwatch(o: { action: string }): Promise<void>;
   zone(o: { action: "add" | "remove"; zone: string }): Promise<void>;
   setRingEvents(o: { value: boolean }): Promise<void>;
@@ -102,9 +102,11 @@ export const native = {
   earlySnooze: (reminderId: number, original: number) => call((p) => p.earlySnooze({ reminderId, original }), undefined),
   earlyStop: (reminderId: number, original: number) => call((p) => p.earlyStop({ reminderId, original }), undefined),
   resetAlarm: (reminderId: number, original: number | null) => call((p) => p.resetAlarm({ reminderId, original }), undefined),
-  saveClock: (a: ClockAlarm) => call((p) => p.saveClock({ json: JSON.stringify(a) }), { id: 0 }),
-  deleteClock: (id: number) => call((p) => p.deleteClock({ id }), undefined),
-  timer: (action: "start" | "pause" | "resume" | "plus" | "reset" | "delete", o: { id?: number; durationMs?: number; label?: string } = {}) =>
+  /** [snoozeUntil]: for an Undo, the snooze the delete handed back. */
+  saveClock: (a: ClockAlarm, snoozeUntil?: number) => call((p) => p.saveClock({ json: JSON.stringify(a), snoozeUntil }), { id: 0 }),
+  deleteClock: (id: number) => call((p) => p.deleteClock({ id }), {}),
+  /** "restore": [json] is the timer as read before it was deleted, and it comes back just so. */
+  timer: (action: "start" | "pause" | "resume" | "plus" | "reset" | "delete" | "restore", o: { id?: number; durationMs?: number; label?: string; json?: string } = {}) =>
     call((p) => p.timer({ action, ...o }), undefined),
   stopwatch: (action: "start" | "pause" | "lap" | "reset") => call((p) => p.stopwatch({ action }), undefined),
   zone: (action: "add" | "remove", zone: string) => call((p) => p.zone({ action, zone }), undefined),

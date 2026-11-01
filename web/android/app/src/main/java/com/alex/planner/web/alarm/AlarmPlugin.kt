@@ -333,13 +333,15 @@ class AlarmPlugin : Plugin() {
         // The page doesn't keep this: it may be saving what it read before the alarm rang.
         ClockAlarms.get(context, a.id)?.rangAt?.let { a = a.copy(rangAt = it) }
         ClockAlarms.save(context, a)
+        // An Undo of a delete hands back the snooze that delete took with it.
+        call.num("snoozeUntil")?.let { ClockAlarms.restoreSnooze(context, a.id, it) }
         call.resolve(JSObject().put("id", a.id))
     }
 
     @PluginMethod
     fun deleteClock(call: PluginCall) {
-        ClockAlarms.delete(context, call.num("id") ?: return call.reject("id missing"))
-        ok(call)
+        val snoozed = ClockAlarms.delete(context, call.num("id") ?: return call.reject("id missing"))
+        call.resolve(JSObject().apply { snoozed?.let { put("snoozeUntil", it) } })
     }
 
     @PluginMethod
