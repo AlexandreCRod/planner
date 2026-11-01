@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -150,6 +151,55 @@ class RingScreenTest {
         tick()
         assertEquals(1, rests)
         assertEquals(0, stops)
+    }
+
+    @Test fun layoutAOffersToStopTheRestOfABundle() {
+        show(RingLayout.A, StopBy.SLIDE, bundle)
+        rule.onNodeWithText("Stop the rest · 07:20, 07:30").assertIsDisplayed().performClick()
+        tick()
+        assertEquals(1, rests)
+        assertEquals(0, stops)
+    }
+
+    @Test fun layoutAOffersNothingOnceNoneAreLeftToRing() {
+        show(RingLayout.A, StopBy.SLIDE, bundle.copy(index = 3, next = null, rest = emptyList()))
+        rule.onNodeWithTag("stopRest").assertDoesNotExist()
+    }
+
+    @Test fun layoutAOffersNothingOnASingleAlarm() {
+        show(RingLayout.A, StopBy.SLIDE)
+        rule.onNodeWithTag("stopRest").assertDoesNotExist()
+    }
+
+    /** It's under the slide, so a finger that drifts down mustn't reach it, and the slide works as ever. */
+    @Test fun theSlideStaysEasyAndClearOfStopTheRest() {
+        show(RingLayout.A, StopBy.SLIDE, bundle)
+        val track = rule.onNodeWithTag("slide").fetchSemanticsNode().boundsInRoot
+        val rest = rule.onNodeWithTag("stopRest").fetchSemanticsNode().boundsInRoot
+        val gapDp = (rest.top - track.bottom) / rule.density.density
+        assertTrue("only $gapDp dp between them", gapDp >= 48f)
+        slide("slide", 1f)
+        assertEquals(1, stops)
+        assertEquals(0, rests)
+    }
+
+    @Test fun aTouchSlidingOffTheTrackDownwardsDoesntStopTheRest() {
+        show(RingLayout.A, StopBy.SLIDE, bundle)
+        rule.onNodeWithTag("slide").performTouchInput {
+            down(center.copy(x = left + 30f))
+            for (i in 1..12) moveBy(androidx.compose.ui.geometry.Offset(width * 0.03f, height / 2f))
+            up()
+        }
+        tick(500)
+        assertEquals(0, rests)
+        assertEquals(0, stops)
+    }
+
+    @Test fun aTappedStopStaysClearOfStopTheRestToo() {
+        show(RingLayout.A, StopBy.TAP, bundle)
+        val stop = rule.onNodeWithTag("stop").fetchSemanticsNode().boundsInRoot
+        val rest = rule.onNodeWithTag("stopRest").fetchSemanticsNode().boundsInRoot
+        assertTrue((rest.top - stop.bottom) / rule.density.density >= 16f)
     }
 
     @Test fun layoutASaysWhereItSitsInTheBundle() {

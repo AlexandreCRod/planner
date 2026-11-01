@@ -252,7 +252,21 @@ private fun LayoutA(c: RingContent, a: RingActions) {
         }
         Spacer(Modifier.height(20.dp))
         Box(Modifier.widthIn(max = 360.dp).fillMaxWidth()) { Stopper(c.look, a.stop) }
+        // Clear of the track: a slide or a hold has its backup's room under it first, and a tap's big Stop gets a gap.
+        if (c.look.stop == StopBy.TAP && c.stopsRest) Spacer(Modifier.height(16.dp))
+        StopRest(c, a)
     })
+}
+
+private val RingContent.stopsRest get() = bundle?.rest?.isNotEmpty() == true
+
+/** A series' other alarms stopped in one go: a quiet text action, only when more of them are still to ring. */
+@Composable
+private fun StopRest(c: RingContent, a: RingActions) {
+    val b = c.bundle?.takeIf { it.rest.isNotEmpty() } ?: return
+    TextButton(onClick = a.stopRest, modifier = Modifier.padding(top = 4.dp).height(48.dp).testTag("stopRest")) {
+        Text("Stop the rest · ${b.restTimes}", fontSize = 14.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable
@@ -351,9 +365,7 @@ private fun LayoutB(c: RingContent, a: RingActions) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = it, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Mark done") }
         }
-        c.bundle?.takeIf { it.rest.isNotEmpty() }?.let { b ->
-            TextButton(onClick = a.stopRest, modifier = Modifier.padding(top = 4.dp).height(48.dp)) { Text("Stop the rest · ${b.restTimes}", fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        }
+        StopRest(c, a)
     })
 }
 
