@@ -9,7 +9,7 @@
 // - Body weight: the weigh-ins the user enters, records "trainingWeighIns", written only by the app. The
 //   script pulls them back as bodyweight.csv for the plan session. The imported weigh-ins the user hid are
 //   records "trainingHidden", the app's too.
-// - Everything else here (lift e1RM and top sets, weekly hard sets, weekly km, the weight trend, a day's
+// - Everything else here (lift e1RM and top sets, weekly hard sets, the weight trend, a day's
 //   nutrition type) is worked out on the fly from those and from the user's lifts and entries; none of it
 //   is stored.
 // Days are epoch-day numbers (domain/dates.ts); weeks start on Monday.
@@ -596,23 +596,6 @@ function weekTotals(fromDay: number, toDay: number, items: Iterable<[day: number
   }
   return [...totals];
 }
-
-/** Km run per week over the range (whole weeks, like [weeklyHardSets]), to 10 m. */
-export function weeklyKm(runs: Iterable<Run>, fromDay: number, toDay: number): { weekStart: number; km: number }[] {
-  const items: [number, number][] = [];
-  for (const r of runs) items.push([r.day, r.distanceKm ?? 0]);
-  return weekTotals(fromDay, toDay, items).map(([weekStart, km]) => ({ weekStart, km: Math.round(km * 100) / 100 }));
-}
-
-/** The long runs, oldest first. */
-export const longRuns = (runs: Iterable<Run>): Run[] => [...runs].filter((r) => r.type === "long").sort(byMoment);
-
-/**
- * Runs at an easy heart rate (average at most [maxHr]) with a pace no slower than [slowestPace] s/km, oldest
- * first: for pace against heart rate. Slower than 9:00 /km are walk/run mixes and short treadmill runs.
- */
-export const easyRuns = (runs: Iterable<Run>, maxHr = 148, slowestPace = 540): Run[] =>
-  [...runs].filter((r) => r.avgHr !== null && r.avgHr <= maxHr && r.paceSPerKm !== null && r.paceSPerKm <= slowestPace).sort(byMoment);
 
 /** The longest run in km among the [days] days up to and including [day]; null when there's none. For the plan's 10% rule against a sudden jump. */
 export function longestIn(runs: Iterable<Run>, day: number, days = 30): number | null {

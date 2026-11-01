@@ -103,7 +103,7 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
     {(k, i) => Math.abs(i - index) <= 1 && (k === "runs"
       ? <CardioList tr={tr} lp={lp} t={t} st={cardio} sel={wide && k === tab ? card : null} onOpen={open} />
       : k === "body" ? <BodyGrid tr={tr} t={t} sel={wide && k === tab ? card : null} onOpen={open} />
-      : <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />)}
+      : <TabPage tr={tr} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />)}
   </TabsPager>;
 
   return (
@@ -174,9 +174,8 @@ function TabsPager({ index, setIndex, children }: { index: number; setIndex: (i:
 const clampTab = (i: number) => Math.max(0, Math.min(TABS.length - 1, i));
 
 /** The Lifts tab's list, or Nutrition's word: rows under their group headings ([sel]: the row whose card is open beside it). */
-function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan; tab: Tab; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function TabPage({ tr, tab, t, sel, onOpen }: { tr: Training; tab: Tab; t: number; sel: string | null; onOpen: (id: string) => void }) {
   const rows = useMemo(() => (tab === "lifts" ? liftRows(tr, rangeStart("3M", t)) : []), [tr, tab, t]);
-  void lp;
   let group = "";
   return <>
     {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}

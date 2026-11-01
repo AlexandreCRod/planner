@@ -3,9 +3,9 @@ import { test } from "node:test";
 import type { HealthDay } from "../src/domain/health.ts";
 import { type Entry, type Lift, dayOf, entryId, isoOf, newEntry, readPlan } from "../src/domain/training.ts";
 import {
-  type Hidden, type Run, type WeighIn, bodyWeights, hiddenId, hiddenWeighIns, carbsTarget, dayType, e1rmOf, easyRuns, kcalTarget, liftPoints, longRuns, longestIn, readLiftHistory, readMeals,
+  type Hidden, type Run, type WeighIn, bodyWeights, hiddenId, hiddenWeighIns, carbsTarget, dayType, e1rmOf, kcalTarget, liftPoints, longestIn, readLiftHistory, readMeals,
   readRuns, readSleep, readWeights, rpeFor, sourceName,
-  targetRpeOf, healthWeighIns, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weeklyKm, weighInsCsv, weightTrend,
+  targetRpeOf, healthWeighIns, topRpe, topSetOf, trendAt, weeklyChange, weeklyHardSets, weighInsCsv, weightTrend,
 } from "../src/domain/trends.ts";
 
 const d = (iso: string) => dayOf(iso)!;
@@ -108,15 +108,7 @@ const run = (id: string, day: string, extra: Partial<Run> = {}): Run => ({
   avgHr: 140, maxHr: 160, cadenceSpm: 170, ascentM: 20, ...extra,
 });
 
-test("weekly km: Monday weeks, zeros included, whole weeks", () => {
-  const runs = [run("a", "2026-11-02", { distanceKm: 10 }), run("b", "2026-11-18", { distanceKm: 5.1 }), run("c", "2026-11-19", { distanceKm: 4.2 }), run("e", "2026-11-04", { distanceKm: null })];
-  assert.deepEqual(weeklyKm(runs, d("2026-11-02"), d("2026-11-22")), [
-    { weekStart: d("2026-11-02"), km: 10 }, { weekStart: d("2026-11-09"), km: 0 }, { weekStart: d("2026-11-16"), km: 9.3 },
-  ]);
-  assert.deepEqual(weeklyKm(runs, d("2026-11-04"), d("2026-11-04")), [{ weekStart: d("2026-11-02"), km: 10 }]);
-});
-
-test("long runs, easy runs for pace against heart rate, and the longest in the last 30 days", () => {
+test("the longest in the last 30 days", () => {
   const runs = [
     run("c", "2026-10-20", { type: "long", distanceKm: 16 }),
     run("a", "2026-09-01", { type: "long", distanceKm: 12, avgHr: null }),
@@ -127,9 +119,6 @@ test("long runs, easy runs for pace against heart rate, and the longest in the l
     run("w", "2026-10-09", { paceSPerKm: 541, avgHr: 120 }),
     run("v", "2026-10-10", { paceSPerKm: 540, avgHr: 125 }),
   ];
-  assert.deepEqual(longRuns(runs).map((r) => r.id), ["a", "c"]);
-  assert.deepEqual(easyRuns(runs).map((r) => r.id), ["b", "v", "c"]);    // 148 and 9:00 /km count; no pace, no heart rate, too high or slower: out
-  assert.deepEqual(easyRuns(runs, 140).map((r) => r.id), ["v", "c"]);
   assert.equal(longestIn(runs, d("2026-10-26")), 16);
   assert.equal(longestIn(runs, d("2026-10-26"), 5), null);               // nothing in the last 5 days
   assert.equal(longestIn(runs, d("2026-09-30")), 12);                    // a 30-day window ending on the 30th starts on the 1st
