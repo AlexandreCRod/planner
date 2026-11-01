@@ -278,6 +278,19 @@ export const elapsed = (sw: { startedAt: number | null; accumulatedMs: number },
 export const lapLengths = (laps: number[]) => laps.map((t, i) => t - (i > 0 ? laps[i - 1] : 0));
 
 export const TIMER_PRESETS = [1, 3, 5, 10, 15, 30, 60];
+
+/** How long a deleted timer's Undo normally lasts. */
+const TIMER_UNDO_MS = 5000;
+/** A running timer this close to its end goes at once: it mustn't ring while its Undo shows. */
+const TIMER_UNDO_MARGIN_MS = 1000;
+/**
+ * How long (ms) a deleted timer can still be brought back: it's only really deleted after that, so it
+ * comes back untouched. A timer that's running must be gone before it would ring; 0: delete it now.
+ */
+export function timerUndoMs(leftMs: number, running: boolean): number {
+  if (!running || leftMs >= TIMER_UNDO_MS + TIMER_UNDO_MARGIN_MS) return TIMER_UNDO_MS;
+  return Math.max(0, leftMs - TIMER_UNDO_MARGIN_MS);
+}
 export const presetText = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
 
 // ---------- World clock ----------

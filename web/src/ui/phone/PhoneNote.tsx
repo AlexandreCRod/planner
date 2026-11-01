@@ -9,10 +9,10 @@ import { occurrencesIn } from "../../domain/schedule.ts";
 import { preview, stripHtml } from "../../domain/text.ts";
 import { type NoteImage, cssColor } from "../../domain/types.ts";
 import { importImage, importVideo } from "../../store/images.ts";
-import { MAX_VIDEO_BYTES } from "../../domain/media.ts";
+import { MAX_VIDEO_BYTES, isVideo } from "../../domain/media.ts";
 import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
 import { useMouseSelect } from "./mouseSelect.ts";
-import { addImage, deleteImage, trash } from "../../store/store.ts";
+import { addImage, deleteImage, snapshot, withUndo } from "../../store/store.ts";
 import { openItem, replaceRoute } from "../shared/common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/noteStyle.ts";
 import { RichEditor } from "../shared/RichEditor.tsx";
@@ -24,11 +24,10 @@ import { NotePeek, PeekPicker, peekInNextNote, takePendingPeek } from "./NotePee
 import { feel } from "./haptics.ts";
 import { Dialog, DropdownMenu, FilterChip, IconButton, MIcon, TopAppBar, useUndoState } from "./chrome.tsx";
 import { BottomSheet, ColorGrid, PALETTE, TextButton, contentColor, showSnackbar } from "./m3.tsx";
-import { NOTE_DAYS } from "../../domain/retention.ts";
 import { useKeyboardUp } from "./native.ts";
 import { isNative } from "../../platform.ts";
 import { setNoteFind } from "./desk.ts";
-import { PhoneLinks } from "./PhoneItem.tsx";
+import { PhoneLinks, trashWithUndo } from "./PhoneItem.tsx";
 import { RichBar, RichBarButton } from "./RichBar.tsx";
 import { useWebLinks } from "./WebLinks.tsx";
 
@@ -42,7 +41,15 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const [focused, setFocused] = useState(false);
   const [held, setHeld] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [open, setOpen] = useState<"" | "style" | "templates" | "versions" | "trash">("");
+  const [open, setOpen] = useState<"" | "style" | "templates" | "versions">("");
+  /** Gone at once, with the last words typed in it, and Undo in the snackbar. */
+  const moveToTrash = () => {
+    const saved = note.save();
+    note.markDeleted();
+    const item = snapshot().byId.get(saved);
+    if (item) trashWithUndo(item);
+    history.back();
+  };
   const [viewing, setViewing] = useState<NoteImage | null>(null);
   const [lens, setLens] = useState<{ start: number; pointer: { id: number; x: number } | null } | null>(null);
   const textBox = useRef<HTMLDivElement>(null);
@@ -154,7 +161,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
             } },
             { label: "Insert template", icon: "oViewQuilt", onClick: () => setOpen("templates") },
             { label: "Version history", icon: "oHistory", disabled: !noteId, onClick: () => setOpen("versions") },
-            { label: "Move to trash", icon: "oDelete", divider: true, onClick: () => setOpen("trash") },
+            { label: "Move to trash", icon: "oDelete", divider: true, onClick: moveToTrash },
           ]} />
         </span>
       </>} />
@@ -245,20 +252,12 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
         </Dialog>
       )}
 
-      {open === "trash" && (
-        <Dialog title="Move note to trash?" onClose={() => setOpen("")} actions={<>
-          <TextButton onClick={() => setOpen("")}>Cancel</TextButton>
-          <TextButton onClick={() => { setOpen(""); note.markDeleted(); if (noteId) trash(noteId); history.back(); }}>Move to trash</TextButton>
-        </>}>
-          You can restore it from Settings → Trash for {NOTE_DAYS} days.
-        </Dialog>
-      )}
 
       {picking && <PeekPicker exclude={noteId} onPick={(pid) => setPeek(pid)} onClose={() => setPicking(false)} />}
 
       {lens && images.length > 0 && <MediaLens media={images} start={Math.min(lens.start, images.length - 1)} pointer={lens.pointer}
         onClose={() => setLens(null)} onOpen={(i) => { setLens(null); setViewing(images[i]); }} />}
-      {viewing && <MediaViewer m={viewing} onClose={() => setViewing(null)} onRemove={() => { deleteImage(viewing); setViewing(null); }} />}
+      {viewing && <MediaViewer m={viewing} onClose={() => setViewing(null)} onRemove={() => { showSnackbar(isVideo(viewing) ? "Video removed" : "Picture removed", "Undo", withUndo(() => deleteImage(viewing))); setViewing(null); }} />}
     </div>
   );
 }

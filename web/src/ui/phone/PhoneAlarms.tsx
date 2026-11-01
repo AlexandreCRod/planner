@@ -7,11 +7,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal, flushSync } from "react-dom";
 import {
   type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
-  nextRing, presetText, repeatText, timerLeft, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
+  nextRing, presetText, repeatText, timerLeft, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
-import { useSnapshot } from "../../store/store.ts";
+import { onFlush, useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
@@ -482,10 +482,10 @@ const toggleOpen = (open: Record<number, boolean>, group: ClockAlarm[]) => {
   return { ...open, ...Object.fromEntries(group.map((a) => [a.id, on])) };
 };
 
-/** Deletes a whole bundle, with Undo putting its alarms back as they were. */
-function deleteBundle(group: ClockAlarm[]) {
+/** Deletes an alarm or a whole bundle or series, with Undo putting them back as they were. */
+function deleteAlarms(group: ClockAlarm[]) {
   void act(Promise.all(group.map((a) => native.deleteClock(a.id))));
-  showSnackbar(`${group.length} alarms deleted`, "Undo", () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
+  showSnackbar(group.length === 1 ? "Alarm deleted" : `${group.length} alarms deleted`, "Undo", () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
 }
 
 function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
@@ -539,7 +539,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
               {!series && <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />}
             </div>
           ))}
-          <div className="pa-bundle-foot"><TextButton className="icon" onClick={() => deleteBundle(group)}><MIcon name="oDelete" size={18} /> Delete all</TextButton></div>
+          <div className="pa-bundle-foot"><TextButton className="icon" onClick={() => deleteAlarms(group)}><MIcon name="oDelete" size={18} /> Delete all</TextButton></div>
         </div>
       </div>
       {picking && <Layer><TimePickerDialog step={1} value={firstMin} onPick={moveTo} onClose={() => setPicking(false)} /></Layer>}
@@ -633,7 +633,7 @@ function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: 
           <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
         )}
         {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
-        {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteBundle(group); }} />}
+        {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteAlarms(group); }} />}
       </div>
     )}</BottomSheet>
   );
@@ -676,7 +676,7 @@ function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNe
       <div className="pa-editor">
         <div className="pa-editor-head">
           <span className="t-title-medium grow">{isSeries ? "Alarm series" : isNew ? "New alarm" : "Alarm"}</span>
-          {!isNew && <TextButton className="icon" onClick={() => { void act(Promise.all((group.length ? group : [alarm]).map((a) => native.deleteClock(a.id)))); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
+          {!isNew && <TextButton className="icon" onClick={() => { deleteAlarms(group.length ? group : [alarm]); close(); }}><MIcon name="oDelete" size={18} /> Delete</TextButton>}
         </div>
         <div className="pa-wheels"><TimeWheels step={1} value={minute} onChange={setMinute} /></div>
         <div className="pa-erow pa-series-row">
@@ -786,9 +786,28 @@ const startTimer = async (durationMs: number, label = "") => {
   await act(native.timer("start", { durationMs, label }));
 };
 
-function TimersPane({ timers, active, onNew }: { timers: ClockTimer[]; active: boolean; onNew: () => void }) {
+function TimersPane({ timers: all, active, onNew }: { timers: ClockTimer[]; active: boolean; onNew: () => void }) {
+  // A deleted timer leaves the page at once, but is only really deleted when its Undo has gone unused, so
+  // Undo brings it back as it was, still counting.
+  const [leaving, setLeaving] = useState<ReadonlySet<number>>(new Set());
+  const stay = (id: number) => setLeaving((l) => new Set([...l].filter((x) => x !== id)));
+  const timers = all.filter((t) => !leaving.has(t.id));
   const running = timers.some((t) => t.endAt != null);
   const now = useTick(250, active && running);
+  const remove = (t: ClockTimer) => {
+    const left = timerLeft(t, Date.now()), wait = timerUndoMs(left, t.endAt != null);
+    let done = false;
+    const commit = () => { if (done) return; done = true; offFlush(); void act(native.timer("delete", { id: t.id })).then(() => stay(t.id)); };
+    const offFlush = onFlush(commit);
+    setLeaving((l) => new Set([...l, t.id]));
+    if (!wait) { commit(); showSnackbar("Timer deleted"); return; }
+    showSnackbar("Timer deleted", "Undo", () => {
+      if (done) { void act(native.timer("start", { durationMs: left, label: t.label })); return; } // the app was put away meanwhile
+      done = true;
+      offFlush();
+      stay(t.id);
+    }, { ms: wait, onGone: commit });
+  };
   return (
     <div className="pa-scroll pa-gap12 pa-top12">
       <PermissionCards />
@@ -798,20 +817,20 @@ function TimersPane({ timers, active, onNew }: { timers: ClockTimer[]; active: b
         {TIMER_PRESETS.map((m) => <button key={m} className="p-assist pa-chip" onClick={() => void startTimer(m * 60_000)}>{presetText(m)}</button>)}
         <button className="p-assist pa-chip" onClick={onNew}>Other…</button>
       </div>
-      {[...timers].sort((a, b) => a.id - b.id).map((t) => <TimerCard key={t.id} t={t} now={now} />)}
+      {[...timers].sort((a, b) => a.id - b.id).map((t) => <TimerCard key={t.id} t={t} now={now} onDelete={() => remove(t)} />)}
     </div>
   );
 }
 
-function TimerCard({ t, now }: { t: ClockTimer; now: number }) {
+function TimerCard({ t, now, onDelete }: { t: ClockTimer; now: number; onDelete: () => void }) {
   const left = timerLeft(t, now);
   const running = t.endAt != null;
-  const run = (action: "pause" | "resume" | "plus" | "reset" | "delete") => void act(native.timer(action, { id: t.id }));
+  const run = (action: "pause" | "resume" | "plus" | "reset") => void act(native.timer(action, { id: t.id }));
   return (
     <div className="pa-card pa-timer">
       <div className="pa-timer-head">
         <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}</span>
-        <IconButton icon="fClose" label="Delete timer" onClick={() => run("delete")} />
+        <IconButton icon="fClose" label="Delete timer" onClick={onDelete} />
       </div>
       {/* One row (76): the time, then Reset (its symbol), +1:00 and Pause or Resume. */}
       <div className="pa-timer-row">

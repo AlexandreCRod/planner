@@ -9,11 +9,11 @@ import { createPortal } from "react-dom";
 import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, miniScale, previewHash } from "../../domain/media.ts";
 import type { NoteImage } from "../../domain/types.ts";
 import { getBlob, useImageUrl } from "../../store/images.ts";
-import { Dialog, DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
+import { DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { isNative } from "../../platform.ts";
 import { saveToPhone } from "./device.ts";
 import { feel } from "./haptics.ts";
-import { TextButton, showSnackbar } from "./m3.tsx";
+import { showSnackbar } from "./m3.tsx";
 import { GLIDE_SPRING, type Animation, VelocityTracker, animateSpring } from "./motion.ts";
 import { pushBack } from "./native.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
@@ -328,7 +328,6 @@ function LensVideo({ m, active }: { m: NoteImage; active: boolean }) {
 export function MediaViewer({ m, onClose, onRemove }: { m: NoteImage; onClose: () => void; onRemove: () => void }) {
   const still = useImageUrl(previewHash(m));
   const video = useVideoUrl(m, true);
-  const [ask, setAsk] = useState(false);
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
   const what = isVideo(m) ? "video" : "picture";
   useCopyKey(m);
@@ -339,18 +338,12 @@ export function MediaViewer({ m, onClose, onRemove }: { m: NoteImage; onClose: (
         <span className="grow" />
         {canCopyImages && !isVideo(m) && <IconButton icon="oContentCopy" label="Copy image (Ctrl+C)" onClick={() => void copyImage(m)} />}
         <IconButton icon="fDownload" label={`Save ${what} to the phone`} onClick={() => void downloadMedia(m)} />
-        <IconButton icon="oDelete" label={`Remove ${what}`} onClick={() => setAsk(true)} />
+        <IconButton icon="oDelete" label={`Remove ${what}`} onClick={onRemove} />
       </div>
       {video
         ? <video src={video} poster={still ?? undefined} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
         : still && <img src={still} alt="" onClick={(e) => e.stopPropagation()} />}
       {isVideo(m) && !video && <div className="pn-picture-note">This video is on the phone that added it.</div>}
-      {ask && (
-        <Dialog title={`Remove ${what}?`} onClose={() => setAsk(false)} actions={<>
-          <TextButton onClick={() => setAsk(false)}>Cancel</TextButton>
-          <TextButton onClick={onRemove}>Remove</TextButton>
-        </>}>It's removed from this note on all your devices.</Dialog>
-      )}
     </div>
   );
 }
