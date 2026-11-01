@@ -1602,6 +1602,8 @@ html.phone[data-theme="dark"] {
   -webkit-mask: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent); mask: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent); }
 .phone .p-slide-chev { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); color: var(--p-outline); opacity: .6; font-size: 20px; pointer-events: none; }
 .phone .p-slide-chev.end { left: auto; right: 6px; }
+/* In a row beside its label the stepper is only as wide as its value, and the marks would sit on it; its − and + and the hint under it say the same (313). */
+.phone .pa-series-every .p-slide-chev, .phone .pe-wake-row .p-slide-chev { display: none; }
 .phone .p-stepper-hint { margin-top: 8px; text-align: center; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .pe-lead-row { margin-top: 12px; }
 .phone .pe-lead-sum { margin-top: 12px; text-align: center; }
