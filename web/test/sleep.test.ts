@@ -4,7 +4,8 @@ import { dayOf, isoOf } from "../src/domain/training.ts";
 import type { HealthDay, HealthNight } from "../src/domain/health.ts";
 import type { Night } from "../src/domain/trends.ts";
 import {
-  type SleepNight, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, isNap, mergedNights, restingHrFlag, shortSleepBefore, sleepAverages,
+  type SleepNight, avg7, avg7Line, clockAfter, clockOfMoment, fmtSleep, hrvRange, inBedMin, isNap, mergedNights, nightSpans, nightTotals, restingHrFlag, shortSleepBefore, sleepAverages, spanAt,
+  usualNight,
 } from "../src/domain/sleep.ts";
 
 const d = (iso: string) => dayOf(iso)!;
@@ -94,7 +95,7 @@ test("isNap: starts after 10:00 on the day it ends", () => {
 /** Mornings from [iso] on, one a day, with [f] giving each one's numbers. */
 const run = (iso: string, n: number, f: (i: number) => Partial<SleepNight>): SleepNight[] =>
   Array.from({ length: n }, (_, i) => ({
-    day: d(iso) + i, bed: null, wake: null, totalMin: null, awakeMin: null, deepMin: null, lightMin: null, remMin: null, score: null,
+    day: d(iso) + i, bed: null, wake: null, totalMin: null, awakeMin: null, deepMin: null, lightMin: null, remMin: null, spans: [], score: null,
     restingHr: null, hrvMs: null, source: "garmin" as const, restingHrSource: null, hrvSource: null, ...f(i),
   }));
 
@@ -154,4 +155,56 @@ test("fmtSleep and clockOfMoment", () => {
   assert.equal(fmtSleep(45), "45 min");
   assert.equal(clockOfMoment("2026-10-27T23:10"), "23:10");
   assert.equal(clockOfMoment(null), null);
+});
+
+// ---------- One night's stages (308) ----------
+
+test("a watch night keeps its stretches, the awake kinds as one row, in order, side by side ones joined", () => {
+  const stages: HealthNight["stages"] = [["rem", 60, 90], ["awake", 0, 10], ["light", 10, 30], ["light", 30, 40], ["deep", 40, 60], ["awake_in_bed", 90, 95], ["out_of_bed", 95, 100], ["unknown", 100, 110]];
+  const [n] = mergedNights([], [watch("2026-10-27", { stages })], []);
+  assert.deepEqual(n.spans, [
+    { stage: "awake", from: 0, to: 10 }, { stage: "light", from: 10, to: 40 }, { stage: "deep", from: 40, to: 60 }, { stage: "rem", from: 60, to: 90 }, { stage: "awake", from: 90, to: 100 },
+  ]);
+});
+
+test("nights with totals only have no timeline: the Garmin export, an empty list, a record from before stages, plain sleeping", () => {
+  assert.deepEqual(mergedNights([garmin("2026-10-27")], [], [])[0].spans, []);
+  assert.deepEqual(mergedNights([], [watch("2026-10-27")], [])[0].spans, []);
+  const old = { ...watch("2026-10-27") } as Partial<HealthNight>;
+  delete old.stages;
+  assert.deepEqual(mergedNights([], [old as HealthNight], [])[0].spans, []);
+  assert.deepEqual(nightSpans([["sleeping", 0, 400]]), []);
+  assert.deepEqual(nightSpans([["awake", 0, 5], ["sleeping", 5, 400]]), []);    // awake alone says nothing about the night's stages
+});
+
+test("reading the chart finds the stretch under the finger, else the nearest across a gap", () => {
+  const spans = nightSpans([["light", 0, 30], ["sleeping", 30, 60], ["deep", 60, 90]]);
+  assert.equal(spanAt(spans, 10), 0);
+  assert.equal(spanAt(spans, 70), 1);
+  assert.equal(spanAt(spans, 35), 0);
+  assert.equal(spanAt(spans, 55), 1);
+  assert.equal(spanAt(spans, 500), 1);
+  assert.equal(spanAt([], 10), null);
+});
+
+test("a night's stage totals: what's known, none when no stage is", () => {
+  assert.deepEqual(nightTotals({ awakeMin: null, deepMin: 80, lightMin: 270, remMin: null }), { awake: 0, rem: 0, light: 270, deep: 80 });
+  assert.equal(nightTotals({ awakeMin: 30, deepMin: null, lightMin: null, remMin: null }), null);
+});
+
+test("usual is the 30 nights before, not the night itself, and leaves out nights without the number", () => {
+  const nights = run("2026-09-01", 40, (i) => ({ totalMin: i === 39 ? 600 : 400, deepMin: i < 5 ? null : 80, lightMin: i < 5 ? null : 250, remMin: i < 5 ? null : 70, awakeMin: i < 5 ? null : 20 }));
+  const u = usualNight(nights, nights[39].day);
+  assert.equal(u.asleep, 400);
+  assert.deepEqual(u.stages, { awake: 20, rem: 70, light: 250, deep: 80 });
+  // Only the five nights without stages before it: hours, but no stage usuals.
+  assert.equal(usualNight(nights, nights[5].day).stages, null);
+  assert.equal(usualNight(nights, nights[5].day).asleep, 400);
+  assert.deepEqual(usualNight(nights, nights[0].day), { asleep: null, stages: null });
+});
+
+test("bed to wake over midnight, and clocks past it", () => {
+  assert.equal(inBedMin("2026-10-31T23:15", "2026-11-01T07:30"), 495);
+  assert.equal(clockAfter("2026-10-31T23:15", 50), "00:05");
+  assert.equal(clockAfter("2026-10-31T03:48", 495), "12:03");
 });
