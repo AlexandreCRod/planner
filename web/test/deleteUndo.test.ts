@@ -39,7 +39,7 @@ test("Undo brings a removed picture back to its note", () => {
   const note = store.saveItem(newItem({ type: "NOTE", title: "Trip" }));
   store.addImage(note, { hash: "abc", mime: "image/jpeg", width: 10, height: 10 });
   const img = store.snapshot().images.get(note)![0];
-  const undo = store.withUndo(() => store.deleteImage(img));
+  const undo = store.removeImage(img);
   assert.equal(store.snapshot().images.get(note), undefined);
   undo();
   assert.deepEqual(store.snapshot().images.get(note), [img]);

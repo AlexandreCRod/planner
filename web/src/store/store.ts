@@ -487,6 +487,33 @@ export function deleteIfEmpty(id: number) {
 export function ensureDefaults() {
   if (list<Category>("categories").length) return;
   const defs: Category[] = [
+/**
+ * Removes a picture or video from its note, and returns the undo. Leaving a note that this emptied deletes
+ * the note for good (deleteIfEmpty), which can happen while the Undo still shows: the undo then puts the
+ * note back first, with what was attached to it, so the picture never comes back to a note that isn't there.
+ */
+export function removeImage(img: NoteImage): () => void {
+  const key = `items/${img.itemId}`;
+  const note = records.get(key);
+  const attached = [...records].filter(([k, r]) => k !== rk("images", img as unknown as Rec) && attachedTo(k, r, img.itemId));
+  deleteImage(img);
+  return () => {
+    if (note && !records.has(key)) {
+      records.set(key, { ...note, updatedAt: Date.now() });
+      for (const [k, r] of attached) records.set(k, r);
+    }
+    put("images", img);
+    changed();
+  };
+}
+
+/** Whether a record is one of those going with item [id] (what removeItemDeep deletes). */
+function attachedTo(key: string, r: Rec, id: number): boolean {
+  const kind = key.slice(0, key.indexOf("/"));
+  if (kind === "links") return r.sourceId === id || r.targetId === id;
+  return (["completions", "reminders", "itemTags", "versions", "images"] as string[]).includes(kind) && r.itemId === id;
+}
+
     { id: 1, name: "Personal", color: 0xff42a5f5 | 0, defaultAlert: "REMINDER" },
     { id: 2, name: "Work", color: 0xff5c6bc0 | 0, defaultAlert: "NOTIFICATION" },
     { id: 3, name: "Health", color: 0xffef5350 | 0, defaultAlert: "ALARM" },

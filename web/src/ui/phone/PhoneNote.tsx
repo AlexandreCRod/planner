@@ -12,7 +12,7 @@ import { importImage, importVideo } from "../../store/images.ts";
 import { MAX_VIDEO_BYTES, isVideo } from "../../domain/media.ts";
 import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
 import { useMouseSelect } from "./mouseSelect.ts";
-import { addImage, deleteImage, snapshot, withUndo } from "../../store/store.ts";
+import { addImage, removeImage, snapshot } from "../../store/store.ts";
 import { openItem, replaceRoute } from "../shared/common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/noteStyle.ts";
 import { RichEditor } from "../shared/RichEditor.tsx";
@@ -257,7 +257,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
 
       {lens && images.length > 0 && <MediaLens media={images} start={Math.min(lens.start, images.length - 1)} pointer={lens.pointer}
         onClose={() => setLens(null)} onOpen={(i) => { setLens(null); setViewing(images[i]); }} />}
-      {viewing && <MediaViewer m={viewing} onClose={() => setViewing(null)} onRemove={() => { showSnackbar(isVideo(viewing) ? "Video removed" : "Picture removed", "Undo", withUndo(() => deleteImage(viewing))); setViewing(null); }} />}
+      {viewing && <MediaViewer m={viewing} onClose={() => setViewing(null)} onRemove={() => { showSnackbar(isVideo(viewing) ? "Video removed" : "Picture removed", "Undo", removeImage(viewing)); setViewing(null); }} />}
     </div>
   );
 }
