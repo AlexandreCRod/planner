@@ -6,8 +6,8 @@
 // stays where the finger lifts, until a tap anywhere off the chart (the headline too) goes back to the latest.
 // A mouse reads on hover and keeps the reading where it clicks.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Segmented } from "./chrome.tsx";
-import { type RangeKey, RANGES, dayMonth, nearestIndex, niceTicks, scale } from "./chartMath.ts";
+import { DropdownMenu, MIcon, Segmented } from "./chrome.tsx";
+import { type RangeKey, type WindowKey, RANGES, WINDOW_NAMES, WINDOWS, dayMonth, nearestIndex, niceTicks, scale } from "./chartMath.ts";
 import { feel } from "./haptics.ts";
 
 /** The series colours, validated on the dark surface (dataviz skill); in step with the Training kinds. */
@@ -18,15 +18,20 @@ export const GYM = "#bf8a2a", GYM_DIM = "#7a5c22", RUN = "#33a390", WEIGHT = "#6
  * the legend and the 7-day line carrying the reading.
  */
 export const SLEEP = "#c06cb8", SLEEP_DIM = "#864d81";
+/** Futsal's marks (the Training kind's colour), and the quiet grey of an average line (2.8.5 mockup). */
+export const FUTSAL = "#9fb3c8", GREY = "#6b6d73";
 
-/** One reading. [mark]: drawn hollow (an assumed RPE) or as a lower bound (history with no RPE). */
-export interface Pt { day: number; v: number; mark?: "hollow" | "lower" }
+/**
+ * One reading. [mark]: drawn hollow (an assumed RPE) or as a lower bound (history with no RPE). In a bar series,
+ * [span]: this bar's days (a month's), and [dim]: it's still filling.
+ */
+export interface Pt { day: number; v: number; mark?: "hollow" | "lower"; span?: number; dim?: boolean }
 export type Series =
   /** [gap]: the line breaks where readings are more than this many days apart (266: no straight line over weeks of nothing). */
   | { kind: "line"; pts: Pt[]; color: string; area?: boolean; dots?: boolean; gap?: number }
   | { kind: "dots"; pts: Pt[]; color: string; r?: number }
-  /** One bar per [span] days from its day (a week by default). */
-  | { kind: "bars"; pts: Pt[]; color: string; span?: number }
+  /** One bar per [span] days from its day (a week by default), at most [maxW] px wide (24). */
+  | { kind: "bars"; pts: Pt[]; color: string; span?: number; maxW?: number }
   /** A shaded band from [lo] to [hi] (HRV's normal range), drawn under the other series. */
   | { kind: "band"; pts: { day: number; lo: number; hi: number }[]; color: string };
 
@@ -52,12 +57,14 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
  * gets the index of the one nearest the finger, which stays when it lifts, and null when a tap off the chart
  * goes back to the latest (or [reads] change). [rings]: pain, as a ring around the point. [fmt] writes the
  * value axis; [invert] puts low values at the top (pace: faster is higher). [zero] starts the axis at 0 (bars
- * always do). [labels]: the axis's first and last day, when not the domain's. [onTap]: a tap (a short press
- * that hardly moves) on a point, by the index of its reading.
+ * always do). [labels]: the axis's first and last day, when not the domain's; [xLabels]: the axis's words
+ * instead of dates. [avg]: a dashed grey average line. [onTap]: a tap (a short press that hardly moves) on a
+ * point, by the index of its reading.
  */
-export function Chart({ series, domain, today, height = 150, fmt = String, invert = false, zero = false, rings = [], reads, onRead, labels, onTap }: {
+export function Chart({ series, domain, today, height = 150, fmt = String, invert = false, zero = false, rings = [], reads, onRead, labels, xLabels, avg, onTap }: {
   series: Series[]; domain: [number, number]; today: number; height?: number; fmt?: (v: number) => string; invert?: boolean; zero?: boolean;
   rings?: Pt[]; reads: readonly number[]; onRead: (i: number | null) => void; labels?: [number, number]; onTap?: (i: number) => void;
+  xLabels?: { day: number; text: string; anchor: "start" | "middle" | "end" }[]; avg?: number | null;
 }) {
   const [box, w] = useWidth<HTMLDivElement>();
   const [at, setAt] = useState<number | null>(null);
@@ -73,7 +80,7 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   const barSeries = series.find((s) => s.kind === "bars");
   const bars = !!barSeries;
   /** A bar stands from its day over its span: the cursor goes to its middle. */
-  const half = barSeries?.kind === "bars" ? (barSeries.span ?? 7) / 2 : 0;
+  const halfAt = (day: number) => (barSeries?.kind === "bars" ? (barSeries.pts.find((p) => p.day === day)?.span ?? barSeries.span ?? 7) / 2 : 0);
   const lo = all.length ? Math.min(...all, ...(zero || bars ? [0] : [])) : 0, hi = all.length ? Math.max(...all) : 1;
   const ticks = niceTicks(lo, hi, 3);
   const [d0, d1] = domain;
@@ -143,12 +150,12 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
       return;
     }
     if (s.kind === "bars") {
-      const span = s.span ?? 7;
-      const bw = Math.max(1, Math.min(24, (x(d0 + span) - x(d0)) - 2));
       s.pts.forEach((p, i) => {
         if (p.v <= 0) return;
+        const span = p.span ?? s.span ?? 7;
+        const bw = Math.max(1, Math.min(s.maxW ?? 24, (x(d0 + span) - x(d0)) - 2));
         const cx = x(p.day + span / 2), top = y(p.v), r = Math.min(4, bw / 2, (base - top) / 2);
-        drawn.push(<path key={`${k}b${i}`} fill={s.color}
+        drawn.push(<path key={`${k}b${i}`} fill={s.color} fillOpacity={p.dim ? 0.45 : undefined}
           d={`M${cx - bw / 2},${base}V${top + r}Q${cx - bw / 2},${top} ${cx - bw / 2 + r},${top}H${cx + bw / 2 - r}Q${cx + bw / 2},${top} ${cx + bw / 2},${top + r}V${base}Z`} />);
       });
       return;
@@ -186,11 +193,14 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
             <line className="pg-grid" x1={L} x2={w - R} y1={y(t)} y2={y(t)} />
             <text x={L - 6} y={y(t) + 4} textAnchor="end">{fmt(t)}</text>
           </g>)}
-          <text x={x(l0)} y={height - 5} textAnchor="start">{dayMonth(l0, today)}</text>
-          {l1 !== l0 && <text x={x(l1)} y={height - 5} textAnchor="end">{dayMonth(l1, today)}</text>}
+          {xLabels ? xLabels.map((l) => <text key={l.day} x={x(l.day)} y={height - 5} textAnchor={l.anchor}>{l.text}</text>) : <>
+            <text x={x(l0)} y={height - 5} textAnchor="start">{dayMonth(l0, today)}</text>
+            {l1 !== l0 && <text x={x(l1)} y={height - 5} textAnchor="end">{dayMonth(l1, today)}</text>}
+          </>}
+          {avg != null && <line x1={L} x2={w - R} y1={y(avg)} y2={y(avg)} stroke={GREY} strokeWidth={1} strokeDasharray="3 3" />}
           {drawn}
           {rings.map((p, i) => <circle key={`p${i}`} cx={x(p.day)} cy={y(p.v)} r={8} fill="none" stroke={PAIN} strokeWidth={2} />)}
-          {at !== null && reads[at] !== undefined && <line className="pg-cursor" x1={x(reads[at] + half)} x2={x(reads[at] + half)} y1={T} y2={height - B} />}
+          {at !== null && reads[at] !== undefined && <line className="pg-cursor" x1={x(reads[at] + halfAt(reads[at]))} x2={x(reads[at] + halfAt(reads[at]))} y1={T} y2={height - B} />}
         </svg>
       )}
     </div>
@@ -228,7 +238,41 @@ export function Spark({ values, color, bars = false, invert = false, days, gap =
   );
 }
 
-/** 1M · 3M · 6M · 1Y · All. */
-export function RangeSwitch({ value, onChange }: { value: RangeKey; onChange: (k: RangeKey) => void }) {
-  return <div className="pg-range"><Segmented value={value} options={RANGES} onChange={(k) => { feel("tick"); onChange(k); }} /></div>;
+/** 1M · 3M · 6M · 1Y · All, or the [options] given (Cardio's add 1W). */
+export function RangeSwitch<K extends string = RangeKey>({ value, onChange, options = RANGES as unknown as [K, string][] }: { value: K; onChange: (k: K) => void; options?: [K, string][] }) {
+  return <div className="pg-range"><Segmented value={value} options={options} onChange={(k) => { feel("tick"); onChange(k); }} /></div>;
+}
+
+/** Cardio's six ranges in the top row (294 option B): one button showing the choice, and a tap opens the list. */
+export function RangeMenu({ value, onChange }: { value: WindowKey; onChange: (k: WindowKey) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  /** Opened from the keyboard: the current choice takes the focus, and the arrows move through the list. */
+  const byKey = useRef(false);
+  useEffect(() => {
+    if (!open || !byKey.current) return;
+    byKey.current = false;
+    const id = requestAnimationFrame(() => box.current?.querySelector<HTMLElement>(".p-menu-tick")?.closest("button")?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+  const keys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target instanceof HTMLElement && !e.target.closest(".p-menu")) {
+      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); byKey.current = true; setOpen(true); }
+      return;
+    }
+    if (e.key === "Escape") { setOpen(false); box.current?.querySelector<HTMLElement>(".pg-rbtn")?.focus(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const all = [...(box.current?.querySelectorAll<HTMLElement>(".p-menu button") ?? [])], i = all.indexOf(document.activeElement as HTMLElement);
+    all[(i + (e.key === "ArrowDown" ? 1 : all.length - 1)) % all.length]?.focus();
+  };
+  return (
+    <div className="p-menu-anchor pg-rmenu" ref={box} onKeyDown={keys}>
+      <button className="pg-rbtn" aria-haspopup="menu" aria-expanded={open} aria-label={`Range: ${WINDOW_NAMES[value]}`} onClick={() => { feel("tick"); setOpen(!open); }}>
+        {value}<MIcon name="fExpandMore" size={20} />
+      </button>
+      <DropdownMenu open={open} onClose={() => setOpen(false)}
+        items={WINDOWS.map(([k]) => ({ label: WINDOW_NAMES[k], checked: k === value, onClick: () => { feel("tick"); onChange(k); } }))} />
+    </div>
+  );
 }

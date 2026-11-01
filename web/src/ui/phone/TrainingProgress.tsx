@@ -1,5 +1,5 @@
 // Progress (#/training?view=progress), in place of the old Bests page: how the lifts, runs and body weight
-// are moving. Tabs Lifts · Runs · Body · Nutrition (greyed: it comes later, from the meal photos). Each tab
+// are moving. Tabs Lifts · Cardio (TrainingCardio.tsx) · Body · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
 // weigh-ins). Touching a chart reads a day, and the headline shows that day's reading (it stays when the
@@ -16,8 +16,8 @@ import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
 import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths } from "../../domain/body.ts";
 import {
-  type BodyWeight, type LiftPoint, type Run, bodyWeights, easyRuns, healthWeighIns, hiddenId, liftPoints, longRuns, sourceName, targetRpeOf, weeklyChange,
-  weeklyHardSets, weeklyKm, weightTrend,
+  type BodyWeight, type LiftPoint, bodyWeights, healthWeighIns, hiddenId, liftPoints, targetRpeOf, weeklyChange,
+  weeklyHardSets, weightTrend,
 } from "../../domain/trends.ts";
 import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
@@ -29,12 +29,14 @@ import { feel } from "./haptics.ts";
 import { NO_SWIPE, spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
 import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
+import { ChartCard, Empty, Head, from, join } from "./progressParts.tsx";
+import { CardioCards, CardioList, cardioTitle, useCardio } from "./TrainingCardio.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
 import "./progress.css";
 
 type Tab = ProgressTab;
-const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Runs"], ["body", "Body"], ["nutrition", "Nutrition"]];
+const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Cardio"], ["body", "Body"], ["nutrition", "Nutrition"]];
 const tabOf = progressTabOf;
 /** The lifts before this day are the "before the break" peak, shown only as quiet text (keep it quiet before the race). */
 const PEAK_BEFORE = dayOf("2025-04-01")!;
@@ -48,17 +50,6 @@ function useRange(): [RangeKey, (k: RangeKey) => void] {
 
 const route = (tab: Tab, card: string | null, planId: string | null) =>
   `training?view=progress&tab=${tab}${card ? `&c=${encodeURIComponent(card)}` : ""}${planQ(planId)}`;
-
-// ---------- Formats ----------
-
-/** "6:10" from seconds. */
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
-/** "16", "13.1": km to 0.1. */
-const km1 = (km: number) => String(Math.round(km * 10) / 10);
-/** "+0.2", "−1.4", "0": to 0.1, with its sign. */
-const signed1 = (v: number) => { const r = Math.round(v * 10) / 10; return r > 0 ? `+${r}` : r < 0 ? `−${-r}` : "0"; };
-const from = (source: string | null) => { const n = sourceName(source); return n ? `from ${n}` : ""; };
-const join = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(" · ");
 
 /**
  * Where a chart's line breaks (266): the 7-day average over more than 7 days without a reading has nothing to
@@ -101,7 +92,8 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   };
   const weighIn = tab === "body" && (wide || !card || card === "w") && <TextButton className="pg-act" onClick={() => setWeighing(true)}>+ Weigh in</TextButton>;
   const sheet = weighing && <WeighInSheet tr={tr} t={t} onClose={() => setWeighing(false)} />;
-  const cardView = card ? <CardView tr={tr} lp={lp} tab={tab} id={card} t={t} /> : null;
+  const cardio = useCardio();
+  const cardView = card ? <CardView tr={tr} lp={lp} tab={tab} id={card} t={t} cardio={cardio} onOpen={open} /> : null;
 
   if (!wide && card) {
     return <Scaffold title={cardTitle(tr, tab, card)} back flush actions={card === "w" ? weighIn : null}>
@@ -110,7 +102,9 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   }
 
   const list = <TabsPager index={index} setIndex={setIndex}>
-    {(k, i) => Math.abs(i - index) <= 1 && <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />}
+    {(k, i) => Math.abs(i - index) <= 1 && (k === "runs"
+      ? <CardioList tr={tr} lp={lp} t={t} st={cardio} sel={wide && k === tab ? card : null} onOpen={open} />
+      : <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />)}
   </TabsPager>;
 
   return (
@@ -196,7 +190,7 @@ function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan
   let group = "";
   return <>
     {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
-    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{tab === "lifts" ? "Lifts show here once sets are logged." : "Runs show here once the plan session sends runs.json."}</EmptyHint>}
+    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{"Lifts show here once sets are logged."}</EmptyHint>}
     {rows.map((r) => {
       const head = r.group !== group ? r.group : null;
       const first = group === "" && tab !== "nutrition";
@@ -220,13 +214,14 @@ function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan
 
 function cardTitle(tr: Training, tab: Tab, id: string): string {
   if (tab === "lifts") return liftName(tr, id);
+  if (tab === "runs") return cardioTitle(id);
   if (id in BODY) return BODY[id].title;
-  return ({ km: "Distance per week", long: "Long run", easy: "Easy pace", q: "Quality runs", w: "Weight", sl: "Sleep", rh: "Resting heart rate", hrv: "HRV" } as Record<string, string>)[id] ?? "Progress";
+  return ({ w: "Weight", sl: "Sleep", rh: "Resting heart rate", hrv: "HRV" } as Record<string, string>)[id] ?? "Progress";
 }
 
-function CardView({ tr, lp, tab, id, t }: { tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number }) {
+function CardView({ tr, lp, tab, id, t, cardio, onOpen }: { tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number; cardio: ReturnType<typeof useCardio>; onOpen: (id: string) => void }) {
   if (tab === "lifts") return <LiftCards tr={tr} lp={lp} id={id} />;
-  if (tab === "runs") return <RunCards tr={tr} id={id} t={t} />;
+  if (tab === "runs") return <CardioCards tr={tr} id={id} t={t} st={cardio} onOpen={onOpen} />;
   if (tab === "body") {
     if (id === "w") return <WeightCards tr={tr} t={t} />;
     if (id === "sl" || id === "rh" || id === "hrv") return <SleepCards tr={tr} id={id} t={t} />;
@@ -238,35 +233,9 @@ function CardView({ tr, lp, tab, id, t }: { tr: Training; lp: LoadedPlan; tab: T
 function rowsOf(tr: Training, lp: LoadedPlan, tab: Tab, t: number): Row[] {
   const since = rangeStart("3M", t);
   if (tab === "lifts") return liftRows(tr, since);
-  if (tab === "runs") return runRows(tr, lp, since, t);
   if (tab === "body") return bodyRows(tr, since, t);
   return [];
 }
-
-// ---------- A card and its headline ----------
-
-/**
- * A chart card: its title, the headline (its number, or the day a finger read on the chart, kept after it lifts
- * until a tap off the chart: [read] gives its two lines), the chart and what's under it.
- */
-function ChartCard({ title, head, read, children, foot }: {
-  title: string; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode;
-}) {
-  return (
-    <div className="pg-card">
-      <div className="pg-ct"><span>{title}</span></div>
-      <div className="pg-head">{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
-      {children}
-      {foot}
-    </div>
-  );
-}
-
-/** The headline: a big number, a small word after it, and a chip with the change. */
-const Head = ({ value, unit, chip }: { value: string; unit: string; chip?: string | null }) => (
-  <div className="pg-hv">{value}<small>{unit}</small>{chip && <span className="pg-hchip">{chip}</span>}</div>
-);
-const Empty = () => <div className="pg-none">Nothing in this range.</div>;
 
 /** The range a card shows: its first day (null: from the first reading) and the axis's days. */
 function useSpan(days: readonly number[], t: number): { range: RangeKey; setRange: (k: RangeKey) => void; start: number | null; domain: [number, number] } {
@@ -415,126 +384,6 @@ export function LiftCards({ tr, lp, id }: { tr: Training; lp: LoadedPlan; id: st
         {shownBests(bests).map((n) => (
           <div key={n} className="r"><span>{bestWord(n)} · {fmtKg(bests.get(n)!.kg)} kg</span><span>{dayMonth(bests.get(n)!.day, t)}</span></div>
         ))}
-      </div>
-    )}
-  </>;
-}
-
-// ---------- Runs ----------
-
-const qualityRuns = (runs: readonly Run[]) => runs.filter((r) => r.type === "quality" && r.avgHr !== null);
-
-function runRows(tr: Training, lp: LoadedPlan, since: number | null, t: number): Row[] {
-  const rows: Row[] = [];
-  const runs = tr.runs;
-  if (runs.length) {
-    const weeks = weeklyKm(runs, since ?? runs[0].day, t);
-    const now = weeks[weeks.length - 1], before = weeks[weeks.length - 2];
-    rows.push({
-      id: "km", group: "Runs", name: "Distance per week", sub: "this week", spark: <Spark bars values={weeks.map((w) => w.km)} color={RUN} />,
-      value: `${km1(now.km)} km`, valueSub: before ? `${signed1(now.km - before.km)} km` : "",
-    });
-  }
-  const long = longRuns(runs).filter((r) => r.distanceKm !== null);
-  if (long.length) {
-    const last = long[long.length - 1], most = Math.max(...long.map((r) => r.distanceKm!));
-    rows.push({
-      id: "long", group: "Runs", name: "Long run", sub: formatDate(last.day), spark: <Spark values={inRange(long, since).map((r) => r.distanceKm!)} color={RUN} />,
-      value: `${km1(last.distanceKm!)} km`, valueSub: last.distanceKm! >= most ? "longest yet" : `longest ${km1(most)} km`,
-    });
-  }
-  const easy = easyRuns(runs);
-  if (easy.length) {
-    const last = easy[easy.length - 1], recent = inRange(easy, since);
-    const d = recent.length > 1 ? recent[0].paceSPerKm! - last.paceSPerKm! : null;
-    rows.push({
-      id: "easy", group: "Runs", name: "Easy pace", sub: `at ${last.avgHr} bpm`, spark: <Spark invert values={recent.map((r) => r.paceSPerKm!)} color={RUN} />,
-      value: mmss(last.paceSPerKm!), valueSub: d === null ? dayMonth(last.day, t) : d === 0 ? "no change" : `${Math.abs(Math.round(d))} s ${d > 0 ? "faster" : "slower"}`,
-    });
-  }
-  const q = qualityRuns(runs);
-  if (q.length) {
-    const last = q[q.length - 1];
-    rows.push({
-      id: "q", group: "Runs", name: "Quality runs", sub: "avg heart rate", spark: <Spark values={inRange(q, since).map((r) => r.avgHr!)} color={RUN} />,
-      value: String(last.avgHr), valueSub: last.cadenceSpm !== null ? `cadence ${Math.round(last.cadenceSpm)}` : dayMonth(last.day, t),
-    });
-  }
-  // The plan's run records (they were on the Bests page): kept here, as plain rows.
-  lp.plan.records.runs.forEach((r, i) => rows.push({
-    id: `rec${i}`, group: "Records", name: r.distance, sub: join(r.day !== null ? dayMonth(r.day, t) : "", r.note), spark: null, value: r.time, valueSub: "", open: false,
-  }));
-  return rows;
-}
-
-function RunCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
-  const runs = tr.runs;
-  const [at, setAt] = useState<number | null>(null);
-  const [at2, setAt2] = useState<number | null>(null);
-  const span = useSpan(runs.map((r) => r.day), t);
-  const switcher = <RangeSwitch value={span.range} onChange={(k) => { setAt(null); setAt2(null); span.setRange(k); }} />;
-  if (!runs.length) return <EmptyHint>No runs yet.</EmptyHint>;
-
-  if (id === "km") {
-    const weeks = weeklyKm(runs, span.start ?? runs[0].day, t);
-    const now = weeks[weeks.length - 1], before = weeks[weeks.length - 2];
-    const w = at !== null ? weeks[at] : null;
-    const count = w ? runs.filter((r) => r.day >= w.weekStart && r.day < w.weekStart + 7).length : 0;
-    return <>{switcher}<ChartCard title="Km per week" read={w ? [`Week of ${dayMonth(w.weekStart, t)}`, <>{km1(w.km)} km <small>{count === 1 ? "1 run" : `${count} runs`}</small></>] : null}
-      head={<Head value={km1(now.km)} unit="km this week" chip={before ? `${signed1(now.km - before.km)} km on last week` : null} />}>
-      <Chart series={[{ kind: "bars", color: RUN, pts: weeks.map((x) => ({ day: x.weekStart, v: x.km })) }]} zero height={140} today={t}
-        domain={[weeks[0].weekStart, weeks[weeks.length - 1].weekStart + 7]} labels={[weeks[0].weekStart, weeks[weeks.length - 1].weekStart]}
-        reads={weeks.map((x) => x.weekStart)} onRead={setAt} />
-    </ChartCard></>;
-  }
-
-  /** A line of runs by [value] (km, pace, heart rate...), read with its day, the run's line and its source. */
-  const runChart = (list: Run[], value: (r: Run) => number, opts: { fmt?: (v: number) => string; invert?: boolean; zero?: boolean }, onRead: (i: number | null) => void) => {
-    const shown = inRange(list, span.start);
-    return shown.length
-      ? <Chart series={[{ kind: "line", color: RUN, pts: shown.map((r) => ({ day: r.day, v: value(r) })) }]} domain={xDomain(span.range, t, list.map((r) => r.day))} today={t} height={140}
-          fmt={opts.fmt} invert={opts.invert} zero={opts.zero} reads={shown.map((r) => r.day)} onRead={onRead} />
-      : <Empty />;
-  };
-  const readRun = (r: Run, b: ReactNode): [string, ReactNode] => [join(formatDate(r.day), r.title, from(r.source)), b];
-
-  if (id === "long") {
-    const long = longRuns(runs).filter((r) => r.distanceKm !== null), shown = inRange(long, span.start);
-    const most = shown.reduce<Run | null>((m, r) => (!m || r.distanceKm! > m.distanceKm! ? r : m), null);
-    const r = at !== null ? shown[at] : null;
-    return <>{switcher}<ChartCard title="Long run" read={r ? readRun(r, <>{km1(r.distanceKm!)} km <small>{join(r.paceSPerKm !== null && `${mmss(r.paceSPerKm)} /km`, r.avgHr !== null && `${r.avgHr} bpm`)}</small></>) : null}
-      head={most ? <Head value={km1(most.distanceKm!)} unit={`km longest, ${formatDate(most.day)}`} /> : <Head value="–" unit="km" />}>
-      {runChart(long, (x) => x.distanceKm!, { zero: true }, setAt)}
-    </ChartCard></>;
-  }
-
-  if (id === "easy") {
-    const easy = easyRuns(runs), shown = inRange(easy, span.start);
-    const last = shown[shown.length - 1], first = shown[0];
-    const d = shown.length > 1 ? first.paceSPerKm! - last.paceSPerKm! : null;
-    const r = at !== null ? shown[at] : null;
-    return <>{switcher}<ChartCard title="Easy pace (148 bpm or under)" read={r ? readRun(r, <>{mmss(r.paceSPerKm!)} <small>/km at {r.avgHr} bpm{r.distanceKm !== null ? ` · ${km1(r.distanceKm)} km` : ""}</small></>) : null}
-      head={last ? <Head value={mmss(last.paceSPerKm!)} unit={`/km at ${last.avgHr} bpm`} chip={d === null ? null : d === 0 ? "no change" : `${Math.abs(Math.round(d))} s ${d > 0 ? "faster" : "slower"}`} /> : <Head value="–" unit="/km" />}
-      foot={<div className="pg-foot">Faster is higher. Walk/run mixes slower than 9:00 /km are left out.</div>}>
-      {runChart(easy, (x) => x.paceSPerKm!, { fmt: mmss, invert: true }, setAt)}
-    </ChartCard></>;
-  }
-
-  // Quality runs: average heart rate, then cadence (the runs that have it; the old Strava runs don't).
-  const q = qualityRuns(runs), shown = inRange(q, span.start);
-  const last = shown[shown.length - 1], first = shown[0];
-  const r = at !== null ? shown[at] : null;
-  const withCadence = q.filter((x) => x.cadenceSpm !== null), cad = inRange(withCadence, span.start);
-  const c = at2 !== null ? cad[at2] : null;
-  return <>{switcher}
-    <ChartCard title="Average heart rate" read={r ? readRun(r, <>{r.avgHr} bpm <small>{join(r.paceSPerKm !== null && `${mmss(r.paceSPerKm)} /km`, r.cadenceSpm !== null && `cadence ${Math.round(r.cadenceSpm)}`)}</small></>) : null}
-      head={last ? <Head value={String(last.avgHr)} unit="bpm average" chip={shown.length > 1 ? `${signed(last.avgHr! - first.avgHr!)} since ${dayMonth(first.day, t)}` : null} /> : <Head value="–" unit="bpm" />}>
-      {runChart(q, (x) => x.avgHr!, {}, setAt)}
-    </ChartCard>
-    {withCadence.length > 0 && (
-      <div className="pg-card">
-        <div className="pg-ct"><span>Cadence</span>{c && <span className="pg-ct-read">{join(dayMonth(c.day, t), `${Math.round(c.cadenceSpm!)} steps/min`, from(c.source))}</span>}</div>
-        {runChart(withCadence, (x) => x.cadenceSpm!, {}, setAt2)}
       </div>
     )}
   </>;

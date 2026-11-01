@@ -97,3 +97,37 @@
 
 /* The cards on an exercise's history page. */
 .phone .pg-embed { padding: 4px 16px 0; }
+
+/* Cardio (TrainingCardio.tsx, mockup 2.8.6 section 1, top row B). The top row: the switch, and the range as one button. */
+.phone .pg-toprow { display: flex; gap: 8px; align-items: center; margin: 8px 0 12px; }
+.phone .pg-view { flex: 1; min-width: 0; }
+.phone .pg-view .p-segmented { height: 36px; border-radius: 18px; }
+.phone .pg-view .p-segmented button { font-size: 13px; }
+.phone .pg-rbtn { height: 36px; padding: 0 8px 0 14px; border: 1px solid var(--line); border-radius: 18px; background: none; display: inline-flex; align-items: center; gap: 2px; font: inherit; font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; }
+.phone .pg-rmenu .p-menu { top: 40px; width: 176px; border-radius: 12px; padding: 6px 0; }
+.phone .pg-rmenu .p-menu button { height: 44px; padding: 0 14px; font-size: 15px; font-weight: 400; cursor: pointer; }
+.phone .pg-rmenu .p-menu button:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+.phone .pg-rmenu .p-menu-tick { margin: 0; width: auto; color: var(--p-primary); }
+.phone .pg-rmenu .p-menu button:has(.p-menu-tick) { background: color-mix(in srgb, var(--p-primary) 14%, transparent); }
+/* A group heading with a word at its right, and the lines that stand in for a list. */
+.phone .pg-gr { display: flex; align-items: center; gap: 4px; }
+.phone .pg-gr .r { margin-left: auto; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.phone .pg-hint { padding: 10px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
+.phone .pg-link { display: block; padding: 12px 0 2px; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 500; color: var(--p-primary); cursor: pointer; }
+.phone .pg-row .tr-bub { width: 36px; height: 36px; }
+.phone .pg-row:focus-visible, .phone .pg-tile[role="button"]:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+/* Stat tiles. */
+.phone .pg-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.phone .pg-tiles.pg-gap { margin-bottom: 12px; }
+.phone .pg-tile { min-width: 0; padding: 10px 12px; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-tile .a { font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-tile .b { font-size: 20px; line-height: 26px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phone .pg-tile .b small { font-size: 12px; color: var(--muted); }
+.phone .pg-tile .c { min-height: 16px; font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A run's or game's card: what it was, its title and when. */
+.phone .pg-hd { padding: 2px 0 10px; }
+.phone .pg-hd .k { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.phone .pg-hd .k .tr-bub { width: 24px; height: 24px; }
+.phone .pg-hd .t { margin-top: 6px; font-size: 22px; line-height: 28px; color: var(--text); }
+.phone .pg-hd .s { font-size: 14px; color: var(--muted); }
+.phone .pg-hd .ev { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 2px 8px; border-radius: 6px; background: var(--p-sc-high, var(--surface-2)); font-size: 12px; line-height: 16px; color: var(--muted); }

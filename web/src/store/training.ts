@@ -17,6 +17,7 @@ import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts"
 import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
 import { type GameMatches, type GameSlot, matchGames } from "../domain/watchActivities.ts";
+import { type EventTimes, type Game, gamesOf } from "../domain/cardio.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -67,6 +68,8 @@ export interface Training {
   sleep: SleepNight[];
   /** The watch's football sessions matched to the games they were, and those left over (domain/watchActivities.ts, 268). */
   watchGames: GameMatches;
+  /** The futsal games with their events' titles and the watch's sessions, oldest first (domain/cardio.ts). */
+  games: Game[];
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -144,10 +147,19 @@ export function training(): Training {
     healthDays: listOf<HealthDay>("healthDays").sort((a, b) => a.day - b.day),
     sleep: [],
     watchGames: matchGames(gameSlots(shown, items), healthSessions),
+    games: [],
   };
   data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
+  data.games = gamesOf(shown.values(), data.watchGames, eventTimes(items));
   cache = { version: v, data };
   return data;
+}
+
+/** The timed events' times, by id. */
+function eventTimes(items: readonly Item[]): Map<number, EventTimes> {
+  const out = new Map<number, EventTimes>();
+  for (const i of items) if (!i.allDay && i.startMin !== null) out.set(i.id, { startMin: i.startMin, endMin: i.endMin });
+  return out;
 }
 
 /** The games among [entries] with their events' times, for matching the watch's sessions (268). */
