@@ -14,6 +14,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject }
 import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
 import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
+import { freeDayLine } from "../../domain/todayPlan.ts";
 import {
   type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, futsalLogId, leftToPlace, phaseIndexAt,
   phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
@@ -709,8 +710,8 @@ function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day:
 // ---------- Today and the calendar ----------
 
 /**
- * Today's training line for the day shown: its session(s), else how many are still to place this week,
- * else a rest day. Only while a plan runs; a tap opens the session or the week.
+ * Today's training line for the day shown: its session(s), else, on today, how many are still to place
+ * this week, else a rest day (freeDayLine). Only while a plan runs; a tap opens the session or the week.
  */
 export function TrainingLine({ day, t }: { day: number; t: number }) {
   const tr = useTraining();
@@ -728,8 +729,10 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
     icon = sessionIcon(on[0].session);
     if (on.length === 1) target = `training?s=${encodeURIComponent(on[0].session.id)}&d=${day}`;
   } else {
-    const left = day >= t ? leftToPlace(plan, day, tr.entries) : [];
-    if (left.length) text = `${count(left.length, "session")} to place this week`;
+    const left = day >= t ? leftToPlace(plan, day, tr.entries).length : 0;
+    const line = freeDayLine(left, day, t, !!futsal);
+    if (line === "none") return null;
+    if (line === "place") text = `${count(left, "session")} to place this week`;
     else { text = futsal || "Rest day"; rest = !futsal; }
   }
   if (on.length && futsal) text += ` · ${futsal}`;

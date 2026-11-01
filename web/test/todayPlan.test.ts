@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { epochOf, toTimestamp } from "../src/domain/dates.ts";
 import { CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn } from "../src/domain/schedule.ts";
-import { dayGlance, foldDone, foldEvents, weekAhead } from "../src/domain/todayPlan.ts";
+import { dayGlance, foldDone, foldEvents, freeDayLine, overdueCount, weekAhead } from "../src/domain/todayPlan.ts";
 import { type Completion, type Item, newItem } from "../src/domain/types.ts";
 import { PageMemory } from "../src/ui/phone/keep.ts";
 
@@ -68,4 +68,26 @@ test("page memory: kept per history step, the oldest steps dropped past the limi
   assert.equal(m.has("b"), false);
   assert.equal(m.has("a"), true);
   assert.equal(m.size, 2);
+});
+
+test("what's waiting on today: tasks left from before it, not today's own, ticked ones or routines", () => {
+  const t = 20000;
+  const late = newItem({ id: 1, type: "TASK", title: "Late", startDay: t - 2 });
+  const carried = newItem({ id: 2, type: "TASK", title: "Carried", startDay: t - 1, overduePolicy: "CARRY_OVER" });
+  const own = newItem({ id: 3, type: "TASK", title: "Today's own", startDay: t });
+  const ticked = newItem({ id: 4, type: "TASK", title: "Ticked", startDay: t - 2 });
+  const routine = newItem({ id: 5, type: "TASK", title: "Stretch", startDay: t - 5, freq: "DAILY", routine: true });
+  const done = new CompletionIndex([{ itemId: 4, day: t - 2, completedAt: 1 }]);
+  assert.equal(overdueCount([late, carried, own, ticked, routine], done, t, true), 2);
+  assert.equal(overdueCount([own], done, t, true), 0);
+});
+
+test("a day with no session: sessions to place show only on today", () => {
+  const t = 20000;
+  assert.equal(freeDayLine(3, t, t, false), "place");
+  assert.equal(freeDayLine(3, t, t, true), "place");
+  assert.equal(freeDayLine(3, t + 1, t, false), "none");
+  assert.equal(freeDayLine(3, t + 1, t, true), "game or rest");
+  assert.equal(freeDayLine(0, t + 1, t, false), "game or rest");
+  assert.equal(freeDayLine(0, t, t, false), "game or rest");
 });

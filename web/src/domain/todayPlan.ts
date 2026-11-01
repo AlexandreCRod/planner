@@ -2,7 +2,7 @@
 // window's Next 7 days), and on the phone what folds away (ticked tasks, events already over) so the
 // page stays about one screen.
 import { toTimestamp } from "./dates.ts";
-import { type CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn, tasksOnDay } from "./schedule.ts";
+import { type CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay } from "./schedule.ts";
 import { withoutRoutines } from "./routines.ts";
 import type { Item } from "./types.ts";
 
@@ -27,6 +27,24 @@ export function weekAhead(items: Item[], done: CompletionIndex, day: number, tod
 
 /** On today's page, what's behind us: an event that has ended, a timed task ticked once its time came. */
 export const eventOver = (o: Occurrence, now: number) => o.timed && toTimestamp(o.endDay, o.endMin ?? o.startMin ?? 0) <= now;
+/**
+ * How many tasks wait on [t] from before it: the days ahead say so in one line. Tasks not done on their day
+ * carry on until they're ticked; routines are never overdue.
+ */
+export const overdueCount = (items: Item[], done: CompletionIndex, t: number, carry: boolean) =>
+  withoutRoutines(tasksForDay(items, done, t, carry)).filter((e) => e.status === "OVERDUE" || e.status === "CARRIED").length;
+
+/**
+ * What a day with no session says on Today's training line, with [left] sessions still to place this
+ * week. Placing is today's business (281): a later day stays quiet, unless it has a game, and with
+ * sessions left it isn't a rest day yet.
+ */
+export function freeDayLine(left: number, day: number, t: number, game: boolean): "place" | "game or rest" | "none" {
+  if (left === 0) return "game or rest";
+  if (day === t) return "place";
+  return game ? "game or rest" : "none";
+}
+
 export const taskOver = (e: TaskEntry, now: number) => e.status === "DONE" && e.day !== null && e.item.startMin !== null && toTimestamp(e.day, e.item.startMin) <= now;
 
 /** Today's events split into those already over ("2 earlier · hidden") and the rest (all day, now, later). */
