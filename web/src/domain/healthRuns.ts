@@ -68,6 +68,7 @@ export function mergedRuns(runsJson: readonly Run[], sessions: readonly HealthSe
     // The plan session's own matching and type, when the kept copy has none.
     if (twin.sessionId === null) twin.sessionId = r.sessionId;
     if (twin.type === "other") twin.type = r.type;
+    twin.otherIds = [...(twin.otherIds ?? []), r.id];
   }
   for (const r of kept) { const sid = links.get(r.id); if (sid) r.sessionId = sid; }
   return kept.sort(byMoment);

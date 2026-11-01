@@ -1,13 +1,77 @@
 // The Progress charts' arithmetic (ProgressChart.tsx), kept apart so it can be tested: the date ranges
 // the range switch offers, the value scale and its round ticks, and which reading a finger is nearest.
 // Days are epoch-day numbers (domain/dates.ts).
-import { addMonths, monthShort, ymd } from "../../domain/dates.ts";
+import { addMonths, dayShort, epochOf, formatDate, monthShort, startOfWeek, weekday, ymd } from "../../domain/dates.ts";
 
 export type RangeKey = "1M" | "3M" | "6M" | "1Y" | "All";
 /** The range switch on every chart card, as the user set it (2.8); 3M unless changed. */
 export const RANGES: [RangeKey, string][] = [["1M", "1M"], ["3M", "3M"], ["6M", "6M"], ["1Y", "1Y"], ["All", "All"]];
 export const DEFAULT_RANGE: RangeKey = "3M";
 const MONTHS: Record<Exclude<RangeKey, "All">, number> = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 };
+
+/** Cardio's ranges (294): the chart ranges and a week. */
+export type WindowKey = "1W" | RangeKey;
+export const WINDOWS: [WindowKey, string][] = [["1W", "1W"], ...RANGES];
+/** The names in the compact range menu. */
+export const WINDOW_NAMES: Record<WindowKey, string> = { "1W": "1 week", "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year", All: "All" };
+
+/** One bar of a window: its days [from, to), its axis label and its full name. */
+export interface WindowBar {
+  from: number; to: number; label: string; title: string;
+  /** It hasn't started: no bar is drawn. */
+  future: boolean;
+  /** Today is in it: it's still filling. */
+  now: boolean;
+}
+/** A stretch of time at a range: its days [from, to), the bars the range picks, and its name. */
+export interface TimeWindow { key: WindowKey; from: number; to: number; unit: "day" | "week" | "month"; bars: WindowBar[]; label: string }
+
+const monthStart = (day: number) => { const { y, m } = ymd(day); return epochOf(y, m, 1); };
+
+/**
+ * The window a range shows, [back] windows before the current one (0: now; panning through time goes through
+ * these): 1W the Monday-first week, by days; 1M the calendar month, by days; 3M the 13 weeks to this week, by
+ * weeks; 6M and 1Y that many calendar months to this one, by months; All by months from [first], the first
+ * day with data.
+ */
+export function rangeWindow(key: WindowKey, today: number, first: number = today, back = 0): TimeWindow {
+  const bars: WindowBar[] = [];
+  const push = (from: number, to: number, label: string, title: string) =>
+    bars.push({ from, to, label, title, future: from > today, now: today >= from && today < to });
+  let from: number, to: number, unit: TimeWindow["unit"] = "day";
+  if (key === "1W") {
+    from = startOfWeek(today, true) - 7 * back; to = from + 7;
+    for (let x = from; x < to; x++) push(x, x + 1, dayShort(weekday(x)), formatDate(x));
+  } else if (key === "1M") {
+    from = addMonths(monthStart(today), -back); to = addMonths(from, 1);
+    for (let x = from; x < to; x++) push(x, x + 1, String(ymd(x).d), formatDate(x));
+  } else if (key === "3M") {
+    unit = "week";
+    to = startOfWeek(today, true) + 7 - 91 * back; from = to - 91;
+    for (let x = from; x < to; x += 7) push(x, x + 7, dayMonth(x, today), `Week of ${dayMonth(x, today)}`);
+  } else {
+    unit = "month";
+    const thisMonth = monthStart(today), a = ymd(monthStart(Math.min(first, today))), b = ymd(thisMonth);
+    const n = key === "6M" ? 6 : key === "1Y" ? 12 : (b.y - a.y) * 12 + b.m - a.m + 1;
+    to = addMonths(thisMonth, 1 - n * back); from = addMonths(to, -n);
+    for (let x = from; x < to; x = addMonths(x, 1)) { const { y, m } = ymd(x); push(x, addMonths(x, 1), monthShort(m), `${monthShort(m)} ${y}`); }
+  }
+  return { key, from, to, unit, bars, label: windowLabel(key, from, to, today, back) };
+}
+
+function windowLabel(key: WindowKey, from: number, to: number, today: number, back: number): string {
+  if (key === "1W" && back === 0) return "This week";
+  if (key === "1M") { const { y, m } = ymd(from); return `${monthShort(m)} ${y}`; }
+  return `${dayMonth(from, today)} – ${dayMonth(Math.min(to - 1, today), today)}`;
+}
+
+/** What a chart of bars labels: every bar up to 7, else the first, the middle and the last. */
+export function barLabels(bars: readonly WindowBar[]): { day: number; text: string; anchor: "start" | "middle" | "end" }[] {
+  const at = (b: WindowBar, anchor: "start" | "middle" | "end") => ({ day: (b.from + b.to) / 2, text: b.label, anchor });
+  if (bars.length <= 7) return bars.map((b) => at(b, "middle"));
+  const n = bars.length;
+  return [at(bars[0], "start"), at(bars[Math.floor(n / 2)], "middle"), at(bars[n - 1], "end")];
+}
 
 /** The first day [key] shows, counting back from [today] by calendar months; null for All (from the first reading). */
 export function rangeStart(key: RangeKey, today: number): number | null {

@@ -62,6 +62,8 @@ export interface Run {
   /** Health Connect's runs only (healthRuns.ts): the duration minus pauses, and the per-km splits. */
   movingS?: number | null;
   splits?: HealthSplit[];
+  /** The ids of the copies merged into this one (healthRuns.ts mergedRuns), so a note kept on one is still found. */
+  otherIds?: string[];
 }
 
 export type MealKind = "breakfast" | "lunch" | "dinner" | "snack";
