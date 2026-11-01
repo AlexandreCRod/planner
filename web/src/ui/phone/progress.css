@@ -141,3 +141,12 @@
 .phone .pg-note svg { color: var(--muted); }
 .phone .pg-notebox { display: block; box-sizing: border-box; width: 100%; min-height: 84px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--p-primary); background: var(--bg); color: var(--text); font: inherit; font-size: 15px; line-height: 21px; resize: none; user-select: text; -webkit-user-select: text; outline: none; }
 .phone .pg-btns { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 8px; }
+/* Cardio's chart card and its switch beside the title; the switch that counts futsal in the totals. */
+.phone .pg-metric { flex: none; width: 136px; }
+.phone .pg-metric .p-segmented { height: 36px; border-radius: 18px; }
+.phone .pg-metric .p-segmented button { padding: 0 2px; font-size: 13px; }
+.phone .pg-leg i.bx { width: 10px; height: 10px; border-radius: 2px; }
+.phone .pg-setrow { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-setrow .tx { flex: 1; min-width: 0; font-size: 15px; line-height: 20px; color: var(--text); }
+.phone .pg-setrow .tx small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-toprow ~ .pg-card .pg-hv { font-size: 26px; line-height: 34px; }

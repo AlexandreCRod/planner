@@ -1,35 +1,53 @@
 // Progress's Cardio tab (items 294, 269; mockup 2.8.6 section 1 with top row B): a Runs | Futsal switch and the
-// compact range menu; the range sets everything below it. Runs: the run types, each opening its own stats, then
-// the runs and the plan's records. Futsal: the games, named after their calendar events. A run or a game opens
-// its card. The numbers come from domain/cardio.ts, the range's windows from chartMath.ts.
+// compact range menu; the range sets everything below it. Runs: a Distance | Time chart whose bars the range
+// picks, four tiles, the switch that counts futsal in the totals, the run types, each opening its own stats, then
+// the runs and the plan's records. Futsal: heart rate per game, four tiles, and the games, named after their
+// calendar events. A run or a game opens its card, with its note. The numbers come from domain/cardio.ts, the
+// range's windows from chartMath.ts, the charts' touch from ProgressChart.tsx.
 import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, formatTime } from "../../domain/dates.ts";
-import { type ActivityNote, type Game, RUN_TYPE_NAMES, gameNote, gameSeconds, gameStats, gameVenue, gameWatch, playedGames, runEntry, runNote, runSeconds, runTypeName, tally, typeStats } from "../../domain/cardio.ts";
+import {
+  type ActivityNote, type Game, type Tally, RUN_TYPE_NAMES, fastest5k, finishedAverage, gameNote, gameSeconds, gameStats, gameVenue, gameWatch, longestRun, perWeek, playedGames, recordFor, runEntry,
+  runNote, runSeconds, runTypeName, tally, tallyHours, typeStats,
+} from "../../domain/cardio.ts";
 import type { Run, RunType } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, saveGameNote, saveRunNote } from "../../store/training.ts";
-import { type TimeWindow, type WindowKey, WINDOWS, dayMonth, rangeWindow } from "./chartMath.ts";
+import { type TimeWindow, type WindowKey, WINDOWS, barLabels, dayMonth, rangeWindow } from "./chartMath.ts";
 import { EmptyHint, MIcon, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { Chart, FUTSAL, GREY, RUN, RangeMenu, RangeSwitch, Spark } from "./ProgressChart.tsx";
-import { TextButton } from "./m3.tsx";
-import { from, join, kmFixed, mmss, tapProps, Tile } from "./progressParts.tsx";
+import { Switch, TextButton } from "./m3.tsx";
+import { ChartCard, Head, from, join, kmFixed, mmss, tapProps, Tile } from "./progressParts.tsx";
 import { kindIcon } from "./trainingParts.tsx";
+import { fmtSteps } from "../../domain/body.ts";
 import { fmtSleep } from "../../domain/sleep.ts";
 import { hhmm } from "./WatchRuns.tsx";
 
 type View = "runs" | "futsal";
 const VIEWS: [View, string][] = [["runs", "Runs"], ["futsal", "Futsal"]];
+type Metric = "Distance" | "Time";
+const METRICS: [Metric, string][] = [["Distance", "Distance"], ["Time", "Time"]];
+/** Whether futsal counts in the totals, kept on this device. */
+const COUNT_KEY = "cardioCountFutsal";
 
 // The view and the range stay until the app restarts, for this tab and the cards it opens.
 let keptView: View = "runs";
 let keptRange: WindowKey = "3M";
+let keptMetric: Metric = "Distance";
 
-export interface CardioState { view: View; setView: (v: View) => void; range: WindowKey; setRange: (k: WindowKey) => void }
+export interface CardioState {
+  view: View; setView: (v: View) => void; range: WindowKey; setRange: (k: WindowKey) => void; metric: Metric; setMetric: (m: Metric) => void; count: boolean; setCount: (v: boolean) => void;
+}
 
 export function useCardio(): CardioState {
   const [view, setV] = useState(keptView);
   const [range, setR] = useState(keptRange);
-  return { view, setView: (v) => { keptView = v; setV(v); }, range, setRange: (k) => { keptRange = k; setR(k); } };
+  const [metric, setM] = useState(keptMetric);
+  const [count, setC] = useState(() => localStorage.getItem(COUNT_KEY) === "1");
+  return {
+    view, setView: (v) => { keptView = v; setV(v); }, range, setRange: (k) => { keptRange = k; setR(k); }, metric, setMetric: (m) => { keptMetric = m; setM(m); },
+    count, setCount: (v) => { localStorage.setItem(COUNT_KEY, v ? "1" : "0"); setC(v); },
+  };
 }
 
 /** The first day anything happened, for All; today when nothing has. */
@@ -43,7 +61,9 @@ function useWindow(tr: Training, st: CardioState, t: number): { win: TimeWindow;
 /** How many rows a list shows until "Show all". */
 const LATEST = 4, LATEST_GAMES = 6;
 const runsWord = (n: number) => (n === 1 ? "1 run" : `${n} runs`);
+const gamesWord = (n: number) => (n === 1 ? "1 game" : `${n} games`);
 const pace = (s: number | null) => (s === null ? "" : `${mmss(s)} / km`);
+const hours = (h: number) => fmtSleep(h * 60);
 
 // ---------- Cards' routes ----------
 
@@ -80,10 +100,69 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
       <RangeMenu value={st.range} onChange={st.setRange} />
     </div>
     {st.view === "runs"
-      ? <RunsPage tr={tr} lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
-      : <FutsalPage list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
+      ? <>
+        <TotalsChart tr={tr} games={games} win={win} now={now} st={st} t={t} />
+        <RunTiles tr={tr} lp={lp} win={win} now={now} count={st.count} t={t} />
+        <div className="pg-setrow">
+          <div className="tx">Count futsal in the totals<small>{st.count ? `Adds ${gamesWord(now.games.length)} to time and sessions. Km stay runs only.` : "Totals are runs only."}</small></div>
+          <Switch checked={st.count} label="Count futsal in the totals" onChange={(v) => { feel("tick"); st.setCount(v); }} />
+        </div>
+        <RunsPage tr={tr} lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
+      </>
+      : <FutsalPage win={win} list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
     <div className="p-endspace" />
   </>;
+}
+
+/**
+ * The chart on top: distance or time in the window, a bar per day, week or month as the range picks. The
+ * still-filling bar is paler and the finished ones' average a dashed line. With futsal counted, games join
+ * the time in the same colour; reading a bar shows how it splits.
+ */
+function TotalsChart({ tr, games, win, now, st, t }: { tr: Training; games: readonly Game[]; win: TimeWindow; now: Tally; st: CardioState; t: number }) {
+  const [at, setAt] = useState<number | null>(null);
+  const time = st.metric === "Time";
+  const per = useMemo(() => win.bars.map((b) => tally(tr.runs, games, b.from, b.to)), [tr, games, win]);
+  const value = (x: Tally) => (time ? tallyHours(x, st.count) : x.km);
+  const vals = per.map(value);
+  const avg = win.unit === "day" ? null : finishedAverage(win.bars, vals);
+  const live = win.bars.flatMap((b, i) => (b.future ? [] : [i]));
+  const unit = win.unit === "week" ? "wk" : "mo";
+  const i = at !== null ? live[at] : null, b = i !== null ? win.bars[i] : null, x = i !== null ? per[i] : null;
+  const total = time ? hours(tallyHours(now, st.count)) : kmFixed(now.km);
+  const read: [string, ReactNode] | null = b && x
+    ? [join(b.title, b.now && "so far"), time
+      ? <>{hours(tallyHours(x, st.count))} <small>{st.count && x.games.length ? `runs ${hours(x.runS / 3600)} + futsal ${hours(x.gameS / 3600)}` : ""}</small></>
+      : <>{kmFixed(x.km)} km <small>{runsWord(x.runs.length)}</small></>]
+    : null;
+  return (
+    <ChartCard title={st.metric} read={read}
+      side={<span className="pg-metric"><Segmented value={st.metric} options={METRICS} onChange={(m) => { feel("tick"); setAt(null); st.setMetric(m); }} /></span>}
+      head={<Head value={total} unit={`${time ? "" : "km "}${win.label === "This week" ? "this week" : win.label}`} chip={avg !== null ? `avg ${time ? hours(avg) : `${Math.round(avg)} km`} / ${unit}` : null} />}
+      foot={<div className="pg-leg">
+        <span><i className="bx" style={{ background: RUN }} />{time && st.count ? "Runs + futsal" : "Runs"}, per {win.unit}</span>
+        {avg !== null && <span><i className="ln" style={{ background: GREY }} />Average</span>}
+      </div>}>
+      <Chart series={[{ kind: "bars", color: RUN, maxW: 18, pts: live.map((k) => ({ day: win.bars[k].from, v: vals[k], span: win.bars[k].to - win.bars[k].from, dim: win.bars[k].now && win.unit !== "day" })) }]}
+        zero domain={[win.from, win.to]} today={t} height={150} xLabels={barLabels(win.bars)} avg={avg} fmt={time ? (v) => `${v} h` : undefined}
+        reads={live.map((k) => win.bars[k].from)} onRead={setAt} />
+    </ChartCard>
+  );
+}
+
+/** The four tiles under the chart: sessions, time, the longest run and the fastest 5 km in the window. */
+function RunTiles({ tr, lp, win, now, count, t }: { tr: Training; lp: LoadedPlan; win: TimeWindow; now: Tally; count: boolean; t: number }) {
+  const long = longestRun(now.runs), ever = longestRun(tr.runs), fast = fastest5k(now.runs), rec = recordFor(lp.plan.records.runs, "5 km");
+  const games = now.games.length, n = now.runs.length;
+  return (
+    <div className="pg-tiles">
+      <Tile a={count ? "Sessions" : "Runs"} b={String(n + (count ? games : 0))}
+        c={count ? `${runsWord(n)} + ${gamesWord(games)}` : `${perWeek(n, win.from, win.to, t).toFixed(1)} a week`} />
+      <Tile a="Time" b={hours(tallyHours(now, count))} c={count ? `with ${hours(now.gameS / 3600)} of futsal` : "runs only"} />
+      <Tile a="Longest run" b={long ? <>{kmFixed(long.distanceKm!)} <small>km</small></> : "—"} c={long ? join(formatDate(long.day), ever && `ever ${kmFixed(ever.distanceKm!)}`) : "none in this range"} />
+      <Tile a="Fastest 5 km" b={fast ? mmss(fast.s) : "—"} c={fast ? join(dayMonth(fast.run.day, t), rec && `record ${rec.time}`) : "none in this range"} />
+    </div>
+  );
 }
 
 /** The latest of a list, newest first, with "Show all" under them. */
@@ -150,10 +229,29 @@ function GameRow({ g, note, sel, onOpen }: { g: Game; note: string; sel: string 
   );
 }
 
-function FutsalPage({ list, notes, t, sel, onOpen }: { list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function FutsalPage({ win, list, notes, t, sel, onOpen }: { win: TimeWindow; list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
+  const [at, setAt] = useState<number | null>(null);
   if (!list.length) return <div className="pg-hint">No games in this range.</div>;
-  void t;
+  const st = gameStats(list);
+  const beat = list.filter((g) => g.session?.avgHr), last = beat[beat.length - 1], r = at !== null ? beat[at] : null;
+  const days = beat.map((g) => g.day), a = days[0], z = days[days.length - 1];
   return <>
+    {last && (
+      <ChartCard title="Heart rate per game" side={<span>{win.label}</span>}
+        read={r ? [join(dayMonth(r.day, t), r.title), <>{Math.round(r.session!.avgHr!)} <small>{join("avg", !!r.session!.maxHr && `max ${Math.round(r.session!.maxHr)} bpm`)}</small></>] : null}
+        head={<Head value={String(Math.round(last.session!.avgHr!))} unit={`bpm avg, ${formatDate(last.day).split(",")[0]}`} chip={last.session!.maxHr ? `max ${Math.round(last.session!.maxHr)}` : null} />}
+        foot={<div className="pg-leg"><span><i className="ln" style={{ background: FUTSAL }} />Average heart rate in each game</span></div>}>
+        <Chart series={[{ kind: "line", color: FUTSAL, pts: beat.map((g) => ({ day: g.day, v: g.session!.avgHr! })) }]} domain={a === z ? [win.from, win.to] : [a, z]} today={t} height={130}
+          xLabels={a === z ? [{ day: a, text: dayMonth(a, t), anchor: "middle" }] : [{ day: a, text: dayMonth(a, t), anchor: "start" }, { day: z, text: dayMonth(z, t), anchor: "end" }]}
+          reads={days} onRead={setAt} />
+      </ChartCard>
+    )}
+    <div className="pg-tiles">
+      <Tile a="Games" b={String(st.count)} c={hours(st.seconds / 3600)} />
+      <Tile a="A usual game" b={st.usualMin !== null ? <>{Math.round(st.usualMin)} <small>min</small></> : "—"} c={st.avgHr !== null ? `avg ${Math.round(st.avgHr)} bpm` : ""} />
+      <Tile a="Hardest" b={st.hardest ? <>{Math.round(st.hardest.session!.maxHr!)} <small>bpm</small></> : "—"} c={st.hardest ? `max · ${formatDate(st.hardest.day)}` : ""} />
+      <Tile a="Calories" b={st.kcal ? fmtSteps(st.kcal) : "—"} c="kcal in this range" />
+    </div>
     <Group title="Games" right={list.length > LATEST_GAMES ? `latest of ${list.length}` : undefined} />
     <Latest key={list.length} list={list} shown={LATEST_GAMES} row={(g) => <GameRow key={g.id} g={g} note={gameNote(g, notes)} sel={sel} onOpen={onOpen} />} />
   </>;
