@@ -154,7 +154,7 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
 
 /** A priority's name, for its flag's label (held, it shows as a tooltip): "High priority". */
 export const priorityLabel = (p: number) => `${PRIORITIES[p]} priority`;
-const priorityItems = (pick: (p: number) => void): MenuItem[] =>
+export const priorityItems = (pick: (p: number) => void): MenuItem[] =>
   PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? priorityColor(i) : undefined, onClick: () => pick(i) }));
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));

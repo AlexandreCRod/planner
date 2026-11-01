@@ -8,7 +8,7 @@ import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
 import { isRoutineItem, isRoutineSeries, routineEntry } from "../../domain/routines.ts";
 import { showStreaks } from "../../store/routines.ts";
 import { notePreview, preview } from "../../domain/text.ts";
-import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, newItem } from "../../domain/types.ts";
+import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, priorityColor } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
@@ -26,7 +26,8 @@ import { useGlide } from "./glide.ts";
 import { isTodo } from "../../domain/todoNumber.ts";
 import { useRowDrag } from "./rowDrag.ts";
 import { leaveSheet } from "./todoSheetReturn.ts";
-import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
+import { newTodo, sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
+import { priorityItems, priorityLabel } from "./PhoneItem.tsx";
 import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
@@ -202,16 +203,26 @@ export function dropTodo(s: Snapshot, ids: readonly number[], moved: number) {
 /** "Add a to-do": a line that makes a task with no date (the To-do list, Today's to-dos sheet). */
 export function TodoAdd() {
   const [text, setText] = useState("");
+  const [priority, setPriority] = useState(0);
+  const [flags, setFlags] = useState(false);
   const add = () => {
-    const title = text.trim();
-    if (!title) return;
-    saveItem(newItem({ type: "TASK", title }));
+    const todo = newTodo(text, priority);
+    if (!todo) return;
+    saveItem(todo);
     setText("");
+    setPriority(0);
   };
   return (
     <div className="p-todo-add">
       <MIcon name="oAddTask" />
       <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+      {/* Pressing the flag or its menu leaves the keyboard up (320). */}
+      <span className="p-menu-anchor" onMouseDown={(e) => e.preventDefault()}>
+        <IconButton label={priority ? priorityLabel(priority) : "Priority"} onClick={() => setFlags(true)}>
+          <MIcon name={priority ? "fFlag" : "oFlag"} color={priority ? priorityColor(priority) : "var(--muted)"} />
+        </IconButton>
+        <DropdownMenu open={flags} onClose={() => setFlags(false)} items={priorityItems(setPriority)} />
+      </span>
       {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
     </div>
   );

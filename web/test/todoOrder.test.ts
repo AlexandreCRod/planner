@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sortTodos, todoKey, todoOrderChanges } from "../src/domain/todoOrder.ts";
+import { newTodo, sortTodos, todoKey, todoOrderChanges } from "../src/domain/todoOrder.ts";
 import { moveId } from "../src/domain/noteOrder.ts";
 import { type Item, newItem } from "../src/domain/types.ts";
 
@@ -72,4 +72,17 @@ test("many drags into the same gap keep working (halving, then numbering again)"
     todos = todos.map((t) => (c.has(t.id) ? { ...t, listOrder: c.get(t.id) } : t));
     assert.deepEqual(sortTodos(todos).map((t) => t.id), ids, `drag ${n}`);
   }
+});
+
+test("a to-do added with a flag goes in at that priority, above the plain ones", () => {
+  const plain = newTodo("Buy stamps", 0)!, urgent = newTodo("  Call the bank ", 4)!;
+  assert.equal(urgent.title, "Call the bank");
+  assert.equal(urgent.priority, 4);
+  assert.equal(urgent.startDay, null);
+  assert.equal(plain.priority, 0);
+  assert.deepEqual(sortTodos([{ ...plain, id: 1, createdAt: 200 }, { ...urgent, id: 2, createdAt: 100 }]).map((t) => t.id), [2, 1]);
+});
+
+test("an empty add line makes nothing, whatever the flag", () => {
+  assert.equal(newTodo("   ", 3), null);
 });

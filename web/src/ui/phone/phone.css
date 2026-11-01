@@ -525,6 +525,7 @@ html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15
 .phone .p-todo-add { display: flex; align-items: center; padding: 8px 8px 0 20px; color: var(--p-primary); }
 .phone .p-todo-add input { flex: 1; min-width: 0; margin-left: 16px; padding: 14px 0; border: 0; background: none; outline: none; font-size: 16px; line-height: 24px; color: var(--text); caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
 .phone .p-todo-add input::placeholder { color: var(--muted); }
+.phone .p-todo-add .p-icon { margin: -4px 0; }
 
 /* ---------- Notes: staggered cards ---------- */
 .phone .p-list.notes { padding: 0 12px; }

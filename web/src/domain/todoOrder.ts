@@ -3,13 +3,19 @@
 // number between its new neighbours' keys, so one drag saves one to-do. A to-do never dragged goes by
 // the order there was before: priority (high first), then the newest first. Its key is that order as
 // one number (each priority level a step far above any creation time), so the two kinds mix.
-import type { Item } from "./types.ts";
+import { type Item, newItem } from "./types.ts";
 
 /** One priority level, far above any creation time (ms; about 300 years). */
 const PRIORITY_STEP = 1e13;
 
 /** Where a to-do goes (higher first): its dragged place, else its priority and creation time. */
 export const todoKey = (t: Item) => t.listOrder ?? t.priority * PRIORITY_STEP + t.createdAt;
+
+/** A to-do from the add line (320), at the priority its flag is set to; nothing for an empty line. */
+export function newTodo(text: string, priority: number): Item | null {
+  const title = text.trim();
+  return title ? newItem({ type: "TASK", title, priority }) : null;
+}
 
 /** The to-dos in their order. */
 export function sortTodos(todos: readonly Item[]): Item[] {
