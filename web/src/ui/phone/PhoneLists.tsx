@@ -24,6 +24,7 @@ import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
 import { SwipeToTrash } from "./SwipeRow.tsx";
+import { calmRows, quietRows, rowsQuiet } from "./rowGuard.ts";
 import { isTodo } from "../../domain/todoNumber.ts";
 import { useRowDrag } from "./rowDrag.ts";
 import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
@@ -86,6 +87,7 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
   const strip = useRef<HTMLDivElement>(null);
   const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
+  const turned = useRef(false);
   const setIndex = (i: number) => { idx.current = i; setTodo(i === 1); setTodoWatch("todoTab", i === 1); try { localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); } catch { /* private mode */ } };
   /** Puts the strip back where its tab is, with nothing left over from a slide. */
   const rest = () => { stopSlide.current?.(); stopSlide.current = null; if (strip.current) strip.current.style.transform = ""; };
@@ -97,19 +99,20 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
     const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
     flushSync(() => setIndex(i));
     if (!slide || !el || !w) return;
-    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
+    const place = (x: number) => { quietRows(); el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
     stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
   };
   // The page is opened on To-do from Today while it's out of sight: no slide, just the right tab.
   useEffect(() => { todoListener = () => showTab("todo", false); return () => { todoListener = null; }; });
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [strip.current],
-    onStep: (d) => setIndex(Math.min(1, Math.max(0, idx.current + d))),
+    onStep: (d) => { turned.current = true; setIndex(Math.min(1, Math.max(0, idx.current + d))); },
     canStep: (d) => idx.current + d >= 0 && idx.current + d <= 1,
     yieldAtEdge: true,
-    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
-    onSettled: () => track.current?.(null),
-    allow: (t) => !t.closest("input, textarea, .p-chiprow") && !(idx.current === 0 && t.closest(".p-swipe")),
+    onMove: (x, w) => { quietRows(); stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => { track.current?.(null); if (!turned.current) calmRows(); turned.current = false; },
+    // While the rows are quiet a swipe on one moves the list, so a quick swipe back and forth still works.
+    allow: (t) => !t.closest("input, textarea, .p-chiprow") && !(idx.current === 0 && t.closest(".p-swipe") && !rowsQuiet()),
   });
   return (
     <Scaffold title="Tasks" flush back={back} actions={<>
@@ -169,7 +172,7 @@ function ScheduledList() {
             setCollapsed(n);
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
-            <SwipeToTrash key={e.item.id} item={e.item}>
+            <SwipeToTrash key={e.item.id} item={e.item} guarded>
               <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
                 onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
             </SwipeToTrash>
@@ -285,7 +288,7 @@ function TodoList() {
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
       <div key={e.item.id} data-glide={`t${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
-        <SwipeToTrash item={e.item}>
+        <SwipeToTrash item={e.item} guarded>
           <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
         </SwipeToTrash>
       </div>
@@ -296,7 +299,7 @@ function TodoList() {
       </div>
       {showDone && done.map((item) => (
         <div key={`d${item.id}`} data-glide={`t${item.id}`}>
-          <SwipeToTrash item={item}>
+          <SwipeToTrash item={item} guarded>
             <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
           </SwipeToTrash>
         </div>

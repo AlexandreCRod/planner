@@ -2,7 +2,8 @@
 // the touch slop the row follows the finger over a red strip with a bin; let go past 40% of the width (or
 // flung) it slides out and the gap closes, with an Undo snackbar. The item only goes to the trash once
 // that snackbar has gone (or the app is put away); Undo opens the gap again and slides the row back.
-// Less than that, and it springs back. Vertical scrolling and taps are untouched (see gesture.ts).
+// Less than that, and it springs back. On Tasks a fling isn't enough, and right after the list changes the
+// rows ignore swipes (275, rowGuard.ts). Vertical scrolling and taps are untouched (see gesture.ts).
 import { type ReactNode, useRef } from "react";
 import type { Item } from "../../domain/types.ts";
 import { MIcon } from "./chrome.tsx";
@@ -11,15 +12,17 @@ import { onFlush, restore, trash } from "../../store/store.ts";
 import { showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
 import { rowDragging } from "./rowDrag.ts";
+import { REMOVE_AT, rowsQuiet, swipeRemoves } from "./rowGuard.ts";
 
 const EASE = "cubic-bezier(.2, 0, 0, 1)";
 
-export function SwipeToTrash({ item, children }: { item: Item; children: ReactNode }) {
+/** [guarded]: a row of the Tasks page, where a swipe also changes the list (rowGuard.ts). */
+export function SwipeToTrash({ item, guarded = false, children }: { item: Item; guarded?: boolean; children: ReactNode }) {
   const front = useRef<HTMLDivElement>(null);
   const gone = useRef(false);
   const ref = useHorizontalSwipe<HTMLDivElement>({
     // Leftwards only, on every list (241: the same way everywhere, as on Android); not while the row is dragged.
-    accept: (dx) => dx < 0 && !rowDragging(),
+    accept: (dx) => dx < 0 && !rowDragging() && !(guarded && rowsQuiet()),
     onStart: () => {
       const f = front.current;
       if (!f || gone.current) return;
@@ -32,15 +35,14 @@ export function SwipeToTrash({ item, children }: { item: Item; children: ReactNo
       f.style.transform = `translate3d(${dx}px,0,0)`;
       box.classList.toggle("left", dx < 0);
       // Reaching the point where letting go removes it (or going back from it) ticks once.
-      const armed = Math.abs(dx) > box.offsetWidth * 0.4;
+      const armed = Math.abs(dx) > box.offsetWidth * REMOVE_AT;
       if (armed !== box.classList.contains("armed")) { box.classList.toggle("armed", armed); feel("tick"); }
     },
     onEnd: (dx, vx) => {
       const f = front.current, box = ref.current;
       if (!f || !box || gone.current) return;
       const w = box.offsetWidth;
-      const flung = Math.abs(vx) > 0.8 && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) > 48;
-      if (Math.abs(dx) > w * 0.4 || flung) {
+      if (swipeRemoves(dx, vx, w, guarded)) {
         gone.current = true;
         f.style.transition = `transform .18s ${EASE}`;
         f.style.transform = `translate3d(${Math.sign(dx) * w}px,0,0)`;
@@ -92,7 +94,7 @@ export function SwipeToTrash({ item, children }: { item: Item; children: ReactNo
     }, 120);
   };
   return (
-    <div ref={ref} className="p-swipe">
+    <div ref={ref} className={`p-swipe ${guarded ? "guarded" : ""}`}>
       <div className="p-swipe-bg" aria-hidden="true"><MIcon name="oDelete" /></div>
       <div ref={front} className="p-swipe-front">{children}</div>
     </div>
