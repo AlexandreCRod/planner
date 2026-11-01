@@ -6,7 +6,7 @@
 // same way.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
+import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
@@ -132,10 +132,13 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     <div className="p-scaffold p-cal">
       <div className="p-statusbar" />
       <header className="p-calhead" ref={head}>
+        <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous" onClick={() => turn(-1)} />
         <h2 className="t-title-medium">{title}</h2>
-        <IconButton icon="fArrowBack" label="Previous" onClick={() => turn(-1)} />
-        <IconButton icon="oToday" label="Today" onClick={() => setAnchor(todayEpoch())} />
-        <IconButton icon="fArrowForward" label="Next" onClick={() => turn(1)} />
+        <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next" onClick={() => turn(1)} />
+        <span className="grow" />
+        {/* Where Today has it, third from the end; the slot after it is for the page's search (285). */}
+        {!rangeShows(mode, anchor, todayEpoch(), mondayFirst()) && <IconButton icon="oToday" label="Today" onClick={() => setAnchor(todayEpoch())} />}
+        <span className="p-calhead-slot" />
         <div className="p-menu-anchor">
           <IconButton icon="oViewAgenda" label="View" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={menuItems} />

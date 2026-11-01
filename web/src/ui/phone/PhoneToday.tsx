@@ -48,7 +48,7 @@ const WEEK_ROWS = 3;
 export const todayViewedDay = () => viewed ?? todayEpoch();
 /** Back to the real today (a tap on the Today tab while it shows). */
 export const resetToday = () => { viewed = null; };
-/** Turns Today to [day] (the T key), at once, like its own "Back to today" button. */
+/** Turns Today to [day] (the T key), at once, like its own Today button. */
 export function showTodayDay(day: number) {
   if (showDayOnPhone) showDayOnPhone(day);
   else viewed = day === todayEpoch() ? null : day;
@@ -482,9 +482,9 @@ export function PhoneToday() {
         </div>
         <span className="grow" />
         <TestChip />
-        {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
+        {!isToday && <IconButton icon="oToday" label="Today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
-        {/* On another day, Back to today takes its place (the bar has no room for both beside a long weekday). */}
+        {/* On another day, Today takes its place (the bar has no room for both beside a long weekday). */}
         {isToday && <TodosButton s={s} onClick={() => setTodosOpen(true)} />}
         <AppBarActions />
       </header>

@@ -255,7 +255,7 @@ export function DayPickerSheet({ value, onPick, onClose }: { value: number; onPi
       <div className="p-dp-nav">
         <span className="p-dp-month static">{monthLong(m)} {y}</span>
         <span className="grow" />
-        {month !== thisMonth && <TextButton onClick={() => { onPick(t); close(); }}>Today</TextButton>}
+        {(month !== thisMonth || value !== t) && <TextButton onClick={() => { onPick(t); close(); }}>Today</TextButton>}
         <IconButton icon="fKeyboardArrowLeft" label="Previous month" onClick={() => setMonth(addMonths(month, -1))} />
         <IconButton icon="fKeyboardArrowRight" label="Next month" onClick={() => setMonth(addMonths(month, 1))} />
       </div>

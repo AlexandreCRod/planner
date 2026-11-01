@@ -48,6 +48,21 @@ export function monthsBetween(a: number, b: number): number {
   return (z.y - x.y) * 12 + (z.m - x.m);
 }
 
+/** The ranges the calendar shows; each starts from its anchor day ("agenda" lists on from it). */
+export type CalendarRange = "day" | "3day" | "week" | "month" | "year" | "agenda";
+
+/** Whether [day] is in the range shown around [anchor] (the Today button is for when it isn't). */
+export function rangeShows(range: CalendarRange, anchor: number, day: number, mondayFirst: boolean): boolean {
+  const a = ymd(anchor), d = ymd(day);
+  switch (range) {
+    case "3day": return day >= anchor && day < anchor + 3;
+    case "week": return startOfWeek(anchor, mondayFirst) === startOfWeek(day, mondayFirst);
+    case "month": return a.y === d.y && a.m === d.m;
+    case "year": return a.y === d.y;
+    default: return anchor === day;
+  }
+}
+
 export function startOfWeek(epoch: number, mondayFirst: boolean): number {
   const wd = weekday(epoch);
   return epoch - (mondayFirst ? wd - 1 : wd % 7);
