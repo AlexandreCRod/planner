@@ -23,6 +23,8 @@ export const KINDS = [
   "healthSessions", "healthNights", "healthDays",
   // Each device's problem log (problems.ts, store/problemSync.ts): one record per device, written only by it.
   "problemLogs",
+  // The cleared number on Today's to-dos button (304, store/todoNumber.ts): one record, any device writes it.
+  "todoNumber",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

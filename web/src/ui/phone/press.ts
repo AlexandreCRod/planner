@@ -149,7 +149,8 @@ export function swallowClick(ms = 800) {
 function startHold(e: PointerEvent, t: Element) {
   if (hold) { clearTimeout(hold.timer); hold = null; }
   const host = iconButton(t);
-  if (!host) return;
+  // [data-no-tip]: a button with a long press of its own.
+  if (!host || host.hasAttribute("data-no-tip")) return;
   const h: Hold = { host, x0: e.clientX, y0: e.clientY, id: e.pointerId, timer: 0 };
   h.timer = window.setTimeout(() => {
     if (hold !== h) return;

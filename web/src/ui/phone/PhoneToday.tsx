@@ -1,6 +1,6 @@
 // Today: the day pager, each day's tasks, schedule and note, and the routines row.
 import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { dayShort, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { type Occurrence, type TaskEntry, completionDay, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../../domain/schedule.ts";
 import { type GlanceRow, dayGlance, eventOver, foldDone, foldEvents, taskOver, weekAhead } from "../../domain/todayPlan.ts";
@@ -9,9 +9,13 @@ import { type NoteLine, noteLines } from "../../domain/text.ts";
 import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
+import { todoNumber } from "../../domain/todoNumber.ts";
+import { PRIORITIES, priorityColor } from "../../domain/types.ts";
+import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoNumber.ts";
+import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, IconButton, MIcon, TestChip } from "./chrome.tsx";
+import { AppBarActions, DropdownMenu, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -21,7 +25,7 @@ import { StreaksSheet } from "./StreaksSheet.tsx";
 import { useLook } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
 import { HeldTime } from "./TimeWheel.tsx";
-import { BottomSheet } from "./m3.tsx";
+import { BottomSheet, showSnackbar } from "./m3.tsx";
 import { DayPickerSheet } from "./pickers.tsx";
 import { count } from "../../domain/plural.ts";
 import { TrainingLine } from "./PhoneTraining.tsx";
@@ -389,13 +393,37 @@ const DayPage = memo(function DayPage({ day, t, s, now, hold, wide }: { day: num
   );
 });
 
-/** The to-dos button in Today's top bar (271): how many are open in a small badge on its corner (none at 0). */
-function TodosButton({ count: n, onClick }: { count: number; onClick: () => void }) {
+/**
+ * The to-dos button in Today's top bar (271): a tap opens them. The badge on its corner is the number of
+ * domain/todoNumber.ts, in its priority's colour. A long press, a right-click or the keyboard's menu key
+ * offers clearing it, and while it's cleared, showing it again.
+ */
+function TodosButton({ s, onClick }: { s: Snapshot; onClick: () => void }) {
+  const cleared = todosCleared();
+  const number = todoNumber(openTodos(s).map((e) => e.item), cleared);
+  const [menu, setMenu] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const items: MenuItem[] = [
+    ...(number ? [{ label: "Clear the number", onClick: () => showSnackbar("Number cleared", "Undo", clearTodoNumber()) }] : []),
+    ...(cleared ? [{ label: "Show the number", onClick: showTodoNumber }] : []),
+  ];
+  const offer = () => setMenu(true);
+  const { fired, ...press } = useHold(items.length ? offer : undefined);
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) || !items.length) return;
+    e.preventDefault();
+    flushSync(offer);
+    anchor.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+  };
   return (
-    <IconButton className="p-badged" label={n ? `To-dos, ${n} open` : "To-dos"} onClick={onClick}>
-      <MIcon name="oCheckBox" />
-      {n > 0 && <span className="p-badge" aria-hidden="true">{n > 99 ? "99+" : n}</span>}
-    </IconButton>
+    <span className="p-menu-anchor" ref={anchor}>
+      <button className="p-icon p-badged" aria-label={number ? `To-dos, ${number.count} ${PRIORITIES[number.level].toLowerCase()}` : "To-dos"}
+        data-no-tip={items.length ? "" : undefined} {...press} onKeyDown={onKeyDown} onClick={() => { if (!fired()) onClick(); }}>
+        <MIcon name="oCheckBox" />
+        {number && <span className="p-badge" aria-hidden="true" style={{ background: priorityColor(number.level) }}>{number.count > 99 ? "99+" : number.count}</span>}
+      </button>
+      <DropdownMenu open={menu} onClose={() => setMenu(false)} items={items} />
+    </span>
   );
 }
 
@@ -425,7 +453,6 @@ export function PhoneToday() {
   const [picking, setPicking] = useState(false);
   // The to-dos (tasks with no date) aren't on Today's list (271): a button in the bar opens them in a sheet.
   const [todosOpen, setTodosOpen] = useState(false);
-  const todoCount = openTodos(s).length;
   const near = useDeferredValue(day);
   const days = [...new Set([near - 1, near, near + 1, day])].sort((a, b) => a - b);
   const track = useRef<HTMLDivElement>(null);
@@ -458,7 +485,7 @@ export function PhoneToday() {
         {!isToday && <IconButton icon="oToday" label="Back to today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
         {/* On another day, Back to today takes its place (the bar has no room for both beside a long weekday). */}
-        {isToday && <TodosButton count={todoCount} onClick={() => setTodosOpen(true)} />}
+        {isToday && <TodosButton s={s} onClick={() => setTodosOpen(true)} />}
         <AppBarActions />
       </header>
       {todosOpen && createPortal(<TodosSheet onClose={() => setTodosOpen(false)} />, document.body)}

@@ -23,8 +23,7 @@ import { useLinkGesture } from "../shared/linkGesture.ts";
 import { useWebLinks } from "./WebLinks.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
-import { TOUCH_SLOP } from "./press.ts";
-import { mouseMenu } from "./desk.ts";
+import { useHold } from "./hold.ts";
 import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { fetchPlaceOfLink } from "../../store/preview.ts";
 import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
@@ -966,31 +965,6 @@ function DoneWhenDialog({ item, day, at, onClose }: { item: Item; day: number; a
     </Dialog>
     {pickDay && <DatePickerDialog value={d} onClose={() => setPickDay(false)} onPick={(x) => setD(x)} />}
   </>;
-}
-
-/** A long press (450 ms, the finger kept within the touch slop): a pick-up pulse, then [onLong]; the tap after it is dropped. */
-function useHold(onLong?: () => void) {
-  const st = useRef<{ timer: number; x: number; y: number } | null>(null);
-  const firedRef = useRef(false);
-  const clear = () => { if (st.current) clearTimeout(st.current.timer); st.current = null; };
-  useEffect(() => clear, []);
-  const fired = () => { const f = firedRef.current; firedRef.current = false; return f; };
-  if (!onLong) return { fired };
-  return {
-    fired,
-    onPointerDown: (e: React.PointerEvent) => {
-      clear();
-      firedRef.current = false;
-      const h = { timer: 0, x: e.clientX, y: e.clientY };
-      h.timer = window.setTimeout(() => { firedRef.current = true; st.current = null; feel("pickup"); onLong(); }, 450);
-      st.current = h;
-    },
-    onPointerMove: (e: React.PointerEvent) => { const h = st.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > TOUCH_SLOP) clear(); },
-    onPointerUp: clear,
-    onPointerCancel: clear,
-    // A right-click is the mouse's long press.
-    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { clear(); onLong(); } },
-  };
 }
 
 function WhenSheet({ item, shownStart, onClose, onSave }: { item: Item; shownStart: number | null; onClose: () => void; onSave: (i: Item) => void }) {

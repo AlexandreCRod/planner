@@ -24,6 +24,7 @@ import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
 import { SwipeToTrash } from "./SwipeRow.tsx";
+import { isTodo } from "../../domain/todoNumber.ts";
 import { useRowDrag } from "./rowDrag.ts";
 import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
 import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
@@ -185,7 +186,7 @@ function ScheduledList() {
  * then the newest first (domain/todoOrder.ts). Today's to-dos sheet lists them too (271).
  */
 export function openTodos(s: Snapshot): TaskEntry[] {
-  return sortTodos(s.items.filter((i) => i.type === "TASK" && i.startDay === null && !s.done.isDone(i.id, NO_DAY)))
+  return sortTodos(s.items.filter((i) => isTodo(i) && !s.done.isDone(i.id, NO_DAY)))
     .map((item): TaskEntry => ({ item, day: null, status: "ANYTIME", missed: 0 }));
 }
 
