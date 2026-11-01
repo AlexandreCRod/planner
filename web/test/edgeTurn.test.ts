@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EDGE_HOLD, EDGE_REPEAT, EDGE_TRAVEL, EDGE_ZONE, EdgeHold, dropColumn, edgeOf, edgeZone } from "../src/ui/phone/edgeTurn.ts";
+import { EDGE_HOLD, EDGE_REPEAT, EDGE_TRAVEL, EDGE_ZONE, EdgeHold, dropColumn, edgeOf, edgeZone, holdTouch } from "../src/ui/phone/edgeTurn.ts";
 
 test("the edges of the grid, and past them, count; the middle doesn't", () => {
   assert.equal(edgeOf(100, 40, 400), 0);
@@ -90,4 +90,14 @@ test("a block lands in the column it's over, held within the days in view", () =
   assert.equal(dropColumn(2, 76, 50, 7), 4);
   assert.equal(dropColumn(2, 400, 50, 7), 6);
   assert.equal(dropColumn(2, -400, 50, 7), 0);
+});
+
+test("a held finger's moves are kept from the browser on the element itself, until the drag lets go", () => {
+  const touched = new EventTarget(); // nothing above it: as an element a turn took out of the page
+  const move = () => { const e = new Event("touchmove", { cancelable: true }); touched.dispatchEvent(e); return e.defaultPrevented; };
+  assert.equal(move(), false);
+  const release = holdTouch(touched);
+  assert.equal(move(), true);
+  release();
+  assert.equal(move(), false);
 });

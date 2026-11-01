@@ -24,7 +24,7 @@ import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
 import { type PageTurner, SWIPE_GAIN, pageTarget, spring, swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
-import { EdgeHold, dropColumn, edgeOf, edgeZone } from "./edgeTurn.ts";
+import { EdgeHold, dropColumn, edgeOf, edgeZone, holdTouch } from "./edgeTurn.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
 import { useLook } from "./looks.ts";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
@@ -213,7 +213,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
     let d: {
       id: number; chip: HTMLElement; item: Item; from: number; x0: number; y0: number; x: number; y: number; timer: number; raf: number; mouse: boolean;
       lifted: boolean; float: HTMLElement | null; cells: { el: HTMLElement; day: number; r: DOMRect }[]; over: HTMLElement | null; sliding: boolean; drop: boolean;
-      left: number; right: number; edge: EdgeHold;
+      left: number; right: number; edge: EdgeHold; target: Element; release: () => void; dimmed: HTMLElement[];
     } | null = null;
     const noScroll = (e: TouchEvent) => { if (d?.lifted && e.cancelable) e.preventDefault(); };
     const measure = () => {
@@ -244,7 +244,8 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
       frame.cancel();
       d.float?.remove();
       d.over?.classList.remove("drop");
-      d.chip.style.opacity = "";
+      for (const c of d.dimmed) c.style.opacity = "";
+      d.release();
       d = null;
       el.removeEventListener("touchmove", noScroll);
       window.removeEventListener("pointermove", onMove);
@@ -278,6 +279,8 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
       if (!d?.lifted || !d.sliding) return;
       d.sliding = false;
       measure();
+      // Back in a month it had left, the chip is a new one (and a day can show in two months).
+      for (const c of el.querySelectorAll<HTMLElement>(`.p-mchip[data-id="${d.chip.dataset.id}"][data-day="${d.from}"]`)) { c.style.opacity = ".35"; d.dimmed.push(c); }
       mark();
       if (d.drop) finish();
     };
@@ -293,6 +296,8 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
       document.body.appendChild(f);
       d.float = f;
       d.chip.style.opacity = ".35";
+      d.dimmed.push(d.chip);
+      d.release = holdTouch(d.target);
       frame(0);
       d.raf = requestAnimationFrame(watchEdge);
     };
@@ -318,7 +323,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
       if (!chip || !item) return;
       d = {
         id: e.pointerId, chip, item, from: Number(chip.dataset.day), x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, raf: 0, mouse: isMouse(e),
-        lifted: false, float: null, cells: [], over: null, sliding: false, drop: false, left: 0, right: 0, edge: new EdgeHold(),
+        lifted: false, float: null, cells: [], over: null, sliding: false, drop: false, left: 0, right: 0, edge: new EdgeHold(), target: e.target as Element, release: () => {}, dimmed: [],
         timer: window.setTimeout(() => { claimSwipe(e.pointerId); lift(); }, LONG_PRESS_MS),
       };
       el.addEventListener("touchmove", noScroll, { passive: false });
@@ -565,6 +570,11 @@ interface Gesture {
   carrier: HTMLElement | null;
   edge: EdgeHold;
   left: number; right: number;
+  /** What the finger landed on: its touches stay on it, whatever happens to it (holdTouch). */
+  target: Element;
+  release: () => void;
+  /** The grid's top when picked up, and how far it has moved since: the all-day row is taller in some ranges than in others. */
+  top0: number; shift: number;
 }
 
 interface PendingMove { series: Item; day: number; edited: Item }
@@ -727,10 +737,10 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
     return () => ro.disconnect();
   }, []);
   // A moved block keeps its dragged position until the grid has redrawn it in its new place.
-  const clearAfterRender = useRef<HTMLElement | null>(null);
+  const clearAfterRender = useRef<HTMLElement[]>([]);
   useLayoutEffect(() => {
-    const el = clearAfterRender.current;
-    if (el) { el.style.transform = ""; el.style.visibility = ""; el.classList.remove("lifted"); clearAfterRender.current = null; }
+    for (const el of clearAfterRender.current) { el.style.transform = ""; el.style.visibility = ""; el.classList.remove("lifted"); }
+    clearAfterRender.current = [];
   });
 
   // The new event's slot stays in view above the add panel.
@@ -785,7 +795,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
 
     const updateDrag = () => {
       if (!g || !g.block || !g.info) return;
-      const dy = g.dy + (el.scrollTop - g.scroll0);
+      const dy = g.dy + (el.scrollTop - g.scroll0) + g.shift;
       (g.carrier ?? g.block).style.transform = `translate3d(${g.dx}px,${dy}px,0) scale(1.03)`;
       const { p, di } = g.info;
       const px = pxRef.current;
@@ -807,7 +817,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       const b = cur.block, host = layer.current?.parentElement;
       if (cur.carrier || !b || !host) return;
       const r = b.getBoundingClientRect(), h = host.getBoundingClientRect();
-      const dy = cur.dy + (el.scrollTop - cur.scroll0);
+      const dy = cur.dy + (el.scrollTop - cur.scroll0) + cur.shift;
       const c = b.cloneNode(true) as HTMLElement;
       Object.assign(c.style, {
         left: `${r.left + r.width / 2 - h.left - cur.dx - b.offsetWidth / 2}px`, top: `${r.top + r.height / 2 - h.top - dy - b.offsetHeight / 2}px`,
@@ -816,6 +826,12 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       host.appendChild(c);
       cur.carrier = c;
       b.style.visibility = "hidden";
+    };
+
+    /** The block picked up, and the new one drawn if the days came back to it after it went. */
+    const heldBlocks = (cur: Gesture) => [...new Set([cur.block, ...el.querySelectorAll<HTMLElement>(`.pg-block[data-key="${cur.key}"]`)])].filter((b): b is HTMLElement => !!b && b !== cur.carrier);
+    const putBack = (blocks: HTMLElement[]) => {
+      for (const b of blocks) { b.style.transform = ""; b.style.visibility = ""; b.classList.remove("lifted"); }
     };
 
     // While dragging near the top or bottom edge, the grid scrolls by itself.
@@ -842,6 +858,8 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       claimSwipe(g.id);
       const box = (layer.current?.parentElement ?? el).getBoundingClientRect();
       g.left = box.left; g.right = box.right;
+      g.top0 = el.getBoundingClientRect().top;
+      g.release = holdTouch(g.target);
       feel("pickup");
       g.block.classList.add("lifted");
       el.classList.add("dragging");
@@ -874,6 +892,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       cancelAnimationFrame(g.raf);
       el.classList.remove("dragging");
       g.carrier?.remove();
+      g.release();
       g = null;
     };
 
@@ -888,7 +907,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         dx: 0, dy: 0, x: e.clientX, y: e.clientY, vt: new VelocityTracker(), sx: 0, snap: "", raf: 0, mouse: isMouse(e),
         resize: !!block && isMouse(e) && !!(e.target as HTMLElement).closest(".pg-resize"),
         flung: !isMouse(e) && performance.now() - lastScroll < 120,
-        info: null, carrier: null, edge: new EdgeHold(), left: 0, right: 0,
+        info: null, carrier: null, edge: new EdgeHold(), left: 0, right: 0, target: e.target as Element, release: () => {}, top0: 0, shift: 0,
       };
       g.vt.add(e.timeStamp, e.clientX);
       if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
@@ -928,7 +947,12 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
         moveLayers(-dir * w);
         // The new days render there, then the offset is dropped. (At once with a block in the air: it's now
         // over a different day.)
-        if (dir && g?.lifted) { flushSync(() => props.current.onStep(dir)); updateDrag(); }
+        if (dir && g?.lifted) {
+          flushSync(() => props.current.onStep(dir));
+          g.shift = g.top0 - el.getBoundingClientRect().top;
+          for (const b of heldBlocks(g)) b.style.visibility = "hidden";
+          updateDrag();
+        }
         else if (dir) props.current.onStep(dir);
         else moveLayers(0);
       };
@@ -962,18 +986,14 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
           if (!dMin && !dDay) {
             // Not moved: back into place.
             if (!cur.carrier) cur.block.animate([{ transform: cur.block.style.transform }, { transform: "none" }], { duration: 160, easing: "ease-out" });
-            cur.block.style.transform = "";
-            cur.block.style.visibility = "";
-            cur.block.classList.remove("lifted");
+            putBack(heldBlocks(cur));
           } else {
             const edited = moved(p.o, dDay, dMin);
             if (isRecurring(p.o.item)) {
-              cur.block.style.transform = "";
-              cur.block.style.visibility = "";
-              cur.block.classList.remove("lifted");
+              putBack(heldBlocks(cur));
               setPendingMove({ series: p.o.item, day: p.o.day, edited });
             } else {
-              clearAfterRender.current = cur.block;
+              clearAfterRender.current = heldBlocks(cur);
               saveItem(edited);
             }
           }
@@ -1002,7 +1022,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
       if (!g || e.pointerId !== g.id) return;
       // The browser took the finger for scrolling.
       if (g.swiping) settleSwipe(g.sx, 0);
-      if (g.lifted && g.block) { g.block.style.transform = ""; g.block.style.visibility = ""; g.block.classList.remove("lifted"); setGhost(null); }
+      if (g.lifted) { putBack(heldBlocks(g)); setGhost(null); }
       if (g.resize) { if (g.block) g.block.style.height = ""; setGhost(null); }
       end();
     };

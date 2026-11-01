@@ -43,6 +43,18 @@ export class EdgeHold {
   }
 }
 
+/**
+ * Keeps the browser from taking a held finger for a scroll (310). The listener goes on [target], what the
+ * finger landed on, not on the grid around it: a turn takes that element out of the page once its days have
+ * gone, the touch stays on it all the same, and from outside the page its moves reach nothing above it. Left
+ * unanswered, the browser scrolls the page and cancels the drag. Returns how to let go.
+ */
+export function holdTouch(target: EventTarget): () => void {
+  const hold = (e: Event) => { if (e.cancelable) e.preventDefault(); };
+  target.addEventListener("touchmove", hold, { passive: false });
+  return () => target.removeEventListener("touchmove", hold);
+}
+
 /** The column in view a block lands in: taken from column [di], dragged [dx] px, columns [w] px wide. */
 export function dropColumn(di: number, dx: number, w: number, columns: number): number {
   return Math.max(0, Math.min(columns - 1, di + Math.round(dx / w)));
