@@ -419,7 +419,7 @@ function TodosButton({ s, onClick }: { s: Snapshot; onClick: () => void }) {
     <span className="p-menu-anchor" ref={anchor}>
       <button className="p-icon p-badged" aria-label={number ? `To-dos, ${number.count} ${PRIORITIES[number.level].toLowerCase()}` : "To-dos"}
         data-no-tip={items.length ? "" : undefined} {...press} onKeyDown={onKeyDown} onClick={() => { if (!fired()) onClick(); }}>
-        <MIcon name="oCheckBox" />
+        <MIcon name="oTaskAlt" />
         {number && <span className="p-badge" aria-hidden="true" style={{ background: priorityColor(number.level) }}>{number.count > 99 ? "99+" : number.count}</span>}
       </button>
       <DropdownMenu open={menu} onClose={() => setMenu(false)} items={items} />
