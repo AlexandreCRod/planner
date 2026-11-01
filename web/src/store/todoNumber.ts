@@ -1,5 +1,6 @@
 // The cleared to-dos number (304; the rules are in domain/todoNumber.ts) as one synced record, so clearing
-// it on one device clears it everywhere. Kind "todoNumber": any device writes it and the last change wins.
+// it on one device clears it everywhere. Kind "todoNumber": any device writes it. If the phone and the PC both
+// change it between syncs the phone wins, as with any record (server/src/records.ts clientWins), not the later.
 // It needs nothing new of the Worker, and an older app just carries the record without reading it.
 import { type ClearedTodos, clearedNow, isTodo } from "../domain/todoNumber.ts";
 import type { Item } from "../domain/types.ts";
