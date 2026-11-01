@@ -6,6 +6,13 @@
 import type { Item } from "./types.ts";
 
 /**
+ * Whether a note's editor holds its saves: it trashed the note itself ([marked]) and the note [stored] is
+ * still in the trash, or gone. Undo takes it out, so an editor kept open saves again; a note trashed
+ * elsewhere isn't marked, and typing here still saves.
+ */
+export const saveHeld = (marked: boolean, stored: { deletedAt: number | null } | undefined) => marked && stored?.deletedAt !== null;
+
+/**
  * The parts of a note its editor can change. [tags] is the names, space separated. (Notes no longer have
  * a place: a place stored on an older note is never written here, so it's kept as it is.)
  */

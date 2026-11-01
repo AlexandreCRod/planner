@@ -4,7 +4,7 @@
 // edit that came from another device while the note was open stays. Such an edit shows in the editor
 // as it arrives, unless the user has changed that part here (then theirs is kept and saved).
 import { useEffect, useRef, useState } from "react";
-import { type NoteBaseline, type NoteDraft, afterSave, baselineOf, draftOf, localChanges, noteToSave, rebase } from "../../domain/noteDraft.ts";
+import { type NoteBaseline, type NoteDraft, afterSave, baselineOf, draftOf, localChanges, noteToSave, rebase, saveHeld } from "../../domain/noteDraft.ts";
 import { type Item, newItem } from "../../domain/types.ts";
 import { allRecords, deleteIfEmpty, isEmptyNote, onFlush, saveItem, saveVersion, type Snapshot, snapshot, useSnapshot } from "../../store/store.ts";
 import { type RichEditorHandle, useEditorHtml } from "./RichEditor.tsx";
@@ -50,6 +50,9 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     if (h !== null) baseline.current = { ...baseline.current, shownContent: h };
   }, [content]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** This editor moved its note to the trash, and it's still there. */
+  const held = () => saveHeld(deleted.current, storedItem(latest.current.noteId));
+
   /** The editor now (content null while text from the store is still on its way in). */
   const current = () => {
     const l = latest.current;
@@ -79,9 +82,9 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     adopt(saved);
     return saved;
   };
-  const scheduleSave = () => { clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (!deleted.current) save(); }, 600); };
+  const scheduleSave = () => { clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (!held()) save(); }, 600); };
   // Put away: saved at once. Also catches text changed without an input event (some keyboards' corrections).
-  useEffect(() => onFlush(() => { if (!deleted.current) save(); }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => onFlush(() => { if (!held()) save(); }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A change to this note from elsewhere (sync): shown, except where the user has changed it here.
   useEffect(() => {
@@ -106,7 +109,7 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
   // On leaving: saved if changed; a version kept if the text changed; the note dropped if it ended up empty.
   useEffect(() => { leaving.current = false; return () => {
     clearTimeout(timer.current);
-    if (deleted.current) return;
+    if (held()) return;
     leaving.current = true;
     const savedId = save();
     if (!savedId) return;
@@ -137,7 +140,7 @@ export function useNoteSession({ id, day, newTitle }: { id: number | null; day: 
     /** For the editor's onChange. */
     changed: scheduleSave,
     save,
-    /** The note was moved to the trash: nothing more is saved. */
+    /** The note was moved to the trash: nothing more is saved, unless Undo brings it back. */
     markDeleted: () => { deleted.current = true; clearTimeout(timer.current); },
   };
 }
