@@ -6,15 +6,15 @@
 // finger lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
 // opens over the list (back closes it); in a wide window the list and the card sit side by side. A swipe turns the tab. Weight's
 // top bar has "+ Weigh in", and a weigh-in tapped (a dot, or a row of the recent ones) opens to change or
-// delete it, or hide an imported one. Body (251, once the Weight and Sleep tabs): weight; the nights, resting HR
-// and HRV, from sleep.json and the watch; VO2 max and steps; and, folded under More, blood oxygen, breathing
-// rate and body fat when there are any. The numbers come from domain/trends.ts, domain/sleep.ts and
-// domain/body.ts; nothing here is stored but the user's weigh-ins and what they hid.
+// delete it, or hide an imported one. Body (251, a grid of small charts since 270): weight across the top, then
+// a tile for each of the nights, resting HR, steps, body fat, HRV, VO2 max, blood oxygen and breathing rate, each
+// opening its card; those with no reading for 14 days fold under "Not updating". The numbers come from
+// domain/trends.ts, domain/sleep.ts and domain/body.ts; nothing here is stored but the user's weigh-ins and what they hid.
 import { type ReactNode, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
-import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths } from "../../domain/body.ts";
+import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../../domain/body.ts";
 import {
   type BodyWeight, type LiftPoint, bodyWeights, healthWeighIns, hiddenId, liftPoints, targetRpeOf, weeklyChange,
   weeklyHardSets, weightTrend,
@@ -28,8 +28,8 @@ import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { NO_SWIPE, spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
-import { type Pt, type Series, Chart, GYM, GYM_DIM, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
-import { ChartCard, Empty, Head, from, join } from "./progressParts.tsx";
+import { type Pt, type Series, Chart, GREY, GYM, GYM_DIM, MiniChart, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
+import { ChartCard, Empty, Head, from, join, tapProps } from "./progressParts.tsx";
 import { CardioCards, CardioList, cardioTitle, useCardio } from "./TrainingCardio.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
@@ -60,11 +60,9 @@ const AVG_GAP = 7, TREND_GAP = 14;
 // ---------- The page ----------
 
 /** One row of a tab's list: its name and line under it, the sparkline, the number and the line under it. */
-interface Row { id: string; name: string; sub: string; spark: ReactNode; value: string; valueSub: string; group: string; open?: boolean; more?: boolean }
-/** A row with nothing to show yet: its name and why, not tappable. */
-const emptyRow = (id: string, group: string, name: string, sub: string): Row => ({ id, group, name, sub, spark: null, value: "–", valueSub: "", open: false });
+interface Row { id: string; name: string; sub: string; spark: ReactNode; value: string; valueSub: string; group: string }
 
-// Body's More (blood oxygen, breathing rate, body fat) stays open or folded until the app restarts.
+// Body's "Not updating" stays open or folded until the app restarts.
 let keptMore = false;
 
 export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: LoadedPlan; query: URLSearchParams; planId: string | null }) {
@@ -104,6 +102,7 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   const list = <TabsPager index={index} setIndex={setIndex}>
     {(k, i) => Math.abs(i - index) <= 1 && (k === "runs"
       ? <CardioList tr={tr} lp={lp} t={t} st={cardio} sel={wide && k === tab ? card : null} onOpen={open} />
+      : k === "body" ? <BodyGrid tr={tr} t={t} sel={wide && k === tab ? card : null} onOpen={open} />
       : <TabPage tr={tr} lp={lp} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />)}
   </TabsPager>;
 
@@ -174,38 +173,25 @@ function TabsPager({ index, setIndex, children }: { index: number; setIndex: (i:
 
 const clampTab = (i: number) => Math.max(0, Math.min(TABS.length - 1, i));
 
-/** One tab's list: its rows under their group headings ([sel]: the row whose card is open beside it). */
+/** The Lifts tab's list, or Nutrition's word: rows under their group headings ([sel]: the row whose card is open beside it). */
 function TabPage({ tr, lp, tab, t, sel, onOpen }: { tr: Training; lp: LoadedPlan; tab: Tab; t: number; sel: string | null; onOpen: (id: string) => void }) {
-  const rows = useMemo(() => rowsOf(tr, lp, tab, t), [tr, lp, tab, t]);
-  const [more, setMore] = useState(() => keptMore || rows.some((r) => r.more && r.id === sel));
-  const toggleMore = () => { feel("tick"); keptMore = !more; setMore(!more); };
-  const rowView = (r: Row) => (
-    <div className={`pg-row ${sel === r.id ? "sel" : ""} ${r.open === false ? "still" : ""}`} role={r.open === false ? undefined : "button"}
-      onClick={r.open === false ? undefined : () => onOpen(r.id)}>
-      <div className="n"><b>{r.name}</b><span>{r.sub}</span></div>
-      {r.spark}
-      <div className="v">{r.value}<span>{r.valueSub}</span></div>
-    </div>
-  );
+  const rows = useMemo(() => (tab === "lifts" ? liftRows(tr, rangeStart("3M", t)) : []), [tr, tab, t]);
+  void lp;
   let group = "";
   return <>
     {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
-    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>{"Lifts show here once sets are logged."}</EmptyHint>}
+    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>Lifts show here once sets are logged.</EmptyHint>}
     {rows.map((r) => {
       const head = r.group !== group ? r.group : null;
-      const first = group === "" && tab !== "nutrition";
+      const first = group === "";
       group = r.group;
-      if (r.more && head) {
-        // More: a heading that folds its rows away (shut until opened).
-        return <div key={r.id}>
-          <button className="pg-group pg-more" aria-expanded={more} onClick={toggleMore}><span>{head}</span><MIcon name={more ? "fExpandLess" : "fExpandMore"} size={20} /></button>
-          {more && rowView(r)}
-        </div>;
-      }
-      if (r.more && !more) return null;
       return <div key={r.id}>
         {head && <div className={`pg-group ${first ? "first" : ""}`}>{head}</div>}
-        {rowView(r)}
+        <div className={`pg-row ${sel === r.id ? "sel" : ""}`} role="button" onClick={() => onOpen(r.id)}>
+          <div className="n"><b>{r.name}</b><span>{r.sub}</span></div>
+          {r.spark}
+          <div className="v">{r.value}<span>{r.valueSub}</span></div>
+        </div>
       </div>;
     })}
     <div className="p-endspace" />
@@ -228,13 +214,6 @@ function CardView({ tr, lp, tab, id, t, cardio, onOpen }: { tr: Training; lp: Lo
     if (id in BODY) return <BodyCards tr={tr} def={BODY[id]} t={t} />;
   }
   return null;
-}
-
-function rowsOf(tr: Training, lp: LoadedPlan, tab: Tab, t: number): Row[] {
-  const since = rangeStart("3M", t);
-  if (tab === "lifts") return liftRows(tr, since);
-  if (tab === "body") return bodyRows(tr, since, t);
-  return [];
 }
 
 /** The range a card shows: its first day (null: from the first reading) and the axis's days. */
@@ -399,20 +378,6 @@ function weightData(tr: Training) {
   return { all, trend: weightTrend(all) };
 }
 
-function weightRows(tr: Training, since: number | null, t: number): Row[] {
-  const { all, trend } = weightData(tr);
-  const rows: Row[] = [];
-  if (trend.length) {
-    const recent = inRange(trend, since), last = trend[trend.length - 1], wk = weeklyChange(trend), w = all[all.length - 1];
-    rows.push({
-      // The trend and its weekly change, with the last weigh-in under the name (250).
-      id: "w", group: "Weight", name: "Trend", sub: lastWeighInLine(w.kg, w.day, t),
-      spark: <Spark values={recent.map((p) => p.trend)} days={recent.map((p) => p.day)} gap={TREND_GAP} color={WEIGHT} />, value: last.trend.toFixed(1), valueSub: wk !== null ? `${signedTenths(wk)} kg/wk` : "",
-    });
-  }
-  return rows;
-}
-
 /** A day's weigh-in times for its reading: "08:12", "08:12 & 19:40", else "3 weigh-ins". Blank when none has a time. */
 function timesOf(list: readonly BodyWeight[]): string {
   if (list.length > 2) return `${list.length} weigh-ins`;
@@ -483,26 +448,6 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
 const withField = (nights: readonly SleepNight[], field: SleepField) => nights.filter((n) => n[field] !== null);
 /** "last night" ("this morning") for today's, else its date. */
 const whenOf = (day: number, t: number, today: string) => (day === t ? today : formatDate(day));
-
-function sleepRows(tr: Training, t: number): Row[] {
-  const rows: Row[] = [];
-  const add = (id: string, name: string, field: SleepField, today: string, value: (v: number) => string, bars = false) => {
-    const list = withField(tr.sleep, field);
-    const last = list[list.length - 1];
-    if (!last) { rows.push(emptyRow(id, "Sleep", name, "Nothing from the watch yet")); return; }
-    const avg = avg7(tr.sleep, field, last.day);
-    const recent = list.slice(bars ? -10 : -14);
-    rows.push({
-      id, group: "Sleep", name, sub: whenOf(last.day, t, today),
-      spark: <Spark bars={bars} values={recent.map((n) => n[field]!)} days={recent.map((n) => n.day)} gap={AVG_GAP} color={SLEEP} />,
-      value: value(last[field]!), valueSub: avg !== null ? `avg ${value(avg)}` : "",
-    });
-  };
-  add("sl", "Sleep", "totalMin", "last night", fmtSleep, true);
-  add("rh", "Resting heart rate", "restingHr", "this morning", (v) => String(Math.round(v)));
-  add("hrv", "HRV", "hrvMs", "last night", (v) => `${Math.round(v)} ms`);
-  return rows;
-}
 
 /** Where a sleep number came from, for its reading: sleep.json's "from Garmin"; the watch's own needs no word. */
 const fromSleep = (s: SleepSource | null) => (s === "garmin" ? from(s) : "");
@@ -580,25 +525,25 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
 
 /** A Body kind's card id, names, colours and how its numbers are written. */
 interface BodyDef {
-  kind: BodyKind; title: string; name: string; group: string; more?: boolean; color: string; dim: string;
+  kind: BodyKind; title: string; name: string; color: string; dim: string;
   fmt: (v: number) => string;
   /** After the headline's number. */
   unit: string;
-  /** The row's second number: the 7-day average, or the change over the row's 3 months. */
+  /** The tile's second number: the 7-day average, or the change over 3 months. */
   sub: "avg" | "change";
   foot: string;
 }
 const RUN_SOFT = `${RUN}73`; // the run colour, see-through: steps' daily bars under their 7-day line
 const BODY: Record<string, BodyDef> = {
-  vo2: { kind: "vo2", title: "VO2 max", name: "VO2 max", group: "Fitness", color: RUN, dim: RUN_SOFT, fmt: (v) => v.toFixed(1), unit: "ml/kg/min", sub: "change",
+  vo2: { kind: "vo2", title: "VO2 max", name: "VO2 max", color: RUN, dim: RUN_SOFT, fmt: (v) => v.toFixed(1), unit: "ml/kg/min", sub: "change",
     foot: "Garmin's estimate, from runs with heart rate. It moves slowly: look at months, not days." },
-  steps: { kind: "steps", title: "Steps", name: "Steps", group: "Fitness", color: RUN, dim: RUN_SOFT, fmt: fmtSteps, unit: "steps", sub: "avg",
+  steps: { kind: "steps", title: "Steps", name: "Steps", color: RUN, dim: RUN_SOFT, fmt: fmtSteps, unit: "steps", sub: "avg",
     foot: "Today's count grows through the day." },
-  spo2: { kind: "spo2", title: "Blood oxygen (overnight)", name: "Blood oxygen", group: "More", more: true, color: SLEEP, dim: SLEEP_DIM, fmt: (v) => v.toFixed(1), unit: "%", sub: "avg",
+  spo2: { kind: "spo2", title: "Blood oxygen (overnight)", name: "Blood oxygen", color: SLEEP, dim: SLEEP_DIM, fmt: (v) => v.toFixed(1), unit: "%", sub: "avg",
     foot: "The watch's average while you sleep. Most nights sit between 94 and 99%." },
-  br: { kind: "breath", title: "Breathing rate", name: "Breathing rate", group: "More", more: true, color: SLEEP, dim: SLEEP_DIM, fmt: (v) => v.toFixed(1), unit: "breaths/min", sub: "avg",
+  br: { kind: "breath", title: "Breathing rate", name: "Breathing rate", color: SLEEP, dim: SLEEP_DIM, fmt: (v) => v.toFixed(1), unit: "breaths/min", sub: "avg",
     foot: "Breaths a minute, the watch's average. A rise of 2 or more over your usual can mean you're run down." },
-  fat: { kind: "fat", title: "Body fat", name: "Body fat", group: "More", more: true, color: WEIGHT, dim: WEIGHT_DIM, fmt: (v) => v.toFixed(1), unit: "%", sub: "change",
+  fat: { kind: "fat", title: "Body fat", name: "Body fat", color: WEIGHT, dim: WEIGHT_DIM, fmt: (v) => v.toFixed(1), unit: "%", sub: "change",
     foot: "From a scale that writes it to Health Connect. A scale's body fat is rough: follow the line, not a day." },
 };
 /** What a reading from today is called: blood oxygen is the night's. */
@@ -609,27 +554,118 @@ const rowValue = (b: BodyDef, v: number) => `${b.fmt(v)}${b.unit === "%" ? "%" :
 /** A Body kind's readings (one per day) from the watch's days and sleep.json. */
 const seriesOf = (tr: Training, kind: BodyKind) => bodySeries(kind, tr.healthDays, tr.nights);
 
-function bodyRows(tr: Training, since: number | null, t: number): Row[] {
-  const rows: Row[] = [];
-  rows.push(weightRows(tr, since, t)[0] ?? emptyRow("w", "Weight", "Trend", "No weigh-ins yet"));
-  rows.push(...sleepRows(tr, t));
-  for (const [id, b] of Object.entries(BODY)) {
-    const list = seriesOf(tr, b.kind);
-    const last = list[list.length - 1];
-    if (!last) { if (!b.more) rows.push(emptyRow(id, b.group, b.name, "Nothing from the watch yet")); continue; } // More's rows only with data
-    const recent = inRange(list, since), sparkPts = b.sub === "avg" ? list.slice(-14) : recent;
-    let valueSub = "";
-    if (b.sub === "avg") { const a = avgNow(b.kind, list, t); if (a !== null) valueSub = `avg ${rowValue(b, a)}`; }
-    else if (recent.length > 1) valueSub = `${signedTenths(last.v - recent[0].v)} in 3M`;
-    rows.push({
-      id, group: b.group, more: b.more, name: b.name, sub: last.day === t ? todayWord(b.kind) : shortWhen(last.day, t),
-      // Daily readings: the last two weeks (as the sleep rows); slow ones (VO2 max, body fat): the row's 3 months.
-      spark: b.kind === "steps" ? <Spark bars values={list.slice(-10).map((p) => p.v)} color={b.color} />
-        : <Spark values={sparkPts.map((p) => p.v)} days={sparkPts.map((p) => p.day)} gap={b.sub === "avg" ? AVG_GAP : undefined} color={b.color} />,
-      value: rowValue(b, last.v), valueSub,
+// ---------- Body's tiles (270) ----------
+
+/** A tile: what it says, its last reading's day (null: none yet) and its small chart, in colour or grey when stale. */
+interface BodyTile { id: string; name: string; value: string; unit: string; sub: string; last: number | null; chart: (stale: boolean) => ReactNode }
+
+const DAILY = 14, MONTH = 30, TWO_MONTHS = 60, QUARTER = 90, TILE_H = 52;
+
+const lineTile = (pts: readonly { day: number; v: number }[], color: string, t: number, days: number, gap: number) => (stale: boolean) => {
+  const last = pts[pts.length - 1].day, domain = tileDays(last, t, days);
+  return <MiniChart kind="line" pts={pts.filter((p) => p.day >= domain[0])} domain={domain} color={stale ? GREY : color} height={stale ? 44 : TILE_H} gap={gap} />;
+};
+
+/** Sleep, resting HR, steps, body fat, HRV, VO2 max, blood oxygen and breathing rate; those with no data yet only for the first three. */
+function bodyTiles(tr: Training, t: number): BodyTile[] {
+  const out: BodyTile[] = [];
+  const none = (id: string, name: string) => out.push({ id, name, value: "–", unit: "", sub: "Nothing from the watch yet", last: null, chart: () => null });
+  const nights = (id: string, name: string, field: SleepField, unit: string, today: string, fmt: (v: number) => string, chart: BodyTile["chart"] | null, must: boolean) => {
+    const list = withField(tr.sleep, field), last = list[list.length - 1];
+    if (!last) { if (must) none(id, name); return; }
+    const avg = avg7(tr.sleep, field, last.day);
+    out.push({
+      id, name, value: fmt(last[field]!), unit, sub: join(last.day === t ? today : shortWhen(last.day, t), avg !== null && `avg ${fmt(avg)}`), last: last.day,
+      chart: chart ?? lineTile(list.map((n) => ({ day: n.day, v: n[field]! })), SLEEP, t, id === "rh" ? MONTH : TWO_MONTHS, AVG_GAP),
     });
-  }
-  return rows;
+  };
+  const sleepList = withField(tr.sleep, "totalMin");
+  const sleepLast = sleepList[sleepList.length - 1];
+  nights("sl", "Sleep", "totalMin", "", "last night", fmtSleep, sleepLast ? (stale) => {
+    const domain = tileDays(sleepLast.day, t, DAILY - 1), avg = avg7(tr.sleep, "totalMin", sleepLast.day);
+    return <MiniChart kind="bars" pts={sleepList.filter((n) => n.day >= domain[0]).map((n) => ({ day: n.day, v: n.totalMin! }))} domain={domain} color={stale ? GREY : SLEEP} height={stale ? 44 : TILE_H} avg={avg} />;
+  } : null, true);
+  nights("rh", "Resting heart rate", "restingHr", "bpm", "this morning", (v) => String(Math.round(v)), null, true);
+  const kind = (id: string, unit: string, days: number) => {
+    const b = BODY[id], list = seriesOf(tr, b.kind), last = list[list.length - 1];
+    if (!last) { if (id === "steps") none(id, b.name); return; }
+    const a = avgNow(b.kind, list, t), recent = inRange(list, rangeStart("3M", t));
+    const when = last.day === t ? todayWord(b.kind) : shortWhen(last.day, t);
+    const more = b.sub === "avg" ? a !== null && `avg ${b.fmt(a)}` : recent.length > 1 && `${signedTenths(last.v - recent[0].v)} in 3M`;
+    out.push({
+      id, name: b.name, value: b.fmt(last.v), unit, sub: join(when, more), last: last.day,
+      chart: id === "steps"
+        ? (stale) => {
+          const domain = tileDays(last.day, t, DAILY - 1);
+          return <MiniChart kind="bars" pts={list.filter((p) => p.day >= domain[0])} domain={domain} color={stale ? GREY : b.color} height={stale ? 44 : TILE_H} avg={a} dimLast={last.day === t} />;
+        }
+        : lineTile(list, b.color, t, days, b.sub === "avg" ? AVG_GAP : Infinity),
+    });
+  };
+  kind("steps", "", DAILY);
+  kind("fat", "%", QUARTER);
+  nights("hrv", "HRV", "hrvMs", "ms", "last night", (v) => String(Math.round(v)), null, false);
+  kind("vo2", "", QUARTER);
+  kind("spo2", "%", MONTH);
+  kind("br", "/ min", MONTH);
+  return out;
+}
+
+/** Weight across the top: the trend with each weigh-in over 3 months, the weekly change and the last weigh-in. */
+function WeightTile({ tr, t, sel, onOpen }: { tr: Training; t: number; sel: boolean; onOpen: () => void }) {
+  const { all, trend } = useMemo(() => weightData(tr), [tr]);
+  const last = trend[trend.length - 1];
+  if (!last) return <div className="pg-tile pg-tile-wide"><div className="a">Weight</div><div className="b">–</div><div className="c">No weigh-ins yet</div></div>;
+  const since = rangeStart("3M", t), wk = weeklyChange(trend), w = all[all.length - 1];
+  return (
+    <div className={`pg-tile pg-tile-wide ${sel ? "sel" : ""}`} {...tapProps(onOpen)}>
+      <div className="a pg-tile-top"><span>Weight</span><span>3 months</span></div>
+      <div className="pg-tile-big"><span className="b">{last.trend.toFixed(1)} <small>kg trend</small></span>{wk !== null && <span className="pg-hchip">{signedTenths(wk)} kg / week</span>}</div>
+      <MiniChart kind="line" pts={inRange(trend, since).map((p) => ({ day: p.day, v: p.trend }))} domain={[since ?? last.day, t]} color={WEIGHT} height={96} gap={TREND_GAP}
+        dots={inRange(all, since).map((x) => ({ day: x.day, v: x.kg }))} dotColor={WEIGHT_DIM} />
+      <div className="c">{lastWeighInLine(w.kg, w.day, t)}</div>
+    </div>
+  );
+}
+
+/** The four the watch doesn't send (Garmin's export only): they get the mockup's words; anything else stale, plainer ones. */
+const EXPORT_ONLY = new Set(["hrv", "vo2", "spo2", "br"]);
+
+/** The Body tab (270, mockup B): a grid of small charts; each tile opens the card the row used to. */
+function BodyGrid({ tr, t, sel, onOpen }: { tr: Training; t: number; sel: string | null; onOpen: (id: string) => void }) {
+  const { fresh, stale, since } = useMemo(() => splitStale(bodyTiles(tr, t), t), [tr, t]);
+  const [more, setMore] = useState(() => keptMore || stale.some((x) => x.id === sel));
+  const toggle = () => { feel("tick"); keptMore = !more; setMore(!more); };
+  const tile = (x: BodyTile, old: boolean) => {
+    const shown = x.last !== null;
+    return (
+      <div key={x.id} className={`pg-tile pg-btile ${old ? "dim" : ""} ${sel === x.id ? "sel" : ""}`} {...(shown ? tapProps(() => onOpen(x.id)) : {})}>
+        <div className="a">{x.name}</div>
+        <div className="b">{x.value}{x.unit && <> <small>{x.unit}</small></>}</div>
+        <div className="c">{old ? `last ${dayMonth(x.last!, t)}` : x.sub}</div>
+        {shown && x.chart(old)}
+      </div>
+    );
+  };
+  return <>
+    <WeightTile tr={tr} t={t} sel={sel === "w"} onOpen={() => onOpen("w")} />
+    <div className="pg-tiles">{fresh.map((x) => tile(x, false))}</div>
+    {stale.length > 0 && <>
+      <button className="pg-group pg-more pg-stale" aria-expanded={more} onClick={toggle}>
+        <span>Not updating · {stale.length}</span><MIcon name={more ? "fExpandLess" : "fExpandMore"} size={20} />
+        <span className="r">since {dayMonth(since!, t)}</span>
+      </button>
+      {more && <>
+        <div className="pg-stalenote"><MIcon name="oInfo" size={16} />
+          <span>{stale.every((x) => EXPORT_ONLY.has(x.id))
+            ? "From your Garmin export. Garmin doesn't send these to Health Connect; they move back up if new readings arrive."
+            : "No new readings for two weeks or more; they move back up when new readings arrive."}</span>
+        </div>
+        <div className="pg-tiles">{stale.map((x) => tile(x, true))}</div>
+      </>}
+    </>}
+    <div className="p-endspace" />
+  </>;
 }
 
 /**

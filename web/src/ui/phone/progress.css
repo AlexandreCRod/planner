@@ -151,3 +151,22 @@
 .phone .pg-setrow .tx small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .pg-toprow ~ .pg-card .pg-hv { font-size: 26px; line-height: 34px; }
 .phone :is(.pg-row, .pg-hd) .tr-bub { background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); }
+/* Body (270, mockup B): weight across the top, then tiles of two; a tile's chart is the shape only. */
+.phone .pg-tile[role="button"] { cursor: pointer; transition: background-color .15s; }
+.phone .pg-tile[role="button"]:active, .phone .pg-tile.sel { background: var(--p-sec-container); }
+.phone .pg-tile-wide { margin: 8px 0; padding: 10px 12px 8px; }
+.phone .pg-tile-top { display: flex; justify-content: space-between; }
+.phone .pg-tile-big { display: flex; align-items: baseline; gap: 8px; }
+.phone .pg-tile-big .b { font-size: 24px; line-height: 32px; }
+.phone .pg-tile-big .pg-hchip { padding: 2px 8px; font-size: 12px; }
+.phone .pg-tile-wide .pg-mchart { margin-top: 4px; }
+.phone .pg-tile-wide .c { margin-top: 4px; }
+.phone .pg-btile { padding: 10px 10px 8px; }
+.phone .pg-btile.dim { opacity: .55; }
+.phone .pg-btile .pg-mchart { margin-top: 6px; }
+.phone .pg-mchart svg { display: block; overflow: visible; }
+.phone .pg-mring { stroke: var(--p-sc-low, var(--surface-2)); }
+.phone .pg-stale { margin-top: 20px; }
+.phone .pg-stale .r { margin-left: auto; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.phone .pg-stalenote { display: flex; gap: 6px; align-items: flex-start; margin: 2px 0 8px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-stalenote svg { flex: none; }

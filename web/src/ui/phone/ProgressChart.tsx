@@ -238,6 +238,41 @@ export function Spark({ values, color, bars = false, invert = false, days, gap =
   );
 }
 
+/**
+ * A Body tile's small chart (270): the shape only, spaced by time over [domain]. Not read by touch: a tap on the
+ * tile opens its card, a swipe turns the tab. A line (breaking over more than [gap] days, the last reading
+ * ringed, [dots] under it), or a bar per day with [avg] dashed; [dimLast]: the last bar is still filling.
+ */
+export function MiniChart({ kind, pts, domain, color, height, gap = Infinity, dots, dotColor, avg, dimLast = false }: {
+  kind: "line" | "bars"; pts: readonly { day: number; v: number }[]; domain: [number, number]; color: string; height: number; gap?: number;
+  dots?: readonly { day: number; v: number }[]; dotColor?: string; avg?: number | null; dimLast?: boolean;
+}) {
+  const [box, w] = useWidth<HTMLDivElement>();
+  const all = [...pts, ...(dots ?? [])].map((p) => p.v);
+  const bars = kind === "bars";
+  const lo = bars ? 0 : Math.min(...all), hi = Math.max(...all, avg ?? -Infinity);
+  const x = scale(domain[0], domain[1] + (bars ? 1 : 0), bars ? 1 : 3, Math.max(4, w - (bars ? 1 : 6)));
+  const y = scale(lo, hi === lo ? lo + 1 : hi, height - (bars ? 1 : 5), bars ? 2 : 5);
+  const bw = Math.max(2, Math.min(14, x(domain[0] + 1) - x(domain[0]) - 2));
+  const end = pts[pts.length - 1];
+  return (
+    <div className="pg-mchart" ref={box}>
+      {w > 0 && pts.length > 0 && (
+        <svg width={w} height={height} aria-hidden>
+          {dots?.map((p, i) => <circle key={i} cx={x(p.day)} cy={y(p.v)} r={2} fill={dotColor} />)}
+          {avg != null && <line x1={0} x2={w} y1={y(avg)} y2={y(avg)} stroke={GREY} strokeWidth={1} strokeDasharray="3 3" />}
+          {bars
+            ? pts.map((p, i) => <rect key={i} x={x(p.day + 0.5) - bw / 2} y={y(p.v)} width={bw} height={Math.max(1, y(0) - y(p.v))} rx={Math.min(3, bw / 2)} fill={color} fillOpacity={dimLast && i === pts.length - 1 ? 0.45 : undefined} />)
+            : <>
+              {pts.length > 1 && <path d={pts.map((p, i) => `${i && p.day - pts[i - 1].day <= gap ? "L" : "M"}${x(p.day)},${y(p.v)}`).join("")} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+              <circle cx={x(end.day)} cy={y(end.v)} r={3.5} fill={color} className="pg-mring" strokeWidth={2} />
+            </>}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 /** 1M · 3M · 6M · 1Y · All, or the [options] given (Cardio's add 1W). */
 export function RangeSwitch<K extends string = RangeKey>({ value, onChange, options = RANGES as unknown as [K, string][] }: { value: K; onChange: (k: K) => void; options?: [K, string][] }) {
   return <div className="pg-range"><Segmented value={value} options={options} onChange={(k) => { feel("tick"); onChange(k); }} /></div>;

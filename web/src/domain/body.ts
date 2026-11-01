@@ -77,8 +77,29 @@ export function shortWhen(day: number, today: number): string {
   return `${a.d} ${monthShort(a.m)}${a.y !== b.y ? ` ${a.y}` : ""}`;
 }
 
-/** The weight row's line (250): "Last 82.4 kg · Wed". */
-export const lastWeighInLine = (kg: number, day: number, today: number) => `Last ${kg.toFixed(1)} kg · ${shortWhen(day, today)}`;
+/** The weight tile's line (250, 270): "Last weigh-in 82.4 · Wed". */
+export const lastWeighInLine = (kg: number, day: number, today: number) => `Last weigh-in ${kg.toFixed(1)} · ${shortWhen(day, today)}`;
+
+/** Without a reading for this many days a Body tile is "Not updating" (270: room for a holiday without the watch). */
+export const STALE_DAYS = 14;
+export const isStale = (lastDay: number, today: number) => today - lastDay >= STALE_DAYS;
+
+/**
+ * Body's tiles split (270): [fresh] stay in the grid, [stale] fold under "Not updating", each with its last
+ * reading's day and, in [since], the latest of those. A reading that arrives moves its tile back up by itself.
+ */
+export function splitStale<T extends { last: number | null }>(tiles: readonly T[], today: number): { fresh: T[]; stale: T[]; since: number | null } {
+  const stale = tiles.filter((x) => x.last !== null && isStale(x.last, today));
+  return { fresh: tiles.filter((x) => !stale.includes(x)), stale, since: stale.length ? Math.max(...stale.map((x) => x.last!)) : null };
+}
+
+/**
+ * The days a tile's small chart spans: the last [days] days to [today]; a stale one reaches back from its last
+ * reading instead, so its line still shows, stopping short of today.
+ */
+export function tileDays(last: number, today: number, days: number): [number, number] {
+  return [Math.min(today, last) - days, today];
+}
 
 /** "8,412": steps with a thousands comma. */
 export const fmtSteps = (v: number) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");

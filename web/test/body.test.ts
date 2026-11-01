@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
 import type { HealthDay } from "../src/domain/health.ts";
-import { progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths } from "../src/domain/body.ts";
+import { progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, isStale, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../src/domain/body.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -16,8 +16,8 @@ test("shortWhen: today, a weekday within six days, else the date", () => {
 });
 
 test("lastWeighInLine (250)", () => {
-  assert.equal(lastWeighInLine(82.44, d("2026-10-28"), d("2026-10-29")), "Last 82.4 kg · Wed");
-  assert.equal(lastWeighInLine(82, d("2026-10-29"), d("2026-10-29")), "Last 82.0 kg · today");
+  assert.equal(lastWeighInLine(82.44, d("2026-10-28"), d("2026-10-29")), "Last weigh-in 82.4 · Wed");
+  assert.equal(lastWeighInLine(82, d("2026-10-29"), d("2026-10-29")), "Last weigh-in 82.0 · today");
 });
 
 const day = (iso: string, f: Partial<HealthDay> = {}): HealthDay => ({
@@ -85,4 +85,23 @@ test("steps' average leaves out today's count, still growing; other kinds count 
 
 test("signedTenths: a change with its sign and always one decimal (266)", () => {
   assert.deepEqual([1, -0.4, 0, 0.04, -0.06, 2.25, -12].map(signedTenths), ["+1.0", "−0.4", "0.0", "0.0", "−0.1", "+2.3", "−12.0"]);
+});
+
+test("a tile goes to Not updating after 14 days without a reading, and comes back with a new one (270)", () => {
+  const t = d("2026-10-29");
+  assert.equal(isStale(t - 13, t), false);
+  assert.equal(isStale(t - 14, t), true);
+  const tiles = [{ id: "steps", last: t }, { id: "hrv", last: t - 17 }, { id: "vo2", last: t - 30 }, { id: "fat", last: null }];
+  const a = splitStale(tiles, t);
+  assert.deepEqual(a.fresh.map((x) => x.id), ["steps", "fat"]);    // none yet isn't stale
+  assert.deepEqual(a.stale.map((x) => x.id), ["hrv", "vo2"]);
+  assert.equal(a.since, t - 17);
+  const b = splitStale([{ id: "hrv", last: t - 2 }], t);
+  assert.deepEqual([b.fresh.length, b.stale.length, b.since], [1, 0, null]);
+});
+
+test("a stale tile's chart reaches back from its last reading, so the line shows and stops short of today", () => {
+  const t = d("2026-10-29");
+  assert.deepEqual(tileDays(t, t, 30), [t - 30, t]);
+  assert.deepEqual(tileDays(t - 60, t, 30), [t - 90, t]);
 });
