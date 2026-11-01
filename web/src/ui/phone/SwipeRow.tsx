@@ -11,6 +11,7 @@ import { useHorizontalSwipe } from "./gesture.ts";
 import { onFlush, restore, trash } from "../../store/store.ts";
 import { showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
+import { swallowClick } from "./press.ts";
 import { rowDragging } from "./rowDrag.ts";
 import { REMOVE_AT, rowsQuiet, swipeRemoves } from "./rowGuard.ts";
 
@@ -22,7 +23,11 @@ export function SwipeToTrash({ item, guarded = false, children }: { item: Item; 
   const gone = useRef(false);
   const ref = useHorizontalSwipe<HTMLDivElement>({
     // Leftwards only, on every list (241: the same way everywhere, as on Android); not while the row is dragged.
-    accept: (dx) => dx < 0 && !rowDragging() && !(guarded && rowsQuiet()),
+    accept: (dx) => {
+      // Nobody takes this swipe, so nothing drops the tap the browser may end it in: it mustn't open the row.
+      if (guarded && rowsQuiet()) { swallowClick(2000); return false; }
+      return dx < 0 && !rowDragging();
+    },
     onStart: () => {
       const f = front.current;
       if (!f || gone.current) return;
