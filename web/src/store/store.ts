@@ -456,10 +456,23 @@ function pruneVersions(now: number): number {
 
 export function saveCategory(c: Category) { put("categories", { ...c, id: c.id || newId() }); changed(); }
 
-export function deleteCategory(c: Category) {
+/**
+ * Deletes a category; its items keep going with none. Returns the undo, which sets only the category back,
+ * on those items still without one: anything else about them may have changed since (an edit synced in).
+ */
+export function deleteCategory(c: Category): () => void {
+  const had = list<Item>("items").filter((i) => i.categoryId === c.id).map((i) => i.id);
   for (const i of list<Item>("items")) if (i.categoryId === c.id) put("items", { ...i, categoryId: null, updatedAt: Date.now() });
   del("categories", c);
   changed();
+  return () => {
+    put("categories", c);
+    for (const id of had) {
+      const i = records.get(`items/${id}`) as Item | undefined;
+      if (i && i.categoryId === null) put("items", { ...i, categoryId: c.id, updatedAt: Date.now() });
+    }
+    changed();
+  };
 }
 
 export function isEmptyNote(i: Item) {
@@ -474,19 +487,6 @@ export function addImage(itemId: number, img: { hash: string; mime: string; widt
 
 export function deleteImage(img: NoteImage) { del("images", img); changed(); }
 
-/** Notes with no title, text, place or pictures are not kept. */
-export function deleteIfEmpty(id: number) {
-  const i = records.get(`items/${id}`) as Item | undefined;
-  if (i && i.type === "NOTE" && isEmptyNote(i)) deleteForever(id);
-}
-
-/**
- * Fixed ids 1-4, the same as the phone, so two fresh devices don't duplicate them. Called only once a
- * sync has finished and found no categories (main.tsx), so they can't overwrite the user's own.
- */
-export function ensureDefaults() {
-  if (list<Category>("categories").length) return;
-  const defs: Category[] = [
 /**
  * Removes a picture or video from its note, and returns the undo. Leaving a note that this emptied deletes
  * the note for good (deleteIfEmpty), which can happen while the Undo still shows: the undo then puts the
@@ -514,6 +514,19 @@ function attachedTo(key: string, r: Rec, id: number): boolean {
   return (["completions", "reminders", "itemTags", "versions", "images"] as string[]).includes(kind) && r.itemId === id;
 }
 
+/** Notes with no title, text, place or pictures are not kept. */
+export function deleteIfEmpty(id: number) {
+  const i = records.get(`items/${id}`) as Item | undefined;
+  if (i && i.type === "NOTE" && isEmptyNote(i)) deleteForever(id);
+}
+
+/**
+ * Fixed ids 1-4, the same as the phone, so two fresh devices don't duplicate them. Called only once a
+ * sync has finished and found no categories (main.tsx), so they can't overwrite the user's own.
+ */
+export function ensureDefaults() {
+  if (list<Category>("categories").length) return;
+  const defs: Category[] = [
     { id: 1, name: "Personal", color: 0xff42a5f5 | 0, defaultAlert: "REMINDER" },
     { id: 2, name: "Work", color: 0xff5c6bc0 | 0, defaultAlert: "NOTIFICATION" },
     { id: 3, name: "Health", color: 0xffef5350 | 0, defaultAlert: "ALARM" },

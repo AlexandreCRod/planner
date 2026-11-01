@@ -7,7 +7,7 @@ import { useKeep, useKeptScroll } from "./keep.ts";
 import { type ClockFormat, DATE_STYLES, type DateStyle, clockFormat, dateStyle, formatClock, formatDate, formatDateTime } from "../../domain/dates.ts";
 import { RETENTION_TEXT, TRASH_DAYS } from "../../domain/retention.ts";
 import { type AlertType, type Category, cssColor } from "../../domain/types.ts";
-import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot, withUndo } from "../../store/store.ts";
+import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCategory, useSnapshot } from "../../store/store.ts";
 import { confirmDeletes, resetLocal, restoreDeletes, serverStorageBytes, signOut, syncNow } from "../../store/sync.ts";
 import { sizeText, STORAGE_LIMIT, storageUse } from "../../domain/storage.ts";
 import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
@@ -579,7 +579,7 @@ function CategoryDialog({ c, onClose }: { c: Category; onClose: () => void }) {
   const save = () => { if (!name.trim()) return; saveCategory({ ...c, name: name.trim(), color, defaultAlert: alert }); onClose(); };
   return (
     <Dialog title={c.id === 0 ? "New category" : "Edit category"} onClose={onClose} actions={<>
-      {c.id !== 0 ? <TextButton onClick={() => { showSnackbar(`“${c.name}” deleted`, "Undo", withUndo(() => deleteCategory(c))); onClose(); }}>Delete</TextButton> : <TextButton onClick={onClose}>Cancel</TextButton>}
+      {c.id !== 0 ? <TextButton onClick={() => { showSnackbar(`“${c.name}” deleted`, "Undo", deleteCategory(c)); onClose(); }}>Delete</TextButton> : <TextButton onClick={onClose}>Cancel</TextButton>}
       <TextButton disabled={!name.trim()} onClick={save}>Save</TextButton>
     </>}>
       <div className="ps-catdialog">

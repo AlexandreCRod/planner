@@ -27,7 +27,7 @@ test("a running timer about to end is gone before it would ring", () => {
 test("Undo brings a deleted category back, on its items too", () => {
   store.saveCategory({ id: 7, name: "Work", color: 1, defaultAlert: "REMINDER" });
   const id = store.saveItem(newItem({ type: "TASK", title: "Report", categoryId: 7 }));
-  const undo = store.withUndo(() => store.deleteCategory({ id: 7, name: "Work", color: 1, defaultAlert: "REMINDER" }));
+  const undo = store.deleteCategory({ id: 7, name: "Work", color: 1, defaultAlert: "REMINDER" });
   assert.equal(store.snapshot().byId.get(id)!.categoryId, null);
   assert.equal(store.snapshot().categories.length, 0);
   undo();
