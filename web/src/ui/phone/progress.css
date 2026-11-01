@@ -150,3 +150,4 @@
 .phone .pg-setrow .tx { flex: 1; min-width: 0; font-size: 15px; line-height: 20px; color: var(--text); }
 .phone .pg-setrow .tx small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .pg-toprow ~ .pg-card .pg-hv { font-size: 26px; line-height: 34px; }
+.phone :is(.pg-row, .pg-hd) .tr-bub { background: color-mix(in srgb, var(--k) 16%, transparent); color: var(--k); }
