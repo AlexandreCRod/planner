@@ -706,7 +706,7 @@ function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNe
           <MIcon name="fRepeat" />
           {dates.length ? (
             <button className="pa-dates" onClick={() => setPicker("dates")}>
-              <span className="t-body-large pa-line">{dates.slice(0, 4).map(shortDay).join(", ") + (dates.length > 4 ? ` +${dates.length - 4}` : "")}</span>
+              <span className="t-body-large pa-line">{dates.slice(0, 4).map(shortDay).join(", ") + (dates.length > 4 ? `, ${dates.length - 4} more` : "")}</span>
             </button>
           ) : (
             <div className="pa-days">

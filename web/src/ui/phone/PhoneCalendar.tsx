@@ -420,7 +420,7 @@ const MonthGrid = memo(function MonthGrid({ s, items, first, t, selected, noteDa
                       }}>{displayTitle(o.item)}</span>
                     );
                   })}
-                  {more > 0 && <span className="p-mmore">+{more}</span>}
+                  {more > 0 && <span className="p-mmore">{more} more</span>}
                 </div>
               );
             })}
@@ -1189,7 +1189,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
                 <div key={i} className={`pg-adcol ${i % count === 0 ? "range" : ""}`}>
                   {room > 0 && <span className="pg-adspace" style={{ height: room * 17 }} />}
                   {own.map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
-                  {more > 0 && <span className="more">+{more}</span>}
+                  {more > 0 && <span className="more">{more} more</span>}
                 </div>
               );
             })}

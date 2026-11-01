@@ -37,7 +37,7 @@ const rowKey = (e: TaskEntry) => `${e.item.id}_${e.day}`;
 
 // The day being looked at, kept while moving around the app; null follows the real today.
 let viewed: number | null = null;
-/** Turns the phone's Today to a day (set while it's shown; the Tomorrow glance's "+3 more" uses it). */
+/** Turns the phone's Today to a day (set while it's shown; the Tomorrow glance's "3 more" uses it). */
 let showDayOnPhone: ((day: number) => void) | null = null;
 
 /** Tomorrow at a glance on the phone's Today: its first few items in time order, and how many more. */
@@ -195,11 +195,11 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   </>;
 }
 
-/** One line standing for what's folded away ("2 done · hidden"); a tap shows them, another hides them. */
+/** One line standing for what's folded away ("2 done ⌄"); a tap shows them, another hides them. */
 function FoldLine({ open, onToggle, text }: { open: boolean; onToggle: () => void; text: string }) {
   return (
     <button className="p-fold" aria-expanded={open} onClick={onToggle}>
-      <span>{text} · {open ? "shown" : "hidden"}</span>
+      <span>{text}</span>
       <MIcon name={open ? "fExpandLess" : "fExpandMore"} size={18} />
     </button>
   );
@@ -224,14 +224,14 @@ function WeekAhead({ s, day, t }: { s: Snapshot; day: number; t: number }) {
               <span className="p-weekday-title">{g.min !== null && !g.allDay ? `${formatTime(g.min)} ` : ""}{g.item.title || "Untitled"}</span>
             </span>
           ))}
-          {rows.length > WEEK_ROWS && <span className="p-weekday-more">+{rows.length - WEEK_ROWS} more</span>}
+          {rows.length > WEEK_ROWS && <span className="p-weekday-more">{rows.length - WEEK_ROWS} more</span>}
         </button>
       ))}
     </div>
   </>;
 }
 
-/** Tomorrow's first few items (time, colour, title) and "+3 more", which turns the page to tomorrow. */
+/** Tomorrow's first few items (time, colour, title) and "3 more", which turns the page to tomorrow. */
 function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day: number }) {
   const more = rows.length - GLANCE_ROWS;
   const toTomorrow = () => showDayOnPhone?.(day);
@@ -245,7 +245,7 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
         <span className="p-glance-title">{g.item.title || "Untitled"}</span>
       </button>
     ))}
-    {more > 0 && <button className="p-glance-more" onClick={toTomorrow}>+{more} more</button>}
+    {more > 0 && <button className="p-glance-more" onClick={toTomorrow}>{more} more</button>}
   </>;
 }
 
