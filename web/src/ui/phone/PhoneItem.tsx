@@ -869,7 +869,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       <ExtendedFab icon="oEdit" label="Edit" onClick={edit} />
 
       {editing === "title" && <TextFieldDialog title="Title" label="Title" initial={item.title} onClose={() => setEditing(null)} onSave={(v) => commit({ ...item, title: v.trim() || item.title })} />}
-      {editing === "tags" && <TextFieldDialog title="Tags (space separated)" label="Tags" initial={tags.map((x) => x.name).join(" ")} onClose={() => setEditing(null)}
+      {editing === "tags" && <TextFieldDialog title="Add tags" label="Tags" initial={tags.map((x) => x.name).join(" ")} onClose={() => setEditing(null)}
         onSave={(v) => saveItem(item, { tags: v.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean) })} />}
       {editing === "color" && <ColorPickerDialog title="Colour" selected={item.color} onClose={() => setEditing(null)} onPick={(c) => commit({ ...item, color: c })} />}
       {editing === "when" && <WhenSheet item={item} shownStart={shownStart} onClose={() => setEditing(null)} onSave={(edited) => {
@@ -1230,7 +1230,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <div className="p-divider" />
 
         <FieldRow icon="oLabel">
-          <input className="pe-input grow" placeholder="Add tags (space separated)" value={cur.tags} autoCapitalize="none" enterKeyHint="done"
+          <input className="pe-input grow" placeholder="Add tags" value={cur.tags} autoCapitalize="none" enterKeyHint="done"
             onChange={(e) => emit({ ...curRef.current, tags: e.target.value })} />
         </FieldRow>
         <div className="p-divider" />

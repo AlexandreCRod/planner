@@ -185,7 +185,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); rich.current?.focusStart(); } }} enterKeyHint="next" />}
         <label className="pn-meta">
           <MIcon name="oLabel" />
-          <input placeholder="tags (space separated)" value={tags} onChange={(e) => setTags(e.target.value)} autoCapitalize="none" />
+          <input placeholder="Add tags" value={tags} onChange={(e) => setTags(e.target.value)} autoCapitalize="none" />
         </label>
         {images.length > 0 && <MediaStrip media={images} onOpen={(i) => setViewing(images[i])} onLens={(start, pointer) => { feel("pickup"); setLens({ start, pointer }); }} />}
         <div className={`pn-text ${hasChecks ? "has-checks" : ""}`} ref={textBox}>
@@ -207,7 +207,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
       {open === "style" && (
         <BottomSheet onClose={() => setOpen("")}>{() => (
           <div className="pn-style">
-            <div className="p-sheet-title small">Page color</div>
+            <div className="p-sheet-title small">Page colour</div>
             <ColorGrid colors={PASTELS} selected={style.bgColor} onPick={(c) => setStyle({ ...style, bgColor: c })} />
             <div className="p-sheet-title small">Page pattern</div>
             <div className="pe-flow">{PATTERNS.map((l, i) => <FilterChip key={l} selected={style.bgPattern === i} onClick={() => setStyle({ ...style, bgPattern: i })}>{l}</FilterChip>)}</div>
@@ -218,7 +218,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
               <FilterChip selected={style.categoryId === null} onClick={() => setStyle({ ...style, categoryId: null })}>None</FilterChip>
               {s.categories.map((c) => <FilterChip key={c.id} selected={style.categoryId === c.id} onClick={() => setStyle({ ...style, categoryId: c.id })}>{c.name}</FilterChip>)}
             </div>
-            <div className="p-sheet-title small">Accent color (graph and lists)</div>
+            <div className="p-sheet-title small">Accent colour (graph and lists)</div>
             <ColorGrid colors={PALETTE} selected={style.color} onPick={(c) => setStyle({ ...style, color: c })} />
           </div>
         )}</BottomSheet>

@@ -721,7 +721,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           <div className="gp-actions">
             <TextButton onClick={() => { if (canGrow) grow(); else save(); }}>More options</TextButton>
             <span className="grow" />
-            <button className="p-filled-btn" disabled={!canSave} onClick={save}>{clock ? (clock.kind === "timer" ? "Start" : "Set") : lineMode ? "Add" : "Save"}</button>
+            <button className="p-filled-btn" disabled={!canSave} onClick={save}>{clock ? (clock.kind === "timer" ? "Start" : "Set") : "Save"}</button>
           </div>
         </animated.div>
       </animated.div>

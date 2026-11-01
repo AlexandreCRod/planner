@@ -149,7 +149,7 @@ function AlarmSettingsSection() {
       onClick={() => void (perms.notifications ? native.openSettings("notifications") : ensureNotifications("Alarms, reminders and timers show and ring through notifications, so this app needs them allowed."))} />
     <ListItem headline="Full-screen alarms" supporting={perms.fullScreen ? "Allowed" : "Not allowed — tap to fix"} onClick={() => void native.openSettings("fullScreen")} />
     {!perms.exact && <ListItem headline="Alarms & reminders" supporting="Not allowed — tap to fix, or alarms may ring late" onClick={() => void native.openSettings("exact")} />}
-    <ListItem headline="Battery optimization" supporting={perms.batteryExempt ? "Not optimized: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
+    <ListItem headline="Battery" supporting={perms.batteryExempt ? "No restrictions: alarms are never delayed" : "Exclude this app so alarms are never delayed"} onClick={() => void native.openSettings("battery")} />
     {perms.xiaomi && <XiaomiChecks />}
     {apps && <WeatherAppSheet apps={apps} current={weatherApp} onClose={() => setApps(null)} />}
     {time && (
@@ -278,7 +278,7 @@ export function PhoneSettings() {
         <SectionHeader>Appearance</SectionHeader>
         <div className="ps-pad">
           <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
-          <div className="ps-label">Accent color</div>
+          <div className="ps-label">Accent colour</div>
           <div className="ps-accents">
             {ACCENTS.map(([name, c]) => (
               <button key={c} className="ps-accent" aria-label={name} aria-pressed={accent === c} onClick={() => setAccent(c)}>
@@ -361,7 +361,7 @@ export function PhoneSettings() {
         <HealthRow />
         {/* Phone only: it reads the phone's own calendars (272). */}
         {canImportCalendars && <ListItem headline="Import from Google Calendar" supporting="Birthdays, holidays and events from the phone's calendars" onClick={() => go("settings/import")} />}
-        <ListItem headline="Categories" supporting="Names, colors and default reminder types" onClick={() => go("settings/categories")} />
+        <ListItem headline="Categories" supporting="Names, colours and default reminder types" onClick={() => go("settings/categories")} />
         <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
         <BackupRows />
         <ProblemsRow />
