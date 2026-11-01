@@ -48,6 +48,16 @@ export function todayCard(plan: Plan, entries: ReadonlyMap<string, Entry>, t: nu
   return left ? { kind: "place", left } : { kind: "rest", next: nextUp(plan, entries, t) };
 }
 
+/**
+ * What the overview shows for today while the box asking how it went is open on [asked] (what was just logged,
+ * a session, or a game with none): that row, done, stays above its box, and the row for what still
+ * waits goes under them. With nothing left to do there's only the first.
+ */
+export function todayRows(card: TodayCard, asked: { session: Session | null; entry: Entry } | null): { rated: TodayCard | null; row: TodayCard | null } {
+  if (!asked) return { rated: null, row: card };
+  return { rated: { kind: "done", session: asked.session, entry: asked.entry }, row: card.kind === "done" ? null : card };
+}
+
 /** "tomorrow", "Fri" within the week, else [far] writes it. */
 export const dayWord = (day: number, t: number, far: (day: number) => string) =>
   (day === t + 1 ? "tomorrow" : day - t < 7 ? dayShort(weekday(day)) : far(day));

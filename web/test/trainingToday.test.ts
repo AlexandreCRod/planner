@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, type Plan, dayOf, entryFor, entryId, futsalLogId, newEntry, readPlan, sessionsOf } from "../src/domain/training.ts";
-import { dayWord, leadLift, nextUp, todayCard, usualWeekKm, weeklyKm } from "../src/domain/trainingToday.ts";
+import { dayWord, leadLift, nextUp, todayCard, todayRows, usualWeekKm, weeklyKm } from "../src/domain/trainingToday.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 const MON = d("2026-11-02");
@@ -108,4 +108,45 @@ test("the lift followed is the one done most lately, the plan's order breaking t
   const old1 = { id: "x", pts: [{ day: 50 }] }, old2 = { id: "y", pts: [{ day: 60 }] };
   assert.equal(leadLift([old1, old2], since), old2);
   assert.equal(leadLift([], since), null);
+});
+
+test("with two sessions on a day, the how-it-went box stays with the one logged, and the other goes under it", () => {
+  const easy = logged("easy", { status: "done" });
+  const card = todayCard(plan, entries(logged("free", { day: MON }), easy), MON + 1);
+  const { rated, row } = todayRows(card, { session: session("easy"), entry: easy });
+  assert.equal(rated?.kind, "done");
+  if (rated?.kind === "done") assert.equal(rated.session?.id, "easy");
+  assert.equal(row?.kind, "session");
+  if (row?.kind === "session") assert.equal(row.session.id, "gym");
+});
+
+test("logging the last of two: the box is on that one, not on the first the done row would show", () => {
+  const easy = logged("easy", { status: "done" }), gym = logged("gym", { status: "done" });
+  const card = todayCard(plan, entries(logged("free", { day: MON }), easy, gym), MON + 1);
+  assert.equal(card.kind, "done");
+  if (card.kind === "done") assert.equal(card.session?.id, "easy");
+  const { rated, row } = todayRows(card, { session: session("gym"), entry: gym });
+  assert.equal(rated?.kind === "done" && rated.session?.id, "gym");
+  assert.equal(row, null);
+});
+
+test("a session logged with the day's game still to come: the game waits under the box", () => {
+  const easy = logged("easy", { status: "done" }), gym = logged("gym", { status: "done" });
+  const card = todayCard(plan, entries(easy, gym, game(MON + 1)), MON + 1);
+  const { rated, row } = todayRows(card, { session: session("gym"), entry: gym });
+  assert.equal(rated?.kind, "done");
+  assert.equal(row?.kind, "game");
+});
+
+test("a game logged asks under its own row", () => {
+  const g = game(MON + 1, "done");
+  const card = todayCard(plan, entries(logged("easy", { status: "done" }), logged("gym", { status: "done" }), g), MON + 1);
+  const { rated, row } = todayRows(card, { session: null, entry: g });
+  assert.equal(rated?.kind === "done" && rated.entry.id, g.id);
+  assert.equal(row, null);
+});
+
+test("with no box open the row is just today's", () => {
+  const card = todayCard(plan, placed, MON + 1);
+  assert.deepEqual(todayRows(card, null), { rated: null, row: card });
 });

@@ -20,7 +20,7 @@ import {
   type Entry, type Phase, type Plan, type Session, changeKey, dayOfSession, entryFor, entryId, futsalLogId, leftToPlace, phaseIndexAt,
   phaseView, planChanges, seenOf, sessionsOf, sessionsOnDay,
 } from "../../domain/training.ts";
-import { todayCard } from "../../domain/trainingToday.ts";
+import { type TodayCard, todayCard, todayRows } from "../../domain/trainingToday.ts";
 import { type ColourKind, colourKind, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
 import { type SleepNight, fmtSleep, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
@@ -129,10 +129,10 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   const bar = weekBar(phaseView(plan, phase, tr.entries, tr.entries.values()).days, tr.runs);
   const card = todayCard(plan, tr.entries, t);
   const openWeek = () => { feel("tick"); go(`training?view=week${planQ(planId)}`); };
-  const openToday = () => {
+  const openToday = (c: TodayCard) => {
     feel("tick");
-    if (card.kind === "session" || (card.kind === "done" && card.session)) go(`training?s=${encodeURIComponent((card.kind === "session" ? card.session : card.session!).id)}${planQ(planId)}`);
-    else if (card.kind === "game" || card.kind === "done") go(`training?d=${t}${planQ(planId)}`);
+    if (c.kind === "session" || (c.kind === "done" && c.session)) go(`training?s=${encodeURIComponent((c.kind === "session" ? c.session : c.session!).id)}${planQ(planId)}`);
+    else if (c.kind === "game" || c.kind === "done") go(`training?d=${t}${planQ(planId)}`);
     else openWeek();
   };
   const log = () => {
@@ -143,14 +143,19 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   // What was just logged, once it's done, asks how it went.
   const askedS = sessionsOnDay(plan, t, tr.entries).find((x) => x.entry.id === asked && x.entry.status === "done");
   const askedG = asked ? tr.entries.get(asked) : undefined;
+  const askedGame = askedG?.kind === "futsal" && askedG.status === "done" ? askedG : undefined;
+  // The box stays under what it rates: with two sessions a day, Log moves on to the second (todayRows).
+  const { rated, row } = todayRows(card, askedS ?? (askedGame ? { session: null, entry: askedGame } : null));
+  const todayRow = (c: TodayCard) => <TodayRow tr={tr} card={c} t={t} onOpen={() => openToday(c)} onStart={() => openToday(c)} onLog={log} />;
   return scaffold(
     <div className={`p-content tr-home ${trainingLookClass()}`}>
       <UpdateNotice tr={tr} lp={lp} readOnly={false} />
       <HealthCard />
       <div className="tr-home-in">
-        <TodayRow tr={tr} card={card} t={t} onOpen={openToday} onStart={openToday} onLog={log} />
+        {rated && todayRow(rated)}
         {askedS ? <AskRow lp={lp} s={askedS.session} e={askedS.entry} onDone={() => setAsked(null)} />
-          : askedG?.kind === "futsal" && askedG.status === "done" ? <GameAskRow plan={plan} e={askedG} onDone={() => setAsked(null)} /> : null}
+          : askedGame ? <GameAskRow plan={plan} e={askedGame} onDone={() => setAsked(null)} /> : null}
+        {row && todayRow(row)}
         <button className="tr-wk" onClick={openWeek}>
           <span className="top"><span>{t >= ph.start && t <= ph.end ? "This week" : phaseNames(ph.name)[0]}</span><MIcon name="fKeyboardArrowRight" size={20} /></span>
           {bar.segments.length > 0 ? <WeekBarView bar={bar} totalKm={summaryKm(ph.summary)} /> : <span className="tr-bar-text"><span>Nothing placed yet</span></span>}
