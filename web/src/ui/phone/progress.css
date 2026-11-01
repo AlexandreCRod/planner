@@ -131,3 +131,13 @@
 .phone .pg-hd .t { margin-top: 6px; font-size: 22px; line-height: 28px; color: var(--text); }
 .phone .pg-hd .s { font-size: 14px; color: var(--muted); }
 .phone .pg-hd .ev { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 2px 8px; border-radius: 6px; background: var(--p-sc-high, var(--surface-2)); font-size: 12px; line-height: 16px; color: var(--muted); }
+/* A row's note, and the note on a card. */
+.phone .pg-row .n span.nt { display: flex; gap: 4px; align-items: center; color: var(--text); opacity: .8; }
+.phone .pg-row .n span.nt em { font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+.phone .pg-note { display: flex; gap: 10px; align-items: flex-start; margin-top: 6px; cursor: pointer; border-radius: 8px; }
+.phone .pg-note:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 2px; }
+.phone .pg-note .bd { flex: 1; min-width: 0; font-size: 15px; line-height: 21px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.phone .pg-note .bd.add { color: var(--p-primary); font-weight: 500; }
+.phone .pg-note svg { color: var(--muted); }
+.phone .pg-notebox { display: block; box-sizing: border-box; width: 100%; min-height: 84px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--p-primary); background: var(--bg); color: var(--text); font: inherit; font-size: 15px; line-height: 21px; resize: none; user-select: text; -webkit-user-select: text; outline: none; }
+.phone .pg-btns { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 8px; }

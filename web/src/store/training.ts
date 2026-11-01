@@ -6,7 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { today } from "../domain/dates.ts";
 import {
-  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, readPlan, sportsCategoryIds, trainingEntries,
+  type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, entryFor, readPlan, sessionsOf, sportsCategoryIds, trainingEntries,
 } from "../domain/training.ts";
 import type { Category, Completion, Item } from "../domain/types.ts";
 import {
@@ -17,7 +17,8 @@ import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts"
 import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
 import { type GameMatches, type GameSlot, matchGames } from "../domain/watchActivities.ts";
-import { type EventTimes, type Game, gamesOf } from "../domain/cardio.ts";
+import { type ActivityNote, type EventTimes, type Game, activityNotes, gamesOf, noteRecord, runIds } from "../domain/cardio.ts";
+import { saveGameLog } from "./futsal.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
 /** A plan as pushed: what it says, what's wrong with it, and its documents by file name. */
@@ -70,6 +71,8 @@ export interface Training {
   watchGames: GameMatches;
   /** The futsal games with their events' titles and the watch's sessions, oldest first (domain/cardio.ts). */
   games: Game[];
+  /** The notes on runs and games with no log to hold them, by id (domain/cardio.ts). */
+  notes: Map<string, ActivityNote>;
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -148,6 +151,7 @@ export function training(): Training {
     sleep: [],
     watchGames: matchGames(gameSlots(shown, items), healthSessions),
     games: [],
+    notes: activityNotes(listOf<ActivityNote>("trainingNotes")),
   };
   data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
   data.games = gamesOf(shown.values(), data.watchGames, eventTimes(items));
@@ -191,6 +195,36 @@ export function saveLift(l: Lift) { putRecords("trainingLifts", [{ ...l, updated
 export function saveSeen(s: SeenPlan) { putRecords("trainingState", [{ ...s, updatedAt: Date.now() }]); }
 export function saveWeighIn(w: WeighIn) { putRecords("trainingWeighIns", [{ ...w, updatedAt: Date.now() }]); }
 export function saveHidden(h: Hidden) { putRecords("trainingHidden", [{ ...h, updatedAt: Date.now() }]); }
+
+/** Keeps or clears a note in the records beside the log: an empty one is a soft delete, so it syncs. */
+function putNote(id: string, note: string, had: ActivityNote | undefined) {
+  if (!note && !had) return;
+  putRecords("trainingNotes", [{ id, note, updatedAt: Date.now(), deletedAt: note ? null : Date.now() } satisfies ActivityNote]);
+}
+
+/**
+ * A run's note: in its plan session's log when it has one (the plan session's CSV carries it, and a note kept
+ * beside it from before it was linked moves there), else in a record of its own.
+ */
+export function saveRunNote(r: Run, text: string) {
+  const note = text.trim(), t = training();
+  const had = noteRecord(t.notes, runIds(r));
+  for (const lp of t.plans) {
+    const s = r.sessionId !== null ? sessionsOf(lp.plan).find((x) => x.id === r.sessionId) : undefined;
+    if (!s) continue;
+    saveEntry({ ...entryFor(lp.plan, s, t.entries), note });
+    if (had) putNote(had.id, "", had);
+    return;
+  }
+  putNote(had?.id ?? r.id, note, had);
+}
+
+/** A game's note: in its log when it has an event, else (the watch caught it, no event) in a record of its own. */
+export function saveGameNote(g: Game, text: string) {
+  const note = text.trim();
+  if (g.entry && g.entry.itemId !== undefined) saveGameLog({ itemId: g.entry.itemId, day: g.day }, g.entry.planId, { note });
+  else putNote(g.id, note, training().notes.get(g.id));
+}
 
 /**
  * The phone, after each Health Connect read and when Training opens: each new watch run on a day with one

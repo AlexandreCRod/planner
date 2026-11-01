@@ -164,6 +164,7 @@ html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now:
 .phone .tr-label { padding: 12px 24px 6px; font-size: 13px; color: var(--muted); }
 .phone .tr-futsal .p-chiprow { padding-left: 24px; padding-right: 24px; }
 .phone .tr-futsal-note { padding: 4px 24px 0; }
+.phone .tr-futsal-rate { padding: 4px 24px 0; }
 /* The placement sheet: the rules a day breaks, the plan's tips, and the week's days with how each fits
    (a green dot fits, red breaks an avoid rule, grey only an "ideally" one). */
 html.phone { --fit-ok: #2e8a4c; --fit-ideally: #79747e; }

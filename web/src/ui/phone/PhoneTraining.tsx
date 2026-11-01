@@ -10,7 +10,7 @@
 // Sleep), and two quiet markers: a moon on a key run (quality or long) after a night under 6 h, and a small
 // heart on a day whose resting HR is up 7+ on its 7-day average two mornings running (domain/sleep.ts).
 // Also here: Today's training line and the calendar's light marks.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
 import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
@@ -38,7 +38,7 @@ import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingFind } from "./TrainingFind.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
-import { gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
+import { Scale, gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
 import { LooseWatchRow, WatchRunChips, WatchStatsGrid, useWatchRunAsks, useWatchRunTicks, watchHead } from "./WatchRuns.tsx";
 import type { HealthSession } from "../../domain/health.ts";
@@ -164,7 +164,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   // A game is a futsal event's day (item 240): ticking it ticks that day of the event.
   const tickFutsal = (e: Entry) => {
     if (readOnly || e.itemId === undefined || e.day === null) return;
-    if (e.status !== "done") feel("confirm");
+    if (e.status !== "done") { feel("confirm"); setAsked(e.id); } else setAsked(null);
     tickGame({ itemId: e.itemId, day: e.day }, e.status !== "done");
   };
   const pickedSession = picked ? sessions.get(picked) : undefined;
@@ -242,7 +242,10 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
               {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
             </div>
           ) : (
-            <FutsalRow key={e.id} e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+            <Fragment key={e.id}>
+              <FutsalRow e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+              {asked === e.id && e.status === "done" && <GameAskRow plan={plan} e={e} onDone={() => setAsked(null)} />}
+            </Fragment>
           ))}
           {looseOn(day).map((x) => <LooseWatchRow key={x.id} s={x} />)}
         </div>
@@ -404,6 +407,25 @@ function FutsalRow({ e, watch, warn, onWarn, onTick, onOpen }: { e: Entry; watch
 
 /** Under a session just ticked: effort, pain and a note, all optional. Closes by itself once left alone. */
 function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; onDone: () => void }) {
+  return <AskBox onDone={onDone}><HowItWent lp={lp} s={s} e={e} readOnly={false} compact /></AskBox>;
+}
+
+/** Under a game just ticked: its effort and pain, as a session's, kept in the game's log. */
+function GameAskRow({ plan, e, onDone }: { plan: Plan; e: Entry; onDone: () => void }) {
+  return <AskBox onDone={onDone}><div className="tr-howwent compact"><GameScales plan={plan} e={e} /></div></AskBox>;
+}
+
+/** A game's effort and pain, saved as they're picked. */
+function GameScales({ plan, e }: { plan: Plan; e: Entry }) {
+  const ref = e.itemId !== undefined && e.day !== null ? { itemId: e.itemId, day: e.day } : null;
+  return <>
+    <Scale label="Effort" hint="1 very easy · 10 all-out" from={1} to={10} value={e.effort} disabled={!ref} onPick={(v) => { if (ref) saveGameLog(ref, plan.id, { effort: v }); }} />
+    <Scale label="Pain" hint="0 none · 10 worst" from={0} to={10} value={e.pain} disabled={!ref} onPick={(v) => { if (ref) saveGameLog(ref, plan.id, { pain: v }); }} />
+  </>;
+}
+
+/** The box that holds it: it closes by itself once left alone. */
+function AskBox({ onDone, children }: { onDone: () => void; children: ReactNode }) {
   const timer = useRef(0);
   const focused = useRef(false);
   const arm = () => { clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (!focused.current) onDone(); }, ASK_MS); };
@@ -411,7 +433,7 @@ function AskRow({ lp, s, e, onDone }: { lp: LoadedPlan; s: Session; e: Entry; on
   return (
     <div className="tr-ask" onPointerDown={arm} onKeyDown={arm}
       onFocus={() => { focused.current = true; }} onBlur={() => { focused.current = false; arm(); }}>
-      <HowItWent lp={lp} s={s} e={e} readOnly={false} compact />
+      {children}
     </div>
   );
 }
@@ -461,6 +483,7 @@ function FutsalSheet({ plan, ph, entry, t, watch, onPlaced, onClose }: {
         <div className="tr-label">How long</div>
         <ChipRow>{[45, 60, 75, 90, 120].map((m) => <FilterChip key={m} selected={dur === m} onClick={() => setDur(dur === m ? null : m)}>{m} min</FilterChip>)}</ChipRow>
         <div className="tr-futsal-note"><OutlinedTextField label="Note" value={note} onChange={setNote} onEnter={() => save(close)} /></div>
+        {entry && game && <div className="tr-futsal-rate"><GameScales plan={plan} e={training().entries.get(entry.id) ?? entry} /></div>}
         <div className="p-sheet-buttons">
           {game && <TextButton onClick={() => { const undo = withUndo(() => removeGame(game)); close(); showSnackbar(`${entry!.title} removed`, "Undo", undo); }}>Remove</TextButton>}
           {game && <TextButton onClick={() => { close(); go(`item/${game.itemId}?occ=${game.day}`); }}>Event</TextButton>}

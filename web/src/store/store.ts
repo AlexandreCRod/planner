@@ -25,6 +25,8 @@ export const KINDS = [
   "problemLogs",
   // The cleared number on Today's to-dos button (304, store/todoNumber.ts): one record, any device writes it.
   "todoNumber",
+  // Notes on runs and games with no training log to hold them (294, domain/cardio.ts): written only by the app.
+  "trainingNotes",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

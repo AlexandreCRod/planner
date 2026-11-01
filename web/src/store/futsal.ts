@@ -31,11 +31,15 @@ export function tickGame(g: GameRef, done: boolean) { toggleCompletion(g.itemId,
 
 const storedLog = (g: GameRef) => listOf<Entry>("trainingEntries").find((e) => e.id === futsalLogId(g.itemId, g.day));
 
-/** Saves what was logged for a game (how long, a note); made only when there's something to keep. */
-export function saveGameLog(g: GameRef, planId: string, log: { durationMin: number | null; note: string }) {
+/** What can be logged for a game. */
+export type GameLog = Partial<Pick<Entry, "durationMin" | "note" | "effort" | "pain">>;
+
+/** Saves what was logged for a game (how long, a note, effort, pain); made only when there's something to keep. */
+export function saveGameLog(g: GameRef, planId: string, log: GameLog) {
   const had = storedLog(g);
-  if (!had && log.durationMin === null && !log.note) return;
-  if (had && had.durationMin === log.durationMin && had.note === log.note) return;
+  const fields = Object.entries(log) as [keyof GameLog, GameLog[keyof GameLog]][];
+  if (!had && fields.every(([, v]) => v === null || v === "" || v === undefined)) return;
+  if (had && fields.every(([k, v]) => had[k] === v)) return;
   const item = snapshot().byId.get(g.itemId);
   const base = had ?? newEntry({ id: futsalLogId(g.itemId, g.day), planId, kind: "futsal", itemId: g.itemId, title: item?.title.trim() || "Futsal" });
   putRecords("trainingEntries", [{ ...base, ...log, updatedAt: Date.now() }]);

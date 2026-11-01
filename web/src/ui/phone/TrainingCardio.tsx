@@ -4,13 +4,14 @@
 // its card. The numbers come from domain/cardio.ts, the range's windows from chartMath.ts.
 import { type ReactNode, useMemo, useState } from "react";
 import { formatDate, formatTime } from "../../domain/dates.ts";
-import { type Game, RUN_TYPE_NAMES, gameSeconds, gameStats, gameVenue, gameWatch, playedGames, runSeconds, runTypeName, tally, typeStats } from "../../domain/cardio.ts";
+import { type ActivityNote, type Game, RUN_TYPE_NAMES, gameNote, gameSeconds, gameStats, gameVenue, gameWatch, playedGames, runEntry, runNote, runSeconds, runTypeName, tally, typeStats } from "../../domain/cardio.ts";
 import type { Run, RunType } from "../../domain/trends.ts";
-import type { LoadedPlan, Training } from "../../store/training.ts";
+import { type LoadedPlan, type Training, saveGameNote, saveRunNote } from "../../store/training.ts";
 import { type TimeWindow, type WindowKey, WINDOWS, dayMonth, rangeWindow } from "./chartMath.ts";
 import { EmptyHint, MIcon, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { Chart, FUTSAL, GREY, RUN, RangeMenu, RangeSwitch, Spark } from "./ProgressChart.tsx";
+import { TextButton } from "./m3.tsx";
 import { from, join, kmFixed, mmss, tapProps, Tile } from "./progressParts.tsx";
 import { kindIcon } from "./trainingParts.tsx";
 import { fmtSleep } from "../../domain/sleep.ts";
@@ -59,7 +60,7 @@ export function CardioCards({ tr, id, t, st, onOpen }: { tr: Training; id: strin
   if (id.startsWith("type:")) return <TypeCards tr={tr} type={typeOf(id)} t={t} st={st} onOpen={onOpen} />;
   if (id.startsWith("run:")) {
     const r = tr.runs.find((x) => x.id === id.slice(4));
-    return r ? <RunCard r={r} /> : <EmptyHint>This run isn't here any more.</EmptyHint>;
+    return r ? <RunCard tr={tr} r={r} /> : <EmptyHint>This run isn't here any more.</EmptyHint>;
   }
   if (id.startsWith("game:")) {
     const g = tr.games.find((x) => x.id === id.slice(5));
@@ -79,8 +80,8 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
       <RangeMenu value={st.range} onChange={st.setRange} />
     </div>
     {st.view === "runs"
-      ? <RunsPage lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
-      : <FutsalPage list={now.games} t={t} sel={sel} onOpen={onOpen} />}
+      ? <RunsPage tr={tr} lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
+      : <FutsalPage list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
     <div className="p-endspace" />
   </>;
 }
@@ -99,18 +100,22 @@ function Group({ title, right }: { title: string; right?: string }) {
   return <div className="pg-group pg-gr"><span>{title}</span>{right && <span className="r">{right}</span>}</div>;
 }
 
-function RunRow({ r, sel, onOpen }: { r: Run; sel: string | null; onOpen: (id: string) => void }) {
+/** A row's one line of its note. */
+const NoteLine = ({ note }: { note: string }) => (note ? <span className="nt"><MIcon name="oDescription" size={14} /><em>{note}</em></span> : null);
+
+function RunRow({ r, note, sel, onOpen }: { r: Run; note: string; sel: string | null; onOpen: (id: string) => void }) {
   const id = `run:${r.id}`;
   return (
     <div className={`pg-row ${sel === id ? "sel" : ""}`} {...tapProps(() => onOpen(id))}>
       <span className="tr-bub k-run"><MIcon name={kindIcon("run")} size={20} /></span>
-      <div className="n"><b>{r.title}</b><span>{join(formatDate(r.day), r.distanceKm !== null && `${kmFixed(r.distanceKm)} km`, pace(r.paceSPerKm))}</span></div>
+      <div className="n"><b>{r.title}</b><span>{join(formatDate(r.day), r.distanceKm !== null && `${kmFixed(r.distanceKm)} km`, pace(r.paceSPerKm))}</span><NoteLine note={note} /></div>
       <div className="v">{fmtSleep(runSeconds(r) / 60)}<span>{r.avgHr !== null ? `${Math.round(r.avgHr)} bpm` : ""}</span></div>
     </div>
   );
 }
 
-function RunsPage({ lp, runs, t, sel, onOpen }: { lp: LoadedPlan; runs: Run[]; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function RunsPage({ tr, lp, runs, t, sel, onOpen }: { tr: Training; lp: LoadedPlan; runs: Run[]; t: number; sel: string | null; onOpen: (id: string) => void }) {
+  const stored = [...tr.entries.values()];
   return <>
     <Group title="By type" right="tap one for its stats" />
     {RUN_TYPE_NAMES.map(([type, name]) => {
@@ -126,7 +131,7 @@ function RunsPage({ lp, runs, t, sel, onOpen }: { lp: LoadedPlan; runs: Run[]; t
       );
     })}
     <Group title="Runs" right={runs.length > LATEST ? `latest of ${runs.length}` : undefined} />
-    {runs.length ? <Latest key={runs.length} list={runs} shown={LATEST} row={(r) => <RunRow key={r.id} r={r} sel={sel} onOpen={onOpen} />} /> : <div className="pg-hint">No runs in this range.</div>}
+    {runs.length ? <Latest key={runs.length} list={runs} shown={LATEST} row={(r) => <RunRow key={r.id} r={r} note={runNote(r, stored, tr.notes)} sel={sel} onOpen={onOpen} />} /> : <div className="pg-hint">No runs in this range.</div>}
     {lp.plan.records.runs.length > 0 && <Group title="Records" />}
     {lp.plan.records.runs.map((r, i) => (
       <div key={i} className="pg-row still"><div className="n"><b>{r.distance}</b><span>{join(r.day !== null && dayMonth(r.day, t), r.note)}</span></div><div className="v">{r.time}</div></div>
@@ -134,23 +139,23 @@ function RunsPage({ lp, runs, t, sel, onOpen }: { lp: LoadedPlan; runs: Run[]; t
   </>;
 }
 
-function GameRow({ g, sel, onOpen }: { g: Game; sel: string | null; onOpen: (id: string) => void }) {
+function GameRow({ g, note, sel, onOpen }: { g: Game; note: string; sel: string | null; onOpen: (id: string) => void }) {
   const id = `game:${g.id}`, w = gameWatch(g), s = gameSeconds(g);
   return (
     <div className={`pg-row ${sel === id ? "sel" : ""}`} {...tapProps(() => onOpen(id))}>
       <span className="tr-bub k-futsal"><MIcon name={kindIcon("futsal")} size={20} /></span>
-      <div className="n"><b>{g.title}</b><span>{join(formatDate(g.day), s > 0 && `${Math.round(s / 60)} min`, w?.distanceKm != null && `${w.approx ? "≈ " : ""}${kmFixed(w.distanceKm)} km`, !g.fromEvent && "no event")}</span></div>
+      <div className="n"><b>{g.title}</b><span>{join(formatDate(g.day), s > 0 && `${Math.round(s / 60)} min`, w?.distanceKm != null && `${w.approx ? "≈ " : ""}${kmFixed(w.distanceKm)} km`, !g.fromEvent && "no event")}</span><NoteLine note={note} /></div>
       <div className="v">{w?.avgHr != null ? Math.round(w.avgHr) : "—"}<span>{w?.avgHr != null ? "avg bpm" : ""}</span></div>
     </div>
   );
 }
 
-function FutsalPage({ list, t, sel, onOpen }: { list: Game[]; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function FutsalPage({ list, notes, t, sel, onOpen }: { list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
   if (!list.length) return <div className="pg-hint">No games in this range.</div>;
   void t;
   return <>
     <Group title="Games" right={list.length > LATEST_GAMES ? `latest of ${list.length}` : undefined} />
-    <Latest key={list.length} list={list} shown={LATEST_GAMES} row={(g) => <GameRow key={g.id} g={g} sel={sel} onOpen={onOpen} />} />
+    <Latest key={list.length} list={list} shown={LATEST_GAMES} row={(g) => <GameRow key={g.id} g={g} note={gameNote(g, notes)} sel={sel} onOpen={onOpen} />} />
   </>;
 }
 
@@ -192,13 +197,51 @@ function TypeCards({ tr, type, t, st, onOpen }: { tr: Training; type: RunType; t
     {trend("hr", "Heart rate trend", "on the same runs", rs.filter((r) => r.avgHr !== null), (r) => r.avgHr!, (r) => join(when(r), `${Math.round(r.avgHr!)} bpm`, r.paceSPerKm !== null && `at ${pace(r.paceSPerKm)}`))}
     {trend("cad", "Cadence", "steps a minute", rs.filter((r) => r.cadenceSpm !== null), (r) => r.cadenceSpm!, (r) => join(when(r), `${Math.round(r.cadenceSpm!)} steps/min`, from(r.source)))}
     <Group title="Runs" right={n > LATEST ? `latest of ${n}` : undefined} />
-    <Latest key={n} list={rs} shown={LATEST} row={(r) => <RunRow key={r.id} r={r} sel={null} onOpen={onOpen} />} />
+    <Latest key={n} list={rs} shown={LATEST} row={(r) => <RunRow key={r.id} r={r} note={runNote(r, [...tr.entries.values()], tr.notes)} sel={null} onOpen={onOpen} />} />
   </>;
 }
 
 // ---------- A run's card and a game's card ----------
 
-function RunCard({ r }: { r: Run }) {
+/** The note on a card: a tap opens it to write or change it; Save or Cancel, or Ctrl+Enter and Esc. */
+function NoteCard({ note, onSave }: { note: string; onSave: (text: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = () => { if (draft !== null) onSave(draft); feel("settle"); setDraft(null); };
+  const keys = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === "Escape") setDraft(null);
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
+  };
+  if (draft !== null) return (
+    <div className="pg-card">
+      <div className="pg-ct"><span>Note</span></div>
+      <textarea className="pg-notebox" autoFocus placeholder="How did it go?" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={keys} />
+      <div className="pg-btns"><TextButton onClick={() => setDraft(null)}>Cancel</TextButton><button className="p-filled-btn" onClick={save}>Save</button></div>
+    </div>
+  );
+  return (
+    <div className="pg-card">
+      <div className="pg-ct"><span>Note</span></div>
+      <div className="pg-note" {...tapProps(() => { feel("tick"); setDraft(note); })}>
+        {note ? <><div className="bd">{note}</div><MIcon name="fEdit" size={20} /></> : <div className="bd add">Add a note</div>}
+      </div>
+    </div>
+  );
+}
+
+/** What was logged: effort and pain, each as far as it was. */
+function LogCard({ e }: { e: { effort: number | null; pain: number | null } }) {
+  return (
+    <div className="pg-card pg-mini">
+      <div className="pg-ct"><span>From your log</span></div>
+      <div className="r"><span>Effort</span><span>{e.effort !== null ? `${e.effort} of 10` : "not logged"}</span></div>
+      <div className="r"><span>Pain</span><span>{e.pain === null ? "not logged" : e.pain === 0 ? "none" : `${e.pain} of 10`}</span></div>
+    </div>
+  );
+}
+
+function RunCard({ tr, r }: { tr: Training; r: Run }) {
+  const stored = [...tr.entries.values()], log = runEntry(r, stored);
   return <>
     <div className="pg-hd">
       <div className="k"><span className="tr-bub k-run"><MIcon name={kindIcon("run")} size={16} /></span>Run · {runTypeName(r.type)}</div>
@@ -211,6 +254,8 @@ function RunCard({ r }: { r: Run }) {
       <Tile a="Pace" b={r.paceSPerKm !== null ? <>{mmss(r.paceSPerKm)} <small>/ km</small></> : "—"} c="average" />
       <Tile a="Heart rate" b={r.avgHr !== null ? <>{Math.round(r.avgHr)} <small>bpm</small></> : "—"} c={r.maxHr !== null ? `max ${Math.round(r.maxHr)} bpm` : "average"} />
     </div>
+    <NoteCard note={runNote(r, stored, tr.notes)} onSave={(v) => saveRunNote(r, v)} />
+    {log && <LogCard e={log} />}
     <div className="pg-foot">{sourceLine(r.source)}</div>
   </>;
 }
@@ -249,6 +294,7 @@ function GameCard({ tr, g, t }: { tr: Training; g: Game; t: number }) {
       <Tile a="Distance" b={w?.distanceKm != null ? <>{w.approx ? "≈ " : ""}{kmFixed(w.distanceKm)} <small>km</small></> : "—"}
         c={w?.distanceKm != null ? (w.approx ? "indoors or out isn't known" : "from GPS") : venue === "indoor" ? "indoors: no GPS" : ""} />
     </div>
+    <NoteCard note={gameNote(g, tr.notes)} onSave={(v) => saveGameNote(g, v)} />
     {pts.length > 1 && (
       <div className="pg-card">
         <div className="pg-ct"><span>Heart rate</span><span className={read ? "pg-ct-read" : ""}>{read ? `${clockAt(read.day)} · ${read.v} bpm` : "every 15 s"}</span></div>
@@ -257,6 +303,7 @@ function GameCard({ tr, g, t }: { tr: Training; g: Game; t: number }) {
         <div className="pg-leg"><span><i className="ln" style={{ background: FUTSAL }} />Heart rate</span><span><i className="ln" style={{ background: GREY }} />Game average</span></div>
       </div>
     )}
+    {g.entry && <LogCard e={g.entry} />}
     {g.session && <div className="pg-foot">From Garmin, through Health Connect.</div>}
   </>;
 }
