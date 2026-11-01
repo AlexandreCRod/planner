@@ -7,8 +7,10 @@
 // session that starts after 10:00 on the day it ends) never counts as the night.
 // Also the numbers drawn from them: the 7-day averages, the HRV normal range, and the quiet flags the
 // Training page shows (under 6 h before a key run, resting HR up two mornings in a row). Nothing is stored.
+// A night's stages (308): the watch's stretches, cleaned for the chart; a night may have only totals (the Garmin
+// export always does; Health Connect may too), and then its timeline is empty.
 // Days are epoch-day numbers (domain/dates.ts).
-import type { HealthDay, HealthNight } from "./health.ts";
+import type { HealthDay, HealthNight, StageSpan } from "./health.ts";
 import { csv, isoOf } from "./training.ts";
 import type { Night } from "./trends.ts";
 
@@ -27,6 +29,8 @@ export interface SleepNight {
   deepMin: number | null;
   lightMin: number | null;
   remMin: number | null;
+  /** The night's stretches in order (minutes from bed); none when only its totals are known. */
+  spans: NightSpan[];
   score: number | null;
   restingHr: number | null;
   hrvMs: number | null;
@@ -34,6 +38,70 @@ export interface SleepNight {
   source: SleepSource;
   restingHrSource: SleepSource | null;
   hrvSource: SleepSource | null;
+}
+
+/** The four rows of a night's chart, top to bottom: the higher, the lighter the sleep. */
+export type NightStage = "awake" | "rem" | "light" | "deep";
+export const NIGHT_STAGES: readonly NightStage[] = ["awake", "rem", "light", "deep"];
+/** One stretch in one stage, in minutes from bed. */
+export interface NightSpan { stage: NightStage; from: number; to: number }
+
+const ROW: Partial<Record<StageSpan[0], NightStage>> = { awake: "awake", awake_in_bed: "awake", out_of_bed: "awake", rem: "rem", light: "light", deep: "deep" };
+
+/**
+ * The stretches to draw: in order, the awake kinds as one, side by side stretches in one stage joined, empty
+ * ones gone. A watch's plain "sleeping" says nothing about stages, so it isn't drawn; with no real stage at all
+ * there's no timeline (the night has totals only).
+ */
+export function nightSpans(stages: readonly StageSpan[]): NightSpan[] {
+  const out: NightSpan[] = [];
+  for (const [kind, from, to] of [...stages].sort((a, b) => a[1] - b[1])) {
+    const stage = ROW[kind];
+    if (!stage || to <= from) continue;
+    const last = out[out.length - 1];
+    if (last && last.stage === stage && from <= last.to) last.to = Math.max(last.to, to);
+    else out.push({ stage, from, to });
+  }
+  return out.some((x) => x.stage !== "awake") ? out : [];
+}
+
+/** The stretch at minute [m] of the night, else the nearest; null with none. */
+export function spanAt(spans: readonly NightSpan[], m: number): number | null {
+  let best: number | null = null, gap = Infinity;
+  spans.forEach((x, i) => {
+    const d = m < x.from ? x.from - m : m > x.to ? m - x.to : 0;
+    if (d < gap) { gap = d; best = i; }
+  });
+  return best;
+}
+
+/** The minutes in each stage, as far as known; null with no stage totals at all. Awake unknown counts as none. */
+export function nightTotals(n: Pick<SleepNight, "awakeMin" | "deepMin" | "lightMin" | "remMin">): Record<NightStage, number> | null {
+  if (n.deepMin === null && n.lightMin === null && n.remMin === null) return null;
+  return { awake: n.awakeMin ?? 0, rem: n.remMin ?? 0, light: n.lightMin ?? 0, deep: n.deepMin ?? 0 };
+}
+
+/** How many nights "usual" is taken over. */
+export const USUAL_NIGHTS = 30;
+
+/** What's usual for the night on [day]: the averages over the 30 nights before it that have them; null where none do. */
+export function usualNight(nights: readonly SleepNight[], day: number): { asleep: number | null; stages: Record<NightStage, number> | null } {
+  const before = nights.filter((n) => n.day < day && n.totalMin !== null).slice(-USUAL_NIGHTS);
+  const totals = before.flatMap((n) => { const x = nightTotals(n); return x ? [x] : []; });
+  const avg = (k: NightStage) => mean(totals.map((x) => x[k]));
+  return {
+    asleep: before.length ? mean(before.map((n) => n.totalMin!)) : null,
+    stages: totals.length ? { awake: avg("awake"), rem: avg("rem"), light: avg("light"), deep: avg("deep") } : null,
+  };
+}
+
+const momentMin = (t: string) => Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10), +t.slice(11, 13), +t.slice(14, 16)) / 60_000;
+/** The minutes between two local moments. */
+export const inBedMin = (bed: string, wake: string) => Math.max(0, momentMin(wake) - momentMin(bed));
+/** The clock [min] minutes after a local moment: "03:48". */
+export function clockAfter(t: string, min: number): string {
+  const m = (((Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16)) + Math.round(min)) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
 /** A nap: a session that starts after 10:00 on the day it ends. It's kept in Health Connect but never the night. */
@@ -62,8 +130,8 @@ export function mergedNights(sleepJson: readonly Night[], hc: readonly HealthNig
     const rhr = d?.restingHr ?? null, hrv = d?.hrvMs ?? null;
     const restingHr = rhr ?? g?.restingHr ?? null, hrvMs = hrv ?? g?.hrvMs ?? null;
     const sleep = w
-      ? { bed: w.bed, wake: w.wake, totalMin: w.totalMin, awakeMin: w.awakeMin, deepMin: w.deepMin, lightMin: w.lightMin, remMin: w.remMin }
-      : { bed: g?.bed ?? null, wake: g?.wake ?? null, totalMin: g?.totalMin ?? null, awakeMin: g?.awakeMin ?? null, deepMin: g?.deepMin ?? null, lightMin: g?.lightMin ?? null, remMin: g?.remMin ?? null };
+      ? { bed: w.bed, wake: w.wake, totalMin: w.totalMin, awakeMin: w.awakeMin, deepMin: w.deepMin, lightMin: w.lightMin, remMin: w.remMin, spans: nightSpans(w.stages ?? []) }
+      : { bed: g?.bed ?? null, wake: g?.wake ?? null, totalMin: g?.totalMin ?? null, awakeMin: g?.awakeMin ?? null, deepMin: g?.deepMin ?? null, lightMin: g?.lightMin ?? null, remMin: g?.remMin ?? null, spans: [] };
     out.push({
       day, ...sleep, score: g?.score ?? null, restingHr, hrvMs,
       source: w || (!g?.totalMin && d) ? "health_connect" : "garmin",

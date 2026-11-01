@@ -33,6 +33,7 @@ import { type Pan, type Pt, type Series, Chart, GREY, GYM, GYM_DIM, MiniChart, P
 import { ChartCard, Head, from, join, tapProps } from "./progressParts.tsx";
 import { CardioCards, CardioList, cardioTitle, useCardio } from "./TrainingCardio.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
+import { NightCards, NightStrip, nightWord } from "./TrainingNight.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
 import "./progress.css";
 
@@ -92,7 +93,9 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   const weighIn = tab === "body" && (wide || !card || card === "w") && <TextButton className="pg-act" onClick={() => setWeighing(true)}>+ Weigh in</TextButton>;
   const sheet = weighing && <WeighInSheet tr={tr} t={t} onClose={() => setWeighing(false)} />;
   const cardio = useCardio();
-  const cardView = card ? <CardView tr={tr} lp={lp} tab={tab} id={card} t={t} cardio={cardio} onOpen={open} /> : null;
+  // A night opens over the Sleep card, wide too, so back returns to it; the ‹ › beside a night swap it in place.
+  const night = { open: (day: number) => { feel("tick"); go(route("body", `night:${day}`, planId)); }, swap: (day: number) => { feel("tick"); replaceRoute(route("body", `night:${day}`, planId)); } };
+  const cardView = card ? <CardView tr={tr} lp={lp} tab={tab} id={card} t={t} cardio={cardio} onOpen={open} night={night} /> : null;
 
   if (!wide && card) {
     return <Scaffold title={cardTitle(tr, tab, card)} back flush actions={card === "w" ? weighIn : null}>
@@ -103,7 +106,7 @@ export function TrainingProgress({ tr, lp, query, planId }: { tr: Training; lp: 
   const list = <TabsPager index={index} setIndex={setIndex}>
     {(k, i) => Math.abs(i - index) <= 1 && (k === "runs"
       ? <CardioList tr={tr} lp={lp} t={t} st={cardio} sel={wide && k === tab ? card : null} onOpen={open} />
-      : k === "body" ? <BodyGrid tr={tr} t={t} sel={wide && k === tab ? card : null} onOpen={open} />
+      : k === "body" ? <BodyGrid tr={tr} t={t} sel={wide && k === tab ? (card?.startsWith("night:") ? "sl" : card) : null} onOpen={open} />
       : <TabPage tr={tr} tab={k} t={t} sel={wide && k === tab ? card : null} onOpen={open} />)}
   </TabsPager>;
 
@@ -201,16 +204,21 @@ function TabPage({ tr, tab, t, sel, onOpen }: { tr: Training; tab: Tab; t: numbe
 function cardTitle(tr: Training, tab: Tab, id: string): string {
   if (tab === "lifts") return liftName(tr, id);
   if (tab === "runs") return cardioTitle(id);
+  if (id.startsWith("night:")) return "Sleep";
   if (id in BODY) return BODY[id].title;
   return ({ w: "Weight", sl: "Sleep", rh: "Resting heart rate", hrv: "HRV" } as Record<string, string>)[id] ?? "Progress";
 }
 
-function CardView({ tr, lp, tab, id, t, cardio, onOpen }: { tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number; cardio: ReturnType<typeof useCardio>; onOpen: (id: string) => void }) {
+function CardView({ tr, lp, tab, id, t, cardio, onOpen, night }: {
+  tr: Training; lp: LoadedPlan; tab: Tab; id: string; t: number; cardio: ReturnType<typeof useCardio>; onOpen: (id: string) => void;
+  night: { open: (day: number) => void; swap: (day: number) => void };
+}) {
   if (tab === "lifts") return <LiftCards tr={tr} lp={lp} id={id} />;
   if (tab === "runs") return <CardioCards tr={tr} id={id} t={t} st={cardio} onOpen={onOpen} />;
   if (tab === "body") {
     if (id === "w") return <WeightCards tr={tr} t={t} />;
-    if (id === "sl" || id === "rh" || id === "hrv") return <SleepCards tr={tr} id={id} t={t} />;
+    if (id === "sl" || id === "rh" || id === "hrv") return <SleepCards tr={tr} id={id} t={t} onNight={night.open} />;
+    if (id.startsWith("night:")) return <NightCards tr={tr} day={Number(id.slice(6))} t={t} onGo={night.swap} />;
     if (id in BODY) return <BodyCards tr={tr} def={BODY[id]} t={t} />;
   }
   return null;
@@ -465,9 +473,10 @@ const stagesOf = (n: SleepNight) => join(n.deepMin !== null && `deep ${fmtSleep(
 /**
  * The Sleep tab's cards: sleep per night (a bar a night and the 7-day line), resting heart rate (each
  * morning, the 7-day line, a ring on the days it's flagged) and HRV (each night, the 7-day line and the
- * normal range shaded). Touching a point reads it with where it came from.
+ * normal range shaded). Holding a point reads it with where it came from. On the first, the latest night has a
+ * row with its strip, and a tap on a bar opens that night (308).
  */
-function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
+function SleepCards({ tr, id, t, onNight }: { tr: Training; id: string; t: number; onNight: (day: number) => void }) {
   const field: SleepField = id === "rh" ? "restingHr" : id === "hrv" ? "hrvMs" : "totalMin";
   const list = useMemo(() => withField(tr.sleep, field), [tr, field]);
   const line = useMemo(() => avg7Line(tr.sleep, field), [tr, field]);
@@ -486,8 +495,8 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
     <div className="pg-leg"><span><i className="ln" style={{ background: SLEEP }} />7-day average</span><span><i className="dt" style={{ background: SLEEP_DIM }} />{each}</span>{extra}</div>
   );
   // A night's bar stands over its day, so the axis runs a day longer and its line goes through the bars' middles.
-  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[]; bars?: boolean; top?: number } = {}) =>
-    <Chart series={series} domain={opts.bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={opts.bars ? span.domain : undefined} today={t} height={150} pan={span.pan}
+  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[]; bars?: boolean; top?: number; onTap?: (i: number) => void } = {}) =>
+    <Chart series={series} onTap={opts.onTap} domain={opts.bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={opts.bars ? span.domain : undefined} today={t} height={150} pan={span.pan}
       fmt={opts.fmt} zero={opts.zero} top={opts.top} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />;
 
   if (field === "totalMin") {
@@ -499,8 +508,14 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
     return <>{switcher}<ChartCard title="Sleep per night" pan={span.pan}
       read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
       head={last ? <Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} /> : none}
-      foot={<>{legend("Each night")}<div className="pg-foot">Under 6 h before a quality or long run puts a moon on that session.</div></>}>
-      {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars, top: Math.max(...list.map((x) => x.totalMin!)) / 60 })}
+      foot={<>{legend("Each night")}<div className="pg-foot">Tap a bar to open that night. Under 6 h before a quality or long run puts a moon on that session.</div></>}>
+      {!span.back && (
+        <div className="pg-lrow" {...tapProps(() => onNight(list[list.length - 1].day))}>
+          <div className="x">{nightWord(list[list.length - 1].day, t)}{list[list.length - 1].bed && list[list.length - 1].wake && <small>{clockOfMoment(list[list.length - 1].bed)}–{clockOfMoment(list[list.length - 1].wake)}</small>}</div>
+          <NightStrip n={list[list.length - 1]} /><MIcon name="fKeyboardArrowRight" size={18} />
+        </div>
+      )}
+      {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars, top: Math.max(...list.map((x) => x.totalMin!)) / 60, onTap: (i) => onNight(shown[i].day) })}
     </ChartCard></>;
   }
 

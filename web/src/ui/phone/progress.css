@@ -91,6 +91,41 @@
 .phone .pg-pb { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--text); cursor: pointer; }
 .phone .pg-pb:disabled { color: color-mix(in srgb, var(--muted) 45%, transparent); cursor: default; }
 .phone .pg-pb:focus-visible, .phone .pg-nowc:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+/* One night (308): the stepped chart, its read-out, the time in each stage; a grey band when only totals are known. */
+.phone .pg-nnav { display: flex; align-items: center; gap: 2px; margin: 4px -8px 0; }
+.phone .pg-nnav .mid { flex: 1; min-width: 0; text-align: center; font-size: 16px; line-height: 22px; color: var(--text); }
+.phone .pg-nnav .mid small { display: block; font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .pg-nsub { margin-bottom: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .pg-nread { display: flex; align-items: center; gap: 6px; height: 24px; margin-top: 6px; font-size: 13px; line-height: 18px; color: var(--muted); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+.phone .pg-nread b { font-weight: 500; color: var(--text); }
+.phone .pg-nread i, .phone .pg-strow i { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+.phone .pg-chart.night { margin: 2px -2px 0; }
+.phone .pg-chart.night:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 2px; border-radius: 4px; }
+.phone .pg-chart.night text.lane { font-size: 12px; fill: var(--text); opacity: .85; }
+.phone .pg-chart.night text.end { fill: var(--text); }
+.phone .pg-chart.night .pg-cursor { stroke: var(--text); }
+.phone .pg-chart.night svg.rd .sp { opacity: .3; }
+.phone .pg-chart.night svg.rd .sp.on { opacity: 1; }
+.phone .pg-band { display: grid; place-items: center; min-height: 44px; margin-top: 8px; padding: 6px 12px; box-sizing: border-box; border-radius: 8px; background: var(--p-sc-high, var(--surface-2)); font-size: 12px; line-height: 16px; color: var(--text); opacity: .85; text-align: center; }
+.phone .pg-times { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.phone .pg-seg8 { display: flex; gap: 2px; height: 8px; margin: 10px 0 6px; }
+.phone .pg-seg8 i { display: block; height: 100%; }
+.phone .pg-seg8 i:first-child { border-radius: 4px 0 0 4px; }
+.phone .pg-seg8 i:last-child { border-radius: 0 4px 4px 0; }
+.phone .pg-strow { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 15px; line-height: 20px; color: var(--text); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line) 60%, transparent); }
+.phone .pg-seg8 + .pg-strow { box-shadow: none; }
+.phone .pg-strow .nm { flex: 1; }
+.phone .pg-strow .pc { width: 38px; text-align: right; font-size: 13px; color: var(--muted); }
+.phone .pg-strow .du { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.phone .pg-strow .us { width: 72px; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Last night's row on the Sleep card, with the night as a strip (grey with only totals). */
+.phone .pg-lrow { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; padding: 10px 6px 10px 12px; border-radius: 12px; background: var(--p-sc-high, var(--surface-2)); cursor: pointer; }
+.phone .pg-lrow:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 1px; }
+.phone .pg-lrow .x { flex: none; font-size: 14px; color: var(--text); }
+.phone .pg-lrow .x small { display: block; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.phone .pg-lrow svg { flex: none; color: var(--muted); }
+.phone .pg-nstrip { flex: 1; min-width: 0; display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--muted) 30%, transparent); }
+.phone .pg-nstrip i { display: block; height: 100%; }
 .phone .pg-nowc { flex: none; height: 28px; margin-left: auto; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; background: none; font: inherit; font-size: 12px; font-weight: 500; color: var(--text); cursor: pointer; white-space: nowrap; }
 
 /* "+ Weigh in", and a weigh-in tapped: its day and time under the title, Delete or Hide at the left. */

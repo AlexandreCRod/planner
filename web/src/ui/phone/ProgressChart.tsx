@@ -9,6 +9,7 @@
 // keyboard, the arrows move the chart that has the focus. The ‹ › above a chart (PanBar) do the same as a swipe.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import type { NightStage } from "../../domain/sleep.ts";
 import { DropdownMenu, MIcon, Segmented } from "./chrome.tsx";
 import { type RangeKey, type WindowKey, RANGES, WINDOW_NAMES, WINDOWS, dayMonth, nearestIndex, niceTicks, panTarget, scale } from "./chartMath.ts";
 import { claimSwipe } from "./gesture.ts";
@@ -25,6 +26,9 @@ export const GYM = "#bf8a2a", GYM_DIM = "#7a5c22", RUN = "#33a390", WEIGHT = "#6
  * the legend and the 7-day line carrying the reading.
  */
 export const SLEEP = "#c06cb8", SLEEP_DIM = "#864d81";
+/** The night's four stages (2.8.6 section 4), validated together on the dark card and on white; REM stays near the app's sleep pink. */
+export const STAGE_COLOURS: Record<NightStage, string> = { awake: "#c18304", rem: "#c16ea7", light: "#2f9bdb", deep: "#4961d3" };
+export const STAGE_NAMES: Record<NightStage, string> = { awake: "Awake", rem: "REM", light: "Light", deep: "Deep" };
 /** Futsal's marks (the Training kind's colour), and the quiet grey of an average line (2.8.5 mockup). */
 export const FUTSAL = "#9fb3c8", GREY = "#6b6d73";
 
@@ -57,7 +61,7 @@ interface Press {
 }
 
 /** The width an element is drawn at, kept up to date. */
-function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
+export function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
   const ref = useRef<T>(null);
   const [w, setW] = useState(0);
   useLayoutEffect(() => {
