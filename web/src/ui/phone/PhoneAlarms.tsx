@@ -350,7 +350,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
-        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={!!open[g[0].id]} onOpen={() => setOpen((o) => ({ ...o, [g[0].id]: !o[g[0].id] }))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} onOpen={() => setOpen((o) => toggleOpen(o, g))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
       {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined} /></Layer>}
     </div>
@@ -476,6 +476,18 @@ function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; 
   );
 }
 
+/** Marks every alarm of [group] open or closed, so the bundle stays open whichever of them is deleted. */
+const toggleOpen = (open: Record<number, boolean>, group: ClockAlarm[]) => {
+  const on = !group.some((a) => open[a.id]);
+  return { ...open, ...Object.fromEntries(group.map((a) => [a.id, on])) };
+};
+
+/** Deletes a whole bundle, with Undo putting its alarms back as they were. */
+function deleteBundle(group: ClockAlarm[]) {
+  void act(Promise.all(group.map((a) => native.deleteClock(a.id))));
+  showSnackbar(`${group.length} alarms deleted`, "Undo", () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
+}
+
 function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
   group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
 }) {
@@ -527,6 +539,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
               {!series && <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />}
             </div>
           ))}
+          <div className="pa-bundle-foot"><TextButton className="icon" onClick={() => deleteBundle(group)}><MIcon name="oDelete" size={18} /> Delete all</TextButton></div>
         </div>
       </div>
       {picking && <Layer><TimePickerDialog step={1} value={firstMin} onPick={moveTo} onClose={() => setPicking(false)} /></Layer>}
@@ -620,6 +633,7 @@ function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: 
           <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
         )}
         {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
+        {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteBundle(group); }} />}
       </div>
     )}</BottomSheet>
   );

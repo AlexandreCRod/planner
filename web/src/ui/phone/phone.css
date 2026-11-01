@@ -986,6 +986,7 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-bundle-body.open { grid-template-rows: 1fr; }
 .phone .pa-bundle-body > div { min-height: 0; overflow: hidden; }
 .phone .pa-bundle-body.open > div { padding-bottom: 8px; }
+.phone .pa-bundle-foot { display: flex; justify-content: flex-end; padding: 2px 10px 0; }
 .phone .pa-bundle-row { position: relative; display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
 .phone .pa-bundle-row::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 1px; background: var(--line); }
 /* Task and event alarms ("From calendar"): bundle-style rows under a small heading. */
