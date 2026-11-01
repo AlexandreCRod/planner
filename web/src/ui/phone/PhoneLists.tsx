@@ -25,6 +25,7 @@ import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
 import { isTodo } from "../../domain/todoNumber.ts";
 import { useRowDrag } from "./rowDrag.ts";
+import { leaveSheet } from "./todoSheetReturn.ts";
 import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
 import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } from "./Select.tsx";
 import { spring, useSwipePager } from "./pager.ts";
@@ -219,9 +220,10 @@ export function TodoAdd() {
 /**
  * Today's to-dos (271): the open to-dos in a sheet, from the button in Today's top bar. The add line at
  * the top, the rows ticked, dragged into order (the To-do list's order), or tapped to open (the sheet
- * closes first). "All tasks" at the end opens the Tasks page on To-do.
+ * closes first; back from there it's as it was, [back] being how far its rows were scrolled: 319). "All
+ * tasks" at the end opens the Tasks page on To-do.
  */
-export function TodosSheet({ onClose }: { onClose: () => void }) {
+export function TodosSheet({ back = null, onClose }: { back?: number | null; onClose: () => void }) {
   const s = useSnapshot();
   const now = useNow();
   const hold = useCheckedHold();
@@ -230,13 +232,14 @@ export function TodosSheet({ onClose }: { onClose: () => void }) {
   const rowDrag = useRowDrag({ list: () => rows.current, onDrop: (ids, moved) => dropTodo(s, ids, moved) });
   // A minimised note's chip shows over the sheet (276): room is left for it at the bottom.
   const [chip] = useState(() => !!document.querySelector(".p-notechip"));
+  useLayoutEffect(() => { if (back !== null && rows.current) rows.current.scrollTop = back; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setTodoWatch("sheet", true); return () => setTodoWatch("sheet", false); }, []);
   // Anything that leaves the page (the chip opening its note) takes the sheet away.
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => { const h = () => closeRef.current(); window.addEventListener("hashchange", h); return () => window.removeEventListener("hashchange", h); }, []);
   return (
-    <BottomSheet onClose={onClose} className="p-todos-sheet">{(close) => {
+    <BottomSheet onClose={onClose} className={`p-todos-sheet ${back !== null ? "back" : ""}`}>{(close) => {
       const after = (f: () => void) => { close(); window.setTimeout(f, 210); };
       return (
         <div className={`p-rlist p-todos ${chip ? "with-chip" : ""}`}>
@@ -246,7 +249,7 @@ export function TodosSheet({ onClose }: { onClose: () => void }) {
             {list.length === 0 && <div className="p-rlist-empty muted">Nothing to do</div>}
             {list.map((e, index) => (
               <div key={e.item.id} data-row={e.item.id} onPointerDown={rowDrag.down}>
-                <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => after(() => openItem(e.item))}
+                <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => { leaveSheet(rows.current?.scrollTop ?? 0); after(() => openItem(e.item)); }}
                   onToggle={(isDone) => hold.onToggle("sheet", String(e.item.id), e, index, isDone)} />
               </div>
             ))}

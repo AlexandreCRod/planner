@@ -21,6 +21,7 @@ import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
 import { mouseMenu } from "./desk.ts";
 import { TodosSheet, openTodos } from "./PhoneLists.tsx";
+import { sheetBack } from "./todoSheetReturn.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
 import { useLook } from "./looks.ts";
 import { canHoldEvent, canPostpone, moveEvent, moveTask, postponeTask, setEventEnd } from "./eventTime.ts";
@@ -459,6 +460,16 @@ export function PhoneToday() {
   const [picking, setPicking] = useState(false);
   // The to-dos (tasks with no date) aren't on Today's list (271): a button in the bar opens them in a sheet.
   const [todosOpen, setTodosOpen] = useState(false);
+  // Back from a to-do opened in the sheet: the sheet is there as it was, with no entrance (319).
+  const [todosBack, setTodosBack] = useState<number | null>(null);
+  useEffect(() => {
+    const on = (e: HashChangeEvent) => {
+      const top = sheetBack(location.hash, !!e.oldURL);
+      if (top !== null) { setTodosBack(top); setTodosOpen(true); }
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
   const near = useDeferredValue(day);
   const days = [...new Set([near - 1, near, near + 1, day])].sort((a, b) => a - b);
   const track = useRef<HTMLDivElement>(null);
@@ -494,7 +505,7 @@ export function PhoneToday() {
         {isToday && <TodosButton s={s} onClick={() => setTodosOpen(true)} />}
         <AppBarActions />
       </header>
-      {todosOpen && createPortal(<TodosSheet onClose={() => setTodosOpen(false)} />, document.body)}
+      {todosOpen && createPortal(<TodosSheet back={todosBack} onClose={() => { setTodosOpen(false); setTodosBack(null); }} />, document.body)}
       {/* On the page root, so it covers the + button like the other sheets. */}
       {picking && createPortal(<DayPickerSheet value={day} onPick={show} onClose={() => setPicking(false)} />, document.body)}
       <div className="p-daypager" ref={pager}>

@@ -636,6 +636,8 @@ html.phone.pure-black[data-theme="dark"] { --bg: #000; --surface: #000; --p-sc-l
   box-shadow: 0 -1px 6px rgb(0 0 0 / .12); animation: p-sheet-in .3s cubic-bezier(.05, .7, .1, 1); will-change: transform;
 }
 @keyframes p-sheet-in { from { transform: translate3d(0, 100%, 0); } }
+/* A sheet being come back to (319) was never gone, as far as the eye goes. */
+.phone .p-sheet.back, .phone .p-sheet-root:has(> .p-sheet.back) > .p-sheet-scrim { animation: none; }
 .phone .p-sheet-top { flex: none; height: 48px; display: grid; place-items: center; touch-action: none; }
 .phone .p-sheet-handle { width: 32px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 40%, transparent); }
 .phone .p-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 16px; }
@@ -1618,7 +1620,7 @@ html.phone[data-theme="dark"] {
   font-variant-numeric: tabular-nums; pointer-events: none;
 }
 /* The to-dos sheet: the add line, then the rows, which scroll. */
-.phone .p-todos { --bg: var(--p-sc-low); } /* the rows (their swipe and drag) sit on the sheet's colour */
+.phone .p-todos { --bg: var(--p-sc-low); } /* the rows (their drag) sit on the sheet's colour */
 .phone .p-todos .p-todo-add { padding-top: 0; }
 .phone .p-todos .p-todo-add input { padding: 10px 0; }
 .phone .p-todos .p-rlist-empty { padding: 12px 24px 16px; }
