@@ -91,6 +91,23 @@ export function animateSpring(from: number, to: number, v0: number, frame: (x: n
 }
 
 /**
+ * The same spring as animateSpring, written out for the compositor to play: its place every [stepMs] ms
+ * from [from] to exactly [to], ending where animateSpring would stop. A slide played this way doesn't
+ * wait for the page's script, so nothing React draws meanwhile can make it stutter.
+ */
+export function springFrames(from: number, to: number, v0: number, cfg: SpringConfig = PAGE_SPRING, stepMs = 8): { xs: number[]; ms: number } {
+  const k = cfg.stiffness ?? 600, z = cfg.damping ?? 1;
+  const restDelta = cfg.restDelta ?? 0.3, restSpeed = cfg.restSpeed ?? 20;
+  const d0 = from - to, vs = v0 * 1000;
+  const xs = [from];
+  for (let i = 1; ; i++) {
+    const t = (i * stepMs) / 1000, s = springAt(t, d0, vs, k, z);
+    if ((t > 0.02 && Math.abs(s.x) < restDelta && Math.abs(s.v) < restSpeed) || t > 3) { xs.push(to); return { xs, ms: i * stepMs }; }
+    xs.push(to + s.x);
+  }
+}
+
+/**
  * A rubber band: [over] px pulled past an edge shows as this much, giving less and less the further it
  * goes, never more than [dim] (iOS's formula, c = 0.55). Negative pulls give negative results.
  */

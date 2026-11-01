@@ -73,8 +73,15 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 /* ---------- Shell: pager, bottom bar, + button ---------- */
 .phone .p-root { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
 .phone .p-pager { position: absolute; top: 0; left: 0; right: 0; bottom: calc(var(--bar-h) + var(--sab)); overflow: hidden; }
-/* No will-change: the pager is only its own layer while it moves (see slide() in PhoneApp). */
+/* At phone width each page is its own layer, kept ready, as are the track and the bar's indicator, so changing tab
+   moves layers already drawn: nothing is painted again, and the slide plays on the compositor (shellPos.ts). Text
+   stays sharp: the track and the page offset each other exactly, so the page rests on whole pixels. With a mouse
+   (a PC window of any width) text keeps its subpixel smoothing, which layers lose: there the pager is only a layer
+   while it moves. */
 .phone .p-track { position: absolute; inset: 0; }
+@media (hover: none) {
+  html.phone:not(.wide) .p-track, html.phone:not(.wide) .p-page, html.phone:not(.wide) .p-pill-track { will-change: transform; }
+}
 .phone .p-page { position: absolute; top: 0; bottom: 0; width: 100%; overflow: hidden; contain: layout paint style; background: var(--bg); }
 /* A sideways swipe anywhere on a page is the app's (300): the browser only scrolls up and down, except in
    the rows that scroll sideways themselves, which say so below. */
@@ -98,6 +105,11 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-tab:not(.on) .p-tab-label { opacity: 0; }
 .phone .p-tab.on .p-tab-icon { color: var(--p-on-sec-container); }
 .phone .p-tab.on .p-tab-label { color: var(--text); }
+/* At phone width nothing in the bar animates colour, which would redraw it each frame after every tab change: the two
+   icons already cross-fade, each in its own colour, and a label is only seen on the chosen tab. */
+html.phone:not(.wide) .p-tab-icon { transition: none; }
+html.phone:not(.wide) .p-ico.sel { color: var(--p-on-sec-container); }
+html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15s linear; }
 
 .phone .p-fab {
   position: absolute; right: 16px; bottom: calc(var(--bar-h) + var(--sab) + 16px); z-index: 25;
@@ -440,8 +452,6 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-ico { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity .3s linear; }
 .phone .p-ico.sel, .phone .p-tab.on .p-ico.off { opacity: 0; }
 .phone .p-tab.on .p-ico.sel { opacity: 1; }
-.phone .p-pill.pop { animation: p-pill .15s cubic-bezier(.2, 0, 0, 1); }
-@keyframes p-pill { from { transform: scaleX(0); opacity: 0; } }
 
 /* ---------- Today: the day pager ---------- */
 .phone .p-daypager { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }

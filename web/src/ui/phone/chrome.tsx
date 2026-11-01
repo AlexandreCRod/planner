@@ -1,7 +1,7 @@
 // Shared phone chrome, drawn like the native app's Material 3 Compose pieces: the top app bar, icon
 // buttons, filter chips, segmented buttons, section headers, list rows, menus and dialogs. Sizes are
 // Compose's (1 CSS px = 1 dp) and text uses the M3 type scale classes in phone.css (.t-title-large...).
-import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { go } from "../shared/common.tsx";
 import { isTestApp } from "../../platform.ts";
@@ -304,7 +304,7 @@ const CLOCK_FACE = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM11.1 6.5H12.9V11.1
 const TASK_FILLED = "M2 12a10 10 0 1 1 20 0a10 10 0 1 1 -20 0ZM6.3 12.4L7.7 11L10.5 13.8L16.3 8L17.7 9.4L10.5 16.6Z";
 
 /** One tab's icon, outlined or solid (TabIcons.kt and the Material icons HomeScreen.kt picks). */
-export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolean; day: number }) {
+export const TabGlyph = memo(function TabGlyph({ tab, selected, day }: { tab: string; selected: boolean; day: number }) {
   useLooks();
   const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const };
   let body: ReactNode;
@@ -335,4 +335,4 @@ export function TabGlyph({ tab, selected, day }: { tab: string; selected: boolea
     default: body = <path d={ICONS.oConstellation} fill="currentColor" />;
   }
   return <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className="p-svg">{body}</svg>;
-}
+});

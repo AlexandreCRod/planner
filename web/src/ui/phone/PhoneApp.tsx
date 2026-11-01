@@ -3,7 +3,7 @@
 // A sideways swipe anywhere on a page changes tab too (300); inner pagers, rows and charts go first.
 // In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
 // top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
-import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { today as todayEpoch, ymd } from "../../domain/dates.ts";
 import { type ItemType, TYPE_COLORS } from "../../domain/types.ts";
@@ -35,7 +35,8 @@ import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
 import { quietRows, rowsQuiet } from "./rowGuard.ts";
 import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
-import { type Animation, PAGE_SPRING, VelocityTracker, animateSpring, frameWriter, rubberBand, springAt } from "./motion.ts";
+import { VelocityTracker, frameWriter, rubberBand } from "./motion.ts";
+import { ShellPos, afterFrame, clamp } from "./shellPos.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
@@ -69,103 +70,6 @@ const hashRoute = (url: string): [string, URLSearchParams] => {
  */
 const RESET_MS = 300;
 const RESET_EASE = "cubic-bezier(.2, 0, 0, 1)";
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-/**
- * The pager's offset (down the side rail, [axis] Y, for its indicator). While it moves it's a 3D
- * translate (its own GPU layer, cheap to slide); at rest it's a plain 2D one, or none, so the page is
- * painted straight onto the screen at whole pixels. (A layer left in place gets resampled at
- * fractional offsets, which is what made text look soft.) Moving means the whole drag or settle, not
- * just a fractional offset: a fast slide reaching the first or last page mustn't drop the layer and
- * build it again mid-gesture, which repainted the pages with a flicker.
- */
-const slide = (p: number, sign: number, moving: boolean, axis: "X" | "Y" = "X") => !moving
-  ? (p ? `translate${axis}(${sign * p * 100}%)` : "none")
-  : axis === "X" ? `translate3d(${sign * p * 100}%,0,0)` : `translate3d(0,${sign * p * 100}%,0)`;
-
-/**
- * Where the pages are (in pages, fractional while moving), written straight to the track and the bar's
- * pill every frame: no React render while they move. A finger on the bar is followed through a short
- * critically damped chase (about 20 ms), so the bar's gear (pages move several times the finger's
- * travel) doesn't turn each touch sample into a visible step; letting go hands its speed to the settle.
- */
-class ShellPos {
-  p: number;
-  /** Where the last settle or jump is taking the pages. */
-  target: number;
-  /** The side rail of a wide window: its indicator moves down the rail. */
-  rail = false;
-  /** The last page's index (the tabs can change with Settings). */
-  last = 0;
-  private moving = false;
-  private anim: Animation | null = null;
-  private chase: { target: number; v: number; raf: number; last: number } | null = null;
-  track: HTMLElement | null = null;
-  pill: HTMLElement | null = null;
-  private shown: number;
-  constructor(p: number, private width: () => number, private onShown: (i: number) => void) { this.p = p; this.shown = p; this.target = p; }
-  draw(p: number) {
-    this.p = p;
-    this.paint();
-    const r = clamp(Math.round(p), 0, this.last);
-    // While moving, the chosen tab changes only once the pages are well past halfway, so a finger
-    // wavering about the middle of a fast slide doesn't flick the tabs back and forth.
-    if (r !== this.shown && (!this.moving || Math.abs(p - this.shown) > 0.6)) { this.shown = r; this.onShown(r); }
-  }
-  /** Writes the track's and the indicator's offsets for where the pages are. */
-  paint() {
-    if (this.track) this.track.style.transform = slide(this.p, -1, this.moving);
-    if (this.pill) this.pill.style.transform = slide(this.p, 1, this.moving, this.rail ? "Y" : "X");
-  }
-  get resting() { return !this.moving; }
-  stop() {
-    this.anim?.stop(); this.anim = null;
-    if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
-  }
-  /**
-   * A finger landing on the bar while the pages still move: they stop where they are, under it, so a
-   * slide starting now carries on from there instead of jumping back to where the last one began.
-   */
-  grab() { if (this.anim || this.chase) this.stop(); }
-  /** At once (a tap on a tab). */
-  jump(i: number) { this.stop(); this.moving = false; this.target = i; this.draw(i); }
-  /** Directly under a finger on the pages, already once per frame: [p] in pages. */
-  drag(p: number) {
-    this.stop();
-    this.moving = true;
-    this.draw(p);
-  }
-  /** Follows a finger: [target] in pages. */
-  follow(target: number) {
-    this.anim?.stop(); this.anim = null;
-    this.moving = true;
-    if (this.chase) { this.chase.target = target; return; }
-    const c = this.chase = { target, v: 0, raf: 0, last: performance.now() };
-    const W = 65; // ω of the chase: lags about 2/ω (30 ms) behind a steady finger, catches up within ~60 ms
-    const step = (now: number) => {
-      if (this.chase !== c) return;
-      const dt = Math.min(0.1, Math.max(0.001, (now - c.last) / 1000));
-      c.last = now;
-      // Exact over the frame (closed form), so a long frame can't make it overshoot or blow up.
-      const st = springAt(dt, this.p - c.target, c.v, W * W, 1);
-      c.v = st.v;
-      let p = c.target + st.x;
-      if (Math.abs(c.target - p) < 0.0005 && Math.abs(c.v) < 0.01) { p = c.target; c.v = 0; }
-      this.draw(p);
-      c.raf = requestAnimationFrame(step);
-    };
-    c.raf = requestAnimationFrame(step);
-  }
-  /** Settles on page [i], starting at [v] pages per ms. */
-  settle(i: number, v: number) {
-    if (this.chase) { cancelAnimationFrame(this.chase.raf); this.chase = null; }
-    this.anim?.stop();
-    this.moving = true;
-    this.target = i;
-    const w = Math.max(1, this.width());
-    this.anim = animateSpring(this.p * w, i * w, v * w, (x) => this.draw(x / w), () => { this.anim = null; this.moving = false; this.draw(i); }, PAGE_SPRING);
-  }
-}
-
 /** About how long a tab's slide takes. */
 const TAB_SLIDE_MS = 350;
 
@@ -385,8 +289,8 @@ export function PhoneApp() {
   /**
    * Settles the pager on a page: with a spring after a slide (carrying the finger's speed, in pages per
    * ms), or at once for a tap on a tab, as the native bar does (sliding past every page in between
-   * would be slower and draw them all). The shell's own re-render (the + button) waits its turn, so the
-   * pages and the bar move first.
+   * would be slower and draw them all). The shell's own re-render (the + button, a page not yet built)
+   * waits until that first frame is out, so the pages and the bar move first.
    */
   const settle = (i: number, velocity = 0, jump = false) => {
     i = clamp(i, 0, LAST);
@@ -400,10 +304,10 @@ export function PhoneApp() {
       // Swiping onto Tasks as a tab (Settings' Keep Tasks) is the same risk: the next swipe lands on a row.
       if (moved) quietRows(performance.now() + TAB_SLIDE_MS);
     }
-    startTransition(() => {
+    afterFrame(() => startTransition(() => {
       setTab(i);
       setMounted((m) => (m.has(TABS[i].key) ? m : new Set([...m, TABS[i].key])));
-    });
+    }));
     if (location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] !== TABS[i].key) history.replaceState(null, "", tabHash(TABS[i].key));
   };
 
@@ -691,12 +595,14 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
   tapRef.current = onTap;
   const day = ymd(todayEpoch()).d;
   // M3's indicator: on a jump it grows from the middle of the new tab and fades in.
+  const pillTrack = useCallback((el: HTMLElement | null) => { pos.pill = el; if (el) pos.paint(); }, [pos]);
+  const popping = useRef<Animation | null>(null);
+  // The indicator already grew as the finger landed on this tab: not a second time as the page turns.
+  const hinted = useRef(false);
   pop.current = () => {
-    const el = pill.current;
-    if (!el) return;
-    el.classList.remove("pop");
-    void el.offsetWidth;
-    el.classList.add("pop");
+    if (hinted.current) { hinted.current = false; return; }
+    popping.current?.cancel();
+    popping.current = pill.current?.animate?.([{ transform: "scaleX(0)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 150, easing: "cubic-bezier(.2, 0, 0, 1)" }) ?? null;
   };
 
   useEffect(() => {
@@ -722,7 +628,8 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
       if (!g.sliding) {
         g.x0 += Math.sign(dx) * TOUCH_SLOP;
-        if (g.turner) g.turner.start(); else pill.current?.classList.remove("pop");
+        dropHint();
+        if (g.turner) g.turner.start(); else popping.current?.cancel();
       }
       g.sliding = true;
       if (g.turner) { g.turner.move(e.clientX - g.x0); return; }
@@ -736,6 +643,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
     };
     const up = (e: PointerEvent) => {
       if (!g) return;
+      if (e.type !== "pointerup") dropHint();
       if (g.sliding && g.turner) {
         swallowNextClick();
         g.turner.end(e.type === "pointerup" ? g.vt.velocity(e.timeStamp) : 0);
@@ -749,13 +657,20 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
         // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
         const tabEl = e.type === "pointerup" ? document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab") : null;
         if (tabEl && el.contains(tabEl)) tapRef.current(Number(tabEl.dataset.i));
+        dropHint();
         // Pages caught mid-settle by the finger and not sent anywhere by the tap go on where they were going.
         if (!pos.resting) settleRef.current(pos.target);
       }
     };
+    /** The finger didn't turn the pages there: the bar shows where they are. */
+    const dropHint = () => { hinted.current = false; if (pos.unhint()) { popping.current?.cancel(); setSelected(pos.shownTab); } };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       pos.grab();
+      // A tab is taken as the finger lifts, but the bar answers as it lands.
+      const pressed = (e.target as Element).closest<HTMLElement>(".p-tab");
+      const i = pressed ? Number(pressed.dataset.i) : pos.shownTab;
+      if (i !== pos.shownTab) { pos.hint(i); setSelected(i); pop.current?.(); hinted.current = true; }
       const days = barDays();
       const turner = days ? turners[tabsRef.current[Math.round(pos.p)]?.key]?.current ?? null : null;
       g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner };
@@ -771,7 +686,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
   return (
     <nav className="p-bar" ref={bar}>
       {/* One tab wide, so moving it by its own width moves the pill one tab. */}
-      <span className="p-pill-track" style={{ ["--tabs" as string]: tabs.length }} ref={(el) => { pos.pill = el; if (el) pos.paint(); }}>
+      <span className="p-pill-track" style={{ ["--tabs" as string]: tabs.length }} ref={pillTrack}>
         <span className="p-pill" ref={pill} />
       </span>
       {tabs.map((t, i) => (
