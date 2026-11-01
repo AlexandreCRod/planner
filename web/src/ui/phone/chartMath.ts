@@ -2,6 +2,7 @@
 // the range switch offers, the value scale and its round ticks, and which reading a finger is nearest.
 // Days are epoch-day numbers (domain/dates.ts).
 import { addMonths, dayShort, epochOf, formatDate, monthShort, startOfWeek, weekday, ymd } from "../../domain/dates.ts";
+import { FLICK } from "./motion.ts";
 
 export type RangeKey = "1M" | "3M" | "6M" | "1Y" | "All";
 /** The range switch on every chart card, as the user set it (2.8); 3M unless changed. */
@@ -65,6 +66,18 @@ function windowLabel(key: WindowKey, from: number, to: number, today: number, ba
   return `${dayMonth(from, today)} – ${dayMonth(Math.min(to - 1, today), today)}`;
 }
 
+/** Whether there's a window before [back] with any days from [first] on: "All" shows everything, so never. */
+export function hasEarlier(key: WindowKey, today: number, first: number, back: number): boolean {
+  return key !== "All" && rangeWindow(key, today, first, back + 1).to > first;
+}
+
+/** Every window of a range from now back to [first], newest first: a scale that stays put is taken over them all. */
+export function allWindows(key: WindowKey, today: number, first: number): TimeWindow[] {
+  const out = [rangeWindow(key, today, first)];
+  while (hasEarlier(key, today, first, out.length - 1)) out.push(rangeWindow(key, today, first, out.length));
+  return out;
+}
+
 /** What a chart of bars labels: every bar up to 7, else the first, the middle and the last. */
 export function barLabels(bars: readonly WindowBar[]): { day: number; text: string; anchor: "start" | "middle" | "end" }[] {
   const at = (b: WindowBar, anchor: "start" | "middle" | "end") => ({ day: (b.from + b.to) / 2, text: b.label, anchor });
@@ -78,9 +91,9 @@ export function rangeStart(key: RangeKey, today: number): number | null {
   return key === "All" ? null : addMonths(today, -MONTHS[key]);
 }
 
-/** The readings on or after [from] (all of them when null), in their order. */
-export const inRange = <T extends { day: number }>(xs: readonly T[], from: number | null): T[] =>
-  from === null ? [...xs] : xs.filter((p) => p.day >= from);
+/** The readings on or after [from] (all of them when null) and up to [to], in their order. */
+export const inRange = <T extends { day: number }>(xs: readonly T[], from: number | null, to: number | null = null): T[] =>
+  from === null && to === null ? [...xs] : xs.filter((p) => p.day >= (from ?? -Infinity) && p.day <= (to ?? Infinity));
 
 /**
  * The days a time axis spans: from the range's start (All: the first of [days], which are oldest first) to
@@ -90,6 +103,38 @@ export function xDomain(key: RangeKey, today: number, days: readonly number[]): 
   const to = Math.max(today, days.length ? days[days.length - 1] : today);
   const from = Math.min(rangeStart(key, today) ?? (days.length ? days[0] : to), to);
   return from < to ? [from, to] : [to - 1, to];
+}
+
+/** A stretch of a card's range: its days [from, to] (null: no limit that way), the axis, its name, and if there's more before it. */
+export interface SpanWindow { from: number | null; to: number | null; domain: [number, number]; label: string; earlier: boolean }
+
+/**
+ * The window a chart card shows, [back] whole windows before the current one. Now, it ends today, as
+ * rangeStart and xDomain say; each earlier one ends the day before the next begins, so no reading is in two.
+ * [days]: the readings' days, oldest first. "All" has nowhere to go.
+ */
+export function spanWindow(key: RangeKey, today: number, days: readonly number[], back = 0): SpanWindow {
+  const first = days.length ? days[0] : null;
+  if (key === "All" || back <= 0) {
+    const from = rangeStart(key, today), domain = xDomain(key, today, days);
+    const label = `${dayMonth(from ?? domain[0], today)} – ${dayMonth(today, today)}`;
+    return { from, to: null, domain, label, earlier: from !== null && first !== null && first < from };
+  }
+  const from = addMonths(today, -MONTHS[key] * (back + 1)), to = addMonths(today, -MONTHS[key] * back) - 1;
+  return { from, to, domain: [from, to], label: `${dayMonth(from, today)} – ${dayMonth(to, today)}`, earlier: first !== null && first < from };
+}
+
+/** A swipe this far (px), or a flick, moves a chart a whole window. */
+export const PAN_DISTANCE = 40;
+
+/**
+ * Where a chart goes when a swipe of [dx] px (rightwards positive) at [vx] px/ms ends: 1 a window older (the
+ * finger went right), -1 a window newer, 0 stays, as it does with nothing that way.
+ */
+export function panTarget(dx: number, vx: number, canBack: boolean, canFwd: boolean): -1 | 0 | 1 {
+  const far = Math.abs(dx) > PAN_DISTANCE || (Math.abs(vx) > FLICK && Math.sign(vx) === Math.sign(dx));
+  if (!far || dx === 0) return 0;
+  return dx > 0 ? (canBack ? 1 : 0) : canFwd ? -1 : 0;
 }
 
 /** Maps [d0, d1] onto [r0, r1] in a straight line; an empty domain maps everything to the middle. */

@@ -129,6 +129,8 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (a === "prev" || a === "next") {
+    // A chart with the focus moves through time with these itself (ProgressChart.tsx).
+    if (e.target instanceof Element && e.target.closest(".pg-chart.pans")) return;
     const p = pagerInView();
     if (p) { e.preventDefault(); p.step(a === "next" ? 1 : -1); }
     return;

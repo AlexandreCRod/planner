@@ -2,8 +2,9 @@
 // are moving. Tabs Lifts · Cardio (TrainingCardio.tsx) · Body · Nutrition (greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
-// weigh-ins). Touching a chart reads a day, and the headline shows that day's reading (it stays when the
-// finger lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
+// weigh-ins). A swipe on a chart moves one window through time (302), and the headline and what's under it follow;
+// a hold, then a slide, reads a day, and the headline shows that day's reading (it stays when the finger
+// lifts), naming where it came from when it's history (FitNotes, Strava, Garmin). On the phone a card
 // opens over the list (back closes it); in a wide window the list and the card sit side by side. A swipe turns the tab. Weight's
 // top bar has "+ Weigh in", and a weigh-in tapped (a dot, or a row of the recent ones) opens to change or
 // delete it, or hide an imported one. Body (251, a grid of small charts since 270): weight across the top, then
@@ -23,13 +24,13 @@ import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clo
 import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
-import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, xDomain } from "./chartMath.ts";
+import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, spanWindow } from "./chartMath.ts";
 import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { NO_SWIPE, spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
-import { type Pt, type Series, Chart, GREY, GYM, GYM_DIM, MiniChart, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
-import { ChartCard, Empty, Head, from, join, tapProps } from "./progressParts.tsx";
+import { type Pan, type Pt, type Series, Chart, GREY, GYM, GYM_DIM, MiniChart, PAIN, RUN, RangeSwitch, SLEEP, SLEEP_DIM, Spark, WEIGHT, WEIGHT_DIM } from "./ProgressChart.tsx";
+import { ChartCard, Head, from, join, tapProps } from "./progressParts.tsx";
 import { CardioCards, CardioList, cardioTitle, useCardio } from "./TrainingCardio.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
@@ -215,10 +216,18 @@ function CardView({ tr, lp, tab, id, t, cardio, onOpen }: { tr: Training; lp: Lo
   return null;
 }
 
-/** The range a card shows: its first day (null: from the first reading) and the axis's days. */
-function useSpan(days: readonly number[], t: number): { range: RangeKey; setRange: (k: RangeKey) => void; start: number | null; domain: [number, number] } {
-  const [range, setRange] = useRange();
-  return { range, setRange, start: rangeStart(range, t), domain: xDomain(range, t, days) };
+/**
+ * The range a card shows and the window of it (302): its first and last days (null: no limit), the axis's days,
+ * how many windows back it is, and the chart's way through time. A new range starts back at now.
+ */
+function useSpan(days: readonly number[], t: number): { range: RangeKey; setRange: (k: RangeKey) => void; start: number | null; end: number | null; domain: [number, number]; back: number; pan: Pan } {
+  const [range, setKept] = useRange();
+  const [back, setBack] = useState(0);
+  const w = spanWindow(range, t, days, back);
+  return {
+    range, setRange: (k) => { setBack(0); setKept(k); }, start: w.from, end: w.to, domain: w.domain, back,
+    pan: { id: range, label: w.label, back, canBack: w.earlier, canFwd: back > 0, step: (d) => setBack((b) => Math.max(0, b + d)), now: () => setBack(0) },
+  };
 }
 
 // ---------- Lifts ----------
@@ -291,9 +300,11 @@ export function LiftCards({ tr, lp, id }: { tr: Training; lp: LoadedPlan; id: st
   const max = byMax(added, pts);
   const main = max ? pts.filter((p) => p.e1rm !== null) : pts;
   const span = useSpan(main.map((p) => p.day), t);
-  const shown = inRange(main, span.start);
+  const shown = inRange(main, span.start, span.end);
   const [at, setAt] = useState<number | null>(null);
   const [weekAt, setWeekAt] = useState<number | null>(null);
+  // The bars' scale stays put from window to window: the best week there's been.
+  const hardTop = useMemo(() => (pts.length ? Math.max(...weeklyHardSets(tr.lifts, [id], pts[0].day, t, tr.pastSets).map((w) => w.sets)) : 0), [tr, id, pts, t]);
   if (!pts.length) return null;
 
   const val = (p: LiftPoint) => (max ? p.e1rm! : p.topKg ?? 0);
@@ -328,14 +339,14 @@ export function LiftCards({ tr, lp, id }: { tr: Training; lp: LoadedPlan; id: st
   const oldBest = pts.filter((q) => q.day < PEAK_BEFORE && q.e1rm !== null).sort((a, b) => b.e1rm! - a.e1rm!)[0];
   const peak = record ? `${fmtKg(record.kg)} kg${record.reps > 1 ? ` × ${record.reps}` : ""}` : oldBest && max ? `at least ${fmtKg(oldBest.e1rm!)} kg estimated` : null;
 
-  const hard = weeklyHardSets(tr.lifts, [id], span.start ?? pts[0].day, t, tr.pastSets);
+  const hard = weeklyHardSets(tr.lifts, [id], span.start ?? pts[0].day, span.end ?? t, tr.pastSets);
   const wk = weekAt !== null ? hard[weekAt] : null;
   const tracked = allExercises(tr).get(id)?.trackBests ?? false;
   const bests = tracked ? repBests(tr.lifts, new Set([id]), lp.plan.bestsSince).get(id) : undefined;
 
   return <>
-    <RangeSwitch value={span.range} onChange={(k) => { setAt(null); setWeekAt(null); span.setRange(k); }} />
-    <ChartCard title={max ? "Estimated max" : added ? "Top set, added weight" : "Top set"} head={head} read={read}
+    <RangeSwitch value={span.range} onChange={span.setRange} />
+    <ChartCard title={max ? "Estimated max" : added ? "Top set, added weight" : "Top set"} head={head} read={read} pan={span.pan}
       foot={<>
         <div className="pg-leg">
           <span><i className="ln" style={{ background: GYM }} />{max ? "Estimated max" : "Top set"}</span>
@@ -346,15 +357,13 @@ export function LiftCards({ tr, lp, id }: { tr: Training; lp: LoadedPlan; id: st
         </div>
         {peak && <div className="pg-foot">Before Apr 2025: {peak}.</div>}
       </>}>
-      {shown.length ? <Chart series={series} rings={rings} domain={span.domain} today={t} height={160} reads={shown.map((q) => q.day)} onRead={setAt} /> : <Empty />}
+      <Chart series={series} rings={rings} domain={span.domain} today={t} height={160} reads={shown.map((q) => q.day)} onRead={setAt} pan={span.pan} />
     </ChartCard>
     <div className="pg-card">
       <div className="pg-ct"><span>Hard sets per week</span>{wk && <span className="pg-ct-read">Week of {dayMonth(wk.weekStart, t)} · {wk.sets} sets</span>}</div>
-      {hard.some((w) => w.sets > 0)
-        ? <Chart series={[{ kind: "bars", color: GYM, pts: hard.map((w) => ({ day: w.weekStart, v: w.sets })) }]} zero height={100} today={t}
-            domain={[hard[0].weekStart, hard[hard.length - 1].weekStart + 7]} labels={[hard[0].weekStart, hard[hard.length - 1].weekStart]}
-            reads={hard.map((w) => w.weekStart)} onRead={setWeekAt} />
-        : <Empty />}
+      <Chart series={[{ kind: "bars", color: GYM, pts: hard.filter((w) => w.sets > 0).map((w) => ({ day: w.weekStart, v: w.sets })) }]} zero top={hardTop} height={100} today={t}
+        domain={[hard[0].weekStart, hard[hard.length - 1].weekStart + 7]} labels={[hard[0].weekStart, hard[hard.length - 1].weekStart]}
+        reads={hard.map((w) => w.weekStart)} onRead={setWeekAt} pan={span.pan} />
     </div>
     {bests && bests.size > 0 && (
       <div className="pg-card pg-mini">
@@ -397,10 +406,11 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
   const [editing, setEditing] = useState<BodyWeight | null>(null);
   const openDay = (day: number) => { const w = all.filter((x) => x.day === day).pop(); if (w) { feel("tick"); setEditing(w); } };
   const recent = all.slice(-RECENT).reverse();
-  const shown = inRange(trend, span.start);
-  const raw = inRange(all, span.start);
-  const last = trend[trend.length - 1];
-  const wk = weeklyChange(trend);
+  const shown = inRange(trend, span.start, span.end);
+  const raw = inRange(all, span.start, span.end);
+  // The headline is the latest; moved back through time, the window's latest.
+  const last = span.back ? shown[shown.length - 1] : trend[trend.length - 1];
+  const wk = weeklyChange(trend, last?.day);
   const p = at !== null ? shown[at] : null;
   let read: [string, ReactNode] | null = null;
   if (p) {
@@ -411,20 +421,18 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
     ];
   }
   return <>
-    <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />
-    <ChartCard title="Weight" read={read}
+    <RangeSwitch value={span.range} onChange={span.setRange} />
+    <ChartCard title="Weight" read={read} pan={span.pan}
       head={last ? <Head value={last.trend.toFixed(1)} unit="kg trend" chip={wk !== null ? `${signedTenths(wk)} kg / week` : null} /> : <Head value="–" unit="kg" />}
       foot={<>
         <div className="pg-leg"><span><i className="ln" style={{ background: WEIGHT }} />Trend</span><span><i className="dt" style={{ background: WEIGHT_DIM }} />Each weigh-in</span></div>
         <div className="pg-foot">One weigh-in can swing 1–2 kg with water; follow the line. A day with several weigh-ins counts their average.</div>
       </>}>
-      {shown.length
-        ? <Chart series={[
-            { kind: "dots", r: 3, color: WEIGHT_DIM, pts: raw.map((w) => ({ day: w.day, v: w.kg })) },
-            { kind: "line", dots: false, color: WEIGHT, gap: TREND_GAP, pts: shown.map((q) => ({ day: q.day, v: q.trend })) },
-          ]} domain={span.domain} today={t} height={150} fmt={(v) => String(v)} reads={shown.map((q) => q.day)} onRead={setAt}
-            onTap={(i) => openDay(shown[i].day)} />
-        : <Empty />}
+      <Chart series={[
+        { kind: "dots", r: 3, color: WEIGHT_DIM, pts: raw.map((w) => ({ day: w.day, v: w.kg })) },
+        { kind: "line", dots: false, color: WEIGHT, gap: TREND_GAP, pts: shown.map((q) => ({ day: q.day, v: q.trend })) },
+      ]} domain={span.domain} today={t} height={150} fmt={(v) => String(v)} reads={shown.map((q) => q.day)} onRead={setAt} pan={span.pan}
+        onTap={(i) => openDay(shown[i].day)} />
     </ChartCard>
     {recent.length > 0 && (
       <div className="pg-card pg-mini">
@@ -465,22 +473,22 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
   const line = useMemo(() => avg7Line(tr.sleep, field), [tr, field]);
   const span = useSpan(list.map((n) => n.day), t);
   const [at, setAt] = useState<number | null>(null);
-  const switcher = <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />;
+  const switcher = <RangeSwitch value={span.range} onChange={span.setRange} />;
   if (!list.length) return <EmptyHint>No nights yet.</EmptyHint>;
-  const shown = inRange(list, span.start);
-  const avgPts = inRange(line, span.start);
-  const last = list[list.length - 1];
-  const lastAvg = avg7(tr.sleep, field, last.day);
+  const shown = inRange(list, span.start, span.end);
+  const avgPts = inRange(line, span.start, span.end);
+  const last = span.back ? shown[shown.length - 1] : list[list.length - 1];
+  const lastAvg = last ? avg7(tr.sleep, field, last.day) : null;
+  const none = <Head value="–" unit="" />;
   const n = at !== null ? shown[at] : null;
   const nAvg = n && avg7(tr.sleep, field, n.day);
   const legend = (each: string, extra?: ReactNode) => (
     <div className="pg-leg"><span><i className="ln" style={{ background: SLEEP }} />7-day average</span><span><i className="dt" style={{ background: SLEEP_DIM }} />{each}</span>{extra}</div>
   );
-  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[]; bars?: boolean } = {}) => shown.length
-    // A night's bar stands over its day, so the axis runs a day longer and its line goes through the bars' middles.
-    ? <Chart series={series} domain={opts.bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={opts.bars ? span.domain : undefined} today={t} height={150}
-        fmt={opts.fmt} zero={opts.zero} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />
-    : <Empty />;
+  // A night's bar stands over its day, so the axis runs a day longer and its line goes through the bars' middles.
+  const chart = (series: Series[], opts: { fmt?: (v: number) => string; zero?: boolean; rings?: Pt[]; bars?: boolean; top?: number } = {}) =>
+    <Chart series={series} domain={opts.bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={opts.bars ? span.domain : undefined} today={t} height={150} pan={span.pan}
+      fmt={opts.fmt} zero={opts.zero} top={opts.top} rings={opts.rings} reads={shown.map((x) => x.day)} onRead={setAt} />;
 
   if (field === "totalMin") {
     // A bar a night; over a long range, where bars would be hairlines, a small dot instead.
@@ -488,19 +496,19 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
     const bars = shown.length <= 120;
     const each: Series = bars ? { kind: "bars", span: 1, color: SLEEP_DIM, pts } : { kind: "dots", r: 2.5, color: SLEEP_DIM, pts };
     const bed = n && n.bed && n.wake ? `bed ${clockOfMoment(n.bed)} → ${clockOfMoment(n.wake)}` : "";
-    return <>{switcher}<ChartCard title="Sleep per night"
+    return <>{switcher}<ChartCard title="Sleep per night" pan={span.pan}
       read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
-      head={<Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} />}
+      head={last ? <Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} /> : none}
       foot={<>{legend("Each night")}<div className="pg-foot">Under 6 h before a quality or long run puts a moon on that session.</div></>}>
-      {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars })}
+      {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars, top: Math.max(...list.map((x) => x.totalMin!)) / 60 })}
     </ChartCard></>;
   }
 
   if (field === "restingHr") {
     const rings = shown.filter((x) => restingHrFlag(tr.sleep, x.day)).map((x) => ({ day: x.day, v: x.restingHr! }));
-    return <>{switcher}<ChartCard title="Resting heart rate"
+    return <>{switcher}<ChartCard title="Resting heart rate" pan={span.pan}
       read={n ? [join(formatDate(n.day), fromSleep(n.restingHrSource)), <>{n.restingHr} bpm <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, restingHrFlag(tr.sleep, n.day) && "up two mornings running")}</small></>] : null}
-      head={<Head value={String(last.restingHr)} unit={`bpm ${whenOf(last.day, t, "this morning")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
+      head={last ? <Head value={String(last.restingHr)} unit={`bpm ${whenOf(last.day, t, "this morning")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} /> : none}
       foot={<>{legend("Each morning", rings.length > 0 && <span><i className="ho" style={{ borderColor: PAIN }} />Up 7+ two mornings running</span>)}
         <div className="pg-foot">7 or more above your 7-day average two mornings running puts a quiet marker on the day.</div></>}>
       {chart([{ kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.restingHr! })) }, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts }], { rings })}
@@ -509,11 +517,11 @@ function SleepCards({ tr, id, t }: { tr: Training; id: string; t: number }) {
 
   // HRV: the normal range as of each night, shaded.
   const band = shown.flatMap((x) => { const r = hrvRange(tr.sleep, x.day); return r ? [{ day: x.day, lo: r.lo, hi: r.hi }] : []; });
-  const range = hrvRange(tr.sleep, last.day);
+  const range = hrvRange(tr.sleep, last?.day ?? t);
   const nRange = n && hrvRange(tr.sleep, n.day);
-  return <>{switcher}<ChartCard title="HRV (overnight)"
+  return <>{switcher}<ChartCard title="HRV (overnight)" pan={span.pan}
     read={n ? [join(formatDate(n.day), fromSleep(n.hrvSource)), <>{n.hrvMs} ms <small>{join(nAvg !== null && `7-day avg ${Math.round(nAvg)}`, nRange && `normal ${Math.round(nRange.lo)}–${Math.round(nRange.hi)}`)}</small></>] : null}
-    head={<Head value={String(last.hrvMs)} unit={`ms ${whenOf(last.day, t, "last night")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} />}
+    head={last ? <Head value={String(last.hrvMs)} unit={`ms ${whenOf(last.day, t, "last night")}`} chip={lastAvg !== null ? `7-day avg ${Math.round(lastAvg)}` : null} /> : none}
     foot={<>{legend("Each night", band.length > 0 && <span><i className="bd" style={{ background: SLEEP }} />Your normal range</span>)}
       <div className="pg-foot">{range ? `Normal for you: ${Math.round(range.lo)}–${Math.round(range.hi)} ms, the last 60 nights' average ± 1 SD. ` : ""}A few nights in a row below the band: make it an easy day.</div></>}>
     {chart([{ kind: "band", color: SLEEP, pts: band }, { kind: "dots", r: 3, color: SLEEP_DIM, pts: shown.map((x) => ({ day: x.day, v: x.hrvMs! })) }, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts }])}
@@ -680,15 +688,15 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
   const line = useMemo(() => avg7LineOf(base), [base]);
   const span = useSpan(list.map((p) => p.day), t);
   const [at, setAt] = useState<number | null>(null);
-  const switcher = <RangeSwitch value={span.range} onChange={(k) => { setAt(null); span.setRange(k); }} />;
+  const switcher = <RangeSwitch value={span.range} onChange={span.setRange} />;
   if (!list.length) return <EmptyHint>{`No ${b.name.toLowerCase()} readings yet. They come from the watch through Health Connect.`}</EmptyHint>;
-  const shown = inRange(list, span.start);
-  const avgPts = inRange(line, span.start);
-  const last = list[list.length - 1], first = shown[0];
-  const lastAvg = avgNow(kind, list, t);
+  const shown = inRange(list, span.start, span.end);
+  const avgPts = inRange(line, span.start, span.end);
+  const last = span.back ? shown[shown.length - 1] : list[list.length - 1], first = shown[0];
+  const lastAvg = span.back ? (last ? avg7Of(base, last.day) : null) : avgNow(kind, list, t);
   const isSteps = kind === "steps", joined = kind === "vo2";
   const chip = b.sub === "avg" ? (lastAvg !== null ? `7-day avg ${rowValue(b, lastAvg)}` : null)
-    : shown.length > 1 ? `${signedTenths(last.v - first.v)} since ${dayMonth(first.day, t)}` : null;
+    : shown.length > 1 && last ? `${signedTenths(last.v - first.v)} since ${dayMonth(first.day, t)}` : null;
   const p: BodyPoint | null = at !== null ? shown[at] ?? null : null;
   const pAvg = p && (p.day >= t ? lastAvg : avg7Of(base, p.day));
   const read: [string, ReactNode] | null = p
@@ -703,16 +711,14 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
       bars ? { kind: "bars", span: 1, color: b.dim, pts } : { kind: "dots", r: isSteps ? 2.5 : 3, color: b.dim, pts },
       { kind: "line", dots: false, color: b.color, gap: AVG_GAP, pts: avgPts.map((x) => ({ day: x.day + (bars ? 0.5 : 0), v: x.v })) },
     ];
-  return <>{switcher}<ChartCard title={b.title} read={read}
-    head={<Head value={b.fmt(last.v)} unit={`${b.unit} ${whenOf(last.day, t, todayWord(kind))}`} chip={chip} />}
+  return <>{switcher}<ChartCard title={b.title} read={read} pan={span.pan}
+    head={last ? <Head value={b.fmt(last.v)} unit={`${b.unit} ${whenOf(last.day, t, todayWord(kind))}`} chip={chip} /> : <Head value="–" unit="" />}
     foot={<>
       {!joined && <div className="pg-leg"><span><i className="ln" style={{ background: b.color }} />7-day average</span><span><i className={bars ? "bd" : "dt"} style={{ background: b.dim, opacity: 1 }} />Each day</span></div>}
       <div className="pg-foot">{b.foot}</div>
     </>}>
-    {shown.length
-      ? <Chart series={series} domain={bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={bars ? span.domain : undefined} today={t} height={150}
-          fmt={isSteps ? (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(v)) : undefined} zero={isSteps} reads={shown.map((x) => x.day)} onRead={setAt} />
-      : <Empty />}
+    <Chart series={series} domain={bars ? [span.domain[0], span.domain[1] + 1] : span.domain} labels={bars ? span.domain : undefined} today={t} height={150} pan={span.pan}
+      fmt={isSteps ? (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(v)) : undefined} zero={isSteps} top={isSteps ? Math.max(...list.map((x) => x.v)) : undefined} reads={shown.map((x) => x.day)} onRead={setAt} />
   </ChartCard></>;
 }
 

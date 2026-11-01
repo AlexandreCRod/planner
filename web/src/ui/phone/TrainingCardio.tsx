@@ -12,10 +12,10 @@ import {
 } from "../../domain/cardio.ts";
 import type { Run, RunType } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, saveGameNote, saveRunNote } from "../../store/training.ts";
-import { type TimeWindow, type WindowKey, WINDOWS, barLabels, dayMonth, rangeWindow } from "./chartMath.ts";
+import { type TimeWindow, type WindowKey, WINDOWS, allWindows, barLabels, dayMonth, hasEarlier, rangeWindow } from "./chartMath.ts";
 import { EmptyHint, MIcon, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
-import { Chart, FUTSAL, GREY, RUN, RangeMenu, RangeSwitch, Spark } from "./ProgressChart.tsx";
+import { type Pan, Chart, FUTSAL, GREY, PanBar, RUN, RangeMenu, RangeSwitch, Spark } from "./ProgressChart.tsx";
 import { Switch, TextButton } from "./m3.tsx";
 import { ChartCard, Head, from, join, kmFixed, mmss, tapProps, Tile } from "./progressParts.tsx";
 import { kindIcon } from "./trainingParts.tsx";
@@ -37,6 +37,8 @@ let keptMetric: Metric = "Distance";
 
 export interface CardioState {
   view: View; setView: (v: View) => void; range: WindowKey; setRange: (k: WindowKey) => void; metric: Metric; setMetric: (m: Metric) => void; count: boolean; setCount: (v: boolean) => void;
+  /** How many windows back the charts, the tiles and the lists are (302). */
+  back: number; setBack: (n: number) => void;
 }
 
 export function useCardio(): CardioState {
@@ -44,8 +46,10 @@ export function useCardio(): CardioState {
   const [range, setR] = useState(keptRange);
   const [metric, setM] = useState(keptMetric);
   const [count, setC] = useState(() => localStorage.getItem(COUNT_KEY) === "1");
+  const [back, setBack] = useState(0);
   return {
-    view, setView: (v) => { keptView = v; setV(v); }, range, setRange: (k) => { keptRange = k; setR(k); }, metric, setMetric: (m) => { keptMetric = m; setM(m); },
+    back, setBack,
+    view, setView: (v) => { keptView = v; setV(v); }, range, setRange: (k) => { keptRange = k; setR(k); setBack(0); }, metric, setMetric: (m) => { keptMetric = m; setM(m); },
     count, setCount: (v) => { localStorage.setItem(COUNT_KEY, v ? "1" : "0"); setC(v); },
   };
 }
@@ -53,9 +57,14 @@ export function useCardio(): CardioState {
 /** The first day anything happened, for All; today when nothing has. */
 const firstDay = (tr: Training, games: readonly Game[], t: number) => Math.min(t, tr.runs[0]?.day ?? t, games[0]?.day ?? t);
 
-function useWindow(tr: Training, st: CardioState, t: number): { win: TimeWindow; games: Game[] } {
+function useWindow(tr: Training, st: CardioState, t: number): { win: TimeWindow; games: Game[]; first: number; pan: Pan } {
   const games = useMemo(() => playedGames(tr.games, t), [tr, t]);
-  return { win: rangeWindow(st.range, t, firstDay(tr, games, t)), games };
+  const first = firstDay(tr, games, t), win = rangeWindow(st.range, t, first, st.back);
+  const pan: Pan = {
+    id: st.range, label: win.label, back: st.back, canBack: hasEarlier(st.range, t, first, st.back), canFwd: st.back > 0,
+    step: (d) => st.setBack(Math.max(0, st.back + d)), now: () => st.setBack(0),
+  };
+  return { win, games, first, pan };
 }
 
 /** How many rows a list shows until "Show all". */
@@ -92,7 +101,7 @@ export function CardioCards({ tr, id, t, st, onOpen }: { tr: Training; id: strin
 // ---------- The tab ----------
 
 export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: LoadedPlan; t: number; st: CardioState; sel: string | null; onOpen: (id: string) => void }) {
-  const { win, games } = useWindow(tr, st, t);
+  const { win, games, first, pan } = useWindow(tr, st, t);
   const now = useMemo(() => tally(tr.runs, games, win.from, win.to), [tr, games, win.from, win.to]);
   return <>
     <div className="pg-toprow">
@@ -101,7 +110,7 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
     </div>
     {st.view === "runs"
       ? <>
-        <TotalsChart tr={tr} games={games} win={win} now={now} st={st} t={t} />
+        <TotalsChart tr={tr} games={games} win={win} now={now} st={st} t={t} first={first} pan={pan} />
         <RunTiles tr={tr} lp={lp} win={win} now={now} count={st.count} t={t} />
         <div className="pg-setrow">
           <div className="tx">Count futsal in the totals<small>{st.count ? `Adds ${gamesWord(now.games.length)} to time and sessions. Km stay runs only.` : "Totals are runs only."}</small></div>
@@ -109,7 +118,7 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
         </div>
         <RunsPage tr={tr} lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
       </>
-      : <FutsalPage win={win} list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
+      : <FutsalPage pan={pan} list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
     <div className="p-endspace" />
   </>;
 }
@@ -117,14 +126,19 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
 /**
  * The chart on top: distance or time in the window, a bar per day, week or month as the range picks. The
  * still-filling bar is paler and the finished ones' average a dashed line. With futsal counted, games join
- * the time in the same colour; reading a bar shows how it splits.
+ * the time in the same colour; reading a bar shows how it splits. Its scale is the highest bar of any window at
+ * this range, so one window compares fairly with the next.
  */
-function TotalsChart({ tr, games, win, now, st, t }: { tr: Training; games: readonly Game[]; win: TimeWindow; now: Tally; st: CardioState; t: number }) {
+function TotalsChart({ tr, games, win, now, st, t, first, pan }: { tr: Training; games: readonly Game[]; win: TimeWindow; now: Tally; st: CardioState; t: number; first: number; pan: Pan }) {
   const [at, setAt] = useState<number | null>(null);
   const time = st.metric === "Time";
   const per = useMemo(() => win.bars.map((b) => tally(tr.runs, games, b.from, b.to)), [tr, games, win]);
   const value = (x: Tally) => (time ? tallyHours(x, st.count) : x.km);
   const vals = per.map(value);
+  const top = useMemo(
+    () => Math.max(0, ...allWindows(st.range, t, first).flatMap((w) => w.bars.map((b) => value(tally(tr.runs, games, b.from, b.to))))),
+    [tr, games, st.range, st.metric, st.count, t, first], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const avg = win.unit === "day" ? null : finishedAverage(win.bars, vals);
   const live = win.bars.flatMap((b, i) => (b.future ? [] : [i]));
   const unit = win.unit === "week" ? "wk" : "mo";
@@ -136,15 +150,15 @@ function TotalsChart({ tr, games, win, now, st, t }: { tr: Training; games: read
       : <>{kmFixed(x.km)} km <small>{runsWord(x.runs.length)}</small></>]
     : null;
   return (
-    <ChartCard title={st.metric} read={read}
+    <ChartCard title={st.metric} read={read} pan={pan}
       side={<span className="pg-metric"><Segmented value={st.metric} options={METRICS} onChange={(m) => { feel("tick"); setAt(null); st.setMetric(m); }} /></span>}
-      head={<Head value={total} unit={`${time ? "" : "km "}${win.label === "This week" ? "this week" : win.label}`} chip={avg !== null ? `avg ${time ? hours(avg) : `${Math.round(avg)} km`} / ${unit}` : null} />}
+      head={<Head value={total} unit={time ? "" : "km"} chip={avg !== null ? `avg ${time ? hours(avg) : `${Math.round(avg)} km`} / ${unit}` : null} />}
       foot={<div className="pg-leg">
         <span><i className="bx" style={{ background: RUN }} />{time && st.count ? "Runs + futsal" : "Runs"}, per {win.unit}</span>
         {avg !== null && <span><i className="ln" style={{ background: GREY }} />Average</span>}
       </div>}>
       <Chart series={[{ kind: "bars", color: RUN, maxW: 18, pts: live.map((k) => ({ day: win.bars[k].from, v: vals[k], span: win.bars[k].to - win.bars[k].from, dim: win.bars[k].now && win.unit !== "day" })) }]}
-        zero domain={[win.from, win.to]} today={t} height={150} xLabels={barLabels(win.bars)} avg={avg} fmt={time ? (v) => `${v} h` : undefined}
+        zero top={top} pan={pan} domain={[win.from, win.to]} today={t} height={150} xLabels={barLabels(win.bars)} avg={avg} fmt={time ? (v) => `${v} h` : undefined}
         reads={live.map((k) => win.bars[k].from)} onRead={setAt} />
     </ChartCard>
   );
@@ -229,19 +243,20 @@ function GameRow({ g, note, sel, onOpen }: { g: Game; note: string; sel: string 
   );
 }
 
-function FutsalPage({ win, list, notes, t, sel, onOpen }: { win: TimeWindow; list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function FutsalPage({ pan, list, notes, t, sel, onOpen }: { pan: Pan; list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
   const [at, setAt] = useState<number | null>(null);
-  if (!list.length) return <div className="pg-hint">No games in this range.</div>;
+  if (!list.length) return <><PanBar pan={pan} /><div className="pg-hint">No games in this range.</div></>;
   const st = gameStats(list);
   const beat = list.filter((g) => g.session?.avgHr), last = beat[beat.length - 1], r = at !== null ? beat[at] : null;
   const days = beat.map((g) => g.day), a = days[0], z = days[days.length - 1];
   return <>
+    {!last && <PanBar pan={pan} />}
     {last && (
-      <ChartCard title="Heart rate per game" side={<span>{win.label}</span>}
+      <ChartCard title="Heart rate per game" pan={pan}
         read={r ? [join(dayMonth(r.day, t), r.title), <>{Math.round(r.session!.avgHr!)} <small>{join("avg", !!r.session!.maxHr && `max ${Math.round(r.session!.maxHr)} bpm`)}</small></>] : null}
         head={<Head value={String(Math.round(last.session!.avgHr!))} unit={`bpm avg, ${formatDate(last.day).split(",")[0]}`} chip={last.session!.maxHr ? `max ${Math.round(last.session!.maxHr)}` : null} />}
         foot={<div className="pg-leg"><span><i className="ln" style={{ background: FUTSAL }} />Average heart rate in each game</span></div>}>
-        <Chart series={[{ kind: "line", color: FUTSAL, pts: beat.map((g) => ({ day: g.day, v: g.session!.avgHr! })) }]} domain={a === z ? [win.from, win.to] : [a, z]} today={t} height={130}
+        <Chart series={[{ kind: "line", color: FUTSAL, pts: beat.map((g) => ({ day: g.day, v: g.session!.avgHr! })) }]} domain={a === z ? [a - 1, a + 1] : [a, z]} today={t} height={130} pan={pan}
           xLabels={a === z ? [{ day: a, text: dayMonth(a, t), anchor: "middle" }] : [{ day: a, text: dayMonth(a, t), anchor: "start" }, { day: z, text: dayMonth(z, t), anchor: "end" }]}
           reads={days} onRead={setAt} />
       </ChartCard>
@@ -260,12 +275,12 @@ function FutsalPage({ win, list, notes, t, sel, onOpen }: { win: TimeWindow; lis
 // ---------- A run type's own stats ----------
 
 function TypeCards({ tr, type, t, st, onOpen }: { tr: Training; type: RunType; t: number; st: CardioState; onOpen: (id: string) => void }) {
-  const { win, games } = useWindow(tr, st, t);
+  const { win, games, pan } = useWindow(tr, st, t);
   const rs = useMemo(() => tally(tr.runs, games, win.from, win.to).runs.filter((r) => r.type === type), [tr, games, win.from, win.to, type]);
   const [at, setAt] = useState<[string, number] | null>(null);
   const switcher = <RangeSwitch value={st.range} options={WINDOWS} onChange={(k) => { setAt(null); st.setRange(k); }} />;
   const name = runTypeName(type);
-  if (!rs.length) return <>{switcher}<div className="pg-hint">No {name.toLowerCase()} runs in this range. Try a longer one.</div></>;
+  if (!rs.length) return <>{switcher}<PanBar pan={pan} /><div className="pg-hint">No {name.toLowerCase()} runs in this range. Try a longer one.</div></>;
   const s = typeStats(rs), n = rs.length;
   const faster = s.faster === null ? "one run" : `${Math.abs(Math.round(s.faster))} s ${s.faster >= 0 ? "faster" : "slower"} in ${st.range}`;
   const hrMove = s.hrChange === null ? "one run" : `${s.hrChange > 0 ? "+" : s.hrChange < 0 ? "−" : ""}${Math.abs(Math.round(s.hrChange))} bpm in ${st.range}`;
@@ -278,13 +293,14 @@ function TypeCards({ tr, type, t, st, onOpen }: { tr: Training; type: RunType; t
         <div className="pg-ct"><span>{title}</span><span className={r ? "pg-ct-read" : ""}>{r ? read(r) : side}</span></div>
         <Chart series={[{ kind: "line", color: RUN, dots: list.length <= 40, pts: list.map((x) => ({ day: x.day, v: v(x) })) }]} domain={[a, b]} today={t} height={120}
           xLabels={a === b ? [{ day: a, text: dayMonth(a, t), anchor: "middle" }] : [{ day: a, text: dayMonth(a, t), anchor: "start" }, { day: b, text: dayMonth(b, t), anchor: "end" }]}
-          fmt={opts.fmt} invert={opts.invert} reads={list.map((x) => x.day)} onRead={(i) => setAt(i === null ? null : [key, i])} />
+          fmt={opts.fmt} invert={opts.invert} pan={pan} reads={list.map((x) => x.day)} onRead={(i) => setAt(i === null ? null : [key, i])} />
       </div>
     );
   };
   const when = (r: Run) => dayMonth(r.day, t);
   return <>
     {switcher}
+    <PanBar pan={pan} />
     <div className="pg-tiles pg-gap">
       <Tile a="Pace" b={s.paceS !== null ? <>{mmss(s.paceS)} <small>/ km</small></> : "—"} c={faster} />
       <Tile a="Heart rate" b={s.hr !== null ? <>{Math.round(s.hr)} <small>bpm</small></> : "—"} c={hrMove} />

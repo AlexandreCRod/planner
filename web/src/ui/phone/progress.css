@@ -80,6 +80,18 @@
 .phone .pg-chart .pg-ring { stroke: var(--p-sc-low, var(--surface-2)); }
 .phone .pg-chart .pg-fill { fill: var(--p-sc-low, var(--surface-2)); }
 .phone .pg-chart .pg-cursor { stroke: var(--muted); stroke-width: 1; }
+/* A chart that moves through time (302): the plot slides inside its box; the ‹ › and dates above it; Back to now. */
+.phone .pg-chart.pans { overflow: hidden; border-radius: 4px; -webkit-touch-callout: none; }
+.phone .pg-chart.pans:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+.phone .pg-chart.reading .pg-cursor { stroke: var(--p-primary); }
+.phone .pg-plot { will-change: transform; }
+.phone .pg-ct.pans { align-items: center; min-height: 28px; }
+.phone .pg-pnav { display: flex; align-items: center; gap: 2px; margin: 4px -8px 0; }
+.phone .pg-pnav .pl { flex: 1; min-width: 0; text-align: center; font-size: 14px; line-height: 20px; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .pg-pb { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--text); cursor: pointer; }
+.phone .pg-pb:disabled { color: color-mix(in srgb, var(--muted) 45%, transparent); cursor: default; }
+.phone .pg-pb:focus-visible, .phone .pg-nowc:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+.phone .pg-nowc { flex: none; height: 28px; margin-left: auto; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; background: none; font: inherit; font-size: 12px; font-weight: 500; color: var(--text); cursor: pointer; white-space: nowrap; }
 
 /* "+ Weigh in", and a weigh-in tapped: its day and time under the title, Delete or Hide at the left. */
 .phone .pg-weigh { padding: 0 16px; }

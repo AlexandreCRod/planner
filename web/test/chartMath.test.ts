@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
-import { dayMonth, inRange, nearestIndex, niceTicks, rangeStart, scale, signed, xDomain } from "../src/ui/phone/chartMath.ts";
+import { allWindows, dayMonth, hasEarlier, inRange, nearestIndex, niceTicks, panTarget, rangeStart, rangeWindow, scale, signed, spanWindow, xDomain } from "../src/ui/phone/chartMath.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -73,4 +73,68 @@ test("short dates and signed changes", () => {
   assert.equal(signed(-3.5), "−3.5");
   assert.equal(signed(0.1), "0");
   assert.equal(signed(2.26), "+2.5");
+});
+
+// ---------- Moving through time (302) ----------
+
+test("a reading is in exactly one window as a card moves back, and none is skipped", () => {
+  const t = d("2026-10-31"), first = d("2024-02-29");
+  const days = Array.from({ length: t - first + 1 }, (_, i) => first + i);
+  for (const key of ["1M", "3M", "6M", "1Y"] as const) {
+    const seen = new Map<number, number>();
+    let back = 0, w = spanWindow(key, t, days, back);
+    for (;;) {
+      for (const p of inRange(days.map((day) => ({ day })), w.from, w.to)) seen.set(p.day, (seen.get(p.day) ?? 0) + 1);
+      if (!w.earlier) break;
+      w = spanWindow(key, t, days, ++back);
+    }
+    assert.equal(seen.size, days.length, key);
+    assert.ok([...seen.values()].every((n) => n === 1), key);
+  }
+});
+
+test("now, a card's window is what it showed before panning; a window back ends the day before", () => {
+  const t = d("2026-10-27"), days = [d("2026-01-05"), d("2026-10-20")];
+  const now = spanWindow("3M", t, days);
+  assert.deepEqual([now.from, now.to, now.domain], [d("2026-07-27"), null, xDomain("3M", t, days)]);
+  const back = spanWindow("3M", t, days, 1);
+  assert.deepEqual([back.from, back.to, back.domain], [d("2026-04-27"), d("2026-07-26"), [d("2026-04-27"), d("2026-07-26")]]);
+  assert.equal(back.label, "27 Apr – 26 Jul");
+});
+
+test("moving back stops at the window holding the first reading, and All has nowhere to go", () => {
+  const t = d("2026-10-27"), days = [d("2026-03-01"), d("2026-10-20")];
+  assert.equal(spanWindow("3M", t, days, 0).earlier, true);
+  assert.equal(spanWindow("3M", t, days, 1).earlier, true);    // 27 Apr – 26 Jul: March is still before it
+  assert.equal(spanWindow("3M", t, days, 2).earlier, false);   // 27 Jan – 26 Apr holds the first reading
+  assert.equal(spanWindow("All", t, days).earlier, false);
+  assert.equal(spanWindow("3M", t, []).earlier, false);
+});
+
+test("Cardio's windows stop at the first day with data", () => {
+  const t = d("2026-10-28"); // a Wednesday
+  const first = d("2026-10-12");
+  assert.equal(hasEarlier("1W", t, first, 0), true);   // last week starts 19 Oct
+  assert.equal(hasEarlier("1W", t, first, 1), true);   // the week of the 12th is before it
+  assert.equal(hasEarlier("1W", t, first, 2), false);
+  assert.equal(hasEarlier("All", t, d("2020-01-01"), 0), false);
+  const list = allWindows("1W", t, first);
+  assert.deepEqual(list.map((w) => w.from), [d("2026-10-26"), d("2026-10-19"), d("2026-10-12")]);
+  assert.deepEqual(list[2], rangeWindow("1W", t, first, 2));
+});
+
+test("a swipe moves a window past 40 px or on a flick, older to the right, and not where there's nothing", () => {
+  assert.equal(panTarget(60, 0, true, true), 1);
+  assert.equal(panTarget(-60, 0, true, true), -1);
+  assert.equal(panTarget(30, 0, true, true), 0);        // too short, too slow: springs back
+  assert.equal(panTarget(30, 0.6, true, true), 1);      // a flick
+  assert.equal(panTarget(30, -0.6, true, true), 0);     // pulled back as it let go
+  assert.equal(panTarget(80, 0, false, true), 0);       // at the first window
+  assert.equal(panTarget(-80, 0, true, false), 0);      // at now
+});
+
+test("inRange can end too", () => {
+  const xs = [{ day: 5 }, { day: 10 }, { day: 15 }];
+  assert.deepEqual(inRange(xs, 6, 10), [{ day: 10 }]);
+  assert.deepEqual(inRange(xs, null, 10), [{ day: 5 }, { day: 10 }]);
 });

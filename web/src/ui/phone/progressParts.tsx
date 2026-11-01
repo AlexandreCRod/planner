@@ -2,6 +2,7 @@
 // headline, a stat tile, and a row or tile a keyboard can open.
 import type { ReactNode } from "react";
 import { sourceName } from "../../domain/trends.ts";
+import { type Pan, BackToNow, PanBar } from "./ProgressChart.tsx";
 
 /** "6:10" from seconds. */
 export const mmss = (s: number) => { const r = Math.round(s); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, "0")}`; };
@@ -23,13 +24,15 @@ export const tapProps = (open: () => void) => ({
 /**
  * A chart card: its title (and [side], beside it), the headline (its number, or the day a finger read on the
  * chart, kept after it lifts until a tap off the chart: [read] gives its two lines), the chart and what's under it.
+ * [pan]: the chart moves through time, so the ‹ › and the window's dates go above the headline.
  */
-export function ChartCard({ title, side, head, read, children, foot }: {
-  title: string; side?: ReactNode; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode;
+export function ChartCard({ title, side, head, read, children, foot, pan }: {
+  title: string; side?: ReactNode; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode; pan?: Pan;
 }) {
   return (
     <div className="pg-card">
-      <div className="pg-ct"><span>{title}</span>{side}</div>
+      <div className={`pg-ct ${pan ? "pans" : ""}`}><span>{title}</span>{pan && <BackToNow pan={pan} />}{side}</div>
+      {pan && <PanBar pan={pan} />}
       <div className="pg-head">{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
       {children}
       {foot}
@@ -41,7 +44,6 @@ export function ChartCard({ title, side, head, read, children, foot }: {
 export const Head = ({ value, unit, chip }: { value: string; unit: string; chip?: string | null }) => (
   <div className="pg-hv">{value}<small>{unit}</small>{chip && <span className="pg-hchip">{chip}</span>}</div>
 );
-export const Empty = () => <div className="pg-none">Nothing in this range.</div>;
 
 /** A stat tile: its name, its number and the line under it. */
 export const Tile = ({ a, b, c }: { a: string; b: ReactNode; c: string }) => (
