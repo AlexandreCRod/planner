@@ -1,6 +1,6 @@
 // The phone shell: pages side by side like a ViewPager, a Material bottom bar that drags them (a finger
 // slid along it moves the pages 1:1), the + button, and full-screen pages for editors and settings.
-// A sideways swipe anywhere on a page changes tab too (300); inner pagers, rows and charts go first.
+// A sideways swipe anywhere on a page changes tab too (300); inner pagers and charts go first.
 // In a wide window (the PC, html.wide) the same shell has a side rail for the bar, the + button at its
 // top, the open note beside the Notes list, and the keys of desk.ts (Esc, N, T, Ctrl+F).
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
@@ -33,7 +33,6 @@ import { isNative, useWide } from "../../platform.ts";
 import { deskWheel, scrollsSideways, setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { quietRows, rowsQuiet } from "./rowGuard.ts";
 import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
 import { VelocityTracker, frameWriter, rubberBand } from "./motion.ts";
 import { ShellPos, afterFrame, clamp } from "./shellPos.ts";
@@ -70,9 +69,6 @@ const hashRoute = (url: string): [string, URLSearchParams] => {
  */
 const RESET_MS = 300;
 const RESET_EASE = "cubic-bezier(.2, 0, 0, 1)";
-/** About how long a tab's slide takes. */
-const TAB_SLIDE_MS = 350;
-
 export function PhoneApp() {
   const [path, query] = useRoute();
   const route = path[0] ?? "today";
@@ -191,8 +187,7 @@ export function PhoneApp() {
   // The pages' own swipe (300). This is the last gesture in line: everything inside the page sees the finger
   // first and claims it (gesture.ts), so this only takes what nobody wanted. The pages move once per frame
   // through the shell's transform, at the finger's own speed times the pagers' gain, and past the first or
-  // last tab give a little, like the other pagers. Right after Tasks' list changes, a swipe on a row there
-  // stays nobody's (275, rowGuard.ts): the row ignores it, and it mustn't run on to the next tab.
+  // last tab give a little, like the other pagers.
   const swipeState = useRef({ settle: (_i: number, _v?: number) => {}, noteOpen: false });
   useEffect(() => {
     const el = pagerEl.current;
@@ -209,7 +204,7 @@ export function PhoneApp() {
     };
     /** The finger wasn't for the pages: if it caught them moving, they go on to where they were going. */
     const leave = () => { stop(); if (!pos.resting) swipeState.current.settle(pos.target); };
-    const refused = (t: Element) => !!t.closest(NO_SWIPE) || textTouch(t) || scrollsSideways(t, el) || (rowsQuiet() && !!t.closest(".p-swipe.guarded"));
+    const refused = (t: Element) => !!t.closest(NO_SWIPE) || textTouch(t) || scrollsSideways(t, el);
     const onMove = (e: PointerEvent) => {
       if (!g || e.pointerId !== g.id) return;
       g.vt.addEvent(e, "x");
@@ -299,11 +294,7 @@ export function PhoneApp() {
     if (jump) {
       pos.jump(i);
       if (moved) popBar.current?.();
-    } else {
-      pos.settle(i, velocity);
-      // Swiping onto Tasks as a tab (Settings' Keep Tasks) is the same risk: the next swipe lands on a row.
-      if (moved) quietRows(performance.now() + TAB_SLIDE_MS);
-    }
+    } else pos.settle(i, velocity);
     afterFrame(() => startTransition(() => {
       setTab(i);
       setMounted((m) => (m.has(TABS[i].key) ? m : new Set([...m, TABS[i].key])));

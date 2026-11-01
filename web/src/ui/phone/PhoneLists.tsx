@@ -23,8 +23,6 @@ import { TOUCH_SLOP } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { useGlide } from "./glide.ts";
-import { SwipeToTrash } from "./SwipeRow.tsx";
-import { calmRows, quietRows, rowsQuiet } from "./rowGuard.ts";
 import { isTodo } from "../../domain/todoNumber.ts";
 import { useRowDrag } from "./rowDrag.ts";
 import { sortTodos, todoOrderChanges } from "../../domain/todoOrder.ts";
@@ -52,9 +50,9 @@ function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
 
 /**
  * Tasks: Scheduled and To-do side by side. A sideways swipe turns between them, live like the other
- * pagers (the lists follow the finger, the switch's indicator rides along, release settles). A row swiped
- * left goes to the trash on both lists (241: one way everywhere), so on Scheduled the page turns to To-do
- * by the switch or a swipe off the rows (a header, the space below); on To-do a swipe right turns back.
+ * pagers (the lists follow the finger, the switch's indicator rides along, release settles), on a row as
+ * anywhere (318: rows no longer swipe away; a task is deleted from its page). Past either list a swipe
+ * goes on to the app's tabs, as on any page.
  */
 /** Opens Tasks on its To-do tab (from Today's "2 tasks without a date"), every time. */
 export function openTodoTab() {
@@ -87,7 +85,6 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
   const strip = useRef<HTMLDivElement>(null);
   const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  const turned = useRef(false);
   const setIndex = (i: number) => { idx.current = i; setTodo(i === 1); setTodoWatch("todoTab", i === 1); try { localStorage.setItem("tasksTab", i === 1 ? "todo" : "scheduled"); } catch { /* private mode */ } };
   /** Puts the strip back where its tab is, with nothing left over from a slide. */
   const rest = () => { stopSlide.current?.(); stopSlide.current = null; if (strip.current) strip.current.style.transform = ""; };
@@ -99,20 +96,19 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
     const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
     flushSync(() => setIndex(i));
     if (!slide || !el || !w) return;
-    const place = (x: number) => { quietRows(); el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
     stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
   };
   // The page is opened on To-do from Today while it's out of sight: no slide, just the right tab.
   useEffect(() => { todoListener = () => showTab("todo", false); return () => { todoListener = null; }; });
   const pager = useSwipePager<HTMLDivElement>({
     layers: () => [strip.current],
-    onStep: (d) => { turned.current = true; setIndex(Math.min(1, Math.max(0, idx.current + d))); },
+    onStep: (d) => { setIndex(Math.min(1, Math.max(0, idx.current + d))); },
     canStep: (d) => idx.current + d >= 0 && idx.current + d <= 1,
     yieldAtEdge: true,
-    onMove: (x, w) => { quietRows(); stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
-    onSettled: () => { track.current?.(null); if (!turned.current) calmRows(); turned.current = false; },
-    // While the rows are quiet a swipe on one moves the list, so a quick swipe back and forth still works.
-    allow: (t) => !t.closest("input, textarea, .p-chiprow") && !(idx.current === 0 && t.closest(".p-swipe") && !rowsQuiet()),
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => track.current?.(null),
+    allow: (t) => !t.closest("input, textarea, .p-chiprow"),
   });
   return (
     <Scaffold title="Tasks" flush back={back} actions={<>
@@ -172,10 +168,8 @@ function ScheduledList() {
             setCollapsed(n);
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
-            <SwipeToTrash key={e.item.id} item={e.item} guarded>
-              <TaskRow entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
-                onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
-            </SwipeToTrash>
+            <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
+              onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
           ))}
         </div>
       );
@@ -224,8 +218,8 @@ export function TodoAdd() {
 
 /**
  * Today's to-dos (271): the open to-dos in a sheet, from the button in Today's top bar. The add line at
- * the top, the rows ticked, dragged into order (the To-do list's order), swiped left to the trash, or
- * tapped to open (the sheet closes first). "All tasks" at the end opens the Tasks page on To-do.
+ * the top, the rows ticked, dragged into order (the To-do list's order), or tapped to open (the sheet
+ * closes first). "All tasks" at the end opens the Tasks page on To-do.
  */
 export function TodosSheet({ onClose }: { onClose: () => void }) {
   const s = useSnapshot();
@@ -252,10 +246,8 @@ export function TodosSheet({ onClose }: { onClose: () => void }) {
             {list.length === 0 && <div className="p-rlist-empty muted">Nothing to do</div>}
             {list.map((e, index) => (
               <div key={e.item.id} data-row={e.item.id} onPointerDown={rowDrag.down}>
-                <SwipeToTrash item={e.item}>
-                  <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => after(() => openItem(e.item))}
-                    onToggle={(isDone) => hold.onToggle("sheet", String(e.item.id), e, index, isDone)} />
-                </SwipeToTrash>
+                <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => after(() => openItem(e.item))}
+                  onToggle={(isDone) => hold.onToggle("sheet", String(e.item.id), e, index, isDone)} />
               </div>
             ))}
           </div>
@@ -288,9 +280,7 @@ function TodoList() {
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
       <div key={e.item.id} data-glide={`t${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
-        <SwipeToTrash item={e.item} guarded>
-          <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
-        </SwipeToTrash>
+        <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
       </div>
     ))}
     {done.length > 0 && <>
@@ -299,9 +289,7 @@ function TodoList() {
       </div>
       {showDone && done.map((item) => (
         <div key={`d${item.id}`} data-glide={`t${item.id}`}>
-          <SwipeToTrash item={item} guarded>
-            <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
-          </SwipeToTrash>
+          <TaskRow entry={{ item, day: null, status: "DONE", missed: 0 }} s={s} now={now} />
         </div>
       ))}
     </>}

@@ -918,20 +918,10 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .ps-catdialog { display: flex; flex-direction: column; gap: 12px; }
 .phone .ps-catdialog .p-segmented button { font-size: 11px; }
 
-/* ---------- Swipe a task row to the trash ---------- */
-.phone .p-swipe { position: relative; overflow: hidden; touch-action: pan-y; }
-.phone .p-swipe-bg { position: absolute; inset: 0; display: none; align-items: center; justify-content: flex-start; padding: 0 24px; background: color-mix(in srgb, var(--danger) 28%, var(--bg)); color: var(--danger); }
-.phone .p-swipe.swiping > .p-swipe-bg { display: flex; }
-.phone .p-swipe.left > .p-swipe-bg { justify-content: flex-end; }
-.phone .p-swipe-bg svg { transition: transform .15s cubic-bezier(.2, 0, 0, 1); }
-.phone .p-swipe.armed > .p-swipe-bg { background: color-mix(in srgb, var(--danger) 45%, var(--bg)); }
-.phone .p-swipe.armed > .p-swipe-bg svg { transform: scale(1.2); }
-.phone .p-swipe-front { position: relative; background: var(--bg); }
 /* Rows dragged into order (rowDrag.ts, 241): the lifted one rides above the rest with a shadow; while one is
    lifted the others slide out of its way. */
 .phone [data-row] { position: relative; }
 .phone [data-row][data-lift] { z-index: 5; background: var(--p-sc-high, var(--bg)); border-radius: 12px; box-shadow: 0 6px 18px rgb(0 0 0 / .28); transition: box-shadow .15s; }
-.phone [data-row][data-lift] .p-swipe-front { background: transparent; }
 .phone [data-row][data-lift="drag"] { will-change: transform; }
 .phone [data-row][data-lift="down"] { box-shadow: 0 0 0 rgb(0 0 0 / 0); transition: box-shadow .2s, background-color .2s; background: var(--bg); }
 .phone [data-rowdrag="live"] [data-row]:not([data-lift]) { transition: transform .2s cubic-bezier(.2, 0, 0, 1); }
