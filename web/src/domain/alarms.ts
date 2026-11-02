@@ -270,6 +270,13 @@ export function stopwatchParts(ms: number): { main: string; cs: string } {
 export const timerLeft = (t: { endAt: number | null; remainingMs: number }, now: number) =>
   t.endAt !== null ? Math.max(0, t.endAt - now) : t.remainingMs;
 
+/**
+ * How much of a timer is left, 0 to 1, for its progress bar (233): +1:00 can take it past its length, which
+ * shows as a full bar.
+ */
+export const timerShare = (t: { durationMs: number }, leftMs: number) =>
+  t.durationMs > 0 ? Math.min(1, Math.max(0, leftMs / t.durationMs)) : 0;
+
 /** The stopwatch's time at [now]. */
 export const elapsed = (sw: { startedAt: number | null; accumulatedMs: number }, now: number) =>
   sw.accumulatedMs + (sw.startedAt !== null ? Math.max(0, now - sw.startedAt) : 0);
@@ -294,6 +301,13 @@ export function timerUndoMs(leftMs: number, running: boolean): number {
 export const presetText = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
 
 // ---------- World clock ----------
+
+/**
+ * Whether a city card let go after a swipe left goes (233): dragged past 40% of its width, or flung
+ * left (faster than 0.5 px/ms) once past the first 24 px; anything else springs back.
+ */
+export const swipeRemoves = (dx: number, vx: number, width: number) =>
+  dx < 0 && (dx <= -0.4 * width || (vx < -0.5 && dx <= -24));
 
 /** The city part of a zone id: "America/New_York" → "New York". */
 export const cityName = (zone: string) => zone.slice(zone.lastIndexOf("/") + 1).replace(/_/g, " ");
@@ -338,12 +352,13 @@ export function zoneDayLabel(zone: string, at: number, local: string): string | 
 }
 
 /** Time of day with seconds in [zone]: "14:05:09" or "2:05:09 PM". */
-export function zoneClock(zone: string, at: number, use24h: boolean): string {
+export function zoneClock(zone: string, at: number, use24h: boolean, seconds = true): string {
   const w = wall(zone, at);
   const p2 = (n: number) => String(n).padStart(2, "0");
-  if (use24h) return `${p2(w.h)}:${p2(w.mi)}:${p2(w.s)}`;
+  const s = seconds ? `:${p2(w.s)}` : "";
+  if (use24h) return `${p2(w.h)}:${p2(w.mi)}${s}`;
   const h12 = w.h % 12 === 0 ? 12 : w.h % 12;
-  return `${h12}:${p2(w.mi)}:${p2(w.s)} ${w.h < 12 ? "AM" : "PM"}`;
+  return `${h12}:${p2(w.mi)}${s} ${w.h < 12 ? "AM" : "PM"}`;
 }
 
 /** The hour of day in [zone] (for a day or night weather symbol). */
