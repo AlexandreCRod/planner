@@ -271,6 +271,11 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .pg-adcol { flex: 1; min-width: 0; padding: 0 1px; }
 .phone .pg-adcol .more { font-size: 9px; color: var(--muted); }
 .phone .pg-chip { font-size: 10px; line-height: 13px; border-radius: 4px; padding: 1px 3px; margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* An all-day chip's title fades out at its very end instead of "…" (231). */
+.phone .pg-chip > .pg-text {
+  display: block; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+}
 .phone .pg-scroll {
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line);
   touch-action: pan-y; overscroll-behavior: contain;
@@ -292,8 +297,28 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
   padding: 2px 4px; overflow: hidden; font-size: 11px; line-height: 12px; font-weight: 500;
   transition: box-shadow .15s, opacity .15s;
 }
-.phone .pg-block b { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.phone .pg-block b.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* The title (231): over as many whole lines as the block holds ("wrap": breaking between words, inside a word
+   only when it's wider than the block), or one line in a short block ("one"); the text is cut by the block's
+   edge only, its last line faded over its last few px there, never shortened to "Dent…". BLOCK_LINE and
+   blockLines in PhoneCalendar.tsx hold the line height. */
+.phone .pg-block .pg-text { display: block; height: 100%; overflow: hidden; }
+/* Not the old PC rows' flex (styles.css .task), which would shrink the text to its width and fade its end even when it fits. */
+.phone :is(.pg-block, .pg-chip).task { display: block; }
+.phone .pg-block b { font-weight: 500; display: block; }
+.phone .pg-block.wrap .pg-text {
+  overflow-wrap: anywhere;
+  /* Whole lines only (the height is set to them); the last one fades out over its end, should the text go on. */
+  --fade: linear-gradient(#000, #000) top / 100% calc(100% - 12px) no-repeat, linear-gradient(to right, #000 calc(100% - 8px), transparent) bottom / 100% 12px no-repeat;
+  -webkit-mask: var(--fade); mask: var(--fade);
+}
+.phone .pg-block.wrap .tm {
+  line-height: 12px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+}
+.phone .pg-block.one .pg-text {
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+}
 .phone .pg-block .tm { display: block; font-size: 9px; line-height: 11px; opacity: .85; white-space: nowrap; }
 .phone .pg-block.tiny { padding: 0 4px; font-size: 9px; line-height: 10px; }
 .phone .pg-block.lifted { z-index: 10; opacity: .92; box-shadow: 0 8px 18px rgb(0 0 0 / .3), 0 2px 5px rgb(0 0 0 / .2); will-change: transform; }
@@ -1419,6 +1444,13 @@ html.phone[data-theme="dark"] {
   flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 4px 0 16px; border: 0; background: none;
   font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); white-space: nowrap;
 }
+/* The calendar's line for a day's routines (224), under Month's grid and in the Day view: as Today's head, full width, with a chevron. */
+.phone .p-routines-line {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 48px; padding: 0 12px 0 16px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); white-space: nowrap; text-align: left;
+}
+.phone .pg-adcol .p-routines-line { height: 40px; padding: 0 8px 0 4px; }
+.phone .p-routines-line .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines .p-rchips {
   flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
@@ -1431,18 +1463,19 @@ html.phone[data-theme="dark"] {
 /* ---------- Tasks on the calendar: outlined and lighter than events, with a small tick circle ----------
    Events keep the filled block with the thin stripe; a task is only an outline in its colour, on the
    page's own background, its title after a small ring that fills (with a tick) once it's done. */
-.phone .pg-block.task { background: color-mix(in srgb, var(--c) 5%, var(--bg)); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: color-mix(in srgb, var(--text) 85%, transparent); padding-left: 19px; }
+.phone .pg-block.task { background: color-mix(in srgb, var(--c) 5%, var(--bg)); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); color: color-mix(in srgb, var(--text) 85%, transparent); padding-left: 4px; }
 .phone .pg-block.task::before { display: none; }
 /* Done: the same outline as before it was ticked, only fainter (and its title struck through). */
 .phone .pg-block.task.done { opacity: .7; }
-.phone .pg-block.task.tiny { padding-left: 15px; }
+.phone .pg-block.task.tiny { padding-left: 4px; }
+/* The tick (a task's, a routine event's: 215) in the title's first line; the lines under it take the whole width. */
 .phone .pg-tick {
-  position: absolute; left: 5px; top: 3px; width: 10px; height: 10px; box-sizing: border-box; display: grid; place-items: center;
+  float: left; width: 10px; height: 10px; margin: 1px 3px 0 0; box-sizing: border-box; display: grid; place-items: center;
   border: 1.3px solid color-mix(in srgb, var(--c) 80%, var(--text)); border-radius: 50%; color: var(--bg);
 }
 .phone .pg-tick svg { width: 8px; height: 8px; }
 .phone .pg-tick.on { background: color-mix(in srgb, var(--c) 80%, var(--text)); }
-.phone .pg-block.tiny .pg-tick { left: 4px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-width: 1.1px; }
+.phone .pg-block.tiny .pg-tick { width: 8px; height: 8px; margin: 1px 2px 0 0; border-width: 1.1px; }
 .phone .pg-block.tiny .pg-tick svg { width: 6px; height: 6px; }
 .phone .pg-chip.task, .phone .p-mchip.task { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent); }
 /* A bar over several days: a thicker left edge at the start of each piece (each week, each run of days). */

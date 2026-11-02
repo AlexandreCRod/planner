@@ -27,6 +27,25 @@ export function routineSeriesOf(item: Item, byId: ReadonlyMap<number, Item>): It
   return !isRecurring(item) && item.parentId !== null ? byId.get(item.parentId) ?? item : item;
 }
 
+/**
+ * A routine's "Show in calendar" switch (224): as set, else on for one that reserves time (a timed event
+ * with a start and an end, like "Tese" 10:30–13:00) and off for a quick habit (a task, or untimed).
+ */
+export function routineInCalendar(item: Item): boolean {
+  return item.inCalendar ?? (item.type === "EVENT" && !item.allDay && item.startMin !== null && item.endMin !== null);
+}
+
+/**
+ * Which routines a calendar view draws (224): "all" with the menu's "Show all routines" on; else "none"
+ * (Month and Year), or "chosen" (the Week, 3-day and Day grids and the Agenda): only those whose "Show in
+ * calendar" switch is on. Everything that isn't a routine is always drawn.
+ */
+export type RoutinesShown = "all" | "chosen" | "none";
+export function calendarShows(item: Item, shown: RoutinesShown): boolean {
+  if (shown === "all" || !isRoutineItem(item)) return true;
+  return shown === "chosen" && routineInCalendar(item);
+}
+
 /** Whether a task or event can carry the routine mark: one that repeats, or a single changed day of one. */
 export function canBeRoutine(item: Pick<Item, "type" | "freq" | "parentId">): boolean {
   return (item.type === "TASK" || item.type === "EVENT") && (item.freq !== "NONE" || item.parentId !== null);

@@ -11,7 +11,7 @@ import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong,
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
-import { isRoutineItem } from "../../domain/routines.ts";
+import { calendarShows, isRoutineItem, routinesOnDay } from "../../domain/routines.ts";
 import { parseDays } from "../../domain/recurrence.ts";
 import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
 import { type EditScope, moveSeries, saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
@@ -23,6 +23,7 @@ import { AppBarActions, Checkbox, Dialog, DoneFold, DropdownMenu, FilterChip, Ic
 import { splitDone } from "../../domain/todayPlan.ts";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { useTrainingDays } from "./PhoneTraining.tsx";
+import { RoutinesDayLine } from "./PhoneToday.tsx";
 import { feel } from "./haptics.ts";
 import { type PageTurner, SWIPE_GAIN, pageTarget, spring, swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
@@ -33,9 +34,11 @@ import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
 import { setEventEnd } from "./eventTime.ts";
+import { BLOCK_LINE, blockLines } from "./blockLines.ts";
 import { wheelZoom } from "./keys.ts";
 
 type Mode = "day" | "3day" | "week" | "month" | "year" | "agenda";
+const ALL_ROUTINES_KEY = "calAllRoutines";
 const MODES: [Mode, string][] = [["day", "Day"], ["3day", "3 days"], ["week", "Week"], ["month", "Month"], ["year", "Year"], ["agenda", "Agenda"]];
 const NARROW = ["M", "T", "W", "T", "F", "S", "S"];
 const WEEKDAYS_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -93,9 +96,11 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const [menu, setMenu] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [f, setF] = useState(filters);
-  // Routines (daily habits) can crowd the calendar: one switch in the menu hides them, on this phone only.
-  const [showRoutines, setShowRoutines] = useState(() => localStorage.getItem("calHideRoutines") !== "1");
-  const toggleRoutines = () => { const v = !showRoutines; localStorage.setItem("calHideRoutines", v ? "0" : "1"); setShowRoutines(v); };
+  // Routines (daily habits) would crowd the calendar (224): Month and Year show none, the Week, 3-day and
+  // Day grids and the Agenda only those whose "Show in calendar" switch is on. The menu's "Show all
+  // routines" brings every one back everywhere, on this device only (off to begin with).
+  const [allRoutines, setAllRoutines] = useState(() => localStorage.getItem(ALL_ROUTINES_KEY) === "1");
+  const toggleRoutines = () => { const v = !allRoutines; localStorage.setItem(ALL_ROUTINES_KEY, v ? "1" : "0"); setAllRoutines(v); };
   const setAnchor = (d: number) => { selected = d; setAnchorState(d); };
   const setFilters = (n: typeof filters) => { filters = n; setF(n); };
   /** Picked in the menu: remembered, like the native calendarView setting. */
@@ -119,9 +124,10 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     : `${monthShort(ymd(mode === "week" ? weekStart : anchor).m)} ${ymd(mode === "week" ? weekStart : anchor).y}`;
   const first = mode === "week" ? weekStart : anchor;
   const count = mode === "day" ? 1 : mode === "3day" ? 3 : 7;
-  const items = useMemo(() => s.items.filter((i) =>
-    ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))
-    && (showRoutines || !isRoutineItem(i))), [s, f, showRoutines]);
+  const filtered = useMemo(() => s.items.filter((i) =>
+    ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))), [s, f]);
+  const gridItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "chosen")), [filtered, allRoutines]);
+  const monthItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "none")), [filtered, allRoutines]);
   const noteDays = useMemo(() => new Set(s.items.filter((i) => i.type === "NOTE" && i.noteDay !== null).map((i) => i.noteDay!)), [s]);
   // Training days get a light mark by the date (the session itself is on the Training page).
   const trainDays = useTrainingDays();
@@ -130,7 +136,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const menuItems: MenuItem[] = [
     ...MODES.map(([k, l]): MenuItem => ({ label: l, checked: mode === k, onClick: () => pickMode(k) })),
     { label: "Filter…", icon: "oFilterList", divider: true, onClick: () => setFilterOpen(true) },
-    { label: "Show routines", icon: "oTaskAlt", checked: showRoutines, onClick: toggleRoutines },
+    { label: "Show all routines", icon: "oTaskAlt", checked: allRoutines, onClick: toggleRoutines },
     { label: "Note for selected day", icon: "oEditNote", onClick: () => openDailyNote(s, anchor) },
   ];
 
@@ -152,13 +158,13 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
         <AppBarActions />
       </header>
       <div className="p-calbody">
-        {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
+        {grid && <TimeGrid s={s} items={gridItems} routinesLine={!allRoutines} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
           onDayHeader={(d) => { setAnchor(d); setMode("day"); }} onDayNote={(d) => openDailyNote(s, d)} />}
-        {mode === "month" && <MonthView s={s} items={items} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
+        {mode === "month" && <MonthView s={s} items={monthItems} routinesLine={!allRoutines} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
           onLong={(d) => { setAnchor(d); onNewAt(d, 9 * 60); }} onDayNote={(d) => openDailyNote(s, d)} />}
-        {mode === "year" && <YearView s={s} items={items} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
-        {mode === "agenda" && <AgendaView s={s} items={items} from={anchor} f={f} onFilters={setFilters} />}
+        {mode === "year" && <YearView s={s} items={monthItems} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
+        {mode === "agenda" && <AgendaView s={s} items={gridItems} from={anchor} f={f} onFilters={setFilters} />}
       </div>
       {filterOpen && <FilterDialog s={s} value={f} onChange={setFilters} onClose={() => setFilterOpen(false)} />}
     </div>
@@ -213,8 +219,8 @@ function DayRows({ list, s, now, hold, listId }: { list: Occurrence[]; s: Snapsh
 
 const monthOf = (d: number) => { const { y, m } = ymd(d); return epochOf(y, m, 1); };
 
-function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLong, onDayNote }: {
-  s: Snapshot; items: Item[]; anchor: number; noteDays: Set<number>; trainDays: Map<number, string>; onStep: (dir: number) => void;
+function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep, onPick, onLong, onDayNote }: {
+  s: Snapshot; items: Item[]; routinesLine: boolean; anchor: number; noteDays: Set<number>; trainDays: Map<number, string>; onStep: (dir: number) => void;
   onPick: (d: number) => void; onLong: (d: number) => void; onDayNote: (d: number) => void;
 }) {
   const now = useNow();
@@ -379,6 +385,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
           <span className="grow t-title-medium">{formatDate(anchor)}</span>
           <IconButton icon="oEditNote" label="Day note" onClick={() => onDayNote(anchor)} />
         </div>
+        {routinesLine && <RoutinesDayLine s={s} day={anchor} />}
         {dayList.length === 0 && <div className="p-empty pad16">Nothing planned. Long-press a day to add an event.</div>}
         <DayRows key={anchor} list={dayList} s={s} now={now} hold={hold} listId={`m${anchor}`} />
         <div style={{ height: 88 }} />
@@ -620,8 +627,8 @@ function movedToDay(item: Item, from: number, to: number): Item {
   return { ...item, startDay: to, endDay: item.endDay !== null ? to + (item.endDay - (item.startDay ?? from)) : null };
 }
 
-function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
-  s: Snapshot; items: Item[]; first: number; count: number; onStep: (dir: number) => void; turn: (dir: 1 | -1) => void;
+function TimeGrid({ s, items, routinesLine, first, count, onStep, turn, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
+  s: Snapshot; items: Item[]; routinesLine: boolean; first: number; count: number; onStep: (dir: number) => void; turn: (dir: 1 | -1) => void;
   onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
@@ -1167,7 +1174,9 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
 
   const colPct = 100 / count;
   const compact = days.length > 3;
-  const hasAllDay = allDay.some((l) => l.length);
+  // The Day view's line for the day's routines (224), at the end of its all-day row: "Routines 1/3 ›".
+  const routineDays = count === 1 && routinesLine ? all.map((d) => routinesOnDay(s.items, s.done, d, t).length > 0) : null;
+  const hasAllDay = allDay.some((l) => l.length) || !!routineDays?.some(Boolean);
 
   return (
     <div className="pg">
@@ -1213,6 +1222,7 @@ function TimeGrid({ s, items, first, count, onStep, turn, onNewAt, pending, note
                   {room > 0 && <span className="pg-adspace" style={{ height: room * 17 }} />}
                   {own.map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
                   {more > 0 && <span className="more">{more} more</span>}
+                  {routineDays?.[i] && <RoutinesDayLine s={s} day={all[i]} />}
                 </div>
               );
             })}
@@ -1320,16 +1330,18 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
   const c = s.colorOf(p.o.item);
   const h = Math.max(14, (p.end - p.start) * pxPerMin);
   const tiny = h < 22;
+  const lines = tiny ? 1 : blockLines(h);
   return (
-    <div className={`pg-block ${tiny ? "tiny" : ""} ${isTask ? "task" : ""} ${p.o.completed ? "done" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
+    <div className={`pg-block ${tiny ? "tiny" : ""} ${lines > 1 ? "wrap" : "one"} ${isTask ? "task" : ""} ${p.o.completed ? "done" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
       style={{
         top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`, ["--c" as string]: c,
       }}>
-      <b className={h >= 36 ? "two" : ""} style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>
+      <span className="pg-text" style={lines > 1 ? { height: lines * BLOCK_LINE } : undefined}>
+        {/* The tick sits in the first line, so the lines under it use the block's whole width. */}
         {ticks && <span className={`pg-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
-        {displayTitle(p.o.item)}
-      </b>
-      {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
+        <b style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>{displayTitle(p.o.item)}</b>
+        {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
+      </span>
       {/* The bottom edge, for a mouse: drag it to change when the event ends (wide.css shows it to a mouse only). */}
       {!isTask && h >= 24 && <span className="pg-resize" aria-hidden="true" />}
     </div>
@@ -1369,7 +1381,7 @@ function AllDayChip({ o, s }: { o: Occurrence; s: Snapshot }) {
   return (
     <div className={`pg-chip ${isTask ? "task" : ""}`} role="button" onClick={() => openItem(o.item, o.day)}
       style={{ ["--c" as string]: c, textDecoration: o.completed ? "line-through" : undefined }}>
-      {displayTitle(o.item)}
+      <span className="pg-text">{displayTitle(o.item)}</span>
     </div>
   );
 }
