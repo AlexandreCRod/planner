@@ -569,6 +569,11 @@ export const isGame = (item: Item, sports: ReadonlySet<number> = NO_SPORTS) => g
 
 /** The id of a game's log: one per event and day. */
 export const futsalLogId = (itemId: number, day: number) => `futsal:${itemId}:${day}`;
+/** The day of a log id of event [itemId]; null when it isn't one. */
+export function futsalLogDay(id: string, itemId: number): number | null {
+  const prefix = `futsal:${itemId}:`;
+  return id.startsWith(prefix) ? Number(id.slice(prefix.length)) : null;
+}
 
 export interface FutsalGame {
   itemId: number;

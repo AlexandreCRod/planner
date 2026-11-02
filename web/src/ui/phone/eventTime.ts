@@ -4,7 +4,7 @@
 import { formatDateShort, formatTime } from "../../domain/dates.ts";
 import type { Occurrence, TaskEntry } from "../../domain/schedule.ts";
 import { isRecurring, type Item } from "../../domain/types.ts";
-import { deleteForever, saveItem, saveSeriesEdit } from "../../store/store.ts";
+import { saveItem, saveSeriesEdit, withUndo } from "../../store/store.ts";
 import { showSnackbar } from "./m3.tsx";
 import { moveKeepingLength } from "./wheelMath.ts";
 
@@ -15,8 +15,7 @@ function change(item: Item, day: number, patch: Partial<Item>, text: string) {
     saveItem({ ...item, ...patch });
     undo = () => saveItem(item);
   } else {
-    const id = saveSeriesEdit("THIS", item, day, { ...item, ...patch });
-    undo = () => { deleteForever(id); saveItem(item); };
+    undo = withUndo(() => { saveSeriesEdit("THIS", item, day, { ...item, ...patch }); });
   }
   showSnackbar(text, "Undo", undo);
 }

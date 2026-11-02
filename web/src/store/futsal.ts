@@ -4,7 +4,7 @@
 import { type Entry, convertFutsal, futsalLogId, isSportsCategory, newEntry } from "../domain/training.ts";
 import { type Category, type Item, isRecurring, newItem } from "../domain/types.ts";
 import {
-  deleteOccurrence, listOf, putRecords, removeRecords, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash,
+  deleteOccurrence, listOf, putRecords, saveItem, saveSeriesEdit, snapshot, toggleCompletion, trash,
 } from "./store.ts";
 
 const DAY_END = 24 * 60 - 1;
@@ -55,7 +55,7 @@ export function addGame(day: number): GameRef {
 /**
  * Moves a game to [to], and to [startMin] when the event has a time (undefined keeps it). A one-off event
  * moves; one day of a repeating one becomes its own event (as editing "this day" in the calendar does).
- * Its tick and log come along. Returns where the game is now.
+ * Its tick and log come along (the store carries the log, as for any move). Returns where the game is now.
  */
 export function moveGame(g: GameRef, to: number, startMin?: number): GameRef {
   const item = snapshot().byId.get(g.itemId);
@@ -70,7 +70,6 @@ export function moveGame(g: GameRef, to: number, startMin?: number): GameRef {
     ...(timed && newMin !== null ? { startMin: newMin, endMin: length !== null ? Math.min(newMin + Math.max(0, length), DAY_END) : item.endMin } : {}),
   };
   const done = snapshot().done.isDone(g.itemId, g.day);
-  const log = storedLog(g);
   let now: GameRef;
   if (isRecurring(item)) {
     // The tick comes with it (saveSeriesEdit carries it to the new event).
@@ -79,10 +78,6 @@ export function moveGame(g: GameRef, to: number, startMin?: number): GameRef {
     saveItem(edited);
     now = { itemId: g.itemId, day: to };
     if (done && to !== g.day) { toggleCompletion(g.itemId, g.day, false); toggleCompletion(g.itemId, to, true); }
-  }
-  if (log && (now.itemId !== g.itemId || now.day !== g.day)) {
-    putRecords("trainingEntries", [{ ...log, id: futsalLogId(now.itemId, now.day), itemId: now.itemId, updatedAt: Date.now() }]);
-    removeRecords("trainingEntries", [log]);
   }
   return now;
 }

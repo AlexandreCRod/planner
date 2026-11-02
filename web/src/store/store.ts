@@ -4,10 +4,11 @@
 import { useSyncExternalStore } from "react";
 import * as db from "./db.ts";
 import { newId, tagIdFor } from "../domain/ids.ts";
-import { endedBefore, movedRule, parseDays } from "../domain/recurrence.ts";
+import { endedBefore, movedRule, occurrences, parseDays } from "../domain/recurrence.ts";
 import { doneTodosToTrash, expiredTrash, staleVersions } from "../domain/retention.ts";
 import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
+import { type Entry, futsalLogDay, futsalLogId } from "../domain/training.ts";
 import { logProblem } from "../problems.ts";
 import {
   type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
@@ -255,6 +256,7 @@ export function saveItem(item: Item, opts: SaveOptions = {}): number {
   const was = records.get(`items/${saved.id}`) as Item | undefined;
   put("items", saved);
   if (was) moveTick(was, saved);
+  if (was && !isRecurring(was) && was.startDay !== null && was.startDay !== saved.startDay) carryGames(was.id, saved, (d) => (d === was.startDay ? saved.startDay : null));
   const id = saved.id;
   if (opts.reminders) {
     for (const r of list<Reminder>("reminders")) if (r.itemId === id) del("reminders", r);
@@ -273,6 +275,35 @@ function moveTick(was: Item, now: Item) {
   if (!tick) return;
   del("completions", tick);
   put("completions", { ...tick, day: now.startDay ?? NO_DAY });
+}
+
+/**
+ * A game's log hangs on its event and day (futsalLogId), so when a game moves or gets a new event, however
+ * that's done, its log goes with it, and so does its tick where saving didn't move that. [item]: the event as saved;
+ * [to]: where a log of [fromId] on a day goes (null: it stays). It stays too if the event isn't on that day.
+ */
+function carryGames(fromId: number, item: Item, to: (day: number) => number | null) {
+  const moves: { log: Entry; day: number; at: number; tick?: Completion }[] = [];
+  for (const log of list<Entry>("trainingEntries")) {
+    const day = futsalLogDay(log.id, fromId), at = day === null ? null : to(day);
+    if (day === null || at === null || (at === day && item.id === fromId) || !occurrences(item, at, at).length) continue;
+    moves.push({ log, day, at, tick: records.get(`completions/${fromId}:${day}`) as Completion | undefined });
+  }
+  // All off first: a log landing on a day another is leaving mustn't overwrite it.
+  for (const m of moves) { del("trainingEntries", m.log); if (m.tick) del("completions", m.tick); }
+  const now = Date.now();
+  for (const m of moves) {
+    put("trainingEntries", { ...m.log, id: futsalLogId(item.id, m.at), itemId: item.id, updatedAt: now });
+    if (m.tick) put("completions", { ...m.tick, itemId: item.id, day: m.at });
+  }
+}
+
+/** All of [series] was moved (saved as [id]): each game's log goes the same number of days. */
+function carrySeries(series: Item, id: number) {
+  const now = (records.get(`items/${id}`) as Item | undefined)!;
+  const by = (now.startDay ?? 0) - (series.startDay ?? 0);
+  if (by && series.startDay !== null) { carryGames(series.id, now, (d) => d + by); changed(); }
+  return id;
 }
 
 function setTags(itemId: number, names: string[]) {
@@ -392,7 +423,7 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
   const tags = opts.tags ?? (s.tagsByItem.get(series.id) ?? []).map((t) => t.name);
   const span = (series.endDay ?? series.startDay ?? day) - (series.startDay ?? day);
   const freshReminders = reminders.map((r) => ({ ...r, id: 0 }));
-  if (scope === "ALL") return saveItem({ ...edited, id: series.id }, { reminders, tags });
+  if (scope === "ALL") return carrySeries(series, saveItem({ ...edited, id: series.id }, { reminders, tags }));
   if (scope === "THIS") {
     const wasDone = s.done.isDone(series.id, day);
     deleteOccurrence(series, day);
@@ -405,13 +436,15 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
       { reminders: freshReminders, tags },
     );
     if (wasDone && startDay !== null) put("completions", { itemId: newIdNum, day: startDay, completedAt: Date.now() });
+    carryGames(series.id, (records.get(`items/${newIdNum}`) as Item | undefined)!, (d) => (d === day ? startDay : null));
     addLink(newIdNum, series.id);
     return newIdNum;
   }
-  if (day <= (series.startDay ?? day)) return saveItem({ ...edited, id: series.id }, { reminders, tags });
+  if (day <= (series.startDay ?? day)) return carrySeries(series, saveItem({ ...edited, id: series.id }, { reminders, tags }));
   saveItem({ ...series, untilDay: day - 1 });
   const to = opts.movedTo ?? day;
   const id = saveItem({ ...edited, id: 0, startDay: to, endDay: to + span, parentId: null }, { reminders: freshReminders, tags });
+  carryGames(series.id, (records.get(`items/${id}`) as Item | undefined)!, (d) => (d >= day ? d + (to - day) : null));
   addLink(id, series.id);
   return id;
 }
