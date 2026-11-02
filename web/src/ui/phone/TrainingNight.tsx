@@ -8,7 +8,7 @@ import { dayShort, formatDate, weekday } from "../../domain/dates.ts";
 import { type NightSpan, type SleepNight, NIGHT_STAGES, clockAfter, clockChange, clockOfMoment, fmtSleep, inBedMin, nightTotals, spanAt, usualNight } from "../../domain/sleep.ts";
 import type { Training } from "../../store/training.ts";
 import { dayMonth, scale } from "./chartMath.ts";
-import { EmptyHint, MIcon } from "./chrome.tsx";
+import { EmptyState, MIcon } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { GREY, STAGE_COLOURS, STAGE_NAMES, useWidth } from "./ProgressChart.tsx";
 import { join } from "./progressParts.tsx";
@@ -119,7 +119,7 @@ function StageCard({ n, usual }: { n: SleepNight; usual: ReturnType<typeof usual
 export function NightCards({ tr, day, t, onGo }: { tr: Training; day: number; t: number; onGo: (day: number) => void }) {
   const list = tr.sleep.filter((x) => x.totalMin !== null);
   const i = list.findIndex((x) => x.day === day);
-  if (i < 0) return <EmptyHint>This night isn't here any more.</EmptyHint>;
+  if (i < 0) return <EmptyState icon="oNightsStay" title="This night isn't here any more" />;
   const n = list[i], prev = list[i - 1], next = list[i + 1];
   const usual = usualNight(tr.sleep, day);
   const diff = usual.asleep !== null ? n.totalMin! - usual.asleep : null;

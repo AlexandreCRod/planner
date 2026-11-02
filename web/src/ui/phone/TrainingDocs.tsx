@@ -8,7 +8,7 @@ import { type Block, type Inline, parseDocLink, parseMarkdown } from "../../doma
 import { type Lift, entryId } from "../../domain/training.ts";
 import type { LoadedPlan, Training } from "../../store/training.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
-import { ChipRow, EmptyHint, FilterChip, Scaffold, SectionHeader } from "./chrome.tsx";
+import { ChipRow, EmptyState, FilterChip, Scaffold, SectionHeader } from "./chrome.tsx";
 import { ListItem } from "./m3.tsx";
 import { openExternal } from "./native.ts";
 import { allExercises, fmtKg, planQ } from "./trainingParts.tsx";
@@ -125,7 +125,7 @@ export function TrainingDocs({ lp, file, anchor, planId }: { lp: LoadedPlan; fil
         </ChipRow>
       )}
       <div className="p-content tr-doc" ref={box}>
-        {cur ? <MarkdownView md={lp.docs.get(cur)!} onDocLink={follow} /> : <EmptyHint>This plan has no documents yet.</EmptyHint>}
+        {cur ? <MarkdownView md={lp.docs.get(cur)!} onDocLink={follow} /> : <EmptyState icon="oMenuBook" title="No documents" hint="This plan has none yet" />}
       </div>
     </Scaffold>
   );

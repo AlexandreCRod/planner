@@ -9,7 +9,7 @@ import { streakRows } from "../../domain/routines.ts";
 import { useSnapshot } from "../../store/store.ts";
 import { streakSymbol } from "../../store/routines.ts";
 import { openItem } from "../shared/common.tsx";
-import { MIcon } from "./chrome.tsx";
+import { EmptyState, MIcon } from "./chrome.tsx";
 import { BottomSheet } from "./m3.tsx";
 
 const DAYS = 14;
@@ -24,7 +24,7 @@ export function StreaksSheet({ onClose }: { onClose: () => void }) {
     <BottomSheet onClose={onClose} className="p-rlist-sheet">{(close) => (
       <div className="p-rlist">
         <div className="p-rlist-head t-title-medium">Streaks</div>
-        {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet. Turn on Routine in a repeating task or event.</div>}
+        {rows.length === 0 && <EmptyState className="compact" icon="fRepeat" title="No routines yet" hint="Turn on Routine in a repeating task or event" />}
         <div className="p-rlist-rows">
           {rows.map((r) => (
             <button key={r.item.id} className="p-streak-row" onClick={() => { close(); window.setTimeout(() => openItem(r.item), 210); }}>

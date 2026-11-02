@@ -25,7 +25,7 @@ import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../s
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
 import { type RangeKey, DEFAULT_RANGE, dayMonth, inRange, rangeStart, signed, spanWindow } from "./chartMath.ts";
-import { EmptyHint, MIcon, Scaffold, Segmented } from "./chrome.tsx";
+import { EmptyState, MIcon, Scaffold, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { NO_SWIPE, spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { BottomSheet, SheetButtons, TextButton, showSnackbar } from "./m3.tsx";
@@ -183,7 +183,7 @@ function TabPage({ tr, tab, t, sel, onOpen }: { tr: Training; tab: Tab; t: numbe
   let group = "";
   return <>
     {tab === "nutrition" && <div className="pg-soon">Later: from the meal photos you send to the Meals chat, against the plan's protein, carbs and fat.</div>}
-    {tab !== "nutrition" && rows.length === 0 && <EmptyHint>Lifts show here once sets are logged.</EmptyHint>}
+    {tab !== "nutrition" && rows.length === 0 && <EmptyState icon="oFitnessCenter" title="No lifts yet" hint="They show here once sets are logged" />}
     {rows.map((r) => {
       const head = r.group !== group ? r.group : null;
       const first = group === "";
@@ -481,7 +481,7 @@ function SleepCards({ tr, id, t, onNight }: { tr: Training; id: string; t: numbe
   const span = useSpan(list.map((n) => n.day), t);
   const [at, setAt] = useState<number | null>(null);
   const switcher = <RangeSwitch value={span.range} onChange={span.setRange} />;
-  if (!list.length) return <EmptyHint>No nights yet.</EmptyHint>;
+  if (!list.length) return <EmptyState icon="oNightsStay" title="No nights yet" hint="They come from the watch through Health Connect" />;
   const shown = inRange(list, span.start, span.end);
   const avgPts = inRange(line, span.start, span.end);
   const last = span.back ? shown[shown.length - 1] : list[list.length - 1];
@@ -704,7 +704,7 @@ function BodyCards({ tr, def: b, t }: { tr: Training; def: BodyDef; t: number })
   const span = useSpan(list.map((p) => p.day), t);
   const [at, setAt] = useState<number | null>(null);
   const switcher = <RangeSwitch value={span.range} onChange={span.setRange} />;
-  if (!list.length) return <EmptyHint>{`No ${b.name.toLowerCase()} readings yet. They come from the watch through Health Connect.`}</EmptyHint>;
+  if (!list.length) return <EmptyState icon="fShowChart" title={`No ${b.name.toLowerCase()} readings yet`} hint="They come from the watch through Health Connect" />;
   const shown = inRange(list, span.start, span.end);
   const avgPts = inRange(line, span.start, span.end);
   const last = span.back ? shown[shown.length - 1] : list[list.length - 1], first = shown[0];

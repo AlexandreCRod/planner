@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, DoneFold, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, DoneFold, EmptyState, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -120,12 +120,12 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   // The phone keeps Today to about one screen: sections only when they have something, one line when
   // the day is empty, a folded line for what's behind us, no week ahead; a glance at tomorrow instead.
   const nothing = shownOverdue.length === 0 && dayTasks.length === 0 && dayEvents.length === 0 && doneFold.length === 0;
-  const nothingText = isToday ? "Nothing planned today. Tap + to add something." : day < t ? `Nothing was planned ${dayWord}.` : `Nothing planned ${dayWord}.`;
+  const nothingTitle = isToday ? "A clear day" : day < t ? "Nothing was planned" : "Nothing planned yet";
 
   const top = <>
     {(routines.length > 0 || anyRoutine) && <RoutinesLine list={routines} s={s} day={day} t={t} />}
     <TrainingLine day={day} t={t} />
-    {nothing && <div className="hint empty p-nothing">{nothingText}</div>}
+    {nothing && <EmptyState icon="oCalendarToday" title={nothingTitle} hint={day < t ? undefined : "Tap + to add something"} />}
   </>;
   const tasks = <>
     {overdueOnToday > 0 && (
@@ -321,7 +321,7 @@ function RoutineListSheet({ s, t, onClose, onStreaks }: { s: Snapshot; t: number
       <div className="p-rlist">
         <div className="p-sheet-title">Routines</div>
         {todays.length > 0 && <div className="p-rlist-count">{done === todays.length ? `All ${todays.length} done today` : `${done} of ${todays.length} done today`}</div>}
-        {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet. Turn on Routine in a repeating task or event.</div>}
+        {rows.length === 0 && <EmptyState className="compact" icon="fRepeat" title="No routines yet" hint="Turn on Routine in a repeating task or event" />}
         <div className="p-rlist-rows">
           {todays.length > 0 && others.length > 0 && <div className="p-rlist-group">Today<HeadCount n={todays.length} /></div>}
           {todays.map((r) => row(r, close))}

@@ -11,7 +11,7 @@ import { cssColor } from "../../domain/types.ts";
 import { count } from "../../domain/plural.ts";
 import { useSnapshot } from "../../store/store.ts";
 import { calendarAccess, canImportCalendars, importEntries, openCalendarSettings, readPhoneCalendars } from "../../store/phoneCalendar.ts";
-import { Checkbox, EmptyHint, MIcon, Scaffold } from "./chrome.tsx";
+import { Checkbox, EmptyState, MIcon, Scaffold } from "./chrome.tsx";
 import { OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
 
 type State = { at: "loading" } | { at: "denied" } | { at: "error"; message: string } | { at: "ready"; groups: ImportGroup[] };
@@ -71,7 +71,7 @@ export function PhoneCalendarImport() {
     <Scaffold title="Google Calendar" back flush
       actions={state.at === "ready" ? <TextButton disabled={picked.size === 0} onClick={doImport}>{picked.size ? `Import ${picked.size}` : "Import"}</TextButton> : undefined}>
       <div className="p-content ps pci">
-        {!canImportCalendars && <EmptyHint>Importing reads the phone's calendars, so it's in the app on the phone.</EmptyHint>}
+        {!canImportCalendars && <EmptyState icon="oCalendarToday" title="Import on the phone" hint="Importing reads the phone's calendars, so it's in the app on the phone" />}
         {canImportCalendars && state.at === "loading" && <div className="ps-empty">Reading the phone's calendars…</div>}
         {state.at === "denied" && <>
           <div className="ps-empty">Planner needs to read the phone's calendars to import from them. Google Calendar keeps them there; nothing is changed in them.</div>
@@ -83,7 +83,7 @@ export function PhoneCalendarImport() {
         {state.at === "error" && <div className="ps-empty">The calendars couldn't be read ({state.message}).</div>}
         {state.at === "ready" && <>
           <div className="pe-small ps-note">Birthdays come in as yearly all-day events in Personal, holidays as all-day events, the rest with their times. Importing again updates them.</div>
-          {groups.length === 0 && <div className="ps-empty">No events ahead in the phone's calendars.</div>}
+          {groups.length === 0 && <EmptyState icon="oEventBusy" title="No events ahead" hint="The phone's calendars have nothing coming up" />}
           {groups.map((g) => {
             const sources = g.entries.map((e) => e.source);
             const n = sources.filter((k) => picked.has(k)).length;

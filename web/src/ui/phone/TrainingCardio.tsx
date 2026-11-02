@@ -13,7 +13,7 @@ import {
 import type { Run, RunType } from "../../domain/trends.ts";
 import { type LoadedPlan, type Training, saveGameNote, saveRunNote } from "../../store/training.ts";
 import { type TimeWindow, type WindowKey, WINDOWS, allWindows, barLabels, dayMonth, hasEarlier, rangeWindow } from "./chartMath.ts";
-import { EmptyHint, MIcon, Segmented } from "./chrome.tsx";
+import { EmptyState, MIcon, Segmented } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { type Pan, Chart, FUTSAL, GREY, PanBar, RUN, RangeMenu, RangeSwitch, Spark } from "./ProgressChart.tsx";
 import { Switch, TextButton } from "./m3.tsx";
@@ -92,11 +92,11 @@ export function CardioCards({ tr, id, t, st, onOpen }: { tr: Training; id: strin
   if (id.startsWith("type:")) return <TypeCards tr={tr} type={typeOf(id)} t={t} st={st} onOpen={onOpen} />;
   if (id.startsWith("run:")) {
     const r = tr.runs.find((x) => x.id === id.slice(4));
-    return r ? <RunCard key={r.id} tr={tr} r={r} /> : <EmptyHint>This run isn't here any more.</EmptyHint>;
+    return r ? <RunCard key={r.id} tr={tr} r={r} /> : <EmptyState icon="tRunner" title="This run isn't here any more" />;
   }
   if (id.startsWith("game:")) {
     const g = tr.games.find((x) => x.id === id.slice(5));
-    return g ? <GameCard key={g.id} tr={tr} g={g} t={t} /> : <EmptyHint>This game isn't here any more.</EmptyHint>;
+    return g ? <GameCard key={g.id} tr={tr} g={g} t={t} /> : <EmptyState icon="tBallSolid" title="This game isn't here any more" />;
   }
   return null;
 }

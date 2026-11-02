@@ -19,9 +19,9 @@ import { type Placed, layoutDay } from "../shared/dayLayout.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
-import { AppBarActions, Checkbox, Dialog, DoneFold, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
+import { AppBarActions, Checkbox, Dialog, DoneFold, DropdownMenu, EmptyState, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { splitDone } from "../../domain/todayPlan.ts";
-import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
+import { type CalFilter, filterOn, filterShows, noFilter } from "./calFilter.ts";
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { RoutinesDayLine } from "./PhoneToday.tsx";
 import { feel } from "./haptics.ts";
@@ -49,9 +49,7 @@ const ZOOM_KEY = "calHourHeight";
 
 // Kept while moving around the app, like the native CalendarState.
 let selected = todayEpoch();
-let filters = { events: true, tasks: true, hidden: new Set<number>() };
-/** The Agenda's own chips after Events and Tasks (the Tasks page's categories; 241). */
-let agendaFilter: TaskFilter = { category: null };
+let filters: CalFilter = noFilter();
 let savedHour: number | null = Number(localStorage.getItem(ZOOM_KEY)) || null;
 /** The view chosen in the menu (the native app keeps it in its settings); Month to begin with, as there. */
 const baseMode = (): Mode => {
@@ -63,8 +61,7 @@ export const calendarSelectedDay = () => selected;
 /** Back to the base view (a double tap on the Calendar tab): today, the saved view, no filters, the opening zoom. */
 export function resetCalendar() {
   selected = todayEpoch();
-  filters = { events: true, tasks: true, hidden: new Set() };
-  agendaFilter = { category: null };
+  filters = noFilter();
   savedHour = null;
   localStorage.removeItem(ZOOM_KEY);
 }
@@ -124,8 +121,8 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     : `${monthShort(ymd(mode === "week" ? weekStart : anchor).m)} ${ymd(mode === "week" ? weekStart : anchor).y}`;
   const first = mode === "week" ? weekStart : anchor;
   const count = mode === "day" ? 1 : mode === "3day" ? 3 : 7;
-  const filtered = useMemo(() => s.items.filter((i) =>
-    ((i.type === "EVENT" && f.events) || (i.type === "TASK" && f.tasks)) && (i.categoryId === null || !f.hidden.has(i.categoryId))), [s, f]);
+  const filtered = useMemo(() => s.items.filter((i) => filterShows(f, i)), [s, f]);
+  const isFiltered = filterOn(f, s.categories.map((c) => c.id));
   const gridItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "chosen")), [filtered, allRoutines]);
   const monthItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "none")), [filtered, allRoutines]);
   const noteDays = useMemo(() => new Set(s.items.filter((i) => i.type === "NOTE" && i.noteDay !== null).map((i) => i.noteDay!)), [s]);
@@ -157,6 +154,17 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
         </div>
         <AppBarActions />
       </header>
+      {/* One filter for every view (287): while it hides something, a chip says so; a tap on it opens the
+          box, "Clear" shows everything again. */}
+      {isFiltered && (
+        <div className="p-calfilter">
+          <span className="p-calfilter-chip">
+            <button className="on" onClick={() => setFilterOpen(true)}><MIcon name="oFilterList" size={18} /><span>Filtered</span></button>
+            <span className="dot" aria-hidden="true">·</span>
+            <button onClick={() => setFilters(noFilter())}>Clear</button>
+          </span>
+        </div>
+      )}
       <div className="p-calbody">
         {grid && <TimeGrid s={s} items={gridItems} routinesLine={!allRoutines} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
           onDayHeader={(d) => { setAnchor(d); setMode("day"); }} onDayNote={(d) => openDailyNote(s, d)} />}
@@ -164,7 +172,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
           onLong={(d) => { setAnchor(d); onNewAt(d, 9 * 60); }} onDayNote={(d) => openDailyNote(s, d)} />}
         {mode === "year" && <YearView s={s} items={monthItems} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
-        {mode === "agenda" && <AgendaView s={s} items={gridItems} from={anchor} f={f} onFilters={setFilters} />}
+        {mode === "agenda" && <AgendaView s={s} items={gridItems} from={anchor} isFiltered={isFiltered} />}
       </div>
       {filterOpen && <FilterDialog s={s} value={f} onChange={setFilters} onClose={() => setFilterOpen(false)} />}
     </div>
@@ -172,7 +180,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
 }
 
 /** "Show on calendar": events, tasks, and each category (CalendarScreen.kt's filter dialog). */
-function FilterDialog({ s, value, onChange, onClose }: { s: Snapshot; value: typeof filters; onChange: (v: typeof filters) => void; onClose: () => void }) {
+function FilterDialog({ s, value, onChange, onClose }: { s: Snapshot; value: CalFilter; onChange: (v: CalFilter) => void; onClose: () => void }) {
   const row = (label: string, checked: boolean, set: (v: boolean) => void) => (
     <label className="p-check-row" key={label}><Checkbox checked={checked} onChange={set} /><span>{label}</span></label>
   );
@@ -386,7 +394,7 @@ function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep
           <IconButton icon="oEditNote" label="Day note" onClick={() => onDayNote(anchor)} />
         </div>
         {routinesLine && <RoutinesDayLine s={s} day={anchor} />}
-        {dayList.length === 0 && <div className="p-empty pad16">Nothing planned. Long-press a day to add an event.</div>}
+        {dayList.length === 0 && <EmptyState className="compact" icon="oCalendarToday" title="A clear day" hint="Tap + or hold a day to add something" />}
         <DayRows key={anchor} list={dayList} s={s} now={now} hold={hold} listId={`m${anchor}`} />
         <div style={{ height: 88 }} />
       </div>
@@ -546,31 +554,23 @@ const YearPanel = memo(function YearPanel({ s, items, year, t, onMonth }: { s: S
 // ---------- Agenda (YearAgenda.kt's AgendaView) ----------
 
 /**
- * The next 90 days as a list. Its chips (241): Events and Tasks (the Filter dialog's own two), then the Tasks
- * page's categories, so only tasks with a category picked lists them by day. Each day's ticked tasks fold
- * into its own "1 done ⌄" line (284).
+ * The next 90 days as a list, filtered like every view by the menu's Filter (its own chips went in 287).
+ * Each day's ticked tasks fold into its own "1 done ⌄" line (284).
  */
-function AgendaView({ s, items, from, f, onFilters }: { s: Snapshot; items: Item[]; from: number; f: typeof filters; onFilters: (v: typeof filters) => void }) {
+function AgendaView({ s, items, from, isFiltered }: { s: Snapshot; items: Item[]; from: number; isFiltered: boolean }) {
   const now = useNow();
   const t = todayEpoch();
-  const [tf, setTfState] = useState(agendaFilter);
-  const setTf = (v: TaskFilter) => { agendaFilter = v; setTfState(v); };
   const hold = useCheckedHold();
   const groups = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
-    const shown = items.filter((i) => inCategory(i, tf.category));
-    for (const o of forCalendar(shown, s.done, from, from + 90, t, carryOver())) {
+    for (const o of forCalendar(items, s.done, from, from + 90, t, carryOver())) {
       const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]);
     }
     return [...map].sort((a, b) => a[0] - b[0]);
-  }, [items, s, from, t, tf]);
+  }, [items, s, from, t]);
   return (
     <div className="p-agenda p-rows">
-      <TaskChips s={s} value={tf} onChange={setTf} className="agenda" before={<>
-        <FilterChip selected={f.events} check onClick={() => onFilters({ ...f, events: !f.events })}>Events</FilterChip>
-        <FilterChip selected={f.tasks} check onClick={() => onFilters({ ...f, tasks: !f.tasks })}>Tasks</FilterChip>
-      </>} />
-      {groups.length === 0 && <div className="p-empty pad16 body-large">Nothing in the next 90 days.</div>}
+      {groups.length === 0 && <EmptyState icon="oViewAgenda" title={isFiltered ? "Nothing shown" : "Nothing in the next 90 days"} hint={isFiltered ? "The filter hides the rest" : "Tap + to add something"} />}
       {groups.map(([day, list]) => (
         <div key={day}>
           <div className="p-agenda-day t-title-small">{relativeDay(day)}</div>

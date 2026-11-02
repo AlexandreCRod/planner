@@ -21,7 +21,7 @@ import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
-import { Dialog, DropdownMenu, EmptyHint, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
+import { Dialog, DropdownMenu, EmptyState, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
@@ -465,7 +465,7 @@ export function PhoneBackups() {
     <Scaffold title="Restore from backup" back flush>
       <div className="p-content ps">
         <div className="pe-small ps-note">Restoring puts back what's missing here, and can set changed things back to how they were. It never deletes anything. You'll see what it would do first.</div>
-        {files !== null && files.length === 0 && <div className="ps-empty">No backups on this phone yet.</div>}
+        {files !== null && files.length === 0 && <EmptyState icon="oHistory" title="No backups yet" hint="Planner makes one every day on this phone" />}
         {(files ?? []).map((f) => (
           <ListItem key={f.name} headline={backupWhen(f.at)} supporting={sizeText(f.size)} leading={<MIcon name="oRestoreFromTrash" />} onClick={() => void open(f)} />
         ))}
@@ -575,7 +575,7 @@ export function PhoneCategories() {
   return (
     <Scaffold title="Categories" back flush>
       <div className="p-content ps">
-        {s.categories.length === 0 && <EmptyHint>No categories yet.</EmptyHint>}
+        {s.categories.length === 0 && <EmptyState icon="oCategory" title="No categories" hint="Tap + to add one" />}
         {s.categories.map((c) => (
           <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: cssColor(c.color) }} />}
             supporting={`Default reminder: ${c.defaultAlert.toLowerCase()} · ${count(s.items.filter((i) => i.categoryId === c.id).length, "item")}`}
@@ -633,7 +633,7 @@ export function PhoneProblems() {
       <TextButton onClick={clearProblems}>Clear</TextButton>
     </> : undefined}>
       <div className="p-content ps">
-        {list.length === 0 && <div className="ps-empty">Nothing has gone wrong on this device.</div>}
+        {list.length === 0 && <EmptyState icon="oTaskAlt" title="No problems" hint="Nothing has gone wrong on this device" />}
         {list.map((p) => (
           <ListItem key={`${p.at}${p.message}`} headline={<span className="ps-pre">{p.message}</span>}
             supporting={<span className="ps-pre">{`${formatDateTime(p.at)} · ${p.kind}${p.detail ? `\n${p.detail.split("\n").slice(0, 4).join("\n")}` : ""}`}</span>} />
@@ -654,7 +654,7 @@ export function PhoneTrash() {
     <Scaffold title="Trash" back flush actions={s.trash.length > 0 ? <TextButton onClick={() => setConfirm("all")}>Empty</TextButton> : undefined}>
       <div className="p-content ps">
         <div className="pe-small ps-note">{RETENTION_TEXT}</div>
-        {s.trash.length === 0 && <div className="ps-empty">Trash is empty.</div>}
+        {s.trash.length === 0 && <EmptyState icon="oDelete" title="Trash is empty" hint="Deleted things stay here for 30 days" />}
         {s.trash.map((i) => (
           <ListItem key={i.id} headline={<span className="ellipsis">{i.title || "Untitled"}</span>} leading={<MIcon name={icon(i.type)} />}
             supporting={`${typeLabel(i)} · deleted ${formatDateTime(i.deletedAt ?? 0)}`}

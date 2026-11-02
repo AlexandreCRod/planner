@@ -18,7 +18,7 @@ import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { AppBarActions, Dialog, DropdownMenu, FilterChip, HScroll, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { useHorizontalSwipe } from "./gesture.ts";
 import { useHold as useLongPress } from "./hold.ts";
 import { pushBack } from "./native.ts";
@@ -348,7 +348,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
           {CLOCK_FILTERS.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow((f) => toggleFilter(f, k))}>{l}</FilterChip>)}
         </HScroll>
       )}
-      {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
+      {list.length === 0 && <EmptyState icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} hint="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
@@ -440,19 +440,6 @@ function CalendarAlarmsDialog({ list, onClose }: { list: CalendarAlarm[]; onClos
         );
       })}
     </Dialog>
-  );
-}
-
-function Empty({ icon, title, text, action, onIcon, iconLabel }: { icon: string; title: string; text?: string; action?: ReactNode; onIcon?: () => void; iconLabel?: string }) {
-  return (
-    <div className="pa-empty">
-      {onIcon
-        ? <button className="pa-empty-icon pa-noswipe" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={64} /></button>
-        : <MIcon name={icon} size={56} />}
-      <div className="t-title-medium">{title}</div>
-      {text && <div className="t-body-medium muted">{text}</div>}
-      {action}
-    </div>
   );
 }
 
@@ -816,7 +803,7 @@ function TimersPane({ timers: all, active, onNew }: { timers: ClockTimer[]; acti
     <div className="pa-scroll pa-gap12 pa-top12">
       <PermissionCards />
       {/* The big symbol starts a new timer too (77), like the alarms' one adds an alarm. */}
-      {timers.length === 0 && <Empty icon="oTimer" title="No timers" text="Tap the timer, + or a length below" onIcon={onNew} iconLabel="New timer" />}
+      {timers.length === 0 && <EmptyState icon="oTimer" title="No timers" hint="Tap the timer, + or a length below" onIcon={onNew} iconLabel="New timer" />}
       <div className="pa-presets">
         {TIMER_PRESETS.map((m) => <button key={m} className="p-assist pa-chip" onClick={() => void startTimer(m * 60_000)}>{presetText(m)}</button>)}
         <button className="p-assist pa-chip" onClick={onNew}>Other…</button>
@@ -953,7 +940,7 @@ function WorldClockPane({ zones: all, local, active, onAdd }: { zones: string[];
         </div>
         <WeatherChip id={here} now={now} active={active} />
       </div>
-      {zones.length === 0 && <Empty icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
+      {zones.length === 0 && <EmptyState icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
       {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} onRemove={() => remove(z)} />)}
     </div>
   );

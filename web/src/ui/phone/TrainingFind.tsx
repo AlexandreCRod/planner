@@ -8,7 +8,7 @@ import { dayOfSession, entryId, lastLift, sessionsOf } from "../../domain/traini
 import { findInTraining } from "../../domain/trainingFind.ts";
 import type { LoadedPlan, Training } from "../../store/training.ts";
 import { go } from "../shared/common.tsx";
-import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, SectionHeader, TopAppBar } from "./chrome.tsx";
+import { ChipRow, EmptyState, FilterChip, IconButton, MIcon, SectionHeader, TopAppBar } from "./chrome.tsx";
 import { useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 import { ListItem } from "./m3.tsx";
 import { docRoute } from "./TrainingDocs.tsx";
@@ -68,8 +68,8 @@ export function TrainingFind({ tr, lp, planId }: { tr: Training; lp: LoadedPlan;
             {CHIPS.map(([o, l]) => <FilterChip key={o} selected={only === o} onClick={() => setOnly(o)}>{l}</FilterChip>)}
           </ChipRow>
         )}
-        {!t && <EmptyHint>Find a session, an exercise or words in the guides.</EmptyHint>}
-        {t && count === 0 && <EmptyHint>Nothing for “{t}”.</EmptyHint>}
+        {!t && <EmptyState icon="oSearch" title="Search training" hint="Find a session, an exercise or words in the guides" />}
+        {t && count === 0 && <EmptyState icon="oSearch" title="Nothing found" hint={`Nothing for “${t}”`} />}
         {shown("sessions") && hits.sessions.length > 0 && <>
           <SectionHeader>Sessions</SectionHeader>
           {hits.sessions.map((h) => {

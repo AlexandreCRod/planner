@@ -30,7 +30,7 @@ import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
-import { AppBarActions, ChipRow, EmptyHint, FilterChip, HeadCount, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
+import { AppBarActions, ChipRow, EmptyState, FilterChip, HeadCount, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
@@ -77,7 +77,7 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
   if (!lp) {
     return (
       <Scaffold title="Training">
-        <EmptyHint>No training plan on this device yet. The plan session sends it from the PC, and it arrives with the next sync.</EmptyHint>
+        <EmptyState icon="tRunner" title="No training plan" hint="The plan comes from the PC and arrives with the next sync" />
       </Scaffold>
     );
   }
@@ -130,7 +130,7 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
       <AppBarActions />
     </>}>{children}</Scaffold>
   );
-  if (!plan.phases.length) return scaffold(<EmptyHint>This plan has no phases yet.</EmptyHint>);
+  if (!plan.phases.length) return scaffold(<EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" />);
   const phase = phaseIndexAt(plan, t), ph = plan.phases[phase];
   const bar = weekBar(phaseView(plan, phase, tr.entries, tr.entries.values()).days, tr.runs);
   const card = todayCard(plan, tr.entries, t);
@@ -217,7 +217,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   useWatchRunTicks(readOnly);
   const watchAsks = useWatchRunAsks(tr, lp, t, readOnly);
 
-  if (!plan.phases.length) return <Scaffold title="Training"><EmptyHint>This plan has no phases yet.</EmptyHint></Scaffold>;
+  if (!plan.phases.length) return <Scaffold title="Training"><EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" /></Scaffold>;
   const ph = plan.phases[phase];
   const v = phaseView(plan, phase, tr.entries, tr.entries.values());
   const [short, long] = phaseNames(ph.name);

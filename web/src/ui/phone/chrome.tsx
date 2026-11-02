@@ -232,8 +232,23 @@ export function DoneFold({ count, rows }: { count: number; rows: () => ReactNode
   </>;
 }
 
-export function EmptyHint({ children }: { children: ReactNode }) {
-  return <div className="p-empty">{children}</div>;
+/**
+ * The one empty block (287): a 40 px muted icon, a short title and one hint ("Tap + to add one"). With [onIcon] the
+ * icon is a button with a generous round target (77: Clock's empty pages add one with it). [action] goes under the hint.
+ */
+export function EmptyState({ icon, title, hint, action, onIcon, iconLabel, className = "" }: {
+  icon: string; title: ReactNode; hint?: ReactNode; action?: ReactNode; onIcon?: () => void; iconLabel?: string; className?: string;
+}) {
+  return (
+    <div className={`p-emptystate ${className}`}>
+      {onIcon
+        ? <button className="p-emptystate-icon tap pa-noswipe" aria-label={iconLabel} onClick={onIcon}><MIcon name={icon} size={40} /></button>
+        : <span className="p-emptystate-icon"><MIcon name={icon} size={40} /></span>}
+      <div className="p-emptystate-title">{title}</div>
+      {hint && <div className="p-emptystate-hint">{hint}</div>}
+      {action}
+    </div>
+  );
 }
 
 export interface MenuItem { label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean; disabled?: boolean }

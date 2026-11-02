@@ -13,7 +13,7 @@ import {
 } from "../../domain/training.ts";
 import { type LoadedPlan, type Training, saveEntry, saveLift, training } from "../../store/training.ts";
 import { go } from "../shared/common.tsx";
-import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
+import { Dialog, DropdownMenu, EmptyState, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { BottomSheet, OutlinedButton, TextButton, showSnackbar } from "./m3.tsx";
@@ -91,7 +91,7 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
   const [moving, setMoving] = useState(false);
   const nav = closeIcon ? <IconButton icon="fClose" label="Close" onClick={onClose} /> : undefined;
   if (!s) {
-    return <Scaffold title="Session" back={!closeIcon} actions={nav}><EmptyHint>This session isn't in the plan any more.</EmptyHint></Scaffold>;
+    return <Scaffold title="Session" back={!closeIcon} actions={nav}><EmptyState icon="tRunner" title="This session isn't in the plan any more" /></Scaffold>;
   }
   const e = entryFor(plan, s, tr.entries);
   const day = dayOfSession(s, tr.entries.get(e.id));

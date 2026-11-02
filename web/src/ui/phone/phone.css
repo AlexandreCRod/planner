@@ -215,7 +215,6 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .today-list :is(.task, .event).past { opacity: .72; }
 
 /* Today: one line when the day is empty, and tomorrow at a glance (its first few items, "+3 more"). */
-.phone .today-list .hint.empty.p-nothing { padding: 16px 16px 4px; }
 .phone .today-list .p-glance-head { display: block; width: 100%; border: 0; background: none; text-align: left; font-family: inherit; }
 .phone .today-list .p-glance-head::after { content: " \203A"; }
 .phone .today-list .p-glance-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 16px; border: 0; background: none; text-align: left; font: inherit; color: var(--text); }
@@ -456,7 +455,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-hfade.fade-l { --fl: 24px; }
 .phone .p-hfade.fade-r { --fr: 24px; }
 .phone .p-chipdiv { flex: none; align-self: center; width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
-.phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
+.phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
 .phone .p-chip {
   flex: none; height: 32px; margin: 4px 0; padding: 0 16px; border: 1px solid var(--p-outline); border-radius: 8px; background: none;
@@ -474,8 +473,6 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 /* SectionHeader (Common.kt): titleSmall in primary, 16 dp in, 10 above, 2 below. */
 .phone .p-section { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 10px 8px 2px 16px; border: 0; background: none; text-align: left; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary); }
 .phone .p-section svg { color: var(--muted); }
-.phone .p-empty { padding: 6px 16px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
-.phone .p-empty.pad16 { padding: 16px; }
 .phone .p-text-btn.icon { gap: 4px; padding: 0 12px; }
 /* Dropdown menu: surfaceContainer, 4 dp corners, 48 dp items in labelLarge, under the button's end. */
 .phone .p-menu-anchor { position: relative; flex: none; }
@@ -1053,10 +1050,6 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-filter::-webkit-scrollbar { display: none; }
 /* The four filters (71) share the row, so all fit on a phone at once. */
 .phone .pa-filter > * { flex: 1 0 auto; justify-content: center; padding-left: 10px; padding-right: 10px; }
-.phone .pa-empty { display: flex; flex-direction: column; align-items: center; padding: 64px 0; color: var(--text); text-align: center; }
-.phone .pa-empty > svg { color: var(--muted); margin-bottom: 12px; }
-.phone .pa-empty .p-text-btn { margin-top: 4px; }
-.phone .pa-gap12 .pa-empty { padding: 40px 0 12px; }
 /* Cards: surfaceContainerHigh, 24 dp corners. */
 .phone .pa-card { position: relative; overflow: hidden; border-radius: 24px; background: var(--p-sc-high); color: var(--text); }
 .phone .pa-card.off, .phone .pa-bundle-row.off { color: var(--muted); }
@@ -1357,10 +1350,6 @@ html.phone[data-theme="dark"] {
 .phone .pa-dial.out .pa-dial-btn { animation: pa-dial-out .12s linear forwards; }
 @keyframes pa-dial-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.6); } }
 @keyframes pa-dial-out { to { opacity: 0; transform: scale(.85); } }
-/* The empty page's big symbol adds an alarm. */
-/* The big empty-page symbol is a button with a generous target (77): 120 px round, the symbol at 64. */
-.phone .pa-empty-icon { position: relative; overflow: hidden; width: 120px; height: 120px; margin: -16px 0 -12px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
-.phone .pa-empty > .pa-empty-icon > svg { margin: 0; }
 /* World clock cards, a touch smaller. */
 /* No ✕ since 2.10 (233: swipe left or hold to remove): the same height as with it, the time 18 px in. */
 .phone .pa-city { padding: 8px 18px 8px 18px; border-radius: 20px; min-height: 64px; box-sizing: border-box; }
@@ -1569,7 +1558,6 @@ html.phone[data-theme="dark"] {
 .phone .p-rlist > .p-sheet-title { padding-bottom: 2px; }
 .phone .p-rlist-count { padding: 0 24px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
 .phone .p-rlist-group { padding: 12px 24px 4px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
-.phone .p-rlist-empty { padding: 16px 24px 24px; }
 .phone .p-rlist-rows { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
 .phone .p-rlist-row { position: relative; overflow: hidden; width: 100%; display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 8px 24px; border: 0; background: none; color: var(--text); text-align: left; }
 .phone .p-rlist-row .ring { flex: none; width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--p-outline); display: grid; place-items: center; color: var(--p-on-strong); }
@@ -1746,7 +1734,6 @@ html.phone[data-theme="dark"] {
 .phone .p-todos { --bg: var(--p-sc-low); } /* the rows (their drag) sit on the sheet's colour */
 .phone .p-todos .p-todo-add { padding-top: 0; }
 .phone .p-todos .p-todo-add input { padding: 10px 0; }
-.phone .p-todos .p-rlist-empty { padding: 12px 24px 16px; }
 /* The routines list's last line: Streaks. */
 .phone .p-rlist-streaks {
   display: flex; align-items: center; gap: 16px; width: 100%; min-height: 48px; margin-top: 4px; padding: 0 20px 0 24px; border: 0; border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
@@ -1818,3 +1805,25 @@ html.phone[data-theme="dark"] {
 .phone .p-notelabel { padding: 4px 4px 8px; }
 /* Today's headings are flex rows with a gap (styles.css .section); the count follows its word. */
 .phone .section:has(> .p-hn) { gap: 0; }
+
+/* ---------- 287: one empty block everywhere (chrome.tsx EmptyState): a 40 px muted icon, a short title, one hint.
+   Clock's icon is a button that adds one, with a generous round target (77). In sheets and under a grid: .compact. ---------- */
+.phone .p-emptystate { display: flex; flex-direction: column; align-items: center; padding: 48px 24px 24px; text-align: center; }
+.phone .p-emptystate.compact { padding: 16px 24px; }
+.phone .p-emptystate-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 12px; color: var(--muted); }
+.phone button.p-emptystate-icon { position: relative; overflow: hidden; box-sizing: content-box; width: 72px; height: 72px; margin: -16px 0 -4px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.phone .p-emptystate-title { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; color: var(--text); }
+.phone .p-emptystate-hint { margin-top: 2px; max-width: 320px; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
+.phone .p-emptystate .p-text-btn { margin-top: 8px; }
+.phone .p-graph-empty > .p-emptystate { padding: 0; }
+.phone .p-graph .p-emptystate svg { position: static; }
+
+/* ---------- 287: the calendar's one filter. While it hides something, a chip under the header says so:
+   "Filtered" opens the box, "Clear" shows everything again. ---------- */
+.phone .p-calfilter { flex: none; display: flex; padding: 0 16px 8px; }
+.phone .p-calfilter-chip { display: inline-flex; align-items: center; height: 32px; border-radius: 8px; background: var(--p-sec-container); color: var(--p-on-sec-container); font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.phone .p-calfilter-chip button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.phone .p-calfilter-chip button.on { padding-left: 8px; padding-right: 4px; }
+.phone .p-calfilter-chip button:not(.on) { padding-left: 4px; }
+.phone .p-calfilter-chip button:active { background: color-mix(in srgb, currentColor 10%, transparent); }
+.phone .p-calfilter-chip .dot { opacity: .7; }

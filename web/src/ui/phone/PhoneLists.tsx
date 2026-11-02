@@ -15,7 +15,7 @@ import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
-import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, HeadCount, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyState, FilterChip, FoldLine, HeadCount, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
 import { useNoteGrid } from "./noteDrag.ts";
@@ -161,7 +161,7 @@ function ScheduledList() {
   );
   return <>
     <TaskChips s={s} value={filter} onChange={setFilter} />
-    {entries.length === 0 && <EmptyHint>No tasks yet. Tap + and try "Stretch every day 7am".</EmptyHint>}
+    {entries.length === 0 && <EmptyState icon="oTaskAlt" title="No tasks" hint={<>Tap + and try “Stretch every day 7am”</>} />}
     {GROUPS.map((g) => {
       const list = hold.arrange(g, sorted(open.filter((e) => groupOf(e) === g && e.status !== "DONE")), key);
       if (!list.length) return null;
@@ -259,7 +259,7 @@ export function TodosSheet({ back = null, onClose }: { back?: number | null; onC
           <div className="p-rlist-head t-title-medium">To-dos</div>
           <TodoAdd />
           <div className="p-rlist-rows p-rows" ref={rows}>
-            {list.length === 0 && <div className="p-rlist-empty muted">Nothing to do</div>}
+            {list.length === 0 && <EmptyState className="compact" icon="oTaskAlt" title="No to-dos" hint="Type above to add one" />}
             {list.map((e, index) => (
               <div key={e.item.id} data-row={e.item.id} onPointerDown={rowDrag.down}>
                 <TaskRow entry={e} s={s} now={now} onOpen={() => { leaveSheet(rows.current?.scrollTop ?? 0); after(() => openItem(e.item)); }}
@@ -294,7 +294,7 @@ function TodoList() {
   return <div className="p-glide" ref={box}>
     <div ref={layer} />
     <TodoAdd />
-    {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
+    {!shown.length && !done.length && <EmptyState icon="oTaskAlt" title="No to-dos" hint="Type above to add a task with no date" />}
     {shown.map((e, index) => (
       <div key={e.item.id} data-glide={`t${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
         <TaskRow entry={e} s={s} now={now} onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
@@ -318,11 +318,11 @@ function TodoList() {
 
 const NOTE_FONTS = ["", "Georgia, 'Noto Serif', serif", "'Droid Sans Mono', 'Roboto Mono', monospace", "'Dancing Script', cursive"];
 type NoteFilter = "notes" | "pinned" | "daily" | "hidden";
-const EMPTY_NOTES: Record<NoteFilter, string> = {
-  hidden: "No hidden notes.",
-  daily: "No daily notes yet. Open a day's note from Today or the calendar.",
-  pinned: "No pinned notes.",
-  notes: "No notes yet. Tap + to write one.",
+const EMPTY_NOTES: Record<NoteFilter, [string, string]> = {
+  hidden: ["No hidden notes", "Hide a note from its ⋮ menu"],
+  daily: ["No daily notes", "Open a day's note from Today or the calendar"],
+  pinned: ["No pinned notes", "Pin a note to keep it at the top"],
+  notes: ["No notes", "Tap + to write one"],
 };
 
 export const PhoneNotes = memo(function PhoneNotes() {
@@ -373,7 +373,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
           {(hiddenCount > 0 || filter === "hidden") && <FilterChip selected={filter === "hidden"} onClick={() => setFilter(filter === "hidden" ? "notes" : "hidden")}>Hidden</FilterChip>}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
-        {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
+        {notes.length === 0 && <EmptyState icon="oLightbulb" title={tag !== null && filter === "notes" ? "No notes with this tag" : EMPTY_NOTES[filter][0]} hint={tag !== null && filter === "notes" ? "Tap the tag again to see every note" : EMPTY_NOTES[filter][1]} />}
         <div className="p-notegrid" ref={grid}>
           {/* "Pinned" over the pinned notes and "Others" over the rest, when there are both (227). */}
           {labelled && <><div className="p-notelabel" data-label="pinned">Pinned<HeadCount n={pinnedCount} /></div><div className="p-notelabel" data-label="other">Others<HeadCount n={notes.length - pinnedCount} /></div></>}
@@ -642,7 +642,7 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
         </>}
       </ChipRow>
       <div className="p-graph" ref={box}>
-        {graph.nodes.length === 0 && <div className="p-graph-empty"><span>No connections yet.<br />Link items with Link in their editor.</span></div>}
+        {graph.nodes.length === 0 && <div className="p-graph-empty"><EmptyState icon="oConstellation" title="No links yet" hint="Link items with Link in their editor" /></div>}
         <svg width={svgSize.w} height={svgSize.h}>
           {graph.edges.map(([a, b]) => {
             const hot = a === selected || b === selected;
@@ -755,7 +755,8 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
           {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
-        {results.length > 0 && <div className="p-section p-count">Results<HeadCount n={results.length} /></div>}
+        {results.length > 0 ? <div className="p-section p-count">Results<HeadCount n={results.length} /></div>
+          : <EmptyState icon="oSearch" title={q.trim() ? "Nothing found" : "Nothing here yet"} hint={q.trim() ? "Try other words or fewer filters" : "What you add shows up here"} />}
         <div className="p-list">
           {results.map((i) => {
             const pv = preview(i.content, 80);
