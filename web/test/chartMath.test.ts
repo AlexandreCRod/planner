@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
-import { allWindows, dayMonth, hasEarlier, inRange, nearestIndex, niceTicks, panTarget, rangeStart, rangeWindow, scale, signed, spanWindow, xDomain } from "../src/ui/phone/chartMath.ts";
+import { allWindows, dayMonth, hasEarlier, inRange, nearestBar, nearestIndex, niceTicks, panTarget, rangeStart, rangeWindow, scale, signed, spanWindow, xDomain } from "../src/ui/phone/chartMath.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -137,4 +137,17 @@ test("inRange can end too", () => {
   const xs = [{ day: 5 }, { day: 10 }, { day: 15 }];
   assert.deepEqual(inRange(xs, 6, 10), [{ day: 10 }]);
   assert.deepEqual(inRange(xs, null, 10), [{ day: 5 }, { day: 10 }]);
+});
+
+test("a bar reads by its middle: anywhere on a bar is that bar, line points by their own day", () => {
+  const bars = [0, 1, 2, 3, 4, 5, 6];
+  const half = () => 0.5;
+  assert.equal(nearestBar(bars, half, 1.6), 1);   // the right half of Tuesday's bar is Tuesday
+  assert.equal(nearestBar(bars, half, 1.05), 1);
+  assert.equal(nearestBar(bars, half, 1.95), 1);
+  assert.equal(nearestBar(bars, half, 2.05), 2);
+  assert.equal(nearestBar(bars, half, 6.9), 6);
+  assert.equal(nearestBar([0, 7, 14], () => 3.5, 13.5), 1);  // weeks
+  assert.equal(nearestBar([0, 31, 59], (d) => (d === 0 ? 15.5 : 14), 58.5), 1);  // months of different lengths
+  assert.equal(nearestBar(bars, () => 0, 1.6), 2);  // no bars: the nearest point
 });

@@ -11,7 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { NightStage } from "../../domain/sleep.ts";
 import { DropdownMenu, MIcon, Segmented } from "./chrome.tsx";
-import { type RangeKey, type WindowKey, RANGES, WINDOW_NAMES, WINDOWS, dayMonth, nearestIndex, niceTicks, panTarget, scale } from "./chartMath.ts";
+import { type RangeKey, type WindowKey, RANGES, WINDOW_NAMES, WINDOWS, dayMonth, nearestBar, niceTicks, panTarget, scale } from "./chartMath.ts";
 import { claimSwipe } from "./gesture.ts";
 import { feel } from "./haptics.ts";
 import { VelocityTracker, frameWriter, rubberBand } from "./motion.ts";
@@ -131,7 +131,7 @@ export function Chart({ series, domain, today, height = 150, fmt = String, inver
   const forget = () => { kept.current = null; setHolding(false); show(null); };
   const nearestAt = (clientX: number) => {
     const r = box.current!.getBoundingClientRect();
-    return nearestIndex(reads, d0 + ((clientX - r.left - L) / Math.max(1, w - L - R)) * (d1 - d0));
+    return nearestBar(reads, halfAt, d0 + ((clientX - r.left - L) / Math.max(1, w - L - R)) * (d1 - d0));
   };
   const read = (clientX: number) => { if (reads.length && w > 0) show(nearestAt(clientX), true); };
   /** Whether a tap at [clientX] lands on reading [i]: within 24 px of it across. */

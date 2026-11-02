@@ -182,6 +182,9 @@ export function nearestIndex(xs: readonly number[], x: number): number {
   return Math.abs(xs[b] - x) < Math.abs(xs[a] - x) ? b : a;
 }
 
+/** The reading at [x] when each stands [half] of its day on from it (a bar, by its middle): any spot on a bar is that bar. */
+export const nearestBar = (xs: readonly number[], half: (x: number) => number, x: number) => nearestIndex(xs.map((d) => d + half(d)), x);
+
 /** "27 Oct" for the axis and the "since" chip; with the year when it isn't [today]'s year ("27 Oct 2025"). */
 export function dayMonth(day: number, today: number): string {
   const { y, m, d } = ymd(day);
