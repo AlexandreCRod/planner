@@ -68,3 +68,11 @@ test("the grid: two columns, each card under the shorter one", () => {
   assert.ok(!inSlot(slots[1], 50, 20));
   assert.equal(noteSlots([], 300, 8).height, 0);
 });
+
+test("Pinned and Others each start under their label, below both columns", () => {
+  // Two pinned cards (100 and 50 tall), then three others; labels 24 tall.
+  const { slots, labels, height } = noteSlots([100, 50, 40, 30, 20], 208, 8, [{ at: 0, h: 24 }, { at: 2, h: 24 }]);
+  assert.deepEqual(labels, [0, 140]); // the Others label: under the taller pinned column (24 + 100 + 8) and a gap
+  assert.deepEqual(slots.map((s) => [s.x, s.y]), [[0, 24], [108, 24], [0, 164], [108, 164], [108, 202]]);
+  assert.equal(height, 222);
+});

@@ -1,5 +1,7 @@
 // Reordering a note's checklist like Google Keep: each checklist line gets a drag handle in the margin
-// beside it (outside the text, so typing and selecting text are untouched). Drag a handle: the line
+// beside it (outside the text, so typing and selecting text are untouched). The handles can't be seen
+// until a line is pressed (or, with a mouse, pointed at): then that line's shows, and stays while it's
+// dragged (227). Drag a handle: the line
 // (with the lines indented under it) lifts and follows the finger, the others in its list slide out of
 // the way, and on release it settles into its new place. The note's text itself is what changes (its
 // paragraphs move), so it's saved and synced like any edit. Which moves are allowed comes from
@@ -29,6 +31,10 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
   editor: () => HTMLElement | null; host: () => HTMLElement | null; onChange: () => void; onHas: (has: boolean) => void;
 }) {
   const [handles, setHandles] = useState<Handle[]>([]);
+  /** The line whose handle shows (pressed, pointed at, or being dragged). */
+  const [shown, setShown] = useState<number | null>(null);
+  const handlesRef = useRef(handles);
+  handlesRef.current = handles;
   const key = useRef("");
   const dragging = useRef(false);
   const remeasure = useRef<() => void>(() => {});
@@ -79,6 +85,49 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     return () => { mo.disconnect(); ro.disconnect(); clearInterval(t); cancelAnimationFrame(raf); void attached; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Which handle shows: the line under a finger pressed on the text (or the margin), or under the mouse.
+  useEffect(() => {
+    let attached: HTMLElement | null = null, t = 0;
+    const lineAt = (y: number) => {
+      const box = host();
+      if (!box) return null;
+      const top = box.getBoundingClientRect().top;
+      // The whole line, not only its first row (a long one wraps).
+      const root = editor();
+      const lines = root ? linesOf(root) : [];
+      for (const x of handlesRef.current) {
+        const r = lines[x.i]?.getBoundingClientRect();
+        const a = r ? r.top : top + x.top, b = r ? r.bottom : top + x.top + x.h;
+        if (y >= a - 2 && y <= b + 2) return x.i;
+      }
+      return null;
+    };
+    const down = (e: PointerEvent) => { if (!dragging.current) setShown(lineAt(e.clientY)); };
+    const up = (e: PointerEvent) => { if (!dragging.current && e.pointerType !== "mouse") setShown(null); };
+    const move = (e: PointerEvent) => { if (e.pointerType === "mouse" && !dragging.current && !e.buttons) setShown(lineAt(e.clientY)); };
+    const leave = (e: PointerEvent) => { if (e.pointerType === "mouse" && !dragging.current) setShown(null); };
+    const attach = () => {
+      const box = host();
+      if (!box) return false;
+      attached = box;
+      box.addEventListener("pointerdown", down, { passive: true });
+      box.addEventListener("pointermove", move, { passive: true });
+      box.addEventListener("pointerleave", leave, { passive: true });
+      window.addEventListener("pointerup", up, { passive: true });
+      window.addEventListener("pointercancel", up, { passive: true });
+      return true;
+    };
+    if (!attach()) t = window.setInterval(() => { if (attach()) clearInterval(t); }, 100);
+    return () => {
+      clearInterval(t);
+      attached?.removeEventListener("pointerdown", down);
+      attached?.removeEventListener("pointermove", move);
+      attached?.removeEventListener("pointerleave", leave);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const start = (e: React.PointerEvent<HTMLButtonElement>, from: number) => {
     const root = editor();
     if (!root || e.button !== 0 || dragging.current) return;
@@ -124,6 +173,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const clampDy = () => Math.max(minDy, Math.min(maxDy, fingerY - y0 + ((scroller?.scrollTop ?? s0) - s0)));
     let k = k0, raf = 0, dy = 0, scrollRaf = 0;
     dragging.current = true;
+    setShown(from);
     feel("pickup");
     for (const el of dragged) el.classList.add("pn-lifted");
     for (const u of units) for (const el of u.els) el.classList.add("pn-sliding");
@@ -186,6 +236,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       animateSpring(off, 0, 0, settle, () => {
         for (const el of dragged) el.classList.remove("pn-lifted");
         dragging.current = false;
+        setShown(null);
         key.current = "";
         remeasure.current();
         if (moved) cb.current.onChange();
@@ -200,7 +251,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
   return (
     <div className="pn-handles">
       {handles.map((x) => (
-        <button key={x.i} className="pn-handle" style={{ top: x.top + x.h / 2 - 16 }} aria-label="Drag to reorder" tabIndex={-1}
+        <button key={x.i} className={`pn-handle ${shown === x.i ? "on" : ""}`} style={{ top: x.top + x.h / 2 - 16 }} aria-label="Drag to reorder" tabIndex={-1}
           onPointerDown={(e) => start(e, x.i)} onContextMenu={(e) => e.preventDefault()}>
           <MIcon name="fDragIndicator" size={18} />
         </button>

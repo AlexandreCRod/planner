@@ -46,6 +46,11 @@ export function useNoteGrid(opts: {
   order: readonly number[];
   /** Which ones move together: pinned or not; null for a card that can't be dragged. */
   groupOf: (id: number) => string | null;
+  /**
+   * The labelled group a card is shown in ("pinned" or "other"), for the labels in the grid
+   * ([data-label] with that key): each label goes above the first card of its group.
+   */
+  sectionOf?: (id: number) => string;
   /** Shows the notes in this order while dragging (null: their own). */
   setOrder: (ids: number[] | null) => void;
   onDrop: (ids: number[], moved: number) => void;
@@ -74,10 +79,16 @@ export function useNoteGrid(opts: {
     const order = o.current.order.filter((id) => els.has(id));
     const width = g.clientWidth;
     const heights = order.map((id) => els.get(id)!.offsetHeight);
-    const { slots: list, height } = noteSlots(heights, width, GAP);
+    // The "Pinned" and "Others" labels (when shown): each above its group's first card.
+    const labelEls = [...g.querySelectorAll<HTMLElement>(":scope > [data-label]")];
+    const sectionOf = o.current.sectionOf;
+    const sections = sectionOf ? labelEls.map((el) => ({ el, at: order.findIndex((id) => sectionOf(id) === el.dataset.label), h: el.offsetHeight }))
+      .filter((x) => x.at >= 0).sort((a, b) => a.at - b.at) : [];
+    const { slots: list, labels, height } = noteSlots(heights, width, GAP, sections);
     slots.current = new Map(order.map((id, i) => [id, list[i]]));
     const h = `${height}px`;
     if (g.style.height !== h) g.style.height = h;
+    sections.forEach((x, i) => { const t = `translateY(${labels[i]}px)`; if (x.el.style.transform !== t) x.el.style.transform = t; });
     for (const [id, el] of els) {
       const s = slots.current.get(id);
       if (!s || busy.current.has(id)) continue;

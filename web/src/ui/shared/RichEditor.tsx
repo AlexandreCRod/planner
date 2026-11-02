@@ -201,6 +201,48 @@ function placeCaretAtEnd(el: HTMLElement) {
   sel.addRange(r);
 }
 
+// ---------- Checklist boxes drawn as boxes (227) ----------
+// The boxes stay characters in the text ("☐", "☑"). The "Planner Boxes" font (phone.css) draws them as a
+// rounded square, filled with the tick cut out once ticked; their colours, and a ticked line's faded,
+// struck-through text, come from CSS highlights laid over the text as it is. The note's HTML, the caret,
+// selection and every checklist key work exactly as before.
+const boxRanges = new Map<HTMLElement, { box: Range[]; tick: Range[]; done: Range[] }>();
+function showBoxes() {
+  const reg = typeof CSS !== "undefined" ? (CSS as unknown as { highlights?: Map<string, unknown> }).highlights : undefined;
+  if (!reg || typeof Highlight === "undefined") return;
+  const all = { box: [] as Range[], tick: [] as Range[], done: [] as Range[] };
+  for (const r of boxRanges.values()) { all.box.push(...r.box); all.tick.push(...r.tick); all.done.push(...r.done); }
+  reg.set("pn-box", new Highlight(...all.box));
+  reg.set("pn-tick", new Highlight(...all.tick));
+  reg.set("pn-done", new Highlight(...all.done));
+}
+const sameRanges = (a: Range[], b: Range[]) => a.length === b.length && a.every((r, i) => r.startContainer === b[i].startContainer
+  && r.startOffset === b[i].startOffset && r.endContainer === b[i].endContainer && r.endOffset === b[i].endOffset);
+/** Marks [root]'s boxes, the ticked ones and their lines' text; null [lines]: the editor is gone. */
+function paintBoxes(root: HTMLElement, lines: HTMLElement[] | null) {
+  if (!lines) { if (boxRanges.delete(root)) showBoxes(); return; }
+  const out = { box: [] as Range[], tick: [] as Range[], done: [] as Range[] };
+  for (const line of lines) {
+    if (line.tagName !== "P") continue;
+    const t = firstText(line), info = boxInfo(line);
+    if (!t || !info.hasBox || t.data[info.indent] !== (info.checked ? TICK : BOX)) continue;
+    const g = document.createRange();
+    g.setStart(t, info.indent);
+    g.setEnd(t, info.indent + 1);
+    (info.checked ? out.tick : out.box).push(g);
+    if (info.checked) {
+      const d = document.createRange();
+      d.setStart(t, Math.min(t.length, info.indent + 2));
+      d.setEnd(line, line.childNodes.length);
+      out.done.push(d);
+    }
+  }
+  const old = boxRanges.get(root);
+  if (old && sameRanges(old.box, out.box) && sameRanges(old.tick, out.tick) && sameRanges(old.done, out.done)) return;
+  boxRanges.set(root, out);
+  showBoxes();
+}
+
 export const RichEditor = forwardRef<RichEditorHandle, {
   initialHtml: string; onChange: () => void; minHeight?: number;
   /** Bumped to show [initialHtml] again even when it's the same text (a note reloaded from sync). */
@@ -269,6 +311,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     secs.forEach((sec, k) => { out[k].top = Math.round(topIn(lines[sec.first]) - HEAD_H); });
     const k = out.map((h) => `${h.key}|${h.top}|${h.count}|${h.folded}`).join("\n");
     if (k !== headsKey.current) { headsKey.current = k; setHeads(out); }
+    paintBoxes(root, lines);
   };
   const toggleFold = (h: DoneHead) => {
     folded.current.set(h.key, !h.folded);
@@ -297,7 +340,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     checkEmpty();
     layoutDone();
     paint();
-    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); unpaintLinks(root); };
+    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); unpaintLinks(root); paintBoxes(root, null); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A tap on a word places the caret here, so the WebView never opens its spelling pop-up over the
@@ -880,7 +923,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   return (
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
+        style={{ minHeight, fontFamily: fontFamily ? `"Planner Boxes", ${fontFamily}` : undefined }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
         onCompositionEnd={() => tidyMarks(true)}
         data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} {...linkHandlers} />
       {heads.map((h) => (

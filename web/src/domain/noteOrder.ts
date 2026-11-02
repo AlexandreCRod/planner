@@ -60,18 +60,29 @@ export interface Slot { x: number; y: number; w: number; h: number }
 
 /**
  * The Notes grid: two columns [gap] apart in [width], each card (of [heights], in the page's order)
- * going under the shorter column, the left one on a tie. Returns each card's slot and the grid's height.
+ * going under the shorter column, the left one on a tie. [sections]: groups with a label above them
+ * ("Pinned", "Others"), each starting at the card [at] below both columns, under its label [h] tall
+ * (and [gap] more space above it when it isn't the first). Returns each card's slot, each label's
+ * top, and the grid's height.
  */
-export function noteSlots(heights: readonly number[], width: number, gap: number): { slots: Slot[]; height: number } {
+export function noteSlots(heights: readonly number[], width: number, gap: number, sections: readonly { at: number; h: number }[] = []): { slots: Slot[]; labels: number[]; height: number } {
   const w = Math.max(0, (width - gap) / 2);
   const col = [0, 0];
-  const slots = heights.map((h): Slot => {
+  const labels: number[] = [];
+  const startAt = new Map(sections.map((s) => [s.at, s.h]));
+  const slots = heights.map((h, i): Slot => {
+    const lh = startAt.get(i);
+    if (lh !== undefined) {
+      const top = i === 0 ? 0 : Math.max(col[0], col[1]) + gap;
+      labels.push(top);
+      col[0] = col[1] = top + lh;
+    }
     const c = col[0] <= col[1] ? 0 : 1;
     const s = { x: c * (w + gap), y: col[c], w, h };
     col[c] += h + gap;
     return s;
   });
-  return { slots, height: Math.max(0, Math.max(col[0], col[1]) - gap) };
+  return { slots, labels, height: heights.length ? Math.max(0, Math.max(col[0], col[1]) - gap) : 0 };
 }
 
 /** Whether the point is in the slot. */

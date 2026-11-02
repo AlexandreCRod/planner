@@ -100,6 +100,34 @@ export function notePreview(html: string, maxChars = 220, maxLines = 8): string 
   return out.join("\n");
 }
 
+/** A note's card on the Notes page (227): the lines shown, and how many ticked boxes are folded away. */
+export interface NoteCardText { lines: NoteLine[]; ticked: number; more: boolean }
+
+/**
+ * What a note's card shows: its lines in order with the ticked checklist lines taken out (the card says
+ * "+ 2 ticked" under them instead, as Keep does), at most [maxLines] lines and about [maxChars]
+ * characters, a line cut short ending in "…". [more]: lines left out (not counting the ticked ones).
+ */
+export function noteCardText(html: string, maxChars = 220, maxLines = 8): NoteCardText {
+  const all = noteLines(html);
+  const ticked = all.filter((l) => l.kind === "CHECK" && l.checked).length;
+  const open = all.filter((l) => !(l.kind === "CHECK" && l.checked));
+  const lines: NoteLine[] = [];
+  let left = maxChars;
+  for (const l of open) {
+    if (lines.length >= maxLines || left <= 0) break;
+    let text = l.text.replace(/\s+/g, " ");
+    if (text.length > left) {
+      // Too little room left for even a word: the card ends with the line before.
+      if (left < 12 && lines.length) break;
+      text = text.slice(0, Math.max(0, left - 1)).trimEnd() + "…";
+    }
+    left -= Math.max(1, text.length);
+    lines.push({ ...l, text });
+  }
+  return { lines, ticked, more: lines.length < open.length };
+}
+
 // ---------- Descriptions (tasks and events): plain text in, simple HTML stored ----------
 
 function decodeEntities(s: string): string {

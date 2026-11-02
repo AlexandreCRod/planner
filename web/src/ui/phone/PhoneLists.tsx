@@ -8,7 +8,7 @@ import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
 import { splitDone } from "../../domain/todayPlan.ts";
 import { isRoutineItem, isRoutineSeries, routineEntry } from "../../domain/routines.ts";
 import { showStreaks } from "../../store/routines.ts";
-import { notePreview, preview } from "../../domain/text.ts";
+import { noteCardText, preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, priorityColor } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
@@ -344,9 +344,11 @@ export const PhoneNotes = memo(function PhoneNotes() {
   const byId = useMemo(() => new Map(notes.map((n) => [n.id, n])), [notes]);
   // Notes and Pinned can be put in order; daily and hidden notes keep theirs.
   const canOrder = filter === "notes" || filter === "pinned";
+  const labelled = filter === "notes" && notes.some((n) => n.pinned) && notes.some((n) => !n.pinned);
   const noteGrid = useNoteGrid({
     grid: () => grid.current, scroller: () => grid.current?.closest<HTMLElement>(".p-list") ?? null, order: liveOrder ?? shownIds,
     groupOf: (id) => { const n = byId.get(id); return !n || !canOrder ? null : n.pinned ? "pinned" : "other"; },
+    sectionOf: (id) => (byId.get(id)?.pinned ? "pinned" : "other"),
     setOrder: setLiveOrder, isSelected: (id) => sel.ids.has(id), unselect: (id) => sel.toggle(id),
     onDrop: (ids, moved) => {
       const changes: { id: number; pinOrder?: number; listOrder?: number }[] = byId.get(moved)?.pinned
@@ -370,6 +372,8 @@ export const PhoneNotes = memo(function PhoneNotes() {
         </ChipRow>
         {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
         <div className="p-notegrid" ref={grid}>
+          {/* "Pinned" over the pinned notes and "Others" over the rest, when there are both (227). */}
+          {labelled && <><div className="p-notelabel" data-label="pinned">Pinned</div><div className="p-notelabel" data-label="other">Others</div></>}
           {notes.map((n) => <NoteCard key={n.id} n={n} s={s} sel={sel} onDragDown={canOrder ? noteGrid.down : undefined} />)}
         </div>
         <div className="p-endspace" />
@@ -392,12 +396,11 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
   const bg = n.bgColor !== null ? cssColor(n.bgColor) : undefined;
   const fg = bg ? onColor(bg) : undefined;
   const accentArgb = n.color ?? (n.categoryId !== null ? s.categoryById.get(n.categoryId)?.color ?? null : null);
-  const text = notePreview(n.content);
+  const text = useMemo(() => noteCardText(n.content), [n.content]);
   const tags = (s.tagsByItem.get(n.id) ?? []).map((t) => `#${t.name}`).join(" ");
   const links = s.neighbours(n.id).size;
   // Pictures or videos in the note: a small mark with how many.
   const files = s.images.get(n.id)?.length ?? 0;
-  const updated = Math.floor((n.updatedAt - new Date(n.updatedAt).getTimezoneOffset() * 60000) / 86400000);
   // A card can also be dragged into another place, after a long press (noteDrag.ts).
   const sp = sel.pressProps(n.id);
   const press = onDragDown ? { ...sp, onPointerDown: (e: React.PointerEvent<HTMLElement>) => { sp.onPointerDown(e); onDragDown(n.id, e); } } : sp;
@@ -411,12 +414,28 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
           <span className="title">{n.noteDay !== null ? formatDate(n.noteDay) : n.title || "Untitled"}</span>
           {n.pinned && <MIcon name="fPushPin" size={14} />}
         </div>
-        {text && <div className="text">{text}</div>}
-        <div className="foot">
-          <span className="grow">{tags || formatDate(updated)}</span>
-          {files > 0 && <span className="files" role="img" aria-label={files === 1 ? "1 file" : `${files} files`}><MIcon name="oImage" size={12} /><span>{files}</span></span>}
-          {links > 0 && <><MIcon name="oLink" size={12} /><span>{links}</span></>}
-        </div>
+        {(text.lines.length > 0 || text.ticked > 0) && (
+          <div className="text">
+            {text.lines.map((l, i) => (
+              <div key={i} className={`ln ${l.kind === "TEXT" ? "" : "mk"}`} style={l.level ? { paddingLeft: Math.min(4, l.level) * 14 } : undefined}>
+                {l.kind === "CHECK" && <span className="mark c"><MIcon name="oCheckBoxOutlineBlank" size={16} /></span>}
+                {l.kind === "BULLET" && <span className="mark b">•</span>}
+                {l.kind === "NUMBER" && <span className="mark n">{l.number}.</span>}
+                <span className="t">{l.text}</span>
+              </div>
+            ))}
+            {/* Ticked boxes fold away, as Keep does. */}
+            {text.ticked > 0 && <div className="ticked">+ {text.ticked} ticked</div>}
+          </div>
+        )}
+        {/* No date (227): the tags, pictures and links, when there are any. */}
+        {(tags || files > 0 || links > 0) && (
+          <div className="foot">
+            <span className="grow">{tags}</span>
+            {files > 0 && <span className="files" role="img" aria-label={files === 1 ? "1 file" : `${files} files`}><MIcon name="oImage" size={12} /><span>{files}</span></span>}
+            {links > 0 && <><MIcon name="oLink" size={12} /><span>{links}</span></>}
+          </div>
+        )}
       </div>
     </div>
   );
