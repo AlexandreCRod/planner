@@ -209,6 +209,13 @@ function putNote(id: string, note: string, had: ActivityNote | undefined) {
 export function saveRunNote(r: Run, text: string) {
   const note = text.trim(), t = training();
   const had = noteRecord(t.notes, runIds(r));
+  // Its session may have left the plan since: what's in its log is still what shows.
+  const logged = runEntry(r, t.entries.values());
+  if (logged) {
+    saveEntry({ ...logged, note });
+    if (had) putNote(had.id, "", had);
+    return;
+  }
   for (const lp of t.plans) {
     const s = r.sessionId !== null ? sessionsOf(lp.plan).find((x) => x.id === r.sessionId) : undefined;
     if (!s) continue;
@@ -219,11 +226,15 @@ export function saveRunNote(r: Run, text: string) {
   putNote(had?.id ?? r.id, note, had);
 }
 
-/** A game's note: in its log when it has an event, else (the watch caught it, no event) in a record of its own. */
+/** A game's note: in its log when it has an event (a note from before it had one moves there), else (the watch caught it, no event) in a record of its own. */
 export function saveGameNote(g: Game, text: string) {
-  const note = text.trim();
-  if (g.entry && g.entry.itemId !== undefined) saveGameLog({ itemId: g.entry.itemId, day: g.day }, g.entry.planId, { note });
-  else putNote(g.id, note, training().notes.get(g.id));
+  const note = text.trim(), notes = training().notes;
+  if (g.entry && g.entry.itemId !== undefined) {
+    saveGameLog({ itemId: g.entry.itemId, day: g.day }, g.entry.planId, { note });
+    // Written while only the watch knew the game: it lives in the log now.
+    const had = g.session ? notes.get(g.session.id) : undefined;
+    if (had) putNote(had.id, "", had);
+  } else putNote(g.id, note, notes.get(g.id));
 }
 
 /**

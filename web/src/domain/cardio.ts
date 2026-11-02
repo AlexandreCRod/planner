@@ -86,8 +86,9 @@ export function gamesOf(entries: Iterable<Entry>, matches: GameMatches, times: R
 export const playedGames = (games: readonly Game[], today: number): Game[] =>
   games.filter((g) => g.day <= today && (g.done || g.session !== null));
 
-/** A game's note: its log's, or for one with no event the one kept beside it. */
-export const gameNote = (g: Game, notes: ReadonlyMap<string, ActivityNote>) => (g.entry ? g.entry.note.trim() : notes.get(g.id)?.note.trim() ?? "");
+/** A game's note: its log's, else the one kept beside it, on the watch's session when the game had no event yet. */
+export const gameNote = (g: Game, notes: ReadonlyMap<string, ActivityNote>) =>
+  g.entry?.note.trim() || notes.get(g.session?.id ?? g.id)?.note.trim() || "";
 
 export const gameVenue = (g: Game): Venue => (g.session ? venueOf(g.session, g.fromEvent ? g.title : "") : "unknown");
 /** What the watch said of a game; null when it didn't catch it. */

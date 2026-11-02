@@ -97,3 +97,35 @@ test("a watch session no event took is a game, and its note stays with it", () =
   saveGameNote(loose, "Pickup in the park");
   assert.equal(gameNote(training().games.find((g) => g.id === "hc:loose")!, training().notes), "Pickup in the park");
 });
+
+test("a note on a watch-only game stays once the game gets its event, and moves into the log on the next save", () => {
+  const on = d("2026-10-30");
+  const s: HealthSession = {
+    id: "hc:later", day: on, time: "19:00", endTime: "20:00", startMs: 1, durationS: 3600, movingS: 0, exerciseType: "soccer", title: "", source: "garmin", distanceKm: null,
+    ascentM: null, steps: null, kcal: 600, avgHr: 150, maxHr: 180, cadenceSpm: null, laps: [], splits: [], hr: [], updatedAt: 1,
+  };
+  store.putRecords("healthSessions", [s]);
+  saveGameNote(training().games.find((g) => g.id === "hc:later")!, "Written before the event");
+  const event = store.saveItem(newItem({ type: "EVENT", title: "Futsal", startDay: on, endDay: on, allDay: true }));
+  const now = () => { const g = training().games.find((x) => x.entry?.itemId === event); assert.ok(g); return g; };
+  assert.equal(now().session?.id, "hc:later");
+  assert.equal(gameNote(now(), training().notes), "Written before the event");
+  saveGameNote(now(), "Changed after");
+  assert.equal(now().entry!.note, "Changed after");
+  assert.equal(gameNote(now(), training().notes), "Changed after");
+  assert.equal(training().notes.has("hc:later"), false);
+  const row = logCsv(training().plans[0].plan, training().entries.values()).split(/\r?\n/).find((r) => r.includes("Changed after"));
+  assert.ok(row, "the log's note reaches the CSV");
+});
+
+test("a run whose session left the plan edits the note in its log: the new text is what shows", () => {
+  const e = { id: "p:dropped", planId: "p", sessionId: "dropped", kind: "session", day, status: "done", doneDay: day, durationMin: null, pain: null, effort: null, note: "Old text", ticks: [], title: "Dropped", detail: "", updatedAt: 1, deletedAt: null };
+  store.putRecords("trainingEntries", [e]);
+  const r = run({ id: "hc:dropped", sessionId: "dropped" });
+  assert.equal(runNote(r, stored(), training().notes), "Old text");
+  saveRunNote(r, "New text");
+  assert.equal(runNote(r, stored(), training().notes), "New text");
+  assert.equal(training().stored.get("p:dropped")?.note, "New text");
+  assert.equal(training().stored.get("p:dropped")?.status, "done");
+  assert.equal(training().notes.has("hc:dropped"), false);
+});
