@@ -147,6 +147,8 @@ export function PhoneApp() {
   // old index could be past the end of a shorter bar (a crash on the phone, 2026-10-29).
   const shown = tabsRef.current === TABS ? tab : Math.max(0, TABS.findIndex((x) => x.key === tabsRef.current[tabRef.current]?.key));
   useLayoutEffect(() => pos.paint(), [wide, pos]);
+  // Stable, as the pill's: painting on every render of the shell would drop a press's hint from under the finger.
+  const trackRef = useCallback((el: HTMLElement | null) => { pos.track = el; if (el) pos.paint(); }, [pos]);
   const pageEls = useRef<(HTMLDivElement | null)[]>([]);
   const [adding, setAdding] = useState<AddRequest | null>(null);
   // The outline the calendar draws where a new event from a slot will go (it follows the panel).
@@ -461,7 +463,7 @@ export function PhoneApp() {
   return (
     <div className={`p-root ${noteKb ? "note-kb" : ""} ${wide && TABS[shown].key === "notes" ? "notes-split" : ""} ${TABS[shown].key === "training" ? "on-training" : ""} ${TABS[shown].key === "tasks" && todoTab ? "on-todo" : ""} ${overlay === "tasks" ? "over-tasks" : ""}`}>
       <div className="p-pager" ref={pagerEl}>
-        <div className="p-track" ref={(el) => { pos.track = el; if (el) pos.paint(); }}>
+        <div className="p-track" ref={trackRef}>
           {TABS.map((t, i) => (
             <div key={t.key} className="p-page" data-tab={t.key} ref={(el) => { pageEls.current[i] = el; }} style={{ left: `${i * 100}%` }} aria-hidden={i !== shown}>
               {mounted.has(t.key) && <Page key={resets[t.key] ?? 0} tabKey={t.key} onNewAt={onNewAt(setAdding, setPreview)} pending={preview} active={shown === i && !overlay}
@@ -654,7 +656,11 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
       }
     };
     /** The finger didn't turn the pages there: the bar shows where they are. */
-    const dropHint = () => { hinted.current = false; if (pos.unhint()) { popping.current?.cancel(); setSelected(pos.shownTab); } };
+    const dropHint = () => {
+      const was = hinted.current;
+      hinted.current = false;
+      if (pos.unhint() || was) { popping.current?.cancel(); setSelected(pos.shownTab); }
+    };
     const onDown = (e: PointerEvent) => {
       if (g || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
       pos.grab();
