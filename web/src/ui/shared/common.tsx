@@ -124,8 +124,10 @@ function ReminderIcon({ kind }: { kind: AlertType | null }) {
 }
 const REMINDER_EMOJI: Record<AlertType, string> = { ALARM: "⏰", REMINDER: "🔔", NOTIFICATION: "🔕" };
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions, onOpen }: {
+export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions, onOpen, underOverdue }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
+  /** Under Today's Overdue heading (225): no "Overdue" pill; the date says it, in red. */
+  underOverdue?: boolean;
   /** Instead of opening the task straight away (a sheet closes first: Today's to-dos, 271). */
   onOpen?: () => void;
   /** Buttons shown over the end of the row while the pointer is on it (the wide Today). */
@@ -146,8 +148,9 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   // A ticked task's reminders are off (kept for un-ticking), so it shows none.
   const kind = done ? null : reminderKind(s.reminders.get(item.id));
   const linked = s.neighbours(item.id).size > 0;
+  const late = underOverdue && status === "OVERDUE";
   const subParts: ReactNode[] = [
-    showDay && entry.day !== null ? relativeDay(entry.day) : null,
+    showDay && entry.day !== null ? (late ? <span className="late">{relativeDay(entry.day)}{entry.missed > 1 ? ` · ${entry.missed} missed` : ""}</span> : relativeDay(entry.day)) : null,
     item.startMin !== null ? (heldTime?.(entry) || formatTime(item.startMin)) : null,
     isRecurring(item) ? describe(item) : null,
   ].filter(Boolean);
@@ -173,7 +176,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
       <span className="pills">
       {/* The flag alone, never the level's name (held, the phone shows it as a tooltip). */}
       {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={priorityColor(item.priority)} label={`${PRIORITIES[item.priority]} priority`}><span className="sub-icon flag"><Icon name="flag" size={16} /></span></Pill>}
-      {status === "OVERDUE" && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
+      {status === "OVERDUE" && !late && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
       {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
       {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}
       {status === "DUE" && due !== null && <Pill color={due < now ? "var(--danger)" : color}>{dueCountdown(due, now)}</Pill>}

@@ -3,10 +3,10 @@ import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { dayShort, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { type Occurrence, type TaskEntry, completionDay, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../../domain/schedule.ts";
-import { type GlanceRow, dayGlance, eventOver, foldDone, foldEvents, overdueCount, taskOver, weekAhead } from "../../domain/todayPlan.ts";
+import { type GlanceRow, dayGlance, eventOver, foldDone, foldEvents, overdueCount, taskOver, tasksProgressText, weekAhead } from "../../domain/todayPlan.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { type NoteLine, noteLines } from "../../domain/text.ts";
-import { isRoutineItem, routineList, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../../domain/routines.ts";
+import { isRoutineItem, routineList, routineProgress, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../../domain/routines.ts";
 import { type Snapshot, toggleCompletion, useSnapshot } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { todoNumber } from "../../domain/todoNumber.ts";
@@ -114,8 +114,8 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     {canPostpone(e) && <button className="p-icon" aria-label="Move to the next day" title="Move to the next day" onClick={() => postponeTask(e, t)}><MIcon name="fArrowForward" size={20} /></button>}
     <button className="p-icon" aria-label="Open" title="Open" onClick={() => openItem(e.item, e.day)}><MIcon name="oOpenInNew" size={20} /></button>
   </> : undefined);
-  const rows = (list: TaskEntry[], listId: string, showDay: boolean) => list.map((e, index) => (
-    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} heldTime={taskTime}
+  const rows = (list: TaskEntry[], listId: string, showDay: boolean, underOverdue = false) => list.map((e, index) => (
+    <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} underOverdue={underOverdue} heldTime={taskTime}
       past={isToday && taskOver(e, now)} onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} actions={quick(e, listId, index)} />
   ));
   const eventRow = (o: Occurrence) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={eventTime} past={isToday && eventOver(o, now)} />;
@@ -127,8 +127,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   const allHidden = shownTasks.length === 0 && doneFold.length === 0 && dayTasks.length > 0;
 
   const top = <>
-    {dayTasks.length > 0 && <PhoneProgress done={doneCount} total={dayTasks.length} />}
-    {(routines.length > 0 || anyRoutine) && <RoutineChips list={routines} s={s} day={day} t={t} />}
+    {(routines.length > 0 || anyRoutine) && <RoutinesLine list={routines} s={s} day={day} t={t} />}
     <TrainingLine day={day} t={t} />
     {nothing && <div className="hint empty p-nothing">{nothingText}</div>}
   </>;
@@ -141,9 +140,9 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     )}
     {shownOverdue.length > 0 && <>
       <div className="section">Overdue</div>
-      {rows(shownOverdue, `o${day}`, true)}
+      {rows(shownOverdue, `o${day}`, true, true)}
     </>}
-    {(shownTasks.length > 0 || doneFold.length > 0 || allHidden || (wide && !nothing)) && <div className="section">Tasks</div>}
+    {(shownTasks.length > 0 || doneFold.length > 0 || allHidden || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} />}
     {rows(shownTasks, `t${day}`, false)}
     {allHidden && <div className="hint empty">All done {dayWord}.</div>}
     {wide && !nothing && dayTasks.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
@@ -251,16 +250,22 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
 }
 
 /**
- * Today's routines as one row of small chips under the progress bar: a ring (a tick once done) and the
- * name. A tap ticks it (the chip fades and is struck through), a long press opens the routine. The row
- * scrolls sideways when it doesn't fit (it wins over the day swipe then). A routine missed on an
- * earlier day isn't carried here; it only ends the streak.
+ * Today's routines on their own line (225): "Routines 1/3", then a row of small chips: a ring (a tick once
+ * done) and the name. A tap on a chip ticks it (the chip fades and is struck through), a long press opens
+ * the routine. The row scrolls sideways when it doesn't fit (it wins over the day swipe then) and fades at
+ * its end. "Routines 1/3" and the list button at the end open the list of every routine. A routine missed
+ * on an earlier day isn't carried here; it only ends the streak.
  */
-function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
+function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
   const streaks = showStreaks() && day >= t;
   const [all, setAll] = useState(false);
   const [streaksOpen, setStreaksOpen] = useState(false);
+  const { done, total } = routineProgress(list);
   return (
+    <div className="p-routines">
+    <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
+      Routines{total > 0 && <span className="n">{done}/{total}</span>}
+    </button>
     <div className="p-rchips" role="list">
       {list.map((e) => {
         const ticked = e.status === "DONE";
@@ -274,6 +279,7 @@ function RoutineChips({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
       <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
         <MIcon name="fFormatListBulleted" size={18} />
       </button>
+    </div>
       {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} onStreaks={() => setStreaksOpen(true)} />, document.body)}
       {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </div>
@@ -376,18 +382,22 @@ function PhoneNotePreview({ html, isToday }: { html: string | null; isToday: boo
   );
 }
 
-/** Material 3's linear progress indicator as the native Today draws it: 4 dp, a 4 dp gap, a stop dot. */
-function PhoneProgress({ done, total }: { done: number; total: number }) {
+/**
+ * The Tasks heading with the day's progress (225): "Tasks · 1 of 2 done" ("All done" once every one is
+ * ticked), and under it Material 3's linear progress indicator, full width: 4 dp, a 4 dp gap, a stop dot.
+ */
+function TasksHead({ done, total }: { done: number; total: number }) {
   const f = total ? done / total : 0;
-  return (
-    <div className="p-progress-row">
-      <div className="p-progress">
+  const text = tasksProgressText(done, total);
+  return <>
+    <div className="section p-tasks-head">Tasks{text && <span className="n"> · {text}</span>}</div>
+    {total > 0 && (
+      <div className={`p-progress p-taskbar ${f >= 1 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {f > 0 && <span className="active" style={{ width: `${f * 100}%` }} />}
         {f < 1 && <span className="track" style={{ marginLeft: f > 0 ? 4 : 0 }}><span className="stop" /></span>}
       </div>
-      <span className="p-progress-label">{done} of {total} done</span>
-    </div>
-  );
+    )}
+  </>;
 }
 
 /** One page of the phone's day pager: its own scrolling list. Memoised, so turning days redraws only the newcomer. */

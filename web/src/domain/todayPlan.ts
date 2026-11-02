@@ -45,6 +45,12 @@ export function freeDayLine(left: number, day: number, t: number, game: boolean)
   return game ? "game or rest" : "none";
 }
 
+/** The words after Today's "Tasks ·" heading (225): "1 of 2 done", "All done", or none without tasks. */
+export function tasksProgressText(done: number, total: number): string {
+  if (total <= 0) return "";
+  return done >= total ? "All done" : `${done} of ${total} done`;
+}
+
 export const taskOver = (e: TaskEntry, now: number) => e.status === "DONE" && e.day !== null && e.item.startMin !== null && toTimestamp(e.day, e.item.startMin) <= now;
 
 /** Today's events split into those already over ("2 earlier · hidden") and the rest (all day, now, later). */

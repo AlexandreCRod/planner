@@ -1253,6 +1253,15 @@ html.phone[data-theme="dark"] {
 .phone .p-selmark { background: var(--p-strong); color: var(--p-on-strong); }
 .phone .pe-heat span.done { background: var(--p-strong); }
 .phone .p-progress .active, .phone .p-progress .stop { background: var(--p-strong); }
+/* Today's tasks bar under "Tasks · 1 of 2 done" (225): the accent on a raised track, so done and to do are
+   easy to tell apart; green once all are done. */
+.phone .today-list .p-taskbar { margin: 2px 16px 6px; width: auto; }
+.phone .today-list .p-taskbar .active, .phone .today-list .p-taskbar .stop { background: var(--p-primary); }
+.phone .today-list .p-taskbar .track { background: var(--p-sc-high); }
+.phone .today-list .p-taskbar.all .active { background: #86c79a; }
+.phone .today-list .p-tasks-head .n { font-weight: 400; }
+/* Under Today's Overdue heading the row's date is red instead of an "Overdue" pill (225). */
+.phone :is(.today-list, .p-rows) .task .sub .late { color: var(--danger); }
 .phone .pa-indicator { background: var(--p-strong); }
 .phone .pa-tab.on { color: var(--text); }
 
@@ -1337,8 +1346,22 @@ html.phone[data-theme="dark"] {
 .phone .p-rchip.done .ring { background: var(--p-strong); border-color: var(--p-strong); }
 .phone .p-rchip.done .name { text-decoration-color: currentColor; color: var(--muted); }
 .phone .p-rchip.missed .ring { border-color: var(--danger); }
-.phone .p-progress-row + .p-rchips { padding-top: 8px; }
-.phone .today-list > .today-page > .p-rchips:first-child { padding-top: 6px; }
+/* Today's routines on their own line (225): "Routines 1/3", then the chips, 32 px tall in a 48 px band
+   (each chip's hit area reaches the band's edges), 8 px apart, the row fading over its last 24 px. */
+.phone .p-routines { display: flex; align-items: center; min-height: 48px; margin-top: 4px; }
+.phone .p-routines-head {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 4px 0 16px; border: 0; background: none;
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); white-space: nowrap;
+}
+.phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
+.phone .p-routines .p-rchips {
+  flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.phone .p-routines .p-rchip { height: 32px; max-width: 180px; overflow: visible; border-radius: 16px; padding: 0 12px 0 7px; font-size: 14px; line-height: 20px; }
+.phone .p-routines .p-rchip::after { content: ""; position: absolute; inset: -8px -4px; }
+.phone .p-routines .p-rchip .ring { width: 16px; height: 16px; }
+.phone .p-routines .p-rchip.p-rchip-all { padding: 0 8px; }
 
 /* ---------- Tasks on the calendar: outlined and lighter than events, with a small tick circle ----------
    Events keep the filled block with the thin stripe; a task is only an outline in its colour, on the

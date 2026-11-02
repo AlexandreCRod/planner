@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { epochOf, toTimestamp } from "../src/domain/dates.ts";
 import { CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn } from "../src/domain/schedule.ts";
-import { dayGlance, foldDone, foldEvents, freeDayLine, overdueCount, weekAhead } from "../src/domain/todayPlan.ts";
+import { dayGlance, foldDone, foldEvents, freeDayLine, overdueCount, tasksProgressText, weekAhead } from "../src/domain/todayPlan.ts";
 import { type Completion, type Item, newItem } from "../src/domain/types.ts";
 import { PageMemory } from "../src/ui/phone/keep.ts";
 
@@ -90,4 +90,11 @@ test("a day with no session: sessions to place show only on today", () => {
   assert.equal(freeDayLine(3, t + 1, t, true), "game or rest");
   assert.equal(freeDayLine(0, t + 1, t, false), "game or rest");
   assert.equal(freeDayLine(0, t, t, false), "game or rest");
+});
+
+test("the Tasks heading counts the day's tasks done, says All done at the end, and nothing without tasks (225)", () => {
+  assert.equal(tasksProgressText(1, 2), "1 of 2 done");
+  assert.equal(tasksProgressText(0, 3), "0 of 3 done");
+  assert.equal(tasksProgressText(2, 2), "All done");
+  assert.equal(tasksProgressText(0, 0), "");
 });
