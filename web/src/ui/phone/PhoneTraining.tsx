@@ -68,6 +68,9 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
   const t = todayEpoch();
   const wide = useWide();
   const [movedWarn, setMovedWarn] = useState<Warn | null>(null);
+  // Back on the overview the week is put away: the next time it opens on this week, not where it was left.
+  const home = !query.get("view") && !query.get("s") && !query.get("d");
+  useEffect(() => { if (home) kept = null; }, [home]);
   const planId = query.get("p");
   const active = activeOf(tr, t);
   const lp = (planId && tr.plans.find((p) => p.plan.id === planId)) || active;
@@ -167,7 +170,7 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   );
 }
 
-// The phase looked at and the list's scroll, kept while the page is away (a document, the session).
+// The phase looked at and the list's scroll, kept while a page is open over the week (a document, Progress).
 let kept: { plan: string; phase: number; scroll: number } | null = null;
 
 function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }: {
