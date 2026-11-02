@@ -761,7 +761,7 @@ function SkipDaysSheet({ all, group, scope0, quick0, now, onClose, onApply }: {
     void saveAll(changed);
     const when = r.start === end ? dayWord(r.start, today) : `${shortDay(r.start)} – ${shortDay(end)}`;
     const text = !count.skips ? "Saved"
-      : scope === "group" ? `${group.length > 1 ? "These alarms" : "It"} won't ring ${when}` : `${ringsWord(count.skips)} skipped, ${when}`;
+      : scope === "group" && !keptN ? `${group.length > 1 ? "These alarms" : "It"} won't ring ${when}` : `${ringsWord(count.skips)} skipped, ${when}`;
     showSnackbar(text, "Undo", () => void saveAll(before));
   };
   return (
