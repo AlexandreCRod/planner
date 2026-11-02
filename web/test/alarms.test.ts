@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  EVERY_DAY, WEEKDAYS, buildMirror, cityZones, formatDuration, lapLengths, nextRing, repeatText, timerLeft,
-  stopwatchParts, untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
+  EVERY_DAY, WEEKDAYS, buildMirror, cityZones, formatDuration, lapLengths, nextRing, repeatText, swipeRemoves, timerLeft,
+  timerShare, zoneClock, stopwatchParts, untilText, usesFahrenheit, weatherSymbol, zoneDayLabel, zoneOffsetLabel,
 } from "../src/domain/alarms.ts";
 import { epochOf, toTimestamp } from "../src/domain/dates.ts";
 import { parseClockCommand, parseQuickAdd } from "../src/domain/quickadd.ts";
@@ -206,4 +206,32 @@ test("the ringing screen's choices reach the engine as numbers; anything odd is 
   assert.deepEqual(ringChoices("B", "hold", "off", "3"), { ringLayout: 2, ringStop: 2, ringComing: false, ringIcons: 3 });
   assert.deepEqual(ringChoices("A", "tap", "on", "2"), { ringLayout: 1, ringStop: 3, ringComing: true, ringIcons: 2 });
   assert.deepEqual(ringChoices("?", "?", "?", "?"), { ringLayout: 1, ringStop: 1, ringComing: true, ringIcons: 1 });
+});
+
+// ---------- 2.10's Clock page (233) ----------
+
+test("city cards show hours and minutes only; the main clock keeps its seconds", () => {
+  const at = Date.UTC(2026, 10, 2, 15, 7, 42); // 15:07:42 in London (GMT in November)
+  assert.equal(zoneClock("Europe/London", at, true), "15:07:42");
+  assert.equal(zoneClock("Europe/London", at, true, false), "15:07");
+  assert.equal(zoneClock("Asia/Tokyo", at, false, false), "12:07 AM");
+  assert.equal(zoneClock("America/New_York", at, false, false), "10:07 AM");
+});
+
+test("a timer's bar shows the share left, full after +1:00 past its length", () => {
+  const t = { durationMs: 10 * 60_000 };
+  assert.equal(timerShare(t, 10 * 60_000), 1);
+  assert.equal(timerShare(t, 2.5 * 60_000), 0.25);
+  assert.equal(timerShare(t, 0), 0);
+  assert.equal(timerShare(t, 11 * 60_000), 1);
+  assert.equal(timerShare({ durationMs: 0 }, 5000), 0);
+});
+
+test("a city goes when swiped far enough left or flung left, and springs back otherwise", () => {
+  const w = 358;
+  assert.equal(swipeRemoves(-150, 0, w), true);    // past 40%
+  assert.equal(swipeRemoves(-100, 0, w), false);   // slow and short: back
+  assert.equal(swipeRemoves(-40, -1.2, w), true);  // a fling
+  assert.equal(swipeRemoves(-10, -1.2, w), false); // a twitch isn't a fling
+  assert.equal(swipeRemoves(150, 1.5, w), false);  // right never removes
 });

@@ -30,7 +30,7 @@ import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
-import { ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
+import { AppBarActions, ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
@@ -121,10 +121,13 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   const [asked, setAsked] = useState<string | null>(null);
   useWatchRunTicks(false);
   const scaffold = (children: ReactNode) => (
+    // The page's own icons, then search and settings in their usual last two spots (285). Training's own search
+    // stays until the one search (292) takes it in.
     <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
       <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
+      <AppBarActions />
     </>}>{children}</Scaffold>
   );
   if (!plan.phases.length) return scaffold(<EmptyHint>This plan has no phases yet.</EmptyHint>);

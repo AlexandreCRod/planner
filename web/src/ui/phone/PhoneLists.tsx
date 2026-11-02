@@ -15,7 +15,7 @@ import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
-import { AppBarActions, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
 import { useNoteGrid } from "./noteDrag.ts";
@@ -114,7 +114,9 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
   });
   return (
     // Streaks live in one place, the routines list on Today (286), so the page has no ⋮ menu.
-    <Scaffold title="Tasks" flush back={back} actions={<AppBarActions />}>
+    // Opened from a tab (Today, the Agenda) it shows only its back arrow; kept in the bottom bar, it's a tab like
+    // the others, with search and settings (285).
+    <Scaffold title="Tasks" flush back={back}>
       <div className="p-seg-wrap">
         <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} track={track} />
       </div>
@@ -745,15 +747,13 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
         </div>
       } />}
       <div className="p-content flush">
+        {/* One row (232): the kinds, a thin line, then the categories and tags. */}
         <ChipRow className="search">
           {KINDS.map(([k, l]) => <FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
+          {(s.categories.length > 0 || s.tags.length > 0) && <ChipDivider />}
+          {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
+          {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
-        {(s.categories.length > 0 || s.tags.length > 0) && (
-          <ChipRow className="search">
-            {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
-            {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
-          </ChipRow>
-        )}
         <div className="p-count">{count(results.length, "result")}</div>
         <div className="p-list">
           {results.map((i) => {

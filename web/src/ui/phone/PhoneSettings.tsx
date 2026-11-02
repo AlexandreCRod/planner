@@ -21,7 +21,7 @@ import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
-import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
+import { Dialog, DropdownMenu, EmptyHint, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
@@ -38,7 +38,7 @@ import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
 import { canUseHealth, connect, disconnect, healthFound, readNow, useHealth } from "../../health/healthConnect.ts";
 import { watchStatus } from "../../domain/healthRead.ts";
-import { LOOKS, type LookKey, look, setLook, useLooks } from "./looks.ts";
+import { LOOKS, type LookKey, look, setLook, useLook, useLooks } from "./looks.ts";
 import { canImportCalendars } from "../../store/phoneCalendar.ts";
 import { isSportsCategory } from "../../domain/training.ts";
 
@@ -46,6 +46,8 @@ import { isSportsCategory } from "../../domain/training.ts";
 const ACCENTS: [string, string][] = [
   ["Blue", "#1a73e8"], ["Teal", "#00796b"], ["Rose", "#b0285a"], ["Amber", "#8b5000"], ["Forest", "#2e7d32"],
   ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"], ["Indigo", "#3f51b5"],
+  // 2.10 (229): six more, web only (theme.ts has their palettes).
+  ["Coral", "#b33b2b"], ["Mint", "#006c4e"], ["Lilac", "#7d4f91"], ["Gold", "#735c00"], ["Sky", "#00668a"], ["Sage", "#4f6448"],
 ];
 const CLOCKS: [ClockFormat, string][] = [["system", "Phone setting"], ["24", "24-hour (15:30)"], ["12", "12-hour (3:30 PM)"]];
 /** How long a ticked task stays where it was before it folds into its list's "5 done" line (284). */
@@ -68,9 +70,29 @@ function ChoiceRow<T extends string>({ title, value, options, onPick, supporting
   );
 }
 
-function SwitchRow({ title, checked, onChange, supporting }: { title: string; checked: boolean; onChange: (v: boolean) => void; supporting?: string }) {
-  return <ListItem headline={title} supporting={supporting} trailing={<Switch checked={checked} onChange={onChange} label={title} />} onClick={() => onChange(!checked)} />;
+function SwitchRow({ title, checked, onChange, supporting, info }: {
+  title: string; checked: boolean; onChange: (v: boolean) => void; supporting?: string;
+  /** The longer explanation, behind an ⓘ (229: descriptions stay one line). */
+  info?: string;
+}) {
+  const [about, setAbout] = useState(false);
+  return <>
+    <ListItem headline={title} supporting={supporting} onClick={() => onChange(!checked)} trailing={<>
+      {info && <span className="ps-info" onClick={(e) => e.stopPropagation()}><IconButton icon="oInfo" label={`About ${title.toLowerCase()}`} onClick={() => setAbout(true)} /></span>}
+      <Switch checked={checked} onChange={onChange} label={title} />
+    </>} />
+    {about && <Dialog title={title} onClose={() => setAbout(false)} actions={<TextButton onClick={() => setAbout(false)}>OK</TextButton>}>{info}</Dialog>}
+  </>;
 }
+
+/**
+ * One part of Settings (229): a heading over a card of rows on the one page, or (Settings in folders, 259) an
+ * entry on the short list opening its own page. [summary] is the entry's line in the folders.
+ */
+interface Part { key: string; title: string; icon: string; summary: string; body: ReactNode }
+
+/** A part's rows in one rounded card, divided by thin lines. */
+const Card = ({ children }: { children: ReactNode }) => <div className="ps-card">{children}</div>;
 
 /**
  * Which categories count as sport on Training (278): a switch for each, one or several. Until the user
@@ -79,11 +101,8 @@ function SwitchRow({ title, checked, onChange, supporting }: { title: string; ch
  */
 function SportsSection() {
   const s = useSnapshot();
-  if (!s.categories.length) return null;
   return <>
-    <div className="p-hr" />
-    <SectionHeader>Training</SectionHeader>
-    <div className="pe-small ps-note">Counts as sport on Training: the events of the categories switched on show there as games, futsal when the title says so.</div>
+    <div className="pe-small ps-note">Their events count as games on Training</div>
     {s.categories.map((c) => {
       const on = isSportsCategory(c);
       const set = (v: boolean) => saveCategory({ ...c, sport: v });
@@ -115,14 +134,11 @@ function AlarmSettingsSection() {
     const r = await native.pickSound(st.defaultAlarmSound, "Default alarm sound");
     if (r.picked) setAlarmSettings({ defaultAlarmSound: r.uri ?? null, defaultAlarmSoundName: r.uri ? r.name ?? null : null });
   };
-  const ringText = ring.rings ? "Clock alarms, timers and the stopwatch always work"
-    : "Off: events and tasks stay silent here. Clock alarms, timers and the stopwatch still work";
+  const ringText = ring.rings ? "Clock alarms and timers always ring" : "Off: events and tasks are silent here";
   return <>
-    <div className="p-hr" />
-    <SectionHeader>Reminders &amp; alarms</SectionHeader>
     <SwitchRow title="Ring event and task alarms on this phone" supporting={ringText} checked={ring.rings}
       onChange={(v) => void act(native.setRingEvents(v))} />
-    <ListItem headline="Time for untimed reminders" supporting={<span className="ps-pre">{`${formatTime(st.defaultTaskTime)}\nUsed for tasks without a time and all-day events`}</span>} onClick={() => setTime("task")} />
+    <ListItem headline="Time for untimed reminders" supporting={`${formatTime(st.defaultTaskTime)} · tasks with no time, all-day events`} onClick={() => setTime("task")} />
     <ListItem headline="Default alarm sound" supporting={st.defaultAlarmSound == null ? "System alarm" : st.defaultAlarmSoundName ?? "Custom"} onClick={() => void pickSound()} />
     <ChoiceRow title="Snooze length" value={String(st.snoozeMinutes)} options={SNOOZES} onPick={(v) => setAlarmSettings({ snoozeMinutes: Number(v) })} />
     <ChoiceRow title="Event and task alarms ring for" value={String(st.alarmRingMinutes)} options={ALARM_RING_CHOICES.map(minutesChoice)}
@@ -130,19 +146,20 @@ function AlarmSettingsSection() {
     <ChoiceRow title="Clock alarms and timers ring for" value={String(st.clockRingMinutes)} options={CLOCK_RING_CHOICES.map(minutesChoice)}
       onPick={(v) => setAlarmSettings({ clockRingMinutes: Number(v) })} />
     <SwitchRow title="Upcoming alarm notice" checked={st.upcomingAlarms} onChange={(v) => setAlarmSettings({ upcomingAlarms: v })}
-      supporting="2 hours before an alarm or reminder, a line in Planner's card says what's coming, with buttons to skip or snooze an alarm. From 23 hours before, the task or event itself has those buttons" />
+      supporting="A notice 2 h before it rings"
+      info="2 hours before an alarm or reminder, a line in Planner's card says what's coming, with buttons to skip or snooze an alarm. From 23 hours before, the task or event itself has those buttons." />
     <ChoiceRow title="Default alarm filter" value={clock.defaultFilter ?? "all"} options={[["all", "None: every alarm"], ...CLOCK_FILTERS]}
       onPick={(v) => setClockPrefs({ defaultFilter: v === "all" ? null : v as typeof clock.defaultFilter })} />
     <ChoiceRow title="Bundle alarms" value={String(clock.bundleWindow)}
       options={BUNDLE_WINDOW_CHOICES.map((m): [string, string] => [String(m), m === 0 ? "Never: every alarm on its own" : `Up to ${m} min apart`])}
-      supporting={clock.bundleWindow === 0 ? "Never: every alarm on its own" : `Alarms with the same days up to ${clock.bundleWindow} min apart share a card`}
+      supporting={clock.bundleWindow === 0 ? "Never: every alarm on its own" : `Alarms up to ${clock.bundleWindow} min apart share a card`}
       onPick={(v) => setClockPrefs({ bundleWindow: Number(v) })} />
-    <SwitchRow title="Quiet hours" supporting="Reminders arrive silently; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
+    <SwitchRow title="Quiet hours" supporting="Reminders silent; alarms still ring" checked={st.quietHoursEnabled} onChange={(v) => setAlarmSettings({ quietHoursEnabled: v })} />
     {st.quietHoursEnabled && <>
       <ListItem headline="Quiet from" supporting={formatTime(st.quietStart)} onClick={() => setTime("qs")} />
       <ListItem headline="Quiet until" supporting={formatTime(st.quietEnd)} onClick={() => setTime("qe")} />
     </>}
-    <ListItem headline="Weather app" supporting={weatherApp ? `${weatherApp} — opens from the world clock` : "None — the world clock opens a weather page"}
+    <ListItem headline="Weather app" supporting={weatherApp ? `${weatherApp} · opens from the world clock` : "None · the world clock opens a weather page"}
       onClick={() => void pickWeather()}
       trailing={weatherApp ? <IconButton icon="fClose" label="Forget the weather app" onClick={() => void act(native.clearWeatherApp())} /> : undefined} />
     <ListItem headline="Notification permission" supporting={perms.notifications ? "Allowed" : "Blocked — tap to fix"}
@@ -228,14 +245,15 @@ function UpdateRow() {
     else if (r === "failed") showSnackbar("Couldn't check for updates");
   };
   return <>
-    <div className="p-hr" />
-    <SectionHeader>About</SectionHeader>
     <ListItem headline="Check for updates" supporting={checking ? "Checking…" : version ? `Version ${version}` : ""} onClick={() => void check()} />
   </>;
 }
 
-export function PhoneSettings() {
+export function PhoneSettings({ part }: { part?: string }) {
   const sync = useSyncStatus();
+  const layout = useLook("settings");
+  const hasCategories = useSnapshot().categories.length > 0;
+  const alarmPrefs = useAlarmSettings();
   const [theme, setTheme] = useState(localStorage.getItem("theme") ?? "system");
   const [accent, setAccent] = useState((localStorage.getItem("accent") ?? "#1a73e8").toLowerCase());
   const [pureBlack, setPureBlack] = useState(localStorage.getItem("pureBlack") === "true");
@@ -270,98 +288,103 @@ export function PhoneSettings() {
   const status = sync.state === "signed-out" ? "Signed out"
     : `Last sync: ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}\n${sync.state === "syncing" ? "Syncing…" : sync.message || "Up to date"}`;
 
-  return (
-    <Scaffold title="Settings" back flush>
-      <div className="p-content ps" ref={box}>
-        <SectionHeader>Appearance</SectionHeader>
-        <div className="ps-pad">
-          <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
-          <div className="ps-label">Accent colour</div>
-          <div className="ps-accents">
-            {ACCENTS.map(([name, c]) => (
-              <button key={c} className="ps-accent" aria-label={name} aria-pressed={accent === c} onClick={() => setAccent(c)}>
-                <span className={`ps-swatch ${accent === c ? "on" : ""}`} style={{ background: c }}>{accent === c && <MIcon name="fCheck" color="#fff" />}</span>
-                <span className="ps-name">{name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
-        <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change by swiping on the top bar" : "Swiping a page changes the day or week"}
-          checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
-        {!wide && swipesTabs && <SwitchRow title="Bottom bar changes days and weeks" supporting="On Today and Calendar, sliding along the bar changes the day or week"
-          checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}
-        {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right along the bar goes to the page on the left, like swiping the pages"
-          : "Sliding right along the bar goes to the page on the right, the indicator under the finger"} checked={barReversed}
-          onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
-        <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
-          supporting={keepTasks ? "Tasks sits beside Training, so a swipe along the bar still reaches it"
-            : "Off: to-dos without a date are behind the button on Today, dated tasks in the Calendar's Agenda"} checked={keepTasks}
-          onChange={setKeepTasksTab} />
-        <ListItem headline="Looks to try" supporting="Other looks for some pages, to try side by side" onClick={() => go("settings/looks")} />
-
-        <div className="p-hr" />
-        <SectionHeader>Calendar</SectionHeader>
-        <SwitchRow title="Week starts on Monday" checked={monday} onChange={(v) => { setMonday(v); redraw("weekStartsMonday", String(v)); }} />
-        {/* In the app, times follow the phone's own 24-hour setting (Android's Date & time settings). */}
-        {!isNative && <ChoiceRow title="Time format" value={clock} options={CLOCKS} onPick={(v) => { setClock(v); redraw("clockFormat", v); }} />}
-        <ChoiceRow title="Date format" value={dates} options={DATE_STYLES} onPick={(v) => { setDates(v); redraw("dateFormat", v); }} />
-
-        <div className="p-hr" />
-        <SectionHeader>Tasks</SectionHeader>
-        {/* One setting for where a ticked task goes (284): it stays, then folds into the list's "5 done" line. */}
-        <ChoiceRow title="Ticked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
-        <SwitchRow title="Carry unfinished tasks over to today" supporting="Off: a missed task stays on its own day. Routines never carry over" checked={carry}
-          onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
-        {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
-        <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
-
-        <SportsSection />
-
-        {hasAlarms && <AlarmSettingsSection />}
-        {!isNative && <>
-          <div className="p-hr" />
-          <SectionHeader>Reminders</SectionHeader>
-          <SwitchRow title="Show reminders on this computer" supporting="As desktop notifications, while Planner is open in a tab. The phone rings them as alarms"
-            checked={notify} onChange={(v) => void setNotificationsEnabled(v).then(setNotify)} />
-        </>}
-
-        {isTestApp() && <>
-          <div className="p-hr" />
-          <SectionHeader>Planner Test</SectionHeader>
-          <div className="pe-small ps-note">A test copy of Planner, to try new versions first. It has its own data and never syncs, so nothing here reaches your real app.</div>
-          <div className="ps-buttons"><OutlinedButton onClick={() => setDialog("sample")}>Reset sample data</OutlinedButton></div>
-        </>}
-        {!isTestApp() && <>
-        <div className="p-hr" />
-        <SectionHeader>Cloud sync</SectionHeader>
-        {/* The PC is served by the server itself; only the phone build is told where it is. */}
-        {isNative && <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />}
-        <ListItem headline="Status" supporting={<span className="ps-pre">{status}</span>} />
-        {sync.state !== "signed-out" && <StorageRow syncedAt={sync.lastSyncAt} />}
-        {/* The server held back deletions that would remove most items: the user says which was meant. */}
-        {sync.state === "needs-confirm" && (
-          <div className="ps-buttons">
-            <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await confirmDeletes(); setBusy(false); }}>Delete them</OutlinedButton>
-            <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await restoreDeletes(); setBusy(false); }}>Restore them</OutlinedButton>
-          </div>
-        )}
+  const accentName = ACCENTS.find(([, c]) => c === accent)?.[0] ?? "Blue";
+  const parts: Part[] = [
+    { key: "appearance", title: "Appearance", icon: "oPalette", summary: `${theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"} theme · ${accentName} accent`, body: <>
+      <div className="ps-pad ps-look">
+        <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
+        <div className="ps-label">Accent colour</div>
+        {/* One line that scrolls, faded at its ends (229, 232). */}
+        <HScroll className="ps-accents">
+          {ACCENTS.map(([name, c]) => (
+            <button key={c} className="ps-accent" aria-label={name} aria-pressed={accent === c} onClick={() => setAccent(c)}>
+              <span className={`ps-swatch ${accent === c ? "on" : ""}`} style={{ background: c }}>{accent === c && <MIcon name="fCheck" color="#fff" />}</span>
+              <span className="ps-name">{name}</span>
+            </button>
+          ))}
+        </HScroll>
+      </div>
+      <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
+      <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Swiping a page changes the day or week"}
+        checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
+      {!wide && swipesTabs && <SwitchRow title="Bottom bar changes the day" supporting="Slide along it to change the day"
+        checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}
+      <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
+        supporting={keepTasks ? "Tasks sits beside Training" : "Off: to-dos open from Today"} checked={keepTasks}
+        onChange={setKeepTasksTab} />
+      <ListItem headline="Looks to try" supporting="Other looks for some pages, side by side" onClick={() => go("settings/looks")} />
+      {/* The review's order (229): the bar's direction, rarely changed, last. */}
+      {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right goes to the page on the left"
+        : "The indicator follows your finger"} checked={barReversed}
+        onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
+    </> },
+    { key: "calendar", title: "Calendar & tasks", icon: "oCalendarToday", summary: `Week starts ${monday ? "Monday" : "Sunday"} · ticked tasks`, body: <>
+      <SwitchRow title="Week starts on Monday" checked={monday} onChange={(v) => { setMonday(v); redraw("weekStartsMonday", String(v)); }} />
+      {/* In the app, times follow the phone's own 24-hour setting (Android's Date & time settings). */}
+      {!isNative && <ChoiceRow title="Time format" value={clock} options={CLOCKS} onPick={(v) => { setClock(v); redraw("clockFormat", v); }} />}
+      <ChoiceRow title="Date format" value={dates} options={DATE_STYLES} onPick={(v) => { setDates(v); redraw("dateFormat", v); }} />
+      {/* One setting for where a ticked task goes (284): it stays, then folds into the list's "5 done" line. */}
+      <ChoiceRow title="Ticked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
+      <SwitchRow title="Carry unfinished tasks over to today" supporting={carry ? "Missed tasks move to today, not routines" : "Off: a missed task stays on its own day"} checked={carry}
+        onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
+      {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
+      <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
+    </> },
+    ...(hasCategories ? [{ key: "training", title: "Training", icon: "oDirectionsRun", summary: "Which categories count as sport", body: <SportsSection /> }] : []),
+    ...(hasAlarms ? [{ key: "alarms", title: "Reminders & alarms", icon: "oAlarm", summary: `Snooze ${alarmPrefs.snoozeMinutes} min · quiet hours ${alarmPrefs.quietHoursEnabled ? "on" : "off"}`, body: <AlarmSettingsSection /> }]
+      : !isNative ? [{ key: "alarms", title: "Reminders", icon: "oNotifications", summary: notify ? "Shown on this computer" : "Not shown on this computer", body: <>
+        <SwitchRow title="Show reminders on this computer" supporting="As notifications while Planner is open; the phone rings them"
+          checked={notify} onChange={(v) => void setNotificationsEnabled(v).then(setNotify)} />
+      </> }] : []),
+    isTestApp() ? { key: "sync", title: "Planner Test", icon: "oInfo", summary: "Its own data, never synced", body: <>
+      <div className="pe-small ps-note">A test copy of Planner, to try new versions first. It has its own data and never syncs, so nothing here reaches your real app.</div>
+      <div className="ps-buttons"><OutlinedButton onClick={() => setDialog("sample")}>Reset sample data</OutlinedButton></div>
+    </> } : { key: "sync", title: "Cloud sync", icon: "oCloud", summary: sync.state === "signed-out" ? "Signed out" : `Last sync ${sync.lastSyncAt ? formatDateTime(sync.lastSyncAt) : "never"}`, body: <>
+      {/* The PC is served by the server itself; only the phone build is told where it is. */}
+      {isNative && <ListItem headline="Server" supporting={server || "Not set"} onClick={() => setDialog("server")} />}
+      <ListItem headline="Status" supporting={<span className="ps-pre">{status}</span>} />
+      {sync.state !== "signed-out" && <StorageRow syncedAt={sync.lastSyncAt} />}
+      {/* The server held back deletions that would remove most items: the user says which was meant. */}
+      {sync.state === "needs-confirm" && (
         <div className="ps-buttons">
-          <OutlinedButton disabled={busy || sync.state === "signed-out"} onClick={async () => { setBusy(true); await syncNow(); setBusy(false); }}>Sync now</OutlinedButton>
-          <OutlinedButton onClick={() => setDialog("signout")}>Sign out</OutlinedButton>
+          <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await confirmDeletes(); setBusy(false); }}>Delete them</OutlinedButton>
+          <OutlinedButton disabled={busy} onClick={async () => { setBusy(true); await restoreDeletes(); setBusy(false); }}>Restore them</OutlinedButton>
         </div>
-        </>}
+      )}
+      <div className="ps-buttons">
+        <OutlinedButton disabled={busy || sync.state === "signed-out"} onClick={async () => { setBusy(true); await syncNow(); setBusy(false); }}>Sync now</OutlinedButton>
+        <OutlinedButton onClick={() => setDialog("signout")}>Sign out</OutlinedButton>
+      </div>
+    </> },
+    { key: "data", title: "Data", icon: "oDescription", summary: "Categories, trash, backups", body: <>
+      <HealthRow />
+      {/* Phone only: it reads the phone's own calendars (272). */}
+      {canImportCalendars && <ListItem headline="Import from Google Calendar" supporting="Birthdays, holidays and events from the phone" onClick={() => go("settings/import")} />}
+      <ListItem headline="Categories" supporting="Names, colours and default reminders" onClick={() => go("settings/categories")} />
+      <ListItem headline="Trash" supporting={`Restore or delete · kept ${TRASH_DAYS} days`} onClick={() => go("settings/trash")} />
+      <BackupRows />
+      <ProblemsRow />
+    </> },
+    ...(isNative ? [{ key: "about", title: "About", icon: "oInfo", summary: "Version, updates", body: <UpdateRow /> }] : []),
+  ];
+  // Settings in folders (259, a look to try): the short list, and each part on its own page.
+  const shown = part ? parts.find((p) => p.key === part) : undefined;
+  const folders = !shown && layout === "folders";
 
-        <div className="p-hr" />
-        <SectionHeader>Data</SectionHeader>
-        <HealthRow />
-        {/* Phone only: it reads the phone's own calendars (272). */}
-        {canImportCalendars && <ListItem headline="Import from Google Calendar" supporting="Birthdays, holidays and events from the phone's calendars" onClick={() => go("settings/import")} />}
-        <ListItem headline="Categories" supporting="Names, colours and default reminder types" onClick={() => go("settings/categories")} />
-        <ListItem headline="Trash" supporting={<span className="ps-pre">{`Restore or permanently delete items\nKept ${TRASH_DAYS} days`}</span>} onClick={() => go("settings/trash")} />
-        <BackupRows />
-        <ProblemsRow />
-        {isNative && <UpdateRow />}
+  return (
+    <Scaffold title={shown?.title ?? "Settings"} back flush>
+      <div className="p-content ps" ref={box}>
+        {shown ? <div className="ps-part first"><Card>{shown.body}</Card></div>
+          : folders ? <div className="ps-part first"><Card>{parts.map((p) => (
+            <ListItem key={p.key} className="ps-folder" headline={p.title} supporting={p.summary} onClick={() => go(`settings/${p.key}`)}
+              leading={<span className="ps-folder-icon"><MIcon name={p.icon} size={22} /></span>} trailing={<MIcon name="fKeyboardArrowRight" />} />
+          ))}</Card></div>
+          : parts.map((p, i) => (
+            <section key={p.key} className={`ps-part ${i === 0 ? "first" : ""}`}>
+              <SectionHeader>{p.title}</SectionHeader>
+              <Card>{p.body}</Card>
+            </section>
+          ))}
         <div className="p-endspace" />
       </div>
 
@@ -407,12 +430,11 @@ function BackupRows() {
   };
   const lastText = last ? `Last ${backupWhen(last)}` : "None yet";
   return <>
-    <ListItem headline="Back up now" onClick={() => void backUp()} supporting={<span className="ps-pre">{busy ? "Backing up…"
-      : isNative ? `A copy of everything on this phone, made daily too; the last 14 are kept\n${lastText}`
-      : `Downloads a copy of everything to this computer\n${lastText}`}</span>} />
+    <ListItem headline="Back up now" onClick={() => void backUp()} supporting={busy ? "Backing up…"
+      : isNative ? `${lastText} · also daily, the last 14 kept` : `${lastText} · downloads a copy`} />
     {isNative
-      ? <ListItem headline="Restore from backup" supporting="Puts back what's missing or changed; deletes nothing" onClick={() => go("settings/backups")} />
-      : <FilePickRow headline="Restore from backup" supporting="Pick a backup file; puts back what's missing or changed, deletes nothing" onPicked={setRestoring} />}
+      ? <ListItem headline="Restore from backup" supporting="Puts back what's missing; deletes nothing" onClick={() => go("settings/backups")} />
+      : <FilePickRow headline="Restore from backup" supporting="From a file · deletes nothing" onPicked={setRestoring} />}
     {restoring && <RestoreDialog backup={restoring} onClose={() => setRestoring(null)} />}
   </>;
 }

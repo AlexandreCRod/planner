@@ -17,6 +17,14 @@ type Look = {
 /** Every look, in the Looks page's order. */
 export const LOOKS = {
   /**
+   * Settings' layout (259, with 229): one page of grouped cards (the pick), or folders: a short list of its
+   * parts, each opening its own page with its card. Read once, in PhoneSettings.
+   */
+  settings: { page: "Settings", title: "Layout", pick: "page", choices: [
+    ["page", "One page", "Every setting on one page, in cards"],
+    ["folders", "Folders", "A short list; each part opens its own page"],
+  ] },
+  /**
    * The new event's box on the calendar (243). A: a crisp 1.5 px outline, 4 px corners, 6 px dots at the
    * top-right and bottom-left corners. B: a 1 px hairline with 16 × 3 px tabs in the middle of the top and
    * bottom edges. Its class on the box is `look-a` or `look-b` (phone.css); AddPanel picks the handle.

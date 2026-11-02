@@ -104,19 +104,17 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 .phone .p-pill-track { position: absolute; left: 0; top: 0; width: calc(100% / var(--tabs, 4)); height: var(--bar-h); pointer-events: none; }
 .phone .p-pill { position: absolute; left: 50%; margin-left: -28px; top: 7px; width: 56px; height: 30px; border-radius: 15px; background: var(--p-sec-container); }
 .phone .p-tab { flex: 1; min-width: 0; height: var(--bar-h); position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; color: var(--muted); }
-/* The label shows under the selected tab only: unselected icons sit centred, and the chosen tab's icon
-   rises as its label fades in (M3 emphasized easing, 200 ms: it never holds up the tap or the page). */
+/* Every tab shows its name (230): muted under the others, the text colour under the chosen one. The icons
+   never move: choosing a tab only changes the indicator and the colours. */
 .phone .p-tab-icon { margin-top: 10px; width: 24px; height: 24px; display: grid; place-items: center; transition: color .2s; }
-.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s, opacity .15s linear; }
-/* The icons never move: choosing a tab only changes the indicator, the colours and its label, which fades in under it. */
-.phone .p-tab:not(.on) .p-tab-label { opacity: 0; }
+.phone .p-tab-label { margin-top: 8px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; white-space: nowrap; transition: color .2s; }
 .phone .p-tab.on .p-tab-icon { color: var(--p-on-sec-container); }
 .phone .p-tab.on .p-tab-label { color: var(--text); }
 /* At phone width nothing in the bar animates colour, which would redraw it each frame after every tab change: the two
-   icons already cross-fade, each in its own colour, and a label is only seen on the chosen tab. */
+   icons already cross-fade, each in its own colour, and the labels change colour at once, as the finger lands. */
 html.phone:not(.wide) .p-tab-icon { transition: none; }
 html.phone:not(.wide) .p-ico.sel { color: var(--p-on-sec-container); }
-html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15s linear; }
+html.phone:not(.wide) .p-tab-label { transition: none; }
 
 .phone .p-fab {
   position: absolute; right: 16px; bottom: calc(var(--bar-h) + var(--sab) + 16px); z-index: 25;
@@ -247,7 +245,6 @@ html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15
 /* ---------- Calendar (CalendarScreen.kt, TimeGrid.kt) ---------- */
 .phone .p-cal { position: relative; }
 .phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px 0 16px; }
-.phone .p-calhead-slot { flex: none; width: 48px; }
 .phone .p-calhead h2 { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 
@@ -422,8 +419,18 @@ html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15
 
 /* ---------- Shared M3 pieces (chrome.tsx) ---------- */
 /* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
-.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
+.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 16px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
+/* Every row that scrolls sideways (232, edgeFade.ts): a 24 px fade at an end while there's more that way, so a
+   chip is never cut mid-word at the edge; the row's own 16 px padding lets the last chip scroll clear of it. */
+.phone .p-hfade {
+  --fl: 0px; --fr: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fl), #000 calc(100% - var(--fr)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--fl), #000 calc(100% - var(--fr)), transparent);
+}
+.phone .p-hfade.fade-l { --fl: 24px; }
+.phone .p-hfade.fade-r { --fr: 24px; }
+.phone .p-chipdiv { flex: none; align-self: center; width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
 .phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
 .phone .p-chip {
@@ -1331,7 +1338,15 @@ html.phone[data-theme="dark"] {
 .phone .pa-empty-icon { position: relative; overflow: hidden; width: 120px; height: 120px; margin: -16px 0 -12px; padding: 0; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; color: var(--muted); }
 .phone .pa-empty > .pa-empty-icon > svg { margin: 0; }
 /* World clock cards, a touch smaller. */
-.phone .pa-city { padding: 8px 2px 8px 18px; border-radius: 20px; }
+/* No ✕ since 2.10 (233: swipe left or hold to remove): the same height as with it, the time 18 px in. */
+.phone .pa-city { padding: 8px 18px 8px 18px; border-radius: 20px; min-height: 64px; box-sizing: border-box; }
+.phone .pa-city-wrap { position: relative; }
+.phone .pa-city-menu { position: absolute; right: 8px; top: 8px; }
+/* A timer's bar (233): what's left, 3 px along the card's bottom edge; grey and half strength while paused. */
+.phone .pa-timer-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--line); pointer-events: none; }
+.phone .pa-timer-bar > span { display: block; height: 100%; background: color-mix(in srgb, var(--muted) 50%, transparent); transform-origin: left; transition: transform .25s linear; }
+.phone .pa-timer.running .pa-timer-bar > span { background: var(--p-primary); }
+.phone .pa-paused { font-size: 12px; color: var(--muted); }
 .phone .pa-city .t-title-medium { font-size: 15px; line-height: 22px; }
 .phone .pa-city .pa-time26 { font-size: 23px; line-height: 28px; }
 .phone .pa-city .pa-wx { height: 36px; font-size: 13px; }
@@ -1407,7 +1422,6 @@ html.phone[data-theme="dark"] {
 .phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines .p-rchips {
   flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .phone .p-routines .p-rchip { height: 32px; max-width: 180px; overflow: visible; border-radius: 16px; padding: 0 12px 0 7px; font-size: 14px; line-height: 20px; }
 .phone .p-routines .p-rchip::after { content: ""; position: absolute; inset: -8px -4px; }
@@ -1744,3 +1758,21 @@ html.phone[data-theme="dark"] {
 .phone .ps-apps-none { padding: 16px 24px; }
 .phone .ps-apps > .p-sheet-title { flex: none; }
 .phone .p-colorhint { margin-top: 12px; }
+
+/* ---------- Settings in cards (229): each part a heading over a rounded card of rows, thin lines between rows.
+   The headings are the app's (287: 14 px, medium, muted). In folders (259) the parts are a list of entries. ---------- */
+.phone .ps-part { padding: 0 16px; }
+.phone .ps-part > .p-section { min-height: 0; padding: 24px 0 8px; }
+.phone .ps-part.first > .p-section { padding-top: 8px; }
+.phone .ps-part.first > .ps-card:first-child { margin-top: 8px; }
+.phone .ps-card { border-radius: 20px; background: var(--p-sc-low); }
+.phone .ps-card > :is(.p-li, .p-menu-anchor, .ps-pad, .ps-note, .ps-buttons):not(:first-child) { border-top: 1px solid var(--line); }
+.phone .ps-card .p-li { padding-right: 16px; }
+.phone .ps-card > :first-child, .phone .ps-card > :first-child > .p-li { border-top-left-radius: 20px; border-top-right-radius: 20px; }
+.phone .ps-card > :last-child, .phone .ps-card > :last-child > .p-li { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+.phone .ps-card .ps-pad { padding: 12px 16px; }
+.phone .ps-card .ps-note { padding: 12px 16px; }
+.phone .ps-card .ps-buttons { padding: 12px 16px; }
+.phone .ps-info { display: flex; margin-right: 4px; }
+.phone .ps-folder { min-height: 72px; }
+.phone .ps-folder-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--p-sc-high); color: var(--p-primary); }

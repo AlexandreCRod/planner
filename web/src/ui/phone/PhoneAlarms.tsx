@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal, flushSync } from "react-dom";
 import {
   type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
-  nextRing, presetText, repeatText, timerLeft, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
+  nextRing, presetText, repeatText, swipeRemoves, timerLeft, timerShare, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
@@ -18,7 +18,9 @@ import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, Dialog, DropdownMenu, FilterChip, HScroll, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { useHorizontalSwipe } from "./gesture.ts";
+import { useHold as useLongPress } from "./hold.ts";
 import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
@@ -342,9 +344,9 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
         </button>
       )}
       {alarms.length > 0 && (
-        <div className="pa-filter pa-noswipe">
+        <HScroll className="pa-filter pa-noswipe">
           {CLOCK_FILTERS.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow((f) => toggleFilter(f, k))}>{l}</FilterChip>)}
-        </div>
+        </HScroll>
       )}
       {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
@@ -827,11 +829,13 @@ function TimersPane({ timers: all, active, onNew }: { timers: ClockTimer[]; acti
 function TimerCard({ t, now, onDelete }: { t: ClockTimer; now: number; onDelete: () => void }) {
   const left = timerLeft(t, now);
   const running = t.endAt != null;
+  // Stopped part-way (not one reset to its full length, which waits for Start).
+  const paused = !running && left !== t.durationMs;
   const run = (action: "pause" | "resume" | "plus" | "reset") => void act(native.timer(action, { id: t.id }));
   return (
-    <div className="pa-card pa-timer">
+    <div className={`pa-card pa-timer ${running ? "running" : ""} ${paused ? "paused" : ""}`}>
       <div className="pa-timer-head">
-        <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}</span>
+        <span className="t-body-medium muted grow">{t.label.trim() || `${formatDuration(t.durationMs)} timer`}{paused && <span className="pa-paused"> · Paused</span>}</span>
         <IconButton icon="fClose" label="Delete timer" onClick={onDelete} />
       </div>
       {/* One row (76): the time, then Reset (its symbol), +1:00 and Pause or Resume. */}
@@ -843,6 +847,8 @@ function TimerCard({ t, now, onDelete }: { t: ClockTimer; now: number; onDelete:
           ? <button className="pa-tonal pa-small-btn" onClick={() => run("pause")}>Pause</button>
           : <button className="p-filled-btn pa-small-btn" onClick={() => run("resume")}>{left === t.durationMs ? "Start" : "Resume"}</button>}
       </div>
+      {/* What's left, along the card's bottom edge (233): the accent while it runs, grey while paused. */}
+      <div className="pa-timer-bar" aria-hidden="true"><span style={{ transform: `scaleX(${timerShare(t, left)})` }} /></div>
     </div>
   );
 }
@@ -917,10 +923,27 @@ function StopwatchPane({ active }: { active: boolean }) {
 
 const systemZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-function WorldClockPane({ zones, local, active, onAdd }: { zones: string[]; local: string; active: boolean; onAdd: () => void }) {
+function WorldClockPane({ zones: all, local, active, onAdd }: { zones: string[]; local: string; active: boolean; onAdd: () => void }) {
   const now = useTick(1000, active);
   const here = local || systemZone();
   const h24 = use24h();
+  // A removed city leaves at once, but is only really removed once its Undo has gone unused, so Undo puts it
+  // back in its place (as a deleted timer does).
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+  const stay = (id: string) => setLeaving((l) => new Set([...l].filter((x) => x !== id)));
+  const zones = all.filter((z) => !leaving.has(z));
+  const remove = (id: string) => {
+    let done = false;
+    const commit = () => { if (done) return; done = true; offFlush(); void act(native.zone("remove", id)).then(() => stay(id)); };
+    const offFlush = onFlush(commit);
+    setLeaving((l) => new Set([...l, id]));
+    showSnackbar(`${cityLabel(id)} removed`, "Undo", () => {
+      if (done) { void act(native.zone("add", id)); return; } // the app was put away meanwhile
+      done = true;
+      offFlush();
+      stay(id);
+    }, { onGone: commit });
+  };
   return (
     <div className="pa-scroll pa-gap12 pa-top16">
       <div className="pa-local">
@@ -931,7 +954,7 @@ function WorldClockPane({ zones, local, active, onAdd }: { zones: string[]; loca
         <WeatherChip id={here} now={now} active={active} />
       </div>
       {zones.length === 0 && <Empty icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
-      {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} />)}
+      {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} onRemove={() => remove(z)} />)}
     </div>
   );
 }
@@ -952,20 +975,48 @@ function WeatherChip({ id, now, active }: { id: string; now: number; active: boo
   );
 }
 
-/** A city on the world clock, by its stored id (a zone, or "zone#Name": domain/cities.ts). */
-function CityCard({ zone: id, here, now, h24, active }: { zone: string; here: string; now: number; h24: boolean; active: boolean }) {
+/**
+ * A city on the world clock, by its stored id (a zone, or "zone#Name": domain/cities.ts): hours and minutes,
+ * no seconds (233). A swipe left removes it (the card follows the finger, then slides away); a long press
+ * (a right-click) offers Remove. Either way with Undo.
+ */
+function CityCard({ zone: id, here, now, h24, active, onRemove }: {
+  zone: string; here: string; now: number; h24: boolean; active: boolean; onRemove: () => void;
+}) {
+  const [menu, setMenu] = useState(false);
+  const hold = useLongPress(() => setMenu(true));
+  const card = useHorizontalSwipe<HTMLDivElement>({
+    accept: (dx) => dx < 0,
+    onStart: () => { const el = card.current; if (el) el.style.transition = "none"; },
+    onMove: (dx) => { const el = card.current; if (el) el.style.transform = `translate3d(${Math.min(0, dx)}px,0,0)`; },
+    onEnd: (dx, vx) => {
+      const el = card.current;
+      if (!el) return;
+      const w = el.offsetWidth;
+      const goes = swipeRemoves(dx, vx, w);
+      el.style.transition = `transform ${goes ? 160 : 220}ms cubic-bezier(.2, 0, 0, 1), opacity 160ms linear`;
+      el.style.transform = goes ? `translate3d(${-w - 16}px,0,0)` : "";
+      if (goes) { el.style.opacity = "0"; feel("tick"); window.setTimeout(onRemove, 160); }
+    },
+  });
   const zone = zoneOf(id);
   let sub = "";
   try { sub = [zoneDayLabel(zone, now, here), zoneOffsetLabel(zone, now, here)].filter(Boolean).join(" · "); } catch { return null; }
+  const { fired: _fired, ...press } = hold;
+  // The menu sits beside the card, not in it: the card clips what overflows its rounded corners.
   return (
-    <div className="pa-card pa-city">
-      <div className="grow pa-city-text">
-        <div className="t-title-medium pa-line">{cityLabel(id)}</div>
-        <div className="t-body-small muted pa-line">{sub}</div>
+    <div className="pa-city-wrap">
+      <div className="pa-card pa-city" ref={card} {...press}>
+        <div className="grow pa-city-text">
+          <div className="t-title-medium pa-line">{cityLabel(id)}</div>
+          <div className="t-body-small muted pa-line">{sub}</div>
+        </div>
+        <WeatherChip id={id} now={now} active={active} />
+        <span className="pa-time26">{zoneClock(zone, now, h24, false)}</span>
       </div>
-      <WeatherChip id={id} now={now} active={active} />
-      <span className="pa-time26">{zoneClock(zone, now, h24)}</span>
-      <IconButton icon="fClose" label="Remove" onClick={() => void act(native.zone("remove", id))} />
+      <div className="p-menu-anchor pa-city-menu">
+        <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[{ label: "Remove", icon: "oDelete", onClick: onRemove }]} />
+      </div>
     </div>
   );
 }

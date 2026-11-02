@@ -60,7 +60,6 @@ html.wide {
 .wide .p-tab-icon { margin-top: 6px; width: 56px; height: 32px; border-radius: 16px; transition: color .2s, background-color .15s; }
 .wide .p-tab-label { margin-top: 4px; }
 .wide .p-tab:not(.on) .p-tab-icon { transform: none; }
-.wide .p-tab:not(.on) .p-tab-label { opacity: 1; transform: none; }
 .wide .p-pill-track { top: 88px; width: var(--rail-w); height: 68px; }
 .wide .p-pill { top: 6px; height: 32px; border-radius: 16px; }
 .wide .p-root > .p-fab { left: calc((var(--rail-w) - 56px) / 2); right: auto; top: 16px; bottom: auto; transform: none !important; }

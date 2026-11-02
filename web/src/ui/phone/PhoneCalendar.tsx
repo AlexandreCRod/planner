@@ -1,10 +1,11 @@
 // The calendar on the phone, as CalendarScreen.kt: the title and its arrow / today / view buttons, a
-// view menu (Day, 3 days, Week, Month, Year, Agenda, then Filter, the day's note, Search, Settings),
+// view menu (Day, 3 days, Week, Month, Year, Agenda, then Filter, routines and the day's note), search, settings,
 // and the views themselves. The day / 3-day / week time grid scrolls natively, zooms with two
 // fingers, moves an event on long-press-and-drag (snapped to 15 minutes), adds one on a tap on an
 // empty slot, and slides sideways like a pager to the days before and after. Month and Year slide the
 // same way.
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useWide } from "../../platform.ts";
 import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
 import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
@@ -18,7 +19,7 @@ import { type Placed, layoutDay } from "../shared/dayLayout.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
-import { Checkbox, Dialog, DoneFold, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { AppBarActions, Checkbox, Dialog, DoneFold, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { splitDone } from "../../domain/todayPlan.ts";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { useTrainingDays } from "./PhoneTraining.tsx";
@@ -86,6 +87,7 @@ function openDailyNote(s: Snapshot, day: number) {
 
 export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min: number) => void; pending: SlotPreview | null }) {
   const s = useSnapshot();
+  const wide = useWide();
   const [mode, setMode] = useState<Mode>(baseMode);
   const [anchor, setAnchorState] = useState(selected);
   const [menu, setMenu] = useState(false);
@@ -108,7 +110,12 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const head = useHorizontalSwipe<HTMLElement>(turnerSwipe("calendar", turn, () => window.innerWidth));
   const { y, m } = ymd(anchor);
   const weekStart = startOfWeek(anchor, mondayFirst());
-  const title = mode === "year" ? String(y) : mode === "day" ? formatDateShort(anchor) : mode === "month" || mode === "agenda" ? `${monthLong(m)} ${y}`
+  // Away from today the bar has four icons (Today, the view, search, settings): on the phone the month is
+  // shortened then ("Dec 2026"), and a day this year drops its year ("30 Sep"), so a long one isn't cut.
+  const away = !rangeShows(mode, anchor, todayEpoch(), mondayFirst());
+  const short = away && !wide;
+  const dayTitle = formatDateShort(anchor);
+  const title = mode === "year" ? String(y) : mode === "day" ? (short && y === ymd(todayEpoch()).y ? dayTitle.replace(new RegExp(` ${y}$`), "") : dayTitle) : mode === "month" || mode === "agenda" ? `${short ? monthShort(m) : monthLong(m)} ${y}`
     : `${monthShort(ymd(mode === "week" ? weekStart : anchor).m)} ${ymd(mode === "week" ? weekStart : anchor).y}`;
   const first = mode === "week" ? weekStart : anchor;
   const count = mode === "day" ? 1 : mode === "3day" ? 3 : 7;
@@ -125,8 +132,6 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
     { label: "Filter…", icon: "oFilterList", divider: true, onClick: () => setFilterOpen(true) },
     { label: "Show routines", icon: "oTaskAlt", checked: showRoutines, onClick: toggleRoutines },
     { label: "Note for selected day", icon: "oEditNote", onClick: () => openDailyNote(s, anchor) },
-    { label: "Search", icon: "oSearch", onClick: openSearch },
-    { label: "Settings", icon: "oSettings", onClick: () => go("settings") },
   ];
 
   return (
@@ -137,13 +142,14 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
         <h2 className="t-title-medium">{title}</h2>
         <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next" onClick={() => turn(1)} />
         <span className="grow" />
-        {/* Where Today has it, third from the end; the slot after it is for the page's search (285). */}
-        {!rangeShows(mode, anchor, todayEpoch(), mondayFirst()) && <IconButton icon="oToday" label="Today" onClick={() => setAnchor(todayEpoch())} />}
-        <span className="p-calhead-slot" />
+        {/* The page's own icons (Today when away from it, the view menu), then search and settings in the
+            same last two spots as on every tab (285). */}
+        {away && <IconButton icon="oToday" label="Today" onClick={() => setAnchor(todayEpoch())} />}
         <div className="p-menu-anchor">
           <IconButton icon="oViewAgenda" label="View" onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={menuItems} />
         </div>
+        <AppBarActions />
       </header>
       <div className="p-calbody">
         {grid && <TimeGrid s={s} items={items} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}

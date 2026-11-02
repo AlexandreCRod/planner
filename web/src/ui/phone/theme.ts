@@ -11,6 +11,13 @@ const PALETTES: Record<string, [lightContainer: string, dark: string, darkContai
   "#0061a4": ["#d1e4ff", "#9ecaff", "#00497d", "#6b5778"], // Ocean
   "#4f5b66": ["#d3e4f2", "#b7c8d6", "#38444f", "#665a6f"], // Slate
   "#3f51b5": ["#dde1ff", "#b8c3ff", "#2b3a9a", "#7d5260"], // Indigo
+  // 2.10 (229): six more, in the same tones (light 40, container 90, dark 80, dark container 30), web only.
+  "#b33b2b": ["#ffdad4", "#ffb4a8", "#8f2416", "#775930"], // Coral
+  "#006c4e": ["#8bf6c9", "#6fd9ae", "#00513a", "#3e6374"], // Mint
+  "#7d4f91": ["#f6d9ff", "#e3b9f5", "#633877", "#7a5260"], // Lilac
+  "#735c00": ["#ffe08b", "#e6c449", "#574500", "#4d6544"], // Gold
+  "#00668a": ["#c3e8ff", "#7dd0ff", "#004c69", "#5e5b7e"], // Sky
+  "#4f6448": ["#d1e9c6", "#b5cdab", "#384c32", "#386566"], // Sage
 };
 
 const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
