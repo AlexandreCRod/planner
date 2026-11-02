@@ -130,3 +130,26 @@ test("lead times read both ways", () => {
   assert.equal(offsetLabel(-75), "1 hour 15 min after");
   assert.equal(offsetText(20160), "2 weeks before");
 });
+
+// 228: the add panel highlights the words the line understood, so the parser says where they were.
+const words = (s: string, cats: string[] = []) => p(s, cats).spans.map(([a, b]) => s.slice(a, b));
+
+test("the understood words are reported where they were typed, the title's words never", () => {
+  assert.deepEqual(words("Dinner with Ana fri 8pm !alarm #work", ["Work"]), ["fri", "8pm", "!alarm", "#work"]);
+  assert.deepEqual(words("Water plants every mon, thu at 8am"), ["every mon, thu", "at 8am"]);
+  assert.deepEqual(words("Buy alarm clock"), []);
+  assert.deepEqual(words("Dentist tue 3pm remind 1h before @\"Clínica Sorriso\""), ["tue", "3pm", "remind 1h before", "@\"Clínica Sorriso\""]);
+  assert.deepEqual(words("Trip 27 Oct till 8 Nov !1"), ["27 Oct till 8 Nov", "!1"]);
+  // Taken out in a different order from how they're typed (the tag first, the time last): still in order.
+  assert.deepEqual(words("Gym tomorrow 7:30 #health"), ["tomorrow", "7:30", "#health"]);
+});
+
+test("a request at the front counts as understood, and the spans never cover the title", () => {
+  const s = "Remind me to call mom 3pm alarm";
+  assert.deepEqual(words(s), ["Remind me to", "3pm", "alarm"]);
+  for (const line of ["Dinner with Ana fri 8pm !alarm", "Remind me to call mom 3pm alarm", "Water plants every mon, thu at 8am"]) {
+    const r = p(line);
+    const left = line.split("").filter((_, i) => !r.spans.some(([a, b]) => i >= a && i < b)).join("");
+    for (const w of r.title.split(" ")) assert.ok(left.toLowerCase().includes(w.toLowerCase()), `${line}: ${w}`);
+  }
+});

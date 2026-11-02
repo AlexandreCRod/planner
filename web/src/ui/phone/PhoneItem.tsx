@@ -1168,7 +1168,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
       <div className="p-content pe-body">
         {isNew && (
           <div className="pe-types">
-            {(["EVENT", "TASK"] as const).map((t) => <FilterChip key={t} selected={d.type === t} onClick={() => emit(switchType(curRef.current, t))}>{t === "EVENT" ? "Event" : "Task"}</FilterChip>)}
+            {/* The same switch as the small add panel's, in the same order (228). */}
+            <Segmented<ItemType> value={d.type} options={[["TASK", "Task"], ["EVENT", "Event"]]} onChange={(t) => emit(switchType(curRef.current, t))} />
           </div>
         )}
         <div className="pe-titlerow">

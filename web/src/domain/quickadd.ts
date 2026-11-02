@@ -28,6 +28,11 @@ export interface QuickAdd {
   category: string | null;
   /** The place given with "@". */
   place: string | null;
+  /**
+   * The parts of the line that were understood (each [start, end) in the line as typed, in order, not
+   * overlapping): what the add panel highlights. Everything else is the title.
+   */
+  spans: [number, number][];
 }
 
 const WD_NAMES: Record<string, number> = {
@@ -153,6 +158,22 @@ const catKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
  */
 export function parseQuickAdd(input: string, today = todayEpoch(), categories: readonly string[] = []): QuickAdd {
   let text = ` ${input} `;
+  // Where each character of [text] was in [input] (-1: a space added here), so what's taken out can be
+  // told in the line as typed.
+  let pos = [-1, ...Array.from(input, (_, i) => i), -1];
+  const found: [number, number][] = [];
+  /** Takes text[at, at + len) out (leaving one space), noting where it was in the input. */
+  const cut = (at: number, len: number) => {
+    const from = pos.slice(at, at + len).filter((p) => p >= 0);
+    if (from.length) {
+      let a = Math.min(...from), b = Math.max(...from) + 1;
+      while (a < b && /\s/.test(input[a])) a++;
+      while (b > a && /\s/.test(input[b - 1])) b--;
+      if (a < b) found.push([a, b]);
+    }
+    text = text.slice(0, at) + " " + text.slice(at + len);
+    pos = [...pos.slice(0, at), -1, ...pos.slice(at + len)];
+  };
   let day: number | null = null, endDay: number | null = null, untilDay: number | null = null;
   let start: number | null = null, end: number | null = null;
   let freq = "NONE" as Freq, interval = 1, weekDays = 0, priority = 0;
@@ -164,16 +185,23 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
   /** Takes the first match out of the text, unless [fn] turns it down (returns false). */
   const take = (re: RegExp, fn: (m: RegExpExecArray) => void | false) => {
     const m = re.exec(text);
-    if (m && fn(m) !== false) text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+    if (m && fn(m) !== false) cut(m.index, m[0].length);
   };
   const takeAll = (re: RegExp, fn: (m: RegExpExecArray) => void) => {
-    for (let m = re.exec(text); m; m = re.exec(text)) { fn(m); text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length); }
+    for (let m = re.exec(text); m; m = re.exec(text)) { fn(m); cut(m.index, m[0].length); }
   };
   const ci = (p: string) => new RegExp(p, "i");
 
   // "Remind me to call mom": the request goes, and so does its "to" (the reminder stays).
   const remindLead = /^\s*remind(?:\s+me)?\s+(?:to|about)\s+/i.exec(input);
-  if (remindLead) text = ` remind me ${input.slice(remindLead[0].length)} `;
+  if (remindLead) {
+    // The request itself ("Remind me to") is understood; the words after it keep their places.
+    const lead = remindLead[0].length;
+    text = ` remind me ${input.slice(lead)} `;
+    pos = [-1, ...Array.from(" remind me".slice(1), () => -1), -1, ...Array.from(input.slice(lead), (_, i) => lead + i), -1];
+    const a = input.length - input.trimStart().length;
+    found.push([a, input.slice(0, lead).trimEnd().length]);
+  }
 
   const keys = new Map(categories.map((c) => [catKey(c), c]));
   takeAll(/(?<=\s)#([\p{L}\d_-]+)/u, (m) => {
@@ -295,7 +323,17 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
   let title = cleanTitle(text);
   // The request taken from the front ("Remind me to call mom"): the title starts with a capital, as typed.
   if (remindLead && /^\s*[A-Z]/.test(input) && title) title = title[0].toUpperCase() + title.slice(1);
-  return { title, day, endDay, startMin: start, endMin: end, freq, interval, weekDays, untilDay, alerts, priority, tags, category, place };
+  return { title, day, endDay, startMin: start, endMin: end, freq, interval, weekDays, untilDay, alerts, priority, tags, category, place, spans: mergeSpans(found) };
+}
+
+/** Spans in order, the overlapping or touching ones joined. */
+function mergeSpans(list: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const [a, b] of [...list].sort((x, y) => x[0] - y[0] || x[1] - y[1])) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b); else out.push([a, b]);
+  }
+  return out;
 }
 
 // ---------- Timers and alarm clocks from the add line (phone) ----------

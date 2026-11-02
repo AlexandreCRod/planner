@@ -11,7 +11,7 @@
 // (looks.ts: dots at the top-right and bottom-left corners, or tabs mid-edge): dragging one changes the start or the end in quarter hours, the time showing
 // beside the hours, while the panel shrinks to a small bar with the title so the calendar shows.
 import { animated, easings, to, useSpring } from "@react-spring/web";
-import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { describe } from "../../domain/recurrence.ts";
 import { isNative } from "../../platform.ts";
@@ -33,7 +33,7 @@ import { panelTarget } from "./sheet.ts";
 import { type KeptAdd, onSlot, takeKept, worthKeeping } from "./addDraft.ts";
 import { dragEdgeTimes } from "./wheelMath.ts";
 import { feel } from "./haptics.ts";
-import { AssistChip, TextButton, showSnackbar } from "./m3.tsx";
+import { AssistChip, BottomSheet, TextButton, showSnackbar } from "./m3.tsx";
 import { look } from "./looks.ts";
 import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./native.ts";
 
@@ -112,6 +112,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const grownRef = useRef(false);
   const [pick, setPick] = useState<Pick>(null);
   const [colorOpen, setColorOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // ---------- What's being added ----------
   const [type, setType] = useState<ItemType>(restored?.type ?? req.type);
@@ -452,7 +453,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
   const typing = useRef(false);
   const openPick = (p: Pick) => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setPick(p); };
   const closePick = () => {
-    setPick(null); setColorOpen(false);
+    setPick(null); setColorOpen(false); setGuideOpen(false);
     // The keyboard comes back only if it was up for the title before the picker opened.
     if (!grownRef.current && typing.current) { inputRef.current?.focus({ preventScroll: true }); showKeyboard(); }
     typing.current = false;
@@ -617,6 +618,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     </div>
   );
   const isEvent = d.type === "EVENT";
+  // Marks only for an item's line (a timer or alarm clock has its own chip).
+  const marks = lineMode && type !== "NOTE" && !clock && parsed.spans.length > 0;
 
   /** The category (its colour on the dot): picked in a dialog, next to the title. */
   const categoryName = d.categoryId !== null ? snapshot().categoryById.get(d.categoryId)?.name ?? null : null;
@@ -677,9 +680,13 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
           <div className="gp-handle" />
           <Segmented<ItemType> value={lineMode ? type : d.type} options={TYPES} onChange={(t) => live.current.setType(t)} track={typeTrack} />
           {lineMode ? <>
-            <input ref={inputRef} className="p-field" value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
-              placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
-              onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            {/* The words the line understood are drawn as soft marks over it (228). */}
+            <div className="gp-line">
+              <input ref={inputRef} className={`p-field ${marks ? "marked" : ""}`} value={text} onChange={(e) => setText(e.target.value)} enterKeyHint="done" autoCapitalize="sentences"
+                placeholder={type === "TASK" ? "Water plants every mon, thu 8am !alarm" : type === "EVENT" ? "Dentist tue 3pm remind 1h before #health" : "Note title"}
+                onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+              {marks && <LineMarks input={inputRef} text={text} spans={parsed.spans} />}
+            </div>
             {frequentRow}
             {type !== "NOTE" && !clock && settings}
             {clock && (
@@ -697,8 +704,15 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
                   {parsed.tags.map((t) => <span key={t} className="p-assist static"><MIcon name="oLabel" size={18} /> {t}</span>)}
                 </div>
               )}
-              <div className="gp-tip">Tip: dates (tomorrow, next fri, 27/10, 27 Oct till 8 Nov), times (at 18:30, 18-20h), "every mon", "alarm 30m before" or "10m after", #category, !1 to !4, @place{hasAlarms && <>; or "timer 10 min", "alarm 7am weekdays"</>}</div>
             </>}
+            {type !== "NOTE" && !clock && (
+              <div className="gp-hint">
+                <span className="ellipsis">Try&nbsp; fri 8pm · every mon · !alarm · #work</span>
+                <button className="gp-hint-q" aria-label="How to write a quick add" onClick={() => { typing.current = document.activeElement === inputRef.current; inputRef.current?.blur(); setGuideOpen(true); }}>
+                  <MIcon name="oHelpOutline" size={20} />
+                </button>
+              </div>
+            )}
           </> : <>
             <input ref={inputRef} className="gp-title" value={d.title} placeholder="Add title" enterKeyHint="done" autoCapitalize="sentences"
               onChange={(e) => setItem({ title: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
@@ -730,7 +744,65 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} />}
       {pick?.kind === "end" && <TimePickerDialog value={d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END)} onClose={closePick} onPick={pickEnd} />}
       {colorOpen && <CategoryDialog selected={d.categoryId} onClose={closePick} onPick={pickCategory} />}
+      {guideOpen && <QuickAddGuide onClose={closePick} />}
     </div>
+  );
+}
+
+/**
+ * The understood words drawn over the add line (228): the same text, in the same place, with those words
+ * as soft marks; the field's own text goes clear underneath (its caret and selection stay), and the
+ * marks scroll with it when the line is longer than the field.
+ */
+function LineMarks({ input, text, spans }: { input: React.RefObject<HTMLInputElement>; text: string; spans: [number, number][] }) {
+  const inner = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    const sync = () => { if (inner.current) inner.current.style.transform = `translateX(${-el.scrollLeft}px)`; };
+    sync();
+    // Typing at the end scrolls the field after the change; the caret moving does too.
+    const later = () => requestAnimationFrame(sync);
+    el.addEventListener("scroll", sync);
+    el.addEventListener("keyup", later);
+    document.addEventListener("selectionchange", later);
+    return () => { el.removeEventListener("scroll", sync); el.removeEventListener("keyup", later); document.removeEventListener("selectionchange", later); };
+  });
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (const [a, b] of spans) {
+    if (a > at) parts.push(text.slice(at, a));
+    parts.push(<mark key={a}>{text.slice(a, b)}</mark>);
+    at = b;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return <div className="gp-marks" aria-hidden="true"><div className="clip"><span ref={inner}>{parts}</span></div></div>;
+}
+
+/** Everything the add line understands, opened from the hint's "?" (228). */
+function QuickAddGuide({ onClose }: { onClose: () => void }) {
+  const rows: [string, string][] = [
+    ["Dates", "today, tomorrow, fri, next fri, 27/10, 27 Oct, in 3 days; several days: 27 Oct till 8 Nov, 27-30 Oct"],
+    ["Times", "8pm, at 18:30, 18-20h, 3pm to 5pm, noon, tonight, for 2h"],
+    ["Repeats", "every day, every mon, every mon and thu, weekdays, every 2 weeks, monthly; with an end: every mon until 8 Nov"],
+    ["Alarms", "!alarm, with alarm, alarm 30m before, alarm 10m after"],
+    ["Reminders", "remind me, remind 1h before, remind 1 day before and 1 hour before; silent: notify"],
+    ["Category and tags", "#work picks the category of that name; other #words become tags"],
+    ["Priority", "!1 (urgent) to !4 (low), or !high, !medium, !low"],
+    ["Place", "@Decathlon, or @\"Café Lisboa\" for a name with spaces"],
+    ...(hasAlarms ? [["Timers and alarm clocks", "timer 10 min, pasta timer 12m, alarm 7am weekdays, wake me at 6:30"] as [string, string]] : []),
+  ];
+  return (
+    <BottomSheet onClose={onClose}>{(close) => (
+      <div className="gp-guide">
+        <div className="p-sheet-title">Quick add</div>
+        <div className="p-sheet-pad gp-guide-intro">Type the title and, anywhere in it, when and how. The words it understands are marked as you type and leave the title.</div>
+        {rows.map(([h, t]) => (
+          <div key={h} className="gp-guide-row"><div className="h">{h}</div><div className="t">{t}</div></div>
+        ))}
+        <div className="p-sheet-buttons"><TextButton onClick={close}>Close</TextButton></div>
+      </div>
+    )}</BottomSheet>
   );
 }
 
