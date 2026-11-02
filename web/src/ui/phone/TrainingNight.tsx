@@ -5,7 +5,7 @@
 // domain/sleep.ts.
 import { useEffect, useRef, useState } from "react";
 import { dayShort, formatDate, weekday } from "../../domain/dates.ts";
-import { type NightSpan, type SleepNight, NIGHT_STAGES, clockAfter, clockOfMoment, fmtSleep, inBedMin, nightTotals, spanAt, usualNight } from "../../domain/sleep.ts";
+import { type NightSpan, type SleepNight, NIGHT_STAGES, clockAfter, clockChange, clockOfMoment, fmtSleep, inBedMin, nightTotals, spanAt, usualNight } from "../../domain/sleep.ts";
 import type { Training } from "../../store/training.ts";
 import { dayMonth, scale } from "./chartMath.ts";
 import { EmptyHint, MIcon } from "./chrome.tsx";
@@ -30,6 +30,7 @@ const TICK = 120, CLEAR = 34;
 function NightChart({ n, bed, wake }: { n: SleepNight; bed: string; wake: string }) {
   const [box, w] = useWidth<HTMLDivElement>();
   const spans = n.spans, len = Math.max(inBedMin(bed, wake), spans[spans.length - 1].to);
+  const change = clockChange(bed, wake);
   const [at, setAt] = useState<number | null>(null);
   const atRef = useRef<number | null>(null);
   const down = useRef(false);
@@ -64,7 +65,7 @@ function NightChart({ n, bed, wake }: { n: SleepNight; bed: string; wake: string
   const h = T + LANE * 4 + BELOW;
   return <>
     <div className="pg-nread">
-      {a ? <><i style={{ background: STAGE_COLOURS[a.stage] }} /><b>{STAGE_NAMES[a.stage]}</b><span>{clockAfter(bed, a.from)}–{clockAfter(bed, a.to)} · {fmtSleep(a.to - a.from)}</span></>
+      {a ? <><i style={{ background: STAGE_COLOURS[a.stage] }} /><b>{STAGE_NAMES[a.stage]}</b><span>{clockAfter(bed, a.from, change)}–{clockAfter(bed, a.to, change)} · {fmtSleep(a.to - a.from)}</span></>
         : <span>Slide along the chart to read it</span>}
     </div>
     <div className="pg-chart night" ref={box} tabIndex={0} role="group" aria-label={`The night from ${clockOfMoment(bed)} to ${clockOfMoment(wake)}. The left and right arrows step through its stages.`}
@@ -79,7 +80,7 @@ function NightChart({ n, bed, wake }: { n: SleepNight; bed: string; wake: string
             <line className="pg-grid" x1={L} x2={w - R} y1={T + LANE * (i + 1)} y2={T + LANE * (i + 1)} />
             <text className="lane" x={0} y={laneY(k) + 4}>{STAGE_NAMES[k]}</text>
           </g>)}
-          {hours.map((m) => <text key={m} x={X(m)} y={h - 5} textAnchor="middle">{clockAfter(bed, m)}</text>)}
+          {hours.map((m) => <text key={m} x={X(m)} y={h - 5} textAnchor="middle">{clockAfter(bed, m, change)}</text>)}
           <text className="end" x={L} y={h - 5} textAnchor="start">{clockOfMoment(bed)}</text>
           <text className="end" x={w - R} y={h - 5} textAnchor="end">{clockOfMoment(wake)}</text>
           {spans.slice(0, -1).map((x, i) => <line key={i} className="sp" x1={X(x.to)} x2={X(x.to)} y1={laneY(x.stage)} y2={laneY(spans[i + 1].stage)} stroke={GREY} strokeWidth={1} />)}

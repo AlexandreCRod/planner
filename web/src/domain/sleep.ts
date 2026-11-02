@@ -97,12 +97,31 @@ export function usualNight(nights: readonly SleepNight[], day: number): { asleep
   };
 }
 
-const momentMin = (t: string) => Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10), +t.slice(11, 13), +t.slice(14, 16)) / 60_000;
-/** The minutes between two local moments. */
-export const inBedMin = (bed: string, wake: string) => Math.max(0, momentMin(wake) - momentMin(bed));
-/** The clock [min] minutes after a local moment: "03:48". */
-export function clockAfter(t: string, min: number): string {
-  const m = (((Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16)) + Math.round(min)) % 1440) + 1440) % 1440;
+/** A local moment as this device's time zone has it: nights keep only local clocks, and those of a stored night can't be read again. */
+const momentOf = (t: string) => new Date(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10), +t.slice(11, 13), +t.slice(14, 16));
+/** The real minutes between two local moments: a stretch of sleep is real time, whatever the clocks did. */
+export const inBedMin = (bed: string, wake: string) => Math.max(0, (momentOf(wake).getTime() - momentOf(bed).getTime()) / 60_000);
+
+/** A change of the clocks inside a night: [at] minutes after bed they moved [by] minutes (back: negative). */
+export interface ClockChange { at: number; by: number }
+
+/** The clock change between bed and wake; null on any other night. */
+export function clockChange(bed: string, wake: string): ClockChange | null {
+  const a = momentOf(bed), b = momentOf(wake), off = a.getTimezoneOffset();
+  const by = off - b.getTimezoneOffset();
+  if (!by) return null;
+  let lo = 0, hi = Math.round((b.getTime() - a.getTime()) / 60_000);
+  while (hi - lo > 1) {
+    const m = (lo + hi) >> 1;
+    if (new Date(a.getTime() + m * 60_000).getTimezoneOffset() === off) lo = m; else hi = m;
+  }
+  return { at: hi, by };
+}
+
+/** The clock [min] real minutes after a local moment: "03:48". [change]: the night's clock change, if any. */
+export function clockAfter(t: string, min: number, change?: ClockChange | null): string {
+  const moved = change && min >= change.at ? change.by : 0;
+  const m = (((Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16)) + Math.round(min) + moved) % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
