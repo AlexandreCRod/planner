@@ -153,3 +153,26 @@ test("a request at the front counts as understood, and the spans never cover the
     for (const w of r.title.split(" ")) assert.ok(left.toLowerCase().includes(w.toLowerCase()), `${line}: ${w}`);
   }
 });
+
+test("\"for 2h\" is a 2-hour length, as the guide says, not 2 AM (review of 2.10, finding 2)", () => {
+  const a = p("Gym 3pm for 2h");
+  assert.deepEqual([a.title, a.startMin, a.endMin], ["Gym", 15 * 60, 17 * 60]);
+  assert.deepEqual(words("Gym 3pm for 2h"), ["3pm", "for 2h"]);
+  const b = p("Gym for 2h 3pm");
+  assert.deepEqual([b.title, b.startMin, b.endMin], ["Gym", 15 * 60, 17 * 60]);
+  const c = p("Gym 18:00 FOR 3H");
+  assert.deepEqual([c.title, c.startMin, c.endMin], ["Gym", 18 * 60, 21 * 60]);
+  // Without a start it's no time at all, like "for 90 min" always was.
+  const d = p("Gym for 2h");
+  assert.deepEqual([d.title, d.startMin, d.endMin], ["Gym", null, null]);
+  // Everything else as before: a bare "18h", and "for" before a time with minutes.
+  assert.deepEqual([p("Dinner 18h").startMin, p("Table for 18h30").startMin, p("Gym 3pm for 90 min").endMin], [18 * 60, 18 * 60 + 30, 16 * 60 + 30]);
+});
+
+test("an emoji before the understood words doesn't cut their marks short (review of 2.10, finding 3)", () => {
+  assert.deepEqual(words("🎉 Party fri 8pm"), ["fri", "8pm"]);
+  assert.deepEqual(words("Party 🎉🎉 fri 8pm"), ["fri", "8pm"]);
+  assert.deepEqual(words("Remind me to 🎉 call mom 3pm"), ["Remind me to", "3pm"]);
+  assert.deepEqual(words("Run 🏃 tomorrow 7:30 #health 💪"), ["tomorrow", "7:30", "#health"]);
+  assert.equal(p("🎉 Party fri 8pm").title, "🎉 Party");
+});

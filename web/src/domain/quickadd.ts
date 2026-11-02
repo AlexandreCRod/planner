@@ -160,7 +160,8 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
   let text = ` ${input} `;
   // Where each character of [text] was in [input] (-1: a space added here), so what's taken out can be
   // told in the line as typed.
-  let pos = [-1, ...Array.from(input, (_, i) => i), -1];
+  // By UTF-16 unit, like [text]'s indexes (Array.from(input) would walk code points: an emoji counts once; review of 2.10, finding 3).
+  let pos = [-1, ...Array.from({ length: input.length }, (_, i) => i), -1];
   const found: [number, number][] = [];
   /** Takes text[at, at + len) out (leaving one space), noting where it was in the input. */
   const cut = (at: number, len: number) => {
@@ -198,7 +199,7 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
     // The request itself ("Remind me to") is understood; the words after it keep their places.
     const lead = remindLead[0].length;
     text = ` remind me ${input.slice(lead)} `;
-    pos = [-1, ...Array.from(" remind me".slice(1), () => -1), -1, ...Array.from(input.slice(lead), (_, i) => lead + i), -1];
+    pos = [-1, ...Array.from(" remind me".slice(1), () => -1), -1, ...Array.from({ length: input.length - lead }, (_, i) => lead + i), -1];
     const a = input.length - input.trimStart().length;
     found.push([a, input.slice(0, lead).trimEnd().length]);
   }
@@ -283,7 +284,8 @@ export function parseQuickAdd(input: string, today = todayEpoch(), categories: r
     if (s === null || e === null) return false;
     start = s; end = e;
   });
-  if (start === null) take(ci("\\s(?:at\\s+)?(\\d{1,2})(?::(\\d{2})|h(\\d{2})?)\\s*(am|pm)?(?=\\s)"), (m) => { start = toMinutes(m[1], m[2] ?? m[3] ?? "", m[4] ?? ""); });
+  // "for 2h" is a length (below), not 02:00 (review of 2.10, finding 2); "for 18h30" and "for 18:30" still read as times.
+  if (start === null) take(ci("\\s(?:at\\s+)?(?!(?<=\\bfor\\s+)\\d{1,2}h\\s)(\\d{1,2})(?::(\\d{2})|h(\\d{2})?)\\s*(am|pm)?(?=\\s)"),(m) => { start = toMinutes(m[1], m[2] ?? m[3] ?? "", m[4] ?? ""); });
   if (start === null) take(ci("\\s(?:at\\s+)?(\\d{1,2})\\s*(am|pm)(?=\\s)"), (m) => { start = toMinutes(m[1], "", m[2]); });
   if (start === null) take(ci("\\sat\\s+(\\d{1,2})(?=\\s)"), (m) => { start = toMinutes(m[1], "", ""); });
   take(ci("\\s(noon|midday)\\b"), () => { start = 720; });
