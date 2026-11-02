@@ -108,10 +108,10 @@ export const PALETTE = [
 ].map((c) => c | 0);
 
 /** Colour circles (36 dp, 8 apart), "none" first when allowed, a tick on the chosen one (ColorGrid). */
-export function ColorGrid({ colors, selected, allowNone = true, onPick }: { colors: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void }) {
+export function ColorGrid({ colors, selected, allowNone = true, onPick, noneLabel = "None" }: { colors: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; noneLabel?: string }) {
   return (
     <div className="p-colorgrid">
-      {allowNone && <button className="none" aria-label="None" onClick={() => onPick(null)}><MIcon name="fFormatColorReset" size={18} /></button>}
+      {allowNone && <button className="none" aria-label={noneLabel} onClick={() => onPick(null)}><MIcon name="fFormatColorReset" size={18} /></button>}
       {/* A colour chosen before the palette changed stays offered (first), ticked. */}
       {(selected !== null && !colors.includes(selected) ? [selected, ...colors] : colors).map((c) => {
         const css = cssColor(c);
@@ -125,12 +125,15 @@ export function ColorGrid({ colors, selected, allowNone = true, onPick }: { colo
   );
 }
 
-export function ColorPickerDialog({ title, colors = PALETTE, selected, allowNone = true, onPick, onClose }: {
+export function ColorPickerDialog({ title, colors = PALETTE, selected, allowNone = true, onPick, onClose, noneLabel, hint }: {
   title: string; colors?: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; onClose: () => void;
+  /** What the crossed-out choice means here, said under the colours. */
+  noneLabel?: string; hint?: string;
 }) {
   return (
     <Dialog title={title} onClose={onClose} actions={<TextButton onClick={onClose}>Close</TextButton>}>
-      <ColorGrid colors={colors} selected={selected} allowNone={allowNone} onPick={(c) => { onPick(c); onClose(); }} />
+      <ColorGrid colors={colors} selected={selected} allowNone={allowNone} noneLabel={noneLabel} onPick={(c) => { onPick(c); onClose(); }} />
+      {hint && <div className="pe-small p-colorhint">{hint}</div>}
     </Dialog>
   );
 }

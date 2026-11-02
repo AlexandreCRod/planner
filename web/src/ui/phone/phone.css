@@ -818,6 +818,13 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pe-label.ph { color: var(--muted); }
 .phone .pe-text { position: relative; overflow: hidden; padding: 8px 4px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone .pe-text.ph { color: var(--muted); }
+/* Every row's text starts at 72 px (234): a row's first value button gives back its 4 px of padding. */
+.phone .pe-row > .pe-ico + .pe-text, .phone .pe-row > .pe-ico + * > .pe-text:first-child, .phone .pe-row > .pe-ico + * > * > .pe-text:first-child { margin-left: -4px; }
+.phone .pe-catname, .phone .pe-prio { display: inline-flex; align-items: center; }
+.phone .pe-catname .pe-dot { width: 10px; height: 10px; margin-right: 10px; }
+.phone .pe-prio svg { margin-right: 8px; }
+.phone .pe-body .pe-links-head .p-section { padding-left: 72px; }
+.phone .pe-body .pe-links .pe-small.pad { padding-left: 72px; }
 .phone .pe-text.grow { flex: 1; }
 .phone .pe-row .grow { flex: 1; min-width: 0; }
 .phone .pe-input { min-width: 0; height: 40px; padding: 0; border: 0; background: none; font: inherit; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); outline: none; caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
@@ -1736,3 +1743,4 @@ html.phone[data-theme="dark"] {
 .phone .ps-appicon img { width: 40px; height: 40px; border-radius: 10px; }
 .phone .ps-apps-none { padding: 16px 24px; }
 .phone .ps-apps > .p-sheet-title { flex: none; }
+.phone .p-colorhint { margin-top: 12px; }

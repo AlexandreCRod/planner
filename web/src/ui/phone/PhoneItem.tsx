@@ -617,7 +617,7 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
   const rows: { item: Item; label: string; removable: boolean }[] = [];
   const seen = new Set<number>();
   for (const l of s.links) if (l.sourceId === id && s.byId.has(l.targetId)) { seen.add(l.targetId); rows.push({ item: s.byId.get(l.targetId)!, label: l.auto ? "Mentioned" : "Linked", removable: !l.auto }); }
-  for (const l of s.links) if (l.targetId === id && l.sourceId !== id && s.byId.has(l.sourceId) && !seen.has(l.sourceId)) rows.push({ item: s.byId.get(l.sourceId)!, label: l.auto ? "Mentions this" : "Links here", removable: !l.auto });
+  for (const l of s.links) if (l.targetId === id && l.sourceId !== id && s.byId.has(l.sourceId) && !seen.has(l.sourceId)) rows.push({ item: s.byId.get(l.sourceId)!, label: l.auto ? "Mentions this" : "Linked", removable: !l.auto });
   const typeIcon = (i: Item) => (i.type === "TASK" ? "oTaskAlt" : i.type === "EVENT" ? "fEvent" : "oDescription");
   return (
     <div className="pe-links">
@@ -1193,18 +1193,21 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <div className="p-divider" />
 
         <AlertSection alarms all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} onDate={pickWhen} />
+        {/* Said under the alarms, which it's about (234). */}
+        <AlertsHint className="indent" />
         <div className="p-divider" />
         <AlertSection alarms={false} all={cur.reminders} type={d.type} timed={timed} onChange={(r) => emit({ ...curRef.current, reminders: r })} onDate={pickWhen} />
-        <AlertsHint className="indent" />
         <div className="p-divider" />
 
         <FieldRow icon="oPalette">
-          <span className="grow"><MenuText text={category?.name ?? "No category"} items={categoryItems(s, (c) => set({ categoryId: c }), leaveTo)} /></span>
-          <TextButton className="icon" onClick={() => setColorDialog(true)}><span className="pe-dot" style={{ background: color }} />{d.color === null ? "Category colour" : "Own colour"}</TextButton>
+          {/* The category with its colour; the item's own colour is the square by the title (234). */}
+          <span className="grow"><MenuText text={category ? <span className="pe-catname"><span className="pe-dot" style={{ background: cssColor(category.color) }} />{category.name}</span> : "No category"}
+            items={categoryItems(s, (c) => set({ categoryId: c }), leaveTo)} /></span>
         </FieldRow>
         {!isEvent && <>
           <FieldRow icon="oFlag">
-            <MenuText text={d.priority === 0 ? "No priority" : <MIcon name="fFlag" color={priorityColor(d.priority)} />}
+            {/* The flag and the word: "⚑ Urgent" (234). */}
+            <MenuText text={d.priority === 0 ? "No priority" : <span className="pe-prio"><MIcon name="fFlag" size={18} color={priorityColor(d.priority)} />{PRIORITIES[d.priority]}</span>}
               label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
@@ -1232,7 +1235,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <div style={{ height: 48 }} />
       </div>
 
-      {colorDialog && <ColorPickerDialog title="Colour" selected={d.color} onClose={() => setColorDialog(false)} onPick={(c) => set({ color: c })} />}
+      {colorDialog && <ColorPickerDialog title="Colour" selected={d.color} onClose={() => setColorDialog(false)} onPick={(c) => set({ color: c })}
+        noneLabel="Category colour" hint={category ? `Crossed out: ${category.name}'s colour` : "Crossed out: the category's colour"} />}
       {deleteMenu && original && deleteDay !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, original, deleteDay); leaveAll(); }} />}
       {scopeOpen && <ScopeDialog title="Save changes to" onCancel={() => setScopeOpen(false)} onPick={(sc) => { setScopeOpen(false); save(sc); }} />}
     </div>
