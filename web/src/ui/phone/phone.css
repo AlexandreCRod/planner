@@ -1404,6 +1404,13 @@ html.phone[data-theme="dark"] {
   flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 4px 0 16px; border: 0; background: none;
   font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); white-space: nowrap;
 }
+/* The calendar's line for a day's routines (224), under Month's grid and in the Day view: as Today's head, full width, with a chevron. */
+.phone .p-routines-line {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 48px; padding: 0 12px 0 16px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); white-space: nowrap; text-align: left;
+}
+.phone .pg-adcol .p-routines-line { height: 40px; padding: 0 8px 0 4px; }
+.phone .p-routines-line .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines .p-rchips {
   flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
@@ -1422,6 +1429,10 @@ html.phone[data-theme="dark"] {
 /* Done: the same outline as before it was ticked, only fainter (and its title struck through). */
 .phone .pg-block.task.done { opacity: .7; }
 .phone .pg-block.task.tiny { padding-left: 15px; }
+/* A routine event has the tick too (215): its title starts after it, as a task's does. */
+.phone .pg-block.ticks:not(.task) { padding-left: 19px; }
+.phone .pg-block.ticks:not(.task).tiny { padding-left: 15px; }
+.phone .pg-block.ticks:not(.task) .pg-tick { left: 6px; }
 .phone .pg-tick {
   position: absolute; left: 5px; top: 3px; width: 10px; height: 10px; box-sizing: border-box; display: grid; place-items: center;
   border: 1.3px solid color-mix(in srgb, var(--c) 80%, var(--text)); border-radius: 50%; color: var(--bg);

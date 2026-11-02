@@ -237,7 +237,6 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
 function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day: number; t: number }) {
   const streaks = showStreaks() && day >= t;
   const [all, setAll] = useState(false);
-  const [streaksOpen, setStreaksOpen] = useState(false);
   const { done, total } = routineProgress(list);
   return (
     <div className="p-routines">
@@ -258,10 +257,40 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
           <MIcon name="fFormatListBulleted" size={18} />
         </button>
       </div>
-      {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} onStreaks={() => setStreaksOpen(true)} />, document.body)}
-      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
+      <RoutineSheets s={s} t={t} open={all} onClose={() => setAll(false)} />
     </div>
   );
+}
+
+/**
+ * The list of every routine, and Streaks from it: opened by "Routines 1/3" on Today and in the calendar.
+ * Kept in place while [open] is off, so Streaks can open as the list closes.
+ */
+function RoutineSheets({ s, t, open, onClose }: { s: Snapshot; t: number; open: boolean; onClose: () => void }) {
+  const [streaksOpen, setStreaksOpen] = useState(false);
+  return <>
+    {open && createPortal(<RoutineListSheet s={s} t={t} onClose={onClose} onStreaks={() => setStreaksOpen(true)} />, document.body)}
+    {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
+  </>;
+}
+
+/**
+ * The calendar's line for a day's routines (224), under Month's grid and at the top of the Day view, where
+ * routines are left out (only those set to "Show in calendar" are blocks in the Day view): "Routines 1/3 ›",
+ * as on Today; a tap opens the list of every routine. Nothing on a day without routines.
+ */
+export function RoutinesDayLine({ s, day }: { s: Snapshot; day: number }) {
+  const t = todayEpoch();
+  const [open, setOpen] = useState(false);
+  const { done, total } = routineProgress(routinesOnDay(s.items, s.done, day, t));
+  if (!total) return null;
+  return <>
+    <button className="p-routines-line" aria-label={`Routines, ${done} of ${total} done. All routines`} onClick={() => setOpen(true)}>
+      Routines<span className="n">{done}/{total}</span><span className="grow" />
+      <MIcon name="fKeyboardArrowRight" size={20} />
+    </button>
+    <RoutineSheets s={s} t={t} open={open} onClose={() => setOpen(false)} />
+  </>;
 }
 
 /**

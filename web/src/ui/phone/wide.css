@@ -15,7 +15,7 @@
 
   /* The state layer: the content's own colour at 8%, laid over the background (a picked chip keeps its colour). */
   html.phone :is(.p-text-btn, .p-outlined-btn, .p-assist, .p-chip, .p-li[role=button], button.p-section, .p-menu button,
-    .p-itemrow, .p-rlist-row, .p-streak-row, .p-glance-row, .p-glance-more, .p-glance-head, .p-anytime, .p-dayswitch, .p-rchip, .pg-dh,
+    .p-itemrow, .p-rlist-row, .p-streak-row, .p-glance-row, .p-glance-more, .p-glance-head, .p-anytime, .p-dayswitch, .p-rchip, .p-routines-line, .pg-dh,
     .gp-catrow, .p-snack-action, .pa-zone, .p-segmented button, .p-filter, .p-seg button):not(:disabled):hover {
     background-image: linear-gradient(color-mix(in srgb, currentColor 8%, transparent), color-mix(in srgb, currentColor 8%, transparent));
   }

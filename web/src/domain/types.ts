@@ -58,6 +58,9 @@ export interface Item {
   /** A repeating task done as a habit: on Today's own checklist, a missed day only ends its streak
    *  (domain/routines.ts). Missing on records made before routines synced. */
   routine?: boolean;
+  /** A routine's "Show in calendar" switch (224): drawn in the Week, 3-day and Day grids. Missing = the
+   *  default, on for one that reserves time (a start and an end), off for a quick habit (routineInCalendar). */
+  inCalendar?: boolean;
   /** A note kept off the Notes page (still found by Search). Missing = shown. */
   hidden?: boolean;
   /** A pinned note's place among the pinned ones (lower first), set by dragging them; missing = after
