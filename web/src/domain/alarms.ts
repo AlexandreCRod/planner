@@ -30,7 +30,8 @@ const ITEM_FIELDS = ["id", "type", "title", "startDay", "startMin", "endDay", "e
   "monthDays", "months", "untilDay", "excludedDays", "deletedAt", "routine"] as const;
 
 /** The native accents, in order (the engine's ringing screen takes the index). */
-const ACCENTS = ["#1a73e8", "#00796b", "#b0285a", "#8b5000", "#2e7d32", "#6a3db8", "#0061a4", "#4f5b66", "#3f51b5"];
+const ACCENTS = ["#1a73e8", "#00796b", "#b0285a", "#8b5000", "#2e7d32", "#6a3db8", "#0061a4", "#4f5b66", "#3f51b5",
+  "#b33b2b", "#006c4e", "#7d4f91", "#735c00", "#00668a", "#4f6448"];
 
 export interface MirrorPush {
   items: Pick<Item, (typeof ITEM_FIELDS)[number]>[];

@@ -560,7 +560,7 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "browse") {
     body = <PhoneSearch initialKind={query.get("kind") ?? ""} from={query.get("from") ?? ""} />;
   } else if (route === "settings") {
-    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : path[1] === "import" ? <PhoneCalendarImport /> : path[1] === "backups" ? <PhoneBackups /> : <PhoneSettings />;
+    body = path[1] === "categories" ? <PhoneCategories /> : path[1] === "trash" ? <PhoneTrash /> : path[1] === "problems" ? <PhoneProblems /> : path[1] === "looks" ? <PhoneLooks /> : path[1] === "import" ? <PhoneCalendarImport /> : path[1] === "backups" ? <PhoneBackups /> : <PhoneSettings part={path[1]} />;
   } else if (route === "tasks") {
     body = <PhoneTasks back />;
   }
