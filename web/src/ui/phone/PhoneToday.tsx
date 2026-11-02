@@ -14,8 +14,8 @@ import { PRIORITIES, priorityColor } from "../../domain/types.ts";
 import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoNumber.ts";
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
-import { EventRow, TaskRow, go, openItem, showDoneOnToday, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, DropdownMenu, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
+import { AppBarActions, DoneFold, DropdownMenu, FoldLine, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -69,8 +69,7 @@ const taskTime = (e: TaskEntry) => (e.item.startMin !== null && e.day !== null ?
 /** One day's tasks, schedule and note: each page of the day pager. In a wide window, in two columns. */
 function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s: Snapshot; now: number; hold: Hold; wide: boolean }) {
   const isToday = day === t;
-  // On the phone, today's ticked tasks and the events already over fold into one line each; a tap shows them.
-  const [doneOpen, setDoneOpen] = useState(false);
+  // The events already over fold into one line on the phone; a tap shows them.
   const [earlierOpen, setEarlierOpen] = useState(false);
   // Routines: their own checklist, out of the task lists below, never overdue.
   const routines = routinesOnDay(s.items, s.done, day, t);
@@ -88,19 +87,18 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     dayTasks = withoutRoutines(tasksOnDay(s.items, s.done, day, t));
   }
   const shownOverdue = hold.arrange(`o${day}`, overdue, rowKey);
-  // "Show completed tasks on Today" off: ticked tasks leave today's list (after the hold). On, the phone
-  // folds them into one line under the tasks; the wide window has room to leave them in place.
-  const hideDone = isToday && !showDoneOnToday();
-  const fold = isToday && !wide;
-  const shownTasks = hold.arrange(`t${day}`, hideDone || fold ? dayTasks.filter((e) => e.status !== "DONE") : dayTasks, rowKey);
+  // Ticked tasks fold into one line at the end of the tasks ("2 done ⌄", 284), once they've stayed where
+  // they were for the time Settings says.
+  const shownTasks = hold.arrange(`t${day}`, dayTasks.filter((e) => e.status !== "DONE"), rowKey);
   // Ticked during this day but not listed above: overdue ones, undated ones, early ticks...
   const listed = new Set([...shownOverdue, ...shownTasks].map(rowKey));
   for (const r of routines) listed.add(rowKey(r));
-  const alsoDone = hideDone ? [] : withoutRoutines(tickedDuring(s.items, s.completions, day)).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
-  const doneFold = fold && !hideDone ? foldDone(dayTasks, alsoDone, listed, rowKey) : [];
+  const alsoDone = withoutRoutines(tickedDuring(s.items, s.completions, day)).filter((e, i, all) => !listed.has(rowKey(e)) && all.findIndex((x) => rowKey(x) === rowKey(e)) === i);
+  const doneFold = foldDone(dayTasks, alsoDone, listed, rowKey);
   const events = occurrencesIn(s.items.filter((i) => i.type === "EVENT"), s.done, day, day + 7);
   const dayEvents = events.filter((o) => o.day <= day && o.endDay >= day);
-  const { earlier, rest: laterEvents } = fold ? foldEvents(dayEvents, now) : { earlier: [], rest: dayEvents };
+  // On the phone, today's events already over fold too ("2 earlier ⌄"); the wide window has room for them.
+  const { earlier, rest: laterEvents } = isToday && !wide ? foldEvents(dayEvents, now) : { earlier: [], rest: dayEvents };
   const daily = s.items.find((i) => i.type === "NOTE" && i.noteDay === day);
   const doneCount = dayTasks.filter((e) => e.status === "DONE").length;
   const word = day === t ? "Today" : day === t - 1 ? "Yesterday" : day === t + 1 ? "Tomorrow" : null;
@@ -121,10 +119,8 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   const eventRow = (o: Occurrence) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={eventTime} past={isToday && eventOver(o, now)} />;
   // The phone keeps Today to about one screen: sections only when they have something, one line when
   // the day is empty, a folded line for what's behind us, no week ahead; a glance at tomorrow instead.
-  const nothing = shownOverdue.length === 0 && dayTasks.length === 0 && dayEvents.length === 0 && doneFold.length === 0 && alsoDone.length === 0;
+  const nothing = shownOverdue.length === 0 && dayTasks.length === 0 && dayEvents.length === 0 && doneFold.length === 0;
   const nothingText = isToday ? "Nothing planned today. Tap + to add something." : day < t ? `Nothing was planned ${dayWord}.` : `Nothing planned ${dayWord}.`;
-  // Every task ticked and the setting hides them: say so, rather than "nothing planned".
-  const allHidden = shownTasks.length === 0 && doneFold.length === 0 && dayTasks.length > 0;
 
   const top = <>
     {(routines.length > 0 || anyRoutine) && <RoutinesLine list={routines} s={s} day={day} t={t} />}
@@ -142,18 +138,10 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <div className="section">Overdue</div>
       {rows(shownOverdue, `o${day}`, true, true)}
     </>}
-    {(shownTasks.length > 0 || doneFold.length > 0 || allHidden || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} />}
+    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} />}
     {rows(shownTasks, `t${day}`, false)}
-    {allHidden && <div className="hint empty">All done {dayWord}.</div>}
-    {wide && !nothing && dayTasks.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
-    {doneFold.length > 0 && <>
-      <FoldLine open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} text={`${doneFold.length} done`} />
-      {doneOpen && doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
-    </>}
-    {!fold && alsoDone.length > 0 && <>
-      <div className="section">{shownTasks.length || shownOverdue.length ? `Also done ${dayWord}` : `Done ${dayWord}`}</div>
-      {alsoDone.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
-    </>}
+    {wide && !nothing && dayTasks.length === 0 && doneFold.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
+    <DoneFold count={doneFold.length} rows={() => doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)} />
   </>;
   const schedule = <>
     {(dayEvents.length > 0 || (wide && !nothing)) && <div className="section">Schedule</div>}
@@ -193,16 +181,6 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     {glance && <TomorrowGlance rows={glance} s={s} day={day + 1} />}
     {note}
   </>;
-}
-
-/** One line standing for what's folded away ("2 done ⌄"); a tap shows them, another hides them. */
-function FoldLine({ open, onToggle, text }: { open: boolean; onToggle: () => void; text: string }) {
-  return (
-    <button className="p-fold" aria-expanded={open} onClick={onToggle}>
-      <span>{text}</span>
-      <MIcon name={open ? "fExpandLess" : "fExpandMore"} size={18} />
-    </button>
-  );
 }
 
 const SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

@@ -5,6 +5,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExt
 import { formatDate } from "../../domain/dates.ts";
 import { today as todayEpoch } from "../../domain/dates.ts";
 import { currentEntry, streak, type TaskEntry } from "../../domain/schedule.ts";
+import { splitDone } from "../../domain/todayPlan.ts";
 import { isRoutineItem, isRoutineSeries, routineEntry } from "../../domain/routines.ts";
 import { showStreaks } from "../../store/routines.ts";
 import { notePreview, preview } from "../../domain/text.ts";
@@ -14,7 +15,7 @@ import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
-import { AppBarActions, ChipRow, DropdownMenu, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
 import { useNoteGrid } from "./noteDrag.ts";
@@ -142,24 +143,32 @@ function ScheduledList() {
   const s = useSnapshot();
   const now = useNow();
   const t = todayEpoch();
-  const [filter, setFilter] = useState<TaskFilter>({ showDone: false, category: null });
-  const { showDone, category } = filter;
+  const [filter, setFilter] = useState<TaskFilter>({ category: null });
+  const { category } = filter;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const hold = useCheckedHold();
   const streaks = showStreaks();
   const entries = s.items
     .filter((i) => i.type === "TASK" && i.startDay !== null && inCategory(i, category))
     // A routine's box ticks today's (or the next) day, never a missed one.
-    .map((i) => (isRoutineItem(i) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)))
-    .filter((e) => showDone || e.status !== "DONE" || isRecurring(e.item));
+    .map((i) => (isRoutineItem(i) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)));
+  const key = (e: TaskEntry) => String(e.item.id);
+  // The ticked ones fold into one line at the end (284), once they've stayed where they were for a moment.
+  const { open, done } = splitDone(entries, (e) => e.status === "DONE", (e) => hold.holding(groupOf(e), key(e)));
   const sorted = (list: TaskEntry[]) => [...list].sort((a, b) =>
-    Number(a.status === "DONE") - Number(b.status === "DONE") || Number(b.status === "OVERDUE") - Number(a.status === "OVERDUE") || b.item.priority - a.item.priority ||
+    Number(b.status === "OVERDUE") - Number(a.status === "OVERDUE") || b.item.priority - a.item.priority ||
     (a.day ?? 1e9) - (b.day ?? 1e9) || (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || a.item.title.localeCompare(b.item.title));
+  // The latest ticked first.
+  const doneAt = (e: TaskEntry) => (e.day !== null ? s.done.doneAt(e.item.id, isRecurring(e.item) ? e.day : e.item.startDay ?? e.day) : undefined) ?? 0;
+  const folded = [...done].sort((a, b) => doneAt(b) - doneAt(a));
+  const row = (e: TaskEntry, onToggle?: (done: boolean) => void) => (
+    <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined} onToggle={onToggle} />
+  );
   return <>
     <TaskChips s={s} value={filter} onChange={setFilter} />
     {entries.length === 0 && <EmptyHint>No tasks yet. Tap + and try "Stretch every day 7am".</EmptyHint>}
     {GROUPS.map((g) => {
-      const list = hold.arrange(g, sorted(entries.filter((e) => groupOf(e) === g)), (e) => String(e.item.id));
+      const list = hold.arrange(g, sorted(open.filter((e) => groupOf(e) === g && e.status !== "DONE")), key);
       if (!list.length) return null;
       const isCollapsed = collapsed.has(g);
       return (
@@ -169,13 +178,11 @@ function ScheduledList() {
             if (isCollapsed) n.delete(g); else n.add(g);
             setCollapsed(n);
           }}>{g} ({list.length})</SectionHeader>
-          {!isCollapsed && list.map((e, index) => (
-            <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
-              onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
-          ))}
+          {!isCollapsed && list.map((e, index) => row(e, (isDone) => hold.onToggle(g, key(e), e, index, isDone)))}
         </div>
       );
     })}
+    <DoneFold count={folded.length} rows={() => folded.map((e) => row(e))} />
     <div className="p-endspace" />
   </>;
 }
@@ -281,8 +288,9 @@ function TodoList() {
   const hold = useCheckedHold();
   const [showDone, setShowDone] = useState(false);
   const shown = hold.arrange("todo", openTodos(s), (e) => String(e.item.id));
+  // The ticked ones, the latest first, folded into one line at the end (284).
   const done = s.items.filter((i) => i.type === "TASK" && i.startDay === null && s.done.isDone(i.id, NO_DAY)).sort((a, b) => b.updatedAt - a.updatedAt);
-  // A ticked to-do glides down into Completed (or into its header, when it's folded away).
+  // A ticked to-do glides down into the "5 done" line (or among the rows under it, when it's open).
   const box = useRef<HTMLDivElement>(null);
   const layer = useRef<HTMLDivElement>(null);
   const doneKeys = new Set(done.map((i) => `t${i.id}`));
@@ -299,7 +307,7 @@ function TodoList() {
     ))}
     {done.length > 0 && <>
       <div data-glide="completed" data-glide-into="">
-        <SectionHeader expanded={showDone} onClick={() => setShowDone(!showDone)}>Completed ({done.length})</SectionHeader>
+        <FoldLine open={showDone} onToggle={() => setShowDone(!showDone)} text={`${done.length} done`} />
       </div>
       {showDone && done.map((item) => (
         <div key={`d${item.id}`} data-glide={`t${item.id}`}>

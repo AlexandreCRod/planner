@@ -51,7 +51,7 @@ export function TodayRow({ tr, card, t, onOpen, onStart, onLog }: { tr: Training
       <div className="tr-today">
         <Bub cls={kind ? `k-${kind}` : ""} icon={sessionIcon(s)} />
         <div className="x" {...tapProps(onOpen)} aria-label={`Open ${s.title}`}>
-          <div className="k">{join(when, card.more > 0 && `+${card.more} more`)}</div><div className="t">{s.title}</div>
+          <div className="k">{join(when, card.more > 0 && `${card.more} more`)}</div><div className="t">{s.title}</div>
           <div className="s">{s.detail}</div>
         </div>
         <button className="tr-tbtn line" aria-label={`Log ${s.title}`} onClick={onLog}>Log</button>

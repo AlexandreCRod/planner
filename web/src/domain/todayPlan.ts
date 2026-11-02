@@ -45,6 +45,16 @@ export function freeDayLine(left: number, day: number, t: number, game: boolean)
   return game ? "game or rest" : "none";
 }
 
+/**
+ * A list's rows split for its fold (284): those that stay in the list (open ones, and ticked ones still held
+ * where they were for a moment), and the ticked ones, folded into the "5 done" line at its end.
+ */
+export function splitDone<T>(list: readonly T[], isDone: (x: T) => boolean, held: (x: T) => boolean): { open: T[]; done: T[] } {
+  const open: T[] = [], done: T[] = [];
+  for (const x of list) (isDone(x) && !held(x) ? done : open).push(x);
+  return { open, done };
+}
+
 /** The words after Today's "Tasks ·" heading (225): "1 of 2 done", "All done", or none without tasks. */
 export function tasksProgressText(done: number, total: number): string {
   if (total <= 0) return "";

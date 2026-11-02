@@ -191,6 +191,29 @@ export function SectionHeader({ children, onClick, expanded, className = "" }: {
     : <div className={`p-section ${className}`}>{body}</div>;
 }
 
+/** One line standing for what's folded away ("2 done ⌄", "2 earlier ⌄"); a tap shows them, another hides them. */
+export function FoldLine({ open, onToggle, text }: { open: boolean; onToggle: () => void; text: string }) {
+  return (
+    <button className="p-fold" aria-expanded={open} onClick={onToggle}>
+      <span>{text}</span>
+      <MIcon name={open ? "fExpandLess" : "fExpandMore"} size={18} />
+    </button>
+  );
+}
+
+/**
+ * The end of a list of tasks (284): its ticked ones folded into one line, "5 done ⌄", closed until tapped.
+ * [rows] draws them when it's open. Nothing when there are none.
+ */
+export function DoneFold({ count, rows }: { count: number; rows: () => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (count === 0) return null;
+  return <>
+    <FoldLine open={open} onToggle={() => setOpen(!open)} text={`${count} done`} />
+    {open && rows()}
+  </>;
+}
+
 export function EmptyHint({ children }: { children: ReactNode }) {
   return <div className="p-empty">{children}</div>;
 }

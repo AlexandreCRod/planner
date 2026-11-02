@@ -19,7 +19,7 @@ import { type BackupFile, applyRestore, backUpNow, lastBackupAt, listBackups, pl
 import type { Backup, RestorePlan } from "../../domain/backup.ts";
 import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
-import { checkedLinger, go, showDoneOnToday } from "../shared/common.tsx";
+import { checkedLinger, go } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
@@ -49,7 +49,8 @@ const ACCENTS: [string, string][] = [
   ["Violet", "#6a3db8"], ["Ocean", "#0061a4"], ["Slate", "#4f5b66"], ["Indigo", "#3f51b5"],
 ];
 const CLOCKS: [ClockFormat, string][] = [["system", "Phone setting"], ["24", "24-hour (15:30)"], ["12", "12-hour (3:30 PM)"]];
-const LINGER: [string, string][] = [["-1", "Stay until you leave the page"], ["10", "Move away after 10 seconds"], ["5", "Move away after 5 seconds"], ["3", "Move away after 3 seconds"], ["1", "Move away after 1 second"], ["0", "Move away right away"]];
+/** How long a ticked task stays where it was before it folds into its list's "5 done" line (284). */
+const LINGER: [string, string][] = [["-1", "Stay until you leave the page"], ["10", "Stay 10 s, then fold"], ["5", "Stay 5 s, then fold"], ["3", "Stay 3 s, then fold"], ["1", "Stay 1 s, then fold"], ["0", "Fold right away"]];
 
 const store = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
@@ -247,7 +248,6 @@ export function PhoneSettings() {
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
-  const [showDone, setShowDone] = useState(showDoneOnToday());
   const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
   const [streaksOpen, setStreaksOpen] = useState(false);
@@ -311,11 +311,10 @@ export function PhoneSettings() {
 
         <div className="p-hr" />
         <SectionHeader>Tasks</SectionHeader>
-        <ChoiceRow title="Checked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
+        {/* One setting for where a ticked task goes (284): it stays, then folds into the list's "5 done" line. */}
+        <ChoiceRow title="Ticked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
         <SwitchRow title="Carry unfinished tasks over to today" supporting="Off: a missed task stays on its own day. Routines never carry over" checked={carry}
           onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
-        <SwitchRow title="Show completed tasks on Today" supporting="On: ticked tasks fold into one line you can tap to see. Off: they leave today's list once their moment is up" checked={showDone}
-          onChange={(v) => { setShowDone(v); redraw("showDoneOnToday", String(v)); }} />
         {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
         <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
         <ListItem headline="Streaks" supporting="Each routine's current and best streak, and its last 14 days" onClick={() => setStreaksOpen(true)} />

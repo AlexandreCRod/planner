@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { epochOf, toTimestamp } from "../src/domain/dates.ts";
 import { CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn } from "../src/domain/schedule.ts";
-import { dayGlance, foldDone, foldEvents, freeDayLine, overdueCount, tasksProgressText, weekAhead } from "../src/domain/todayPlan.ts";
+import { dayGlance, foldDone, foldEvents, freeDayLine, overdueCount, splitDone, tasksProgressText, weekAhead } from "../src/domain/todayPlan.ts";
 import { type Completion, type Item, newItem } from "../src/domain/types.ts";
 import { PageMemory } from "../src/ui/phone/keep.ts";
 
@@ -97,4 +97,16 @@ test("the Tasks heading counts the day's tasks done, says All done at the end, a
   assert.equal(tasksProgressText(0, 3), "0 of 3 done");
   assert.equal(tasksProgressText(2, 2), "All done");
   assert.equal(tasksProgressText(0, 0), "");
+});
+
+test("a list keeps its open rows and folds the ticked ones at its end, except one just ticked and still held (284)", () => {
+  const rows = [{ id: 1, done: false }, { id: 2, done: true }, { id: 3, done: true }, { id: 4, done: false }];
+  const held = new Set([3]);
+  const { open, done } = splitDone(rows, (r) => r.done, (r) => held.has(r.id));
+  assert.deepEqual(open.map((r) => r.id), [1, 3, 4]);
+  assert.deepEqual(done.map((r) => r.id), [2]);
+  // Once let go, it folds too; an open row is never folded, held or not.
+  const later = splitDone(rows, (r) => r.done, (r) => r.id === 1);
+  assert.deepEqual(later.open.map((r) => r.id), [1, 4]);
+  assert.deepEqual(later.done.map((r) => r.id), [2, 3]);
 });

@@ -15,10 +15,11 @@ import { parseDays } from "../../domain/recurrence.ts";
 import { type Lane, barsShownOver, lanesOver, spanLanes } from "../../domain/spans.ts";
 import { type EditScope, moveSeries, saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
 import { type Placed, layoutDay } from "../shared/dayLayout.ts";
-import { EventRow, TaskRow, go, openItem, useNow } from "../shared/common.tsx";
+import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
 import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
-import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { Checkbox, Dialog, DoneFold, DropdownMenu, FilterChip, IconButton, MIcon, type MenuItem, openSearch } from "./chrome.tsx";
+import { splitDone } from "../../domain/todayPlan.ts";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { feel } from "./haptics.ts";
@@ -45,8 +46,8 @@ const ZOOM_KEY = "calHourHeight";
 // Kept while moving around the app, like the native CalendarState.
 let selected = todayEpoch();
 let filters = { events: true, tasks: true, hidden: new Set<number>() };
-/** The Agenda's own chips after Events and Tasks (the Tasks page's: Show completed, a category; 241). */
-let agendaFilter: TaskFilter = { showDone: false, category: null };
+/** The Agenda's own chips after Events and Tasks (the Tasks page's categories; 241). */
+let agendaFilter: TaskFilter = { category: null };
 let savedHour: number | null = Number(localStorage.getItem(ZOOM_KEY)) || null;
 /** The view chosen in the menu (the native app keeps it in its settings); Month to begin with, as there. */
 const baseMode = (): Mode => {
@@ -59,7 +60,7 @@ export const calendarSelectedDay = () => selected;
 export function resetCalendar() {
   selected = todayEpoch();
   filters = { events: true, tasks: true, hidden: new Set() };
-  agendaFilter = { showDone: false, category: null };
+  agendaFilter = { category: null };
   savedHour = null;
   localStorage.removeItem(ZOOM_KEY);
 }
@@ -180,12 +181,26 @@ function FilterDialog({ s, value, onChange, onClose }: { s: Snapshot; value: typ
 // ---------- Rows shared by Month and Agenda (MonthView.kt's DayAgenda, YearAgenda.kt) ----------
 
 /** A calendar occurrence as a list row: tasks get a tick box, events their times. */
-function OccurrenceRow({ o, s, now }: { o: Occurrence; s: Snapshot; now: number }) {
+function OccurrenceRow({ o, s, now, onToggle }: { o: Occurrence; s: Snapshot; now: number; onToggle?: (done: boolean) => void }) {
   if (o.item.type !== "TASK") return <EventRow o={o} s={s} />;
-  const entry: TaskEntry = o.overdue
-    ? { item: o.item, day: o.item.startDay, status: "OVERDUE", missed: 1 }
-    : { item: o.item, day: o.day, status: o.completed ? "DONE" : "DUE", missed: 0 };
-  return <TaskRow entry={entry} s={s} now={now} />;
+  return <TaskRow entry={occurrenceEntry(o)} s={s} now={now} onToggle={onToggle} />;
+}
+const occurrenceEntry = (o: Occurrence): TaskEntry => o.overdue
+  ? { item: o.item, day: o.item.startDay, status: "OVERDUE", missed: 1 }
+  : { item: o.item, day: o.day, status: o.completed ? "DONE" : "DUE", missed: 0 };
+const occKey = (o: Occurrence) => `${o.item.id}_${o.day}`;
+const tickedTask = (o: Occurrence) => o.item.type === "TASK" && o.completed;
+
+/**
+ * A day's rows in Month's day list and the Agenda (284): events and open tasks in time order, a task just
+ * ticked staying where it was for a moment, then the ticked ones folded into "2 done ⌄" at the end.
+ */
+function DayRows({ list, s, now, hold, listId }: { list: Occurrence[]; s: Snapshot; now: number; hold: ReturnType<typeof useCheckedHold>; listId: string }) {
+  const { open, done } = splitDone(list, tickedTask, (o) => hold.holding(listId, occKey(o)));
+  return <>
+    {open.map((o, index) => <OccurrenceRow key={occKey(o)} o={o} s={s} now={now} onToggle={(d) => hold.onToggle(listId, occKey(o), occurrenceEntry(o), index, d)} />)}
+    <DoneFold count={done.length} rows={() => done.map((o) => <OccurrenceRow key={`d${occKey(o)}`} o={o} s={s} now={now} />)} />
+  </>;
 }
 
 // ---------- Month (MonthView.kt) ----------
@@ -339,6 +354,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
     return () => { stop(); el.removeEventListener("pointerdown", onDown, { capture: true }); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const months = [monthOf(addMonths(anchor, -1)), monthOf(anchor), monthOf(addMonths(anchor, 1))];
+  const hold = useCheckedHold();
   const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
   return (
     <div className="p-monthview">
@@ -358,7 +374,7 @@ function MonthView({ s, items, anchor, noteDays, trainDays, onStep, onPick, onLo
           <IconButton icon="oEditNote" label="Day note" onClick={() => onDayNote(anchor)} />
         </div>
         {dayList.length === 0 && <div className="p-empty pad16">Nothing planned. Long-press a day to add an event.</div>}
-        {dayList.map((o) => <OccurrenceRow key={`${o.item.id}_${o.day}`} o={o} s={s} now={now} />)}
+        <DayRows key={anchor} list={dayList} s={s} now={now} hold={hold} listId={`m${anchor}`} />
         <div style={{ height: 88 }} />
       </div>
       {pendingMove && <MoveScope move={pendingMove} onDone={() => setPendingMove(null)} />}
@@ -518,18 +534,19 @@ const YearPanel = memo(function YearPanel({ s, items, year, t, onMonth }: { s: S
 
 /**
  * The next 90 days as a list. Its chips (241): Events and Tasks (the Filter dialog's own two), then the Tasks
- * page's Show completed and categories, so only tasks with a category picked lists them by day.
+ * page's categories, so only tasks with a category picked lists them by day. Each day's ticked tasks fold
+ * into its own "1 done ⌄" line (284).
  */
 function AgendaView({ s, items, from, f, onFilters }: { s: Snapshot; items: Item[]; from: number; f: typeof filters; onFilters: (v: typeof filters) => void }) {
   const now = useNow();
   const t = todayEpoch();
   const [tf, setTfState] = useState(agendaFilter);
   const setTf = (v: TaskFilter) => { agendaFilter = v; setTfState(v); };
+  const hold = useCheckedHold();
   const groups = useMemo(() => {
     const map = new Map<number, Occurrence[]>();
     const shown = items.filter((i) => inCategory(i, tf.category));
     for (const o of forCalendar(shown, s.done, from, from + 90, t, carryOver())) {
-      if (!tf.showDone && o.item.type === "TASK" && o.completed) continue;
       const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]);
     }
     return [...map].sort((a, b) => a[0] - b[0]);
@@ -544,7 +561,7 @@ function AgendaView({ s, items, from, f, onFilters }: { s: Snapshot; items: Item
       {groups.map(([day, list]) => (
         <div key={day}>
           <div className="p-agenda-day t-title-small">{relativeDay(day)}</div>
-          {list.map((o) => <OccurrenceRow key={`a${o.item.id}_${o.day}`} o={o} s={s} now={now} />)}
+          <DayRows list={list} s={s} now={now} hold={hold} listId={`a${day}`} />
         </div>
       ))}
       <div style={{ height: 88 }} />

@@ -68,14 +68,14 @@ export function Pill({ children, color, className = "", label }: { children: Rea
   return <span className={`pill ${className}`} role={label ? "img" : undefined} aria-label={label} data-tip={label ? "" : undefined} style={{ color, background: `color-mix(in srgb, ${color} 15%, transparent)`, ["--pc" as string]: color }}>{children}</span>;
 }
 
-/** Seconds a ticked task stays where it was (Settings → Checked tasks); -1 until the page is left. */
+/**
+ * Seconds a ticked task stays where it was before it folds into its list's "5 done" line (Settings → Ticked
+ * tasks, 284); -1 until the page is left, 0 at once.
+ */
 export function checkedLinger(): number {
   const v = Number(localStorage.getItem("checkedLinger") ?? "3");
   return Number.isFinite(v) ? v : 3;
 }
-
-/** Whether ticked tasks stay listed on Today (after the linger); chosen in Settings. */
-export const showDoneOnToday = () => localStorage.getItem("showDoneOnToday") !== "false";
 
 /**
  * Keeps ticked tasks where they were for a while, so ticking doesn't make a row jump or vanish under
@@ -98,6 +98,8 @@ export function useCheckedHold() {
       setHeld((prev) => new Map(prev).set(k, { index, entry: { ...entry, status: "DONE" } }));
       if (secs > 0) timers.current.set(k, window.setTimeout(() => { timers.current.delete(k); drop(k); }, secs * 1000));
     },
+    /** Whether the row [key] of [list] was just ticked and still stays where it was. */
+    holding(list: string, key: string): boolean { return held.has(`${list}|${key}`); },
     /** `real` with the held rows of `list` put back where they were, shown as ticked. */
     arrange(list: string, real: TaskEntry[], key: (e: TaskEntry) => string): TaskEntry[] {
       const prefix = `${list}|`;
