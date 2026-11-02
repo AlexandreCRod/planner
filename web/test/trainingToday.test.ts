@@ -2,7 +2,7 @@
 // the weeks of the Runs tile, and the lift the Lifts tile follows.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Entry, type Plan, dayOf, entryFor, entryId, futsalLogId, newEntry, readPlan, sessionsOf } from "../src/domain/training.ts";
+import { type Entry, type Plan, dayOf, entryFor, entryId, futsalLogId, leftToPlace, newEntry, readPlan, sessionsOf } from "../src/domain/training.ts";
 import { dayWord, leadLift, nextUp, todayCard, todayRows, usualWeekKm, weeklyKm } from "../src/domain/trainingToday.ts";
 
 const d = (iso: string) => dayOf(iso)!;
@@ -149,4 +149,25 @@ test("a game logged asks under its own row", () => {
 test("with no box open the row is just today's", () => {
   const card = todayCard(plan, placed, MON + 1);
   assert.deepEqual(todayRows(card, null), { rated: null, row: card });
+});
+
+test("past the plan's end there's nothing to place: the row rests", () => {
+  const end = d("2026-11-15");
+  const left = entries(logged("free", { day: MON }));
+  const unplaced: Plan = { ...plan, phases: plan.phases.map((p, i) => (i === 1 ? { ...p, sessions: [{ ...sessionsOf(plan).find((s) => s.id === "free")!, id: "open", defaultDay: null }] } : p)) };
+  assert.equal(todayCard(unplaced, left, end).kind, "place");           // the last day still counts
+  assert.equal(todayCard(unplaced, left, end + 1).kind, "rest");
+  assert.equal(todayCard(unplaced, left, end + 30).kind, "rest");
+  assert.deepEqual(leftToPlace(unplaced, end + 1, left), []);
+});
+
+test("two games on a day: the row shows the first not done, then done once both are", () => {
+  const a = (st: Entry["status"]) => ({ ...game(MON + 4, st), id: "futsal:7:a" }), b = (st: Entry["status"]) => ({ ...game(MON + 4, st), id: "futsal:8:a", itemId: 8, title: "Evening game" });
+  const free = logged("free", { day: MON });
+  const one = todayCard(plan, entries(free, a("planned"), b("planned")), MON + 4);
+  assert.ok(one.kind === "game" && one.game.id === "futsal:7:a");
+  const two = todayCard(plan, entries(free, a("done"), b("planned")), MON + 4);
+  assert.ok(two.kind === "game" && two.game.title === "Evening game");
+  const both = todayCard(plan, entries(free, a("done"), b("done")), MON + 4);
+  assert.ok(both.kind === "done" && both.entry.id === "futsal:7:a");
 });

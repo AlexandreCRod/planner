@@ -761,10 +761,10 @@ export function markedDays(plan: Plan, entries: ReadonlyMap<string, Entry>): Set
   return out;
 }
 
-/** Sessions of the phase around [day] still to place: for Today's "N to place this week". */
+/** Sessions of the phase around [day] still to place: for Today's "N to place this week". None once the plan has ended. */
 export function leftToPlace(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): Session[] {
   const ph = plan.phases[phaseIndexAt(plan, day)];
-  if (!ph || day < ph.start) return [];
+  if (!ph || day < ph.start || day > ph.end) return [];
   return ph.sessions.filter((s) => !s.optional && dayOfSession(s, entries.get(entryId(plan.id, s.id))) === null &&
     (entries.get(entryId(plan.id, s.id))?.status ?? "planned") === "planned");
 }

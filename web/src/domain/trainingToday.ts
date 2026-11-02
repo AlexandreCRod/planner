@@ -19,9 +19,11 @@ export type TodayCard =
 
 export interface NextUp { title: string; day: number }
 
-/** The day's game (futsal, or another sport by its own title, 267). */
-export const gameOn = (plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): Entry | undefined =>
-  [...entries.values()].find((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+/** The day's game (futsal, or another sport by its own title, 267): the first not done, else the first. */
+export function gameOn(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): Entry | undefined {
+  const games = [...entries.values()].filter((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+  return games.find((g) => g.status !== "done") ?? games[0];
+}
 
 /** The first session or game after [t] not done or skipped, the session first on a day that has both. */
 export function nextUp(plan: Plan, entries: ReadonlyMap<string, Entry>, t: number): NextUp | null {
