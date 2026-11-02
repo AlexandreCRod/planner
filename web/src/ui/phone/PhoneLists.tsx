@@ -114,7 +114,9 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
   });
   return (
     // Streaks live in one place, the routines list on Today (286), so the page has no ⋮ menu.
-    <Scaffold title="Tasks" flush back={back} actions={<AppBarActions />}>
+    // Opened from a tab (Today, the Agenda) it shows only its back arrow; kept in the bottom bar, it's a tab like
+    // the others, with search and settings (285).
+    <Scaffold title="Tasks" flush back={back}>
       <div className="p-seg-wrap">
         <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} track={track} />
       </div>

@@ -238,7 +238,6 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 /* ---------- Calendar (CalendarScreen.kt, TimeGrid.kt) ---------- */
 .phone .p-cal { position: relative; }
 .phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px 0 16px; }
-.phone .p-calhead-slot { flex: none; width: 48px; }
 .phone .p-calhead h2 { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 
