@@ -1358,6 +1358,16 @@ html.phone[data-theme="dark"] {
 .phone .pa-city .t-title-medium { font-size: 15px; line-height: 22px; }
 .phone .pa-city .pa-time26 { font-size: 23px; line-height: 28px; }
 .phone .pa-city .pa-wx { height: 36px; font-size: 13px; }
+/* The globe row after the cities (326): outlined and a little lower than a city card, so it reads as the next slot. */
+.phone .pa-city-add {
+  position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 20px; box-sizing: border-box;
+  border: 1px dashed var(--p-outline, var(--line)); border-radius: 20px; background: none; color: var(--muted); font: inherit; font-size: 15px; cursor: pointer; text-align: left;
+}
+.phone .pa-city-add:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.phone .pa-city-add:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 2px; }
+/* The stopwatch's count starts it while stopped (326). */
+.phone .pa-sw-time.tap { cursor: pointer; position: relative; overflow: hidden; border-radius: 24px; -webkit-tap-highlight-color: transparent; }
+.phone .pa-sw-time.tap:focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
 
 .phone .pg-slot { border-color: var(--p-outline); }
 /* The new event's box while the add panel is open (Google Calendar's): an outline in its colour, faintly

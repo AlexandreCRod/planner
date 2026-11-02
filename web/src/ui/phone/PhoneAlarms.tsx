@@ -851,7 +851,14 @@ function StopwatchPane({ active }: { active: boolean }) {
   const shown = stopwatchParts(total);
   return (
     <div className="pa-scroll pa-sw">
-      <div className="pa-sw-time">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
+      {/* A tap on the count starts it when stopped (326); while it runs the count is only a count, so a stray
+          tap never stops it. */}
+      {running
+        ? <div className="pa-sw-time">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
+        : <div className="pa-sw-time tap" role="button" tabIndex={0} aria-label={total > 0 ? "Resume" : "Start"}
+          onClick={() => run("start")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run("start"); } }}>
+          {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
+        </div>}
       <div className="pa-buttons center">
         {running ? <>
           <button className="p-outlined-btn" onClick={() => run("lap")}>Lap</button>
@@ -910,8 +917,15 @@ function WorldClockPane({ zones: all, local, active, onAdd }: { zones: string[];
         </div>
         <WeatherChip id={here} now={now} active={active} />
       </div>
-      {zones.length === 0 && <EmptyState icon="oPublic" title="No cities" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
+      {zones.length === 0 && <EmptyState icon="oPublic" title="No cities" onIcon={onAdd} iconLabel="Add a city" action={<TextButton onClick={onAdd}>Add a city</TextButton>} />}
       {zones.map((z) => <CityCard key={z} zone={z} here={here} now={now} h24={h24} active={active} onRemove={() => remove(z)} />)}
+      {/* With cities listed, the globe stays as the list's last row (326): a new city lands just there. */}
+      {zones.length > 0 && (
+        <button className="pa-city-add" onClick={onAdd}>
+          <MIcon name="oPublic" />
+          <span>Add a city</span>
+        </button>
+      )}
     </div>
   );
 }
