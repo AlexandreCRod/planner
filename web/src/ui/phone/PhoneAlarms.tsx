@@ -18,7 +18,7 @@ import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { AppBarActions, Dialog, FilterChip, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, Dialog, FilterChip, HScroll, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
@@ -342,9 +342,9 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
         </button>
       )}
       {alarms.length > 0 && (
-        <div className="pa-filter pa-noswipe">
+        <HScroll className="pa-filter pa-noswipe">
           {CLOCK_FILTERS.map(([k, l]) => <FilterChip key={k} selected={show === k} onClick={() => setShow((f) => toggleFilter(f, k))}>{l}</FilterChip>)}
-        </div>
+        </HScroll>
       )}
       {list.length === 0 && <Empty icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} text="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}

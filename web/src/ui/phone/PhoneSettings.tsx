@@ -21,7 +21,7 @@ import { notificationsEnabled, setNotificationsEnabled } from "../../notify.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
-import { Dialog, DropdownMenu, EmptyHint, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
+import { Dialog, DropdownMenu, EmptyHint, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
@@ -277,14 +277,14 @@ export function PhoneSettings() {
         <div className="ps-pad">
           <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
           <div className="ps-label">Accent colour</div>
-          <div className="ps-accents">
+          <HScroll className="ps-accents">
             {ACCENTS.map(([name, c]) => (
               <button key={c} className="ps-accent" aria-label={name} aria-pressed={accent === c} onClick={() => setAccent(c)}>
                 <span className={`ps-swatch ${accent === c ? "on" : ""}`} style={{ background: c }}>{accent === c && <MIcon name="fCheck" color="#fff" />}</span>
                 <span className="ps-name">{name}</span>
               </button>
             ))}
-          </div>
+          </HScroll>
         </div>
         <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
         <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change by swiping on the top bar" : "Swiping a page changes the day or week"}

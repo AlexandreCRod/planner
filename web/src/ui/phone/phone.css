@@ -395,8 +395,18 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 
 /* ---------- Shared M3 pieces (chrome.tsx) ---------- */
 /* Filter chip: 32 dp tall with 4 dp above and below (as measured on the native screens), 8 dp corners, outlined until picked. */
-.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
+.phone .p-chiprow { flex: none; display: flex; gap: 8px; padding: 0 16px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x pan-y; }
 .phone .p-chiprow::-webkit-scrollbar { display: none; }
+/* Every row that scrolls sideways (232, edgeFade.ts): a 24 px fade at an end while there's more that way, so a
+   chip is never cut mid-word at the edge; the row's own 16 px padding lets the last chip scroll clear of it. */
+.phone .p-hfade {
+  --fl: 0px; --fr: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fl), #000 calc(100% - var(--fr)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--fl), #000 calc(100% - var(--fr)), transparent);
+}
+.phone .p-hfade.fade-l { --fl: 24px; }
+.phone .p-hfade.fade-r { --fr: 24px; }
+.phone .p-chipdiv { flex: none; align-self: center; width: 1px; height: 24px; margin: 0 4px; background: var(--line); }
 .phone .p-chiprow.tasks, .phone .p-chiprow.notes, .phone .p-chiprow.graph, .phone .p-chiprow.agenda { padding-top: 8px; padding-bottom: 4px; }
 .phone .p-chiprow.notes { padding-left: 0; padding-right: 0; }
 .phone .p-chip {
@@ -1355,7 +1365,6 @@ html.phone[data-theme="dark"] {
 .phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines .p-rchips {
   flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 .phone .p-routines .p-rchip { height: 32px; max-width: 180px; overflow: visible; border-radius: 16px; padding: 0 12px 0 7px; font-size: 14px; line-height: 20px; }
 .phone .p-routines .p-rchip::after { content: ""; position: absolute; inset: -8px -4px; }

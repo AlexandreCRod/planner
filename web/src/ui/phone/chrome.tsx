@@ -10,6 +10,7 @@ import { pushBack } from "./native.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 import { trainingTabIcon } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
+import { useEdgeFade } from "./edgeFade.ts";
 
 /** Older short names used around the phone code, mapped to the Compose icons. */
 const ALIAS: Record<string, string> = {
@@ -117,10 +118,22 @@ export function FilterChip({ selected, onClick, children, check }: { selected: b
   );
 }
 
-/** A row of chips that scrolls sideways, as Compose's horizontalScroll Row (12 dp in, 8 dp apart). */
-export function ChipRow({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`p-chiprow ${className}`}>{children}</div>;
+/**
+ * A row that scrolls sideways, faded at an end while there's more that way (232): the one treatment for every
+ * chip row (edgeFade.ts).
+ */
+export function HScroll({ children, className = "", role }: { children: ReactNode; className?: string; role?: string }) {
+  const ref = useEdgeFade<HTMLDivElement>();
+  return <div ref={ref} className={className} role={role}>{children}</div>;
 }
+
+/** A row of chips that scrolls sideways, as Compose's horizontalScroll Row (16 dp in, 8 dp apart), faded at its ends. */
+export function ChipRow({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <HScroll className={`p-chiprow ${className}`}>{children}</HScroll>;
+}
+
+/** The thin line between two groups of chips in one row (Search: the kinds, then categories and tags). */
+export const ChipDivider = () => <span className="p-chipdiv" aria-hidden="true" />;
 
 /**
  * Single-choice segmented buttons (40 dp, full width): a calm indicator sits under the chosen one and

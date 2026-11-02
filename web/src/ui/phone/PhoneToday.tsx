@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, DoneFold, DropdownMenu, FoldLine, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, DoneFold, HScroll, DropdownMenu, FoldLine, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -244,7 +244,7 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
       <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
         Routines{total > 0 && <span className="n">{done}/{total}</span>}
       </button>
-      <div className="p-rchips" role="list">
+      <HScroll className="p-rchips" role="list">
         {list.map((e) => {
           const ticked = e.status === "DONE";
           const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
@@ -257,7 +257,7 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
         <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
           <MIcon name="fFormatListBulleted" size={18} />
         </button>
-      </div>
+      </HScroll>
       {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} onStreaks={() => setStreaksOpen(true)} />, document.body)}
       {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </div>
