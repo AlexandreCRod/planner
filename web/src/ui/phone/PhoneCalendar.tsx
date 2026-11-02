@@ -166,9 +166,9 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
         </div>
       )}
       <div className="p-calbody">
-        {grid && <TimeGrid s={s} items={gridItems} routinesLine={!allRoutines} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
+        {grid && <TimeGrid s={s} items={gridItems} routinesLine={allRoutines ? null : filtered} first={first} count={count} onStep={step} turn={turn} onNewAt={onNewAt} pending={pending} noteDays={noteDays} trainDays={trainDays}
           onDayHeader={(d) => { setAnchor(d); setMode("day"); }} onDayNote={(d) => openDailyNote(s, d)} />}
-        {mode === "month" && <MonthView s={s} items={monthItems} routinesLine={!allRoutines} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
+        {mode === "month" && <MonthView s={s} items={monthItems} routinesLine={allRoutines ? null : filtered} anchor={anchor} noteDays={noteDays} trainDays={trainDays} onStep={step}
           onPick={(d) => { if (d === anchor) setMode("day"); else setAnchor(d); }}
           onLong={(d) => { setAnchor(d); onNewAt(d, 9 * 60); }} onDayNote={(d) => openDailyNote(s, d)} />}
         {mode === "year" && <YearView s={s} items={monthItems} anchor={anchor} onStep={step} onMonth={(d) => { setAnchor(d); setMode("month"); }} />}
@@ -228,7 +228,7 @@ function DayRows({ list, s, now, hold, listId }: { list: Occurrence[]; s: Snapsh
 const monthOf = (d: number) => { const { y, m } = ymd(d); return epochOf(y, m, 1); };
 
 function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep, onPick, onLong, onDayNote }: {
-  s: Snapshot; items: Item[]; routinesLine: boolean; anchor: number; noteDays: Set<number>; trainDays: Map<number, string>; onStep: (dir: number) => void;
+  s: Snapshot; items: Item[]; routinesLine: Item[] | null; anchor: number; noteDays: Set<number>; trainDays: Map<number, string>; onStep: (dir: number) => void;
   onPick: (d: number) => void; onLong: (d: number) => void; onDayNote: (d: number) => void;
 }) {
   const now = useNow();
@@ -395,7 +395,7 @@ function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep
           <span className="grow t-title-medium">{formatDate(anchor)}</span>
           <IconButton icon="oEditNote" label="Day note" onClick={() => onDayNote(anchor)} />
         </div>
-        {routinesLine && <RoutinesDayLine s={s} day={anchor} />}
+        {routinesLine && <RoutinesDayLine s={s} items={routinesLine} day={anchor} />}
         {dayList.length === 0 && <EmptyState className="compact" icon="oCalendarToday" title="A clear day" hint="Tap + or hold a day to add something" />}
         <DayRows key={anchor} list={dayList} s={s} now={now} hold={hold} listId={`m${anchor}`} />
         <div style={{ height: 88 }} />
@@ -635,7 +635,7 @@ function movedToDay(item: Item, from: number, to: number): Item {
 }
 
 function TimeGrid({ s, items, routinesLine, first, count, onStep, turn, onNewAt, pending, noteDays, trainDays, onDayHeader, onDayNote }: {
-  s: Snapshot; items: Item[]; routinesLine: boolean; first: number; count: number; onStep: (dir: number) => void; turn: (dir: 1 | -1) => void;
+  s: Snapshot; items: Item[]; routinesLine: Item[] | null; first: number; count: number; onStep: (dir: number) => void; turn: (dir: 1 | -1) => void;
   onNewAt: (day: number, min: number) => void; pending: SlotPreview | null; noteDays: Set<number>; trainDays: Map<number, string>;
   onDayHeader: (d: number) => void; onDayNote: (d: number) => void;
 }) {
@@ -1182,7 +1182,8 @@ function TimeGrid({ s, items, routinesLine, first, count, onStep, turn, onNewAt,
   const colPct = 100 / count;
   const compact = days.length > 3;
   // The Day view's line for the day's routines (224), at the end of its all-day row: "Routines 1/3 ›".
-  const routineDays = count === 1 && routinesLine ? all.map((d) => routinesOnDay(s.items, s.done, d, t).length > 0) : null;
+  // It counts what the calendar's filter shows (review of 2.10, finding 7).
+  const routineDays = count === 1 && routinesLine ? all.map((d) => routinesOnDay(routinesLine, s.done, d, t).length > 0) : null;
   const hasAllDay = allDay.some((l) => l.length) || !!routineDays?.some(Boolean);
 
   return (
@@ -1229,7 +1230,7 @@ function TimeGrid({ s, items, routinesLine, first, count, onStep, turn, onNewAt,
                   {room > 0 && <span className="pg-adspace" style={{ height: room * 17 }} />}
                   {own.map((o) => <AllDayChip key={o.item.id} o={o} s={s} />)}
                   {more > 0 && <span className="more">{more} more</span>}
-                  {routineDays?.[i] && <RoutinesDayLine s={s} day={all[i]} />}
+                  {routineDays?.[i] && routinesLine && <RoutinesDayLine s={s} items={routinesLine} day={all[i]} />}
                 </div>
               );
             })}

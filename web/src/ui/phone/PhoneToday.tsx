@@ -10,7 +10,7 @@ import { isRoutineItem, routineList, routineProgress, routineSeriesOf, routineSt
 import { type Snapshot, toggleCompletion, useSnapshot } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { todoNumber } from "../../domain/todoNumber.ts";
-import { PRIORITIES, priorityColor } from "../../domain/types.ts";
+import { type Item, PRIORITIES, priorityColor } from "../../domain/types.ts";
 import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoNumber.ts";
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
@@ -277,12 +277,13 @@ function RoutineSheets({ s, t, open, onClose }: { s: Snapshot; t: number; open: 
 /**
  * The calendar's line for a day's routines (224), under Month's grid and at the top of the Day view, where
  * routines are left out (only those set to "Show in calendar" are blocks in the Day view): "Routines 1/3 ›",
- * as on Today; a tap opens the list of every routine. Nothing on a day without routines.
+ * as on Today; a tap opens the list of every routine. Nothing on a day without routines. [items]: what the
+ * calendar's filter shows, so a routine it hides isn't counted (review of 2.10, finding 7).
  */
-export function RoutinesDayLine({ s, day }: { s: Snapshot; day: number }) {
+export function RoutinesDayLine({ s, items, day }: { s: Snapshot; items: Item[]; day: number }) {
   const t = todayEpoch();
   const [open, setOpen] = useState(false);
-  const { done, total } = routineProgress(routinesOnDay(s.items, s.done, day, t));
+  const { done, total } = routineProgress(routinesOnDay(items, s.done, day, t));
   if (!total) return null;
   return <>
     <button className="p-routines-line" aria-label={`Routines, ${done} of ${total} done. All routines`} onClick={() => setOpen(true)}>
