@@ -4,7 +4,7 @@
 //   per day), read by the phone from the watch.
 // On the same morning Health Connect wins; sleep.json fills what it lacks (score, and resting HR or HRV when
 // Health Connect has none that day). A morning with two sleep sessions keeps the longest, and a nap (a
-// session that starts after 10:00 on the day it ends) never counts as the night.
+// session under 3 h, whenever it starts: a real night can start after 10:00, 322) never counts as the night.
 // Also the numbers drawn from them: the 7-day averages, the HRV normal range, and the quiet flags the
 // Training page shows (under 6 h before a key run, resting HR up two mornings in a row). Nothing is stored.
 // Every average counts only what was recorded (321): a morning with no number, or a 0 (a session that was
@@ -12,7 +12,7 @@
 // A night's stages (308): the watch's stretches, cleaned for the chart; a night may have only totals (the Garmin
 // export always does; Health Connect may too), and then its timeline is empty.
 // Days are epoch-day numbers (domain/dates.ts).
-import type { HealthDay, HealthNight, StageSpan } from "./health.ts";
+import { type HealthDay, type HealthNight, type StageSpan, NAP_UNDER_MIN } from "./health.ts";
 import { csv, isoOf } from "./training.ts";
 import type { Night } from "./trends.ts";
 
@@ -106,10 +106,8 @@ export function clockAfter(t: string, min: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
-/** A nap: a session that starts after 10:00 on the day it ends. It's kept in Health Connect but never the night. */
-export function isNap(n: { bed: string; wake: string }): boolean {
-  return n.bed.slice(0, 10) === n.wake.slice(0, 10) && Number(n.bed.slice(11, 13)) >= 10;
-}
+/** A nap: a session under 3 h bed to wake, whenever it starts (322). It's kept in Health Connect but never the night. */
+export const isNap = (n: { bed: string; wake: string }) => inBedMin(n.bed, n.wake) < NAP_UNDER_MIN;
 
 /**
  * Every morning that has a night, a resting HR or an HRV, oldest first. Per morning: the longest Health

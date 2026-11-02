@@ -317,6 +317,9 @@ export function sessionOf(r: RawRecord, raw: RawByType, now: number): HealthSess
 
 // ---------- Sleep ----------
 
+/** A sleep shorter than this, bed to wake, is a nap (322): short is what makes one, whenever it starts. */
+export const NAP_UNDER_MIN = 180;
+
 const STAGES: SleepStage[] = ["unknown", "awake", "sleeping", "out_of_bed", "light", "deep", "rem", "awake_in_bed"];
 
 export function nightOf(r: RawRecord, now: number): HealthNight {
@@ -401,11 +404,10 @@ export function daysOf(raw: RawByType, from: number, to: number, now: number): H
     }
     for (const [day, { rs, off }] of m) { const v = sumIn(rs, field, day * DAY_MS - off, (day + 1) * DAY_MS - off); if (v !== null) set(get(day), v); }
   };
-  // The nights (not naps: those start after 10:00 on the day they end), for the overnight readings below.
+  // The nights (not naps, which are short), for the overnight readings below.
   const sleeps = (raw.SleepSession ?? []).flatMap((r) => {
-    const s = startOf(r), e = endOf(r), off = offsetMs(r), offEnd = offsetMs(r, "endZoneOffset");
-    const day = localDay(e, offEnd);
-    return localDay(s, off) === day && localTime(s, off) >= "10:00" ? [] : [{ s, e, day }];
+    const s = startOf(r), e = endOf(r);
+    return e - s < NAP_UNDER_MIN * 60_000 ? [] : [{ s, e, day: localDay(e, offsetMs(r, "endZoneOffset")) }];
   });
   /**
    * HRV, blood oxygen and breathing rate: a night's readings belong to the morning it ends (266: one after

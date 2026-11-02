@@ -294,6 +294,25 @@ test("day: a night's HRV, blood oxygen and breathing go to the morning it ends; 
   assert.equal(d27.respiration, null);
 });
 
+test("day: a night that starts after 10:00 keeps its readings; a short sleep at dawn doesn't (322)", () => {
+  const raw: RawByType = {
+    SleepSession: [
+      interval("late", at("2026-10-28T10:30:00"), at("2026-10-28T18:00:00"), {}),
+      interval("short", at("2026-10-27T05:00:00"), at("2026-10-27T06:30:00"), {}),
+    ],
+    OxygenSaturation: [
+      instant("o1", at("2026-10-28T08:00:00"), { percentage: 99 }), // a spot check, awake
+      instant("o2", at("2026-10-28T12:00:00"), { percentage: 95 }), // asleep, in the late night
+      instant("o3", at("2026-10-27T05:30:00"), { percentage: 94 }), // in the short sleep: by day
+      instant("o4", at("2026-10-27T12:00:00"), { percentage: 98 }), // awake, by day
+    ],
+  };
+  const tue = dayOf("2026-10-27")!;
+  const [d27, d28] = daysOf(raw, tue, tue + 2, 0);
+  assert.equal(d28.spo2, 95);           // only the night's
+  assert.equal(d27.spo2, 96);           // a nap is no night: both by day
+});
+
 test("days outside the window aren't made", () => {
   const raw = dayRaw();
   const wed = dayOf("2026-10-28")!;

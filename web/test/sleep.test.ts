@@ -68,7 +68,7 @@ test("merge: two sessions on a morning keep the longest; a nap never counts", ()
   const out = mergedNights([], [
     watch("2026-10-27", { bed: "2026-10-26T22:00", wake: "2026-10-27T01:30", totalMin: 200 }),
     watch("2026-10-27", { bed: "2026-10-27T02:00", wake: "2026-10-27T07:30", totalMin: 320 }),
-    watch("2026-10-27", { bed: "2026-10-27T14:00", wake: "2026-10-27T15:00", totalMin: 400 }),   // a (long) nap
+    watch("2026-10-27", { bed: "2026-10-27T14:00", wake: "2026-10-27T15:00", totalMin: 400 }),   // a nap, whatever its minutes say
     watch("2026-10-28", { bed: "2026-10-28T13:30", wake: "2026-10-28T14:10", totalMin: 40 }),    // only a nap
   ], []);
   assert.deepEqual(out.map((n) => [isoOf(n.day), n.totalMin]), [["2026-10-27", 320]]);
@@ -80,14 +80,23 @@ test("merge: a nap leaves the morning to sleep.json", () => {
   assert.equal(out[0].totalMin, 450);
 });
 
-test("isNap: starts after 10:00 on the day it ends", () => {
+test("isNap: under 3 h from bed to wake, whenever it starts (322)", () => {
   for (const [bed, wake, nap] of [
     ["2026-10-27T23:00", "2026-10-28T07:00", false],
-    ["2026-10-28T00:30", "2026-10-28T07:00", false],
-    ["2026-10-28T09:59", "2026-10-28T11:00", false],
-    ["2026-10-28T10:00", "2026-10-28T11:00", true],
+    ["2026-10-28T10:30", "2026-10-28T18:00", false],   // a night that starts after 10:00
+    ["2026-10-28T14:00", "2026-10-28T17:00", false],   // 3 h exactly isn't short
+    ["2026-10-28T14:00", "2026-10-28T16:59", true],
     ["2026-10-28T21:30", "2026-10-28T23:55", true],
+    ["2026-10-28T23:00", "2026-10-29T00:30", true],    // over midnight
+    ["2026-10-28T09:00", "2026-10-28T10:00", true],    // before 10:00
   ] as [string, string, boolean][]) assert.equal(isNap({ bed, wake }), nap, `${bed} → ${wake}`);
+});
+
+test("322: a night that starts after 10:00 is the morning's night, and still loses to a longer one", () => {
+  const late = watch("2026-10-28", { bed: "2026-10-28T10:40", wake: "2026-10-28T18:10", totalMin: 430 });
+  assert.deepEqual(mergedNights([], [late], []).map((n) => [isoOf(n.day), n.bed, n.totalMin]), [["2026-10-28", "2026-10-28T10:40", 430]]);
+  const out = mergedNights([], [late, watch("2026-10-28", { bed: "2026-10-27T23:00", wake: "2026-10-28T07:00", totalMin: 460 })], []);
+  assert.equal(out[0].totalMin, 460);
 });
 
 // ---------- Averages and the HRV range ----------
