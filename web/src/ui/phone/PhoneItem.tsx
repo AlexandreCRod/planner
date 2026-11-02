@@ -35,7 +35,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, fitWake, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
-import { canBeRoutine, doneTiming, routineInCalendar, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
+import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
@@ -822,10 +822,12 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <InfoRow icon="oTaskAlt" tint={routine ? color : undefined} text={routine ? "Routine · on Today's checklist" : "Routine"}
             onClick={() => setRoutine(item, !routine)} trailing={<Switch checked={routine} onChange={(v) => setRoutine(item, v)} label="Routine" />} />
         )}
-        {routine && canBeRoutine(item) && (
-          <InfoRow icon={null} text="Show in calendar" sub="A block in the Week, 3-day and Day views" onClick={() => commit({ ...item, inCalendar: !routineInCalendar(item) })}
-            trailing={<Switch checked={routineInCalendar(item)} onChange={(v) => commit({ ...item, inCalendar: v })} label="Show in calendar" />} />
-        )}
+        {/* On a day changed on its own, the switch is its routine's (review of 2.10, finding 5). */}
+        {routine && canBeRoutine(item) && (() => {
+          const owner = routineSeriesOf(item, s.byId);
+          return <InfoRow icon={null} text="Show in calendar" sub="A block in the Week, 3-day and Day views" onClick={() => commit({ ...owner, inCalendar: !routineInCalendar(owner) })}
+            trailing={<Switch checked={routineInCalendar(owner)} onChange={(v) => commit({ ...owner, inCalendar: v })} label="Show in calendar" />} />;
+        })()}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
             <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
@@ -1192,7 +1194,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           </FieldRow>
         )}
         {/* Whether the routine is a block in the Week, 3-day and Day views (224); on to begin with for one with a start and an end. */}
-        {routinable && routine && (
+        {/* Not on a day changed on its own: that's its routine's switch, on the item's page (review of 2.10, finding 5). */}
+        {routinable && routine && !(d.parentId !== null && d.freq === "NONE") && (
           <FieldRow icon={null} onClick={() => set({ inCalendar: !routineInCalendar(d) })}>
             <span className="pe-label grow">Show in calendar<span className="pe-sublabel">A block in the Week, 3-day and Day views</span></span>
             <Switch checked={routineInCalendar(d)} onChange={(v) => set({ inCalendar: v })} label="Show in calendar" />

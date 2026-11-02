@@ -41,9 +41,10 @@ export function routineInCalendar(item: Item): boolean {
  * calendar" switch is on. Everything that isn't a routine is always drawn.
  */
 export type RoutinesShown = "all" | "chosen" | "none";
-export function calendarShows(item: Item, shown: RoutinesShown): boolean {
+export function calendarShows(item: Item, shown: RoutinesShown, byId?: ReadonlyMap<number, Item>): boolean {
   if (shown === "all" || !isRoutineItem(item)) return true;
-  return shown === "chosen" && routineInCalendar(item);
+  // A day changed on its own follows its routine's switch, not a copy of it (review of 2.10, finding 5).
+  return shown === "chosen" && routineInCalendar(byId ? routineSeriesOf(item, byId) : item);
 }
 
 /** Whether a task or event can carry the routine mark: one that repeats, or a single changed day of one. */

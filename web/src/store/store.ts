@@ -429,10 +429,11 @@ export function saveSeriesEdit(scope: EditScope, series: Item, day: number, edit
     deleteOccurrence(series, day);
     const startDay = opts.movedTo ?? (edited.startDay !== series.startDay ? edited.startDay : day);
     const newIdNum = saveItem(
-      // A single changed day of a routine is still that routine's day: it keeps the mark (and stays on
-      // Today's checklist instead of the series' own day), and a tick it already had comes with it.
+      // A single changed day of a routine is still that routine's day, a task's or an event's (review of 2.10,
+      // finding 5): it keeps the mark (and stays on Today's checklist instead of the series' own day), and a
+      // tick it already had comes with it. Its "Show in calendar" is the series' (calendarShows).
       { ...edited, id: 0, freq: "NONE", parentId: series.id, excludedDays: "", untilDay: null, startDay, endDay: (startDay ?? day) + span,
-        routine: series.routine === true && edited.routine !== false && series.type === "TASK" && edited.type === "TASK" },
+        routine: series.routine === true && edited.routine !== false },
       { reminders: freshReminders, tags },
     );
     if (wasDone && startDay !== null) put("completions", { itemId: newIdNum, day: startDay, completedAt: Date.now() });

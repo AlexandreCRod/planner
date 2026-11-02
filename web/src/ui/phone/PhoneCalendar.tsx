@@ -123,7 +123,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const count = mode === "day" ? 1 : mode === "3day" ? 3 : 7;
   const filtered = useMemo(() => s.items.filter((i) => filterShows(f, i)), [s, f]);
   const isFiltered = filterOn(f, s.categories.map((c) => c.id));
-  const gridItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "chosen")), [filtered, allRoutines]);
+  const gridItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "chosen", s.byId)), [filtered, allRoutines, s]);
   const monthItems = useMemo(() => filtered.filter((i) => calendarShows(i, allRoutines ? "all" : "none")), [filtered, allRoutines]);
   const noteDays = useMemo(() => new Set(s.items.filter((i) => i.type === "NOTE" && i.noteDay !== null).map((i) => i.noteDay!)), [s]);
   // Training days get a light mark by the date (the session itself is on the Training page).

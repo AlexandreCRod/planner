@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Item, newItem } from "../src/domain/types.ts";
-import { isRoutineItem, isRoutineSeries, routineList, routinesOnDay, routineSeriesOf, withoutRoutines } from "../src/domain/routines.ts";
+import { calendarShows, isRoutineItem, isRoutineSeries, routineList, routinesOnDay, routineSeriesOf, withoutRoutines } from "../src/domain/routines.ts";
 import { tasksForDay } from "../src/domain/schedule.ts";
 
 // The store saves to localStorage and schedules a redraw; small stand-ins are enough here.
@@ -52,4 +52,37 @@ test("a changed day of a plain repeating task stays a plain task, and turning th
 test("a one-off task without a series is never a routine", () => {
   assert.equal(isRoutineItem(routine(44, { freq: "NONE" })), false);
   assert.equal(isRoutineItem(routine(45, { freq: "NONE", parentId: 41 })), true);
+});
+
+// Review of 2.10, finding 5.
+test("a routine event moved for one day stays a routine, on the day's checklist, out of Month", () => {
+  const tese = newItem({ id: 51, type: "EVENT", title: "Tese", startDay: 20000, endDay: 20000, startMin: 630, endMin: 780, freq: "WEEKLY", routine: true });
+  store.saveItem(tese);
+  const copyId = store.saveSeriesEdit("THIS", tese, 20007, { ...tese, startDay: 20007, endDay: 20007, startMin: 840, endMin: 990 }, { movedTo: 20007 });
+  const s = store.snapshot();
+  const copy = s.byId.get(copyId)!;
+  assert.equal(copy.routine, true);
+  assert.equal(isRoutineItem(copy), true);
+  assert.deepEqual(routinesOnDay(s.items, s.done, 20007, 20007).filter((e) => e.item.title === "Tese").map((e) => e.item.id), [copyId]);
+  assert.equal(calendarShows(copy, "none", s.byId), false); // Month and Year draw no routine
+  assert.equal(calendarShows(copy, "chosen", s.byId), true); // its series' switch is on (a timed event)
+  // The series' switch turned off takes the moved day out of the Week too.
+  store.saveItem({ ...s.byId.get(51)!, inCalendar: false });
+  const after = store.snapshot();
+  assert.equal(calendarShows(after.byId.get(copyId)!, "chosen", after.byId), false);
+});
+
+test("a routine task's day moved on its own follows the series' Show in calendar, whatever the copy says", () => {
+  const stretch = routine(52, { title: "Stretch daily" });
+  store.saveItem(stretch);
+  const copyId = store.saveSeriesEdit("THIS", stretch, day, { ...stretch, startMin: 1200 });
+  const s = store.snapshot();
+  assert.equal(calendarShows(s.byId.get(copyId)!, "chosen", s.byId), false); // a task habit: off to begin with
+  store.saveItem({ ...s.byId.get(52)!, inCalendar: true });
+  const on = store.snapshot();
+  assert.equal(calendarShows(on.byId.get(copyId)!, "chosen", on.byId), true);
+  // Even a copy that carried its own old "off" follows the series.
+  store.saveItem({ ...on.byId.get(copyId)!, inCalendar: false });
+  const still = store.snapshot();
+  assert.equal(calendarShows(still.byId.get(copyId)!, "chosen", still.byId), true);
 });
