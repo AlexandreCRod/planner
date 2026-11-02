@@ -153,7 +153,7 @@ function ScheduledList() {
     .map((i) => (isRoutineItem(i) ? routineEntry(i, s.done, t) : currentEntry(i, s.done, t)))
     .filter((e) => showDone || e.status !== "DONE" || isRecurring(e.item));
   const sorted = (list: TaskEntry[]) => [...list].sort((a, b) =>
-    Number(a.status === "DONE") - Number(b.status === "DONE") || b.item.priority - a.item.priority ||
+    Number(a.status === "DONE") - Number(b.status === "DONE") || Number(b.status === "OVERDUE") - Number(a.status === "OVERDUE") || b.item.priority - a.item.priority ||
     (a.day ?? 1e9) - (b.day ?? 1e9) || (a.item.startMin ?? 1e9) - (b.item.startMin ?? 1e9) || a.item.title.localeCompare(b.item.title));
   return <>
     <TaskChips s={s} value={filter} onChange={setFilter} />
@@ -170,7 +170,7 @@ function ScheduledList() {
             setCollapsed(n);
           }}>{g} ({list.length})</SectionHeader>
           {!isCollapsed && list.map((e, index) => (
-            <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay priorityTag streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
+            <TaskRow key={e.item.id} entry={e} s={s} now={now} showDay streakInfo={streaks && isRoutineSeries(e.item) ? streak(e.item, s.done, t) : undefined}
               onToggle={(done) => hold.onToggle(g, String(e.item.id), e, index, done)} />
           ))}
         </div>
@@ -260,7 +260,7 @@ export function TodosSheet({ back = null, onClose }: { back?: number | null; onC
             {list.length === 0 && <div className="p-rlist-empty muted">Nothing to do</div>}
             {list.map((e, index) => (
               <div key={e.item.id} data-row={e.item.id} onPointerDown={rowDrag.down}>
-                <TaskRow entry={e} s={s} now={now} priorityTag onOpen={() => { leaveSheet(rows.current?.scrollTop ?? 0); after(() => openItem(e.item)); }}
+                <TaskRow entry={e} s={s} now={now} onOpen={() => { leaveSheet(rows.current?.scrollTop ?? 0); after(() => openItem(e.item)); }}
                   onToggle={(isDone) => hold.onToggle("sheet", String(e.item.id), e, index, isDone)} />
               </div>
             ))}
@@ -294,7 +294,7 @@ function TodoList() {
     {!shown.length && !done.length && <EmptyHint>Nothing to do. Type above to add a task with no date.</EmptyHint>}
     {shown.map((e, index) => (
       <div key={e.item.id} data-glide={`t${e.item.id}`} data-row={e.item.id} onPointerDown={rowDrag.down}>
-        <TaskRow entry={e} s={s} now={now} priorityTag onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
+        <TaskRow entry={e} s={s} now={now} onToggle={(isDone) => hold.onToggle("todo", String(e.item.id), e, index, isDone)} />
       </div>
     ))}
     {done.length > 0 && <>

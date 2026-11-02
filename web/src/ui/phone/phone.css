@@ -185,8 +185,12 @@ html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15
 .phone :is(.today-list, .p-rows) .task .sub-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phone :is(.today-list, .p-rows) .task .rem-emoji, .phone :is(.today-list, .p-rows) .fire-emoji { display: none; }
 .phone :is(.today-list, .p-rows) .task .sub .sub-icon { display: inline-flex; flex: none; }
-.phone :is(.today-list, .p-rows) .task .pills { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-right: 8px; }
-.phone :is(.today-list, .p-rows) .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+/* One task row everywhere (226): one status pill on the right, 24 px tall; the flag before the title. */
+.phone :is(.today-list, .p-rows) .task .pills { flex: none; display: flex; align-items: center; gap: 4px; margin: 0 8px 0 6px; }
+.phone :is(.today-list, .p-rows) .pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .1px; white-space: nowrap; }
+.phone :is(.today-list, .p-rows) .task .bar.none { visibility: hidden; }
+.phone :is(.today-list, .p-rows) .task .title .flag { display: inline-flex; vertical-align: -1px; margin-right: 6px; }
+.phone :is(.today-list, .p-rows) .task .title .sub-icon { display: inline-flex; vertical-align: -2px; margin-left: 6px; color: var(--muted); }
 .phone :is(.today-list, .p-rows) .pill .sub-icon.fire { display: inline-flex; margin-right: 3px; }
 .phone :is(.today-list, .p-rows) .rep { width: 17px; height: 17px; margin-right: 4px; vertical-align: -3px; }
 
@@ -580,8 +584,9 @@ html.phone:not(.wide) .p-tab-label { color: var(--text); transition: opacity .15
 html.phone { --p-inverse-surface: #322f35; --p-inverse-on-surface: #f5eff7; --p-inverse-primary: #a8c7fa; }
 /* Priorities (low, medium, high, urgent): blue, yellow, orange and red, each clear on its own background. */
 html.phone { --prio-1: #1e88e5; --prio-2: #c79100; --prio-3: #ef6c00; --prio-4: #d32f2f; }
-@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --prio-1: #8ab4f8; --prio-2: #fdd663; --prio-3: #ffab70; --prio-4: #f28b82; } }
-html.phone[data-theme="dark"] { --prio-1: #8ab4f8; --prio-2: #fdd663; --prio-3: #ffab70; --prio-4: #f28b82; }
+/* Dark (226): four flag colours easier to tell apart at a glance, toned to the palette. */
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --prio-1: #81b7e7; --prio-2: #cfb46e; --prio-3: #e0a77a; --prio-4: #e59b94; } }
+html.phone[data-theme="dark"] { --prio-1: #81b7e7; --prio-2: #cfb46e; --prio-3: #e0a77a; --prio-4: #e59b94; }
 @media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; } }
 html.phone[data-theme="dark"] { --p-inverse-surface: #e6e0e9; --p-inverse-on-surface: #322f35; --p-inverse-primary: #1a73e8; }
 /* Pure black dark mode (Theme.kt with pureBlack): black background and darker containers. */
@@ -928,9 +933,6 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone [data-row][data-lift="drag"] { will-change: transform; }
 .phone [data-row][data-lift="down"] { box-shadow: 0 0 0 rgb(0 0 0 / 0); transition: box-shadow .2s, background-color .2s; background: var(--bg); }
 .phone [data-rowdrag="live"] [data-row]:not([data-lift]) { transition: transform .2s cubic-bezier(.2, 0, 0, 1); }
-.phone :is(.today-list, .p-rows) .pill .sub-icon.flag { display: inline-flex; }
-/* The priority flag on the task lists: a bigger flag in its own colour on a tint of it. */
-.phone :is(.today-list, .p-rows) .pill.prio { padding: 2px 6px; }
 
 /* ---------- Alarms tab (AlarmsScreen.kt, ClockToolsPanes.kt) ---------- */
 .phone .pa-page { position: relative; }
@@ -1210,8 +1212,6 @@ html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), 
 /* Today's "2 tasks without a date — see Tasks": a quiet link to the To-do tab. */
 .phone .today-list .p-anytime { display: block; width: 100%; margin-top: 6px !important; border: 0; background: none; text-align: left; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone .today-list .p-anytime::after { content: " ›"; }
-/* Priority tags keep a hint of their colour, muted (PRIORITY_COLORS_MUTED), not the neutral grey of other tags. */
-.phone :is(.today-list, .p-rows) .pill.prio { color: var(--pc) !important; background: color-mix(in srgb, var(--pc) 16%, transparent) !important; }
 
 /* ---------- Darker highlights ----------
    Filled highlights (today's date, a picked day or weekday, switches, filled buttons, ticks, the

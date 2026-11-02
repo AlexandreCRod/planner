@@ -263,23 +263,23 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
   const { done, total } = routineProgress(list);
   return (
     <div className="p-routines">
-    <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
-      Routines{total > 0 && <span className="n">{done}/{total}</span>}
-    </button>
-    <div className="p-rchips" role="list">
-      {list.map((e) => {
-        const ticked = e.status === "DONE";
-        const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
-        return (
-          <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
-            streak={st && st.current > 1 ? st.current : 0}
-            onToggle={() => { if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); }} onOpen={() => openItem(e.item, e.day)} />
-        );
-      })}
-      <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
-        <MIcon name="fFormatListBulleted" size={18} />
+      <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
+        Routines{total > 0 && <span className="n">{done}/{total}</span>}
       </button>
-    </div>
+      <div className="p-rchips" role="list">
+        {list.map((e) => {
+          const ticked = e.status === "DONE";
+          const st = streaks ? routineStreak(routineSeriesOf(e.item, s.byId), s.done, t) : null;
+          return (
+            <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
+              streak={st && st.current > 1 ? st.current : 0}
+              onToggle={() => { if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); }} onOpen={() => openItem(e.item, e.day)} />
+          );
+        })}
+        <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
+          <MIcon name="fFormatListBulleted" size={18} />
+        </button>
+      </div>
       {all && createPortal(<RoutineListSheet s={s} t={t} onClose={() => setAll(false)} onStreaks={() => setStreaksOpen(true)} />, document.body)}
       {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </div>

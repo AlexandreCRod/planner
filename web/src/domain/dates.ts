@@ -126,6 +126,18 @@ export function relativeDay(epoch: number): string {
   return formatDate(epoch);
 }
 
+/**
+ * A day as a task row's pill says it (226): "Today", "Tomorrow", "Yesterday", the weekday alone within the
+ * coming week ("Thu"), else the date ("Thu, 15 Oct").
+ */
+export function dayPill(epoch: number, t = today()): string {
+  if (epoch === t) return "Today";
+  if (epoch === t + 1) return "Tomorrow";
+  if (epoch === t - 1) return "Yesterday";
+  if (epoch > t && epoch - t < 7) return dayShort(weekday(epoch));
+  return formatDate(epoch);
+}
+
 const system24h = (() => {
   const s = new Intl.DateTimeFormat(undefined, { hour: "numeric" }).format(new Date(2020, 0, 1, 15));
   return !/[AP]M/i.test(s);

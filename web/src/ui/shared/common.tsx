@@ -1,8 +1,9 @@
 // Small shared pieces: the hash router, task and event rows and their few icons.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { describe } from "../../domain/recurrence.ts";
-import { type Occurrence, type Streak, type TaskEntry, completionDay, dueAt } from "../../domain/schedule.ts";
-import { dueCountdown, formatTime, relativeDay } from "../../domain/dates.ts";
+import { type Occurrence, type Streak, type TaskEntry, completionDay } from "../../domain/schedule.ts";
+import { formatTime, relativeDay } from "../../domain/dates.ts";
+import { taskPill } from "../../domain/taskRow.ts";
 import { type AlertType, PRIORITIES, isRecurring, type Item, priorityColor } from "../../domain/types.ts";
 import { reminderKind } from "../../domain/reminders.ts";
 import { type Snapshot, toggleCompletion } from "../../store/store.ts";
@@ -124,7 +125,14 @@ function ReminderIcon({ kind }: { kind: AlertType | null }) {
 }
 const REMINDER_EMOJI: Record<AlertType, string> = { ALARM: "⏰", REMINDER: "🔔", NOTIFICATION: "🔕" };
 
-export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priorityTag, heldTime, past, actions, onOpen, underOverdue }: {
+/**
+ * One task row, the same on Today, Tasks, the to-dos and the calendar's lists (226): the category's bar (none
+ * without a category), the box, the priority flag in its colour before the title, the title, a line under it
+ * with only what the pill doesn't say (the time, how it repeats, its reminder and links), and one status pill
+ * on the right. The date shows once: in the pill, or under the title when there's no pill to say it (a ticked
+ * task, or one under Today's Overdue heading, where it's red).
+ */
+export function TaskRow({ entry, s, now, streakInfo, showDay = false, onToggle, heldTime, past, actions, onOpen, underOverdue }: {
   entry: TaskEntry; s: Snapshot; now: number; streakInfo?: Streak; showDay?: boolean;
   /** Under Today's Overdue heading (225): no "Overdue" pill; the date says it, in red. */
   underOverdue?: boolean;
@@ -136,51 +144,52 @@ export function TaskRow({ entry, s, now, streakInfo, showDay, onToggle, priority
   past?: boolean;
   /** The time, which can be held to change it (Today; other lists pass none). */
   heldTime?: (entry: TaskEntry) => ReactNode;
-  /** The phone's task lists: priority as a coloured "High" tag at the end instead of the small flag. */
-  priorityTag?: boolean;
   /** Called with the new state before the tick is saved. */
   onToggle?: (done: boolean) => void;
 }) {
   const { item, status } = entry;
   const done = status === "DONE";
   const color = s.colorOf(item);
-  const due = dueAt(entry);
+  // No category and no colour of its own: no bar (the type's colour would look like a category).
+  const plain = item.color === null && (item.categoryId === null || !s.categoryById.has(item.categoryId));
   // A ticked task's reminders are off (kept for un-ticking), so it shows none.
   const kind = done ? null : reminderKind(s.reminders.get(item.id));
   const linked = s.neighbours(item.id).size > 0;
-  const late = underOverdue && status === "OVERDUE";
+  const late = !!underOverdue && status === "OVERDUE";
+  const pill = done ? null : taskPill(entry, now, showDay, underOverdue);
+  // The day under the title only where no pill says it.
+  const dayText = showDay && entry.day !== null && (done || late) ? relativeDay(entry.day) : null;
   const subParts: ReactNode[] = [
-    showDay && entry.day !== null ? (late ? <span className="late">{relativeDay(entry.day)}{entry.missed > 1 ? ` · ${entry.missed} missed` : ""}</span> : relativeDay(entry.day)) : null,
+    dayText && (late ? <span className="late">{dayText}{entry.missed > 1 ? ` · ${entry.missed} missed` : ""}</span> : dayText),
     item.startMin !== null ? (heldTime?.(entry) || formatTime(item.startMin)) : null,
     isRecurring(item) ? describe(item) : null,
   ].filter(Boolean);
   const sub = subParts.length > 0;
+  // The phone shows the reminder and links as small icons after the line, like the native row (hidden on the PC).
+  const icons = <>
+    <ReminderIcon kind={kind} />
+    {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
+  </>;
   return (
     <div className={`task ${past ? "past" : ""}`} style={{ ["--c" as string]: color }} onClick={() => (onOpen ? onOpen() : openItem(item, entry.day))}>
-      <span className="bar" style={{ background: color }} />
+      <span className={`bar ${plain ? "none" : ""}`} style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />
       <div className="grow">
         <div className={`title ellipsis ${done ? "done" : ""}`}>
           {isRecurring(item) && item.routine !== true && <RepeatBadge color={color} />}
-          {item.priority > 0 && !done && !priorityTag && <span title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip style={{ verticalAlign: "-3px", marginRight: 4 }}><Icon name="flag" size={16} color={priorityColor(item.priority)} /></span>}
+          {item.priority > 0 && !done && <span className="flag" title={`${PRIORITIES[item.priority]} priority`} role="img" aria-label={`${PRIORITIES[item.priority]} priority`} data-tip><Icon name="flag" size={14} color={priorityColor(item.priority)} /></span>}
           {item.title || "Untitled"}
+          {/* With nothing to say under the title, its reminder and link marks end the title's line. */}
+          {!sub && icons}
         </div>
         {sub && <div className="sub ellipsis">
           <span className="sub-text">{subParts.map((p, i) => <Fragment key={i}>{i > 0 && " · "}{p}</Fragment>)}</span>{kind && <span className="rem-emoji"> · {REMINDER_EMOJI[kind]}</span>}
-          {/* The phone shows these as small icons after the line, like the native row (hidden on the PC). */}
-          <ReminderIcon kind={kind} />
-          {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
+          {icons}
         </div>}
       </div>
       <span className="pills">
-      {/* The flag alone, never the level's name (held, the phone shows it as a tooltip). */}
-      {priorityTag && item.priority > 0 && !done && <Pill className="prio" color={priorityColor(item.priority)} label={`${PRIORITIES[item.priority]} priority`}><span className="sub-icon flag"><Icon name="flag" size={16} /></span></Pill>}
-      {status === "OVERDUE" && !late && <Pill color="var(--danger)">{entry.missed > 1 ? `${entry.missed} missed` : "Overdue"}</Pill>}
-      {status === "CARRIED" && <Pill color="var(--p-tertiary, #7d5260)">Carried over</Pill>}
-      {status === "MISSED" && <Pill color="var(--danger)">Missed</Pill>}
-      {status === "DUE" && due !== null && <Pill color={due < now ? "var(--danger)" : color}>{dueCountdown(due, now)}</Pill>}
-      {status === "UPCOMING" && entry.day !== null && <Pill color="var(--muted)">{relativeDay(entry.day)}</Pill>}
+      {pill && <Pill color={pill.danger ? "var(--danger)" : "var(--muted)"}>{pill.text}</Pill>}
       {streakInfo && streakInfo.current > 0 && (streakSymbol()
         ? <Pill color="#ff7043"><span className="fire-emoji">🔥 </span><span className="sub-icon fire"><Icon name="fire" size={12} /></span>{streakInfo.current}</Pill>
         : <Pill color="#ff7043">{streakInfo.current} in a row</Pill>)}
