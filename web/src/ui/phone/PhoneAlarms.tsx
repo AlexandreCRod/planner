@@ -1,7 +1,7 @@
 // The Clock tab (69: the route is still "alarms"), drawn after the native AlarmsScreen.kt and ClockToolsPanes.kt: alarm clocks (the next
-// one, a filter, close ones bundled, and the next week's task and event alarms), a timer, a stopwatch and a world clock, under Material 3 primary
-// tabs. The four sections also turn with a finger swiped sideways, live like a pager, with the tab
-// indicator riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
+// one, a filter, close ones bundled, and the next week's task and event alarms), a timer, a stopwatch and a world clock, under the app's pill
+// switch (287). The four sections also turn with a finger swiped sideways, live like a pager, with the
+// switch's thumb riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
 // in a browser the tab isn't shown.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
@@ -18,7 +18,7 @@ import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
-import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, IconButton, MIcon, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, IconButton, MIcon, Segmented, TopAppBar } from "./chrome.tsx";
 import { useHorizontalSwipe } from "./gesture.ts";
 import { useHold as useLongPress } from "./hold.ts";
 import { pushBack } from "./native.ts";
@@ -160,8 +160,8 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const [newTimer, setNewTimer] = useState(false);
   const [addZone, setAddZone] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
-  const tabs = useRef<HTMLDivElement>(null);
-  const indicator = useRef<HTMLSpanElement>(null);
+  /** The pill switch's thumb, moved along by a swipe between sections (as on Tasks and Progress). */
+  const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
   // The + button adds what the section shown holds (70): an alarm, a timer, a city; on the stopwatch,
   // which has nothing to add, it offers the list of everything instead.
@@ -175,33 +175,6 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   };
   useEffect(() => { const open = () => addHere.current(); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
-  // Where each tab's label sits, measured once (and again after a resize): reading them on every frame
-  // of a slide, just after moving the pages, would make the browser recalculate styles mid-frame.
-  const boxes = useRef<{ x: number; w: number }[] | null>(null);
-  /** Puts the tab indicator under the label at [p] (between two tabs while sliding): transform only. */
-  const placeIndicator = (p: number) => {
-    const row = tabs.current, ind = indicator.current;
-    if (!row || !ind) return;
-    if (!boxes.current) {
-      boxes.current = [...row.querySelectorAll<HTMLElement>(".pa-tab-label")].map((el) => ({ x: (el.parentElement as HTMLElement).offsetLeft + el.offsetLeft, w: el.offsetWidth }));
-    }
-    const bx = boxes.current;
-    if (!bx.length) return;
-    p = clamp(p, 0, LAST);
-    const a = Math.floor(p), b = Math.min(LAST, a + 1), f = p - a;
-    const x = bx[a].x + (bx[b].x - bx[a].x) * f, w = bx[a].w + (bx[b].w - bx[a].w) * f;
-    // 100 px wide in CSS, stretched to the label; the corners are drawn back to 3 px after the stretch.
-    const k = w / 100;
-    ind.style.transform = `translate3d(${x}px,0,0) scaleX(${k})`;
-    ind.style.borderRadius = k > 0 ? `${3 / k}px ${3 / k}px 0 0 / 3px 3px 0 0` : "";
-  };
-  useLayoutEffect(() => placeIndicator(index));
-  useEffect(() => {
-    const on = () => window.requestAnimationFrame(() => { boxes.current = null; placeIndicator(idx.current); });
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, []);
-
   // Turning to a section another way: a tap on its tab slides there on the pager's spring.
   const show = (i: number) => {
     i = clamp(i, 0, LAST);
@@ -210,8 +183,8 @@ export function PhoneAlarms({ active }: { active: boolean }) {
     stopSlide.current?.();
     const el = strip.current, w = el?.parentElement?.clientWidth ?? 0;
     flushSync(() => setIndex(i));
-    if (!el || !w || Math.abs(i - from) > 1) { if (el) el.style.transform = ""; placeIndicator(i); return; }
-    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; placeIndicator(i - x / w); };
+    if (!el || !w || Math.abs(i - from) > 1) { if (el) el.style.transform = ""; return; }
+    const place = (x: number) => { el.style.transform = x ? `translate3d(${x}px,0,0)` : ""; };
     stopSlide.current = spring((i - from) * w, 0, 0, place, () => { stopSlide.current = null; place(0); });
   };
   useEffect(() => {
@@ -225,7 +198,8 @@ export function PhoneAlarms({ active }: { active: boolean }) {
     layers: () => [strip.current],
     onStep: (d) => setIndex((i) => clamp(i + d, 0, LAST)),
     canStep: (d) => idx.current + d >= 0 && idx.current + d <= LAST,
-    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; placeIndicator(idx.current - x / w); },
+    onMove: (x, w) => { stopSlide.current?.(); stopSlide.current = null; track.current?.(idx.current - x / w); },
+    onSettled: () => track.current?.(null),
     allow: (t) => !t.closest(".p-switch, input, textarea, .pa-noswipe"),
     yieldAtEdge: swipeTabs,
   });
@@ -243,13 +217,9 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   return (
     <div className="p-scaffold pa-page">
       <TopAppBar title="Clock" actions={<AppBarActions />} />
-      <div className="pa-tabs" ref={tabs} role="tablist">
-        {SECTIONS.map(([k, label], i) => (
-          <button key={k} role="tab" aria-selected={index === i} className={`pa-tab ${index === i ? "on" : ""}`} onClick={() => show(i)}>
-            <span className="pa-tab-label">{label}</span>
-          </button>
-        ))}
-        <span className="pa-indicator" ref={indicator} />
+      {/* The pill switch, as for every choice of 2–4 sections (287); a swipe between sections moves its thumb. */}
+      <div className="pa-tabs">
+        <Segmented value={SECTIONS[index][0]} options={SECTIONS} track={track} onChange={(k) => show(SECTIONS.findIndex(([x]) => x === k))} />
       </div>
       <div className="pa-pager" ref={pager}>
         <div className="pa-strip" ref={strip} style={{ left: `${-index * 100}%` }}>

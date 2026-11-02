@@ -1018,11 +1018,8 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pa-page { position: relative; }
 .phone .pa-page .grow { flex: 1; min-width: 0; }
 /* PrimaryTabRow: 48 dp tabs, titleSmall labels, a 3 dp indicator as wide as the label, a divider below. */
-.phone .pa-tabs { flex: none; position: relative; display: flex; height: 48px; border-bottom: 1px solid var(--p-sc-highest); background: var(--bg); }
-.phone .pa-tab { position: relative; overflow: hidden; flex: 1; min-width: 0; border: 0; background: none; padding: 0 4px; display: grid; place-items: center; color: var(--muted); font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; text-align: center; }
-.phone .pa-tab.on { color: var(--p-primary); }
-.phone .pa-tab-label { display: inline-block; }
-.phone .pa-indicator { position: absolute; left: 0; bottom: -1px; height: 3px; width: 100px; transform: scaleX(0); transform-origin: 0 0; border-radius: 3px 3px 0 0; background: var(--p-primary); pointer-events: none; }
+.phone .pa-tabs { flex: none; padding: 8px 16px 4px; }
+.phone .pa-tabs .p-segmented button { padding: 0 4px; }
 /* The sections side by side; the strip slides under the finger (pager.ts). */
 .phone .pa-pager { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: pan-y; }
 .phone .pa-strip { position: absolute; top: 0; bottom: 0; width: 100%; }
@@ -1337,8 +1334,6 @@ html.phone[data-theme="dark"] {
 .phone .today-list .p-taskbar.all .active { background: #86c79a; }
 /* Under Today's Overdue heading the row's date is red instead of an "Overdue" pill (225). */
 .phone :is(.today-list, .p-rows) .task .sub .late { color: var(--danger); }
-.phone .pa-indicator { background: var(--p-strong); }
-.phone .pa-tab.on { color: var(--text); }
 
 /* Alarms' + stack: round symbols above the button, no names (holding one shows it). */
 .phone .pa-dial { position: absolute; right: 4px; bottom: 68px; z-index: 40; display: flex; flex-direction: column-reverse; gap: 12px; }
