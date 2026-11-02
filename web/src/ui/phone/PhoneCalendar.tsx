@@ -8,7 +8,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "rea
 import { useWide } from "../../platform.ts";
 import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
-import { forCalendar, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
+import { forCalendar, withLateTicked, type Occurrence, type TaskEntry } from "../../domain/schedule.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { type Item, displayTitle, isRecurring } from "../../domain/types.ts";
 import { calendarShows, isRoutineItem, routinesOnDay } from "../../domain/routines.ts";
@@ -206,7 +206,7 @@ function OccurrenceRow({ o, s, now, onToggle }: { o: Occurrence; s: Snapshot; no
   return <TaskRow entry={occurrenceEntry(o)} s={s} now={now} onToggle={onToggle} />;
 }
 const occurrenceEntry = (o: Occurrence): TaskEntry => o.overdue
-  ? { item: o.item, day: o.item.startDay, status: "OVERDUE", missed: 1 }
+  ? { item: o.item, day: o.item.startDay, status: o.completed ? "DONE" : "OVERDUE", missed: o.completed ? 0 : 1 }
   : { item: o.item, day: o.day, status: o.completed ? "DONE" : "DUE", missed: 0 };
 const occKey = (o: Occurrence) => `${o.item.id}_${o.day}`;
 const tickedTask = (o: Occurrence) => o.item.type === "TASK" && o.completed;
@@ -375,7 +375,9 @@ function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const months = [monthOf(addMonths(anchor, -1)), monthOf(anchor), monthOf(addMonths(anchor, 1))];
   const hold = useCheckedHold();
-  const dayList = useMemo(() => forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor), [items, s, anchor, t]);
+  // An overdue task ticked here stays, then folds into this day's "N done" (review of 2.10, finding 1).
+  const dayList = useMemo(() => withLateTicked(forCalendar(items, s.done, anchor, anchor, t, carryOver()).filter((o) => o.day <= anchor && o.endDay >= anchor),
+    items, s.done, anchor, carryOver()), [items, s, anchor, t]);
   return (
     <div className="p-monthview">
       <div className="p-hpager" ref={pager}>
@@ -565,6 +567,11 @@ function AgendaView({ s, items, from, isFiltered }: { s: Snapshot; items: Item[]
     const map = new Map<number, Occurrence[]>();
     for (const o of forCalendar(items, s.done, from, from + 90, t, carryOver())) {
       const l = map.get(o.day); if (l) l.push(o); else map.set(o.day, [o]);
+    }
+    // An overdue task ticked under Today stays, then folds into Today's "N done" (review of 2.10, finding 1).
+    if (t >= from && t <= from + 90) {
+      const today = withLateTicked(map.get(t) ?? [], items, s.done, t, carryOver());
+      if (today.length) map.set(t, today);
     }
     return [...map].sort((a, b) => a[0] - b[0]);
   }, [items, s, from, t]);

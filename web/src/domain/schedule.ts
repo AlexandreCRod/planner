@@ -12,7 +12,7 @@ export interface Occurrence {
   completed: boolean;
   timed: boolean;
   multiDay: boolean;
-  /** A one-time task whose day has passed, shown on today instead (see forCalendar). */
+  /** A one-time task whose day has passed, shown on today instead (see forCalendar), or ticked there since (withLateTicked). */
   overdue?: boolean;
 }
 
@@ -95,6 +95,27 @@ export function forCalendar(items: Item[], done: CompletionIndex, from: number, 
   if (today < from || today > to) return rest;
   const moved = late.map((item): Occurrence => ({ item, day: today, startMin: null, endDay: today, endMin: null, completed: false, timed: false, multiDay: false, overdue: true }));
   return [...moved, ...rest].sort((a, b) => a.day - b.day || (a.startMin ?? -1) - (b.startMin ?? -1) || byTitle(a, b));
+}
+
+/**
+ * The calendar's list for [day] (Month's day list, the Agenda) with the one-time tasks that were overdue and
+ * shown on that day by forCalendar, and were ticked during it (review of 2.10, finding 1): ticking sends such
+ * a task back to its own past day, so without this its row would vanish under the finger. They come back
+ * as ticked rows at the place they had (untimed, by title, still `overdue`: unticking them unticks their own day), so the list's hold keeps them there for a moment
+ * and then folds them into that day's "N done" line, as Today does with its overdue ones.
+ */
+export function withLateTicked(list: Occurrence[], items: Item[], done: CompletionIndex, day: number, carry = true): Occurrence[] {
+  if (!carry) return list;
+  const from = toTimestamp(day, 0), to = toTimestamp(day + 1, 0);
+  const shown = new Set(list.filter((o) => o.day === day).map((o) => o.item.id));
+  const late = items.filter((i) => {
+    if (i.type !== "TASK" || isRecurring(i) || i.startDay === null || i.startDay >= day || i.overduePolicy === "SKIP" || routineMark(i) || shown.has(i.id)) return false;
+    const at = done.doneAt(i.id, i.startDay);
+    return at !== undefined && at >= from && at < to;
+  });
+  if (!late.length) return list;
+  const moved = late.map((item): Occurrence => ({ item, day, startMin: null, endDay: day, endMin: null, completed: true, timed: false, multiDay: false, overdue: true }));
+  return [...moved, ...list].sort((a, b) => a.day - b.day || (a.startMin ?? -1) - (b.startMin ?? -1) || byTitle(a, b));
 }
 
 function missedSince(item: Item, done: CompletionIndex, today: number): number {
