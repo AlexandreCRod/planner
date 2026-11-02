@@ -1835,3 +1835,52 @@ html.phone[data-theme="dark"] {
 .phone .p-calfilter-chip button:not(.on) { padding-left: 4px; }
 .phone .p-calfilter-chip button:active { background: color-mix(in srgb, currentColor 10%, transparent); }
 .phone .p-calfilter-chip .dot { opacity: .7; }
+
+/* ---------- Skip (317) ---------- */
+/* A card's switch with the one-tap Skip under it: the button is short, so the card keeps its height. */
+.phone .pa-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; margin: -4px 0 -8px; }
+.phone .pa-skipbtn { height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px; position: relative; overflow: hidden; cursor: pointer; }
+.phone .pa-skipbtn.none { display: block; visibility: hidden; }
+.phone .pa-skipbtn.undo { background: var(--p-sec-container); color: var(--p-on-sec-container); }
+.phone .pa-skipbtn:focus-visible, .phone .pa-rowskip:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 1px; }
+.phone .pa-card.off .pa-skipbtn { color: var(--muted); }
+.phone .pa-rowskip { width: 36px; height: 36px; margin: -4px -2px; cursor: pointer; }
+.phone .pa-rowskip.none { display: block; visibility: hidden; }
+.phone .pa-rowskip.on { color: var(--p-on-sec-container); background: var(--p-sec-container); }
+.phone .pa-bundle-count > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The Skip days sheet: its own scrolling list under the calendar, its buttons always in reach. */
+.phone .pa-sd { display: flex; flex-direction: column; }
+.phone .pa-sd-chips { display: flex; gap: 8px; padding: 4px 24px; overflow-x: auto; scrollbar-width: none; }
+.phone .pa-sd-quick { padding-top: 4px; padding-bottom: 4px; }
+.phone .pa-sd-cal { padding: 0 4px; }
+.phone .pa-sd-cal .p-dp-nav { height: 44px; }
+.phone .pa-sd-cal .p-dp-week span { height: 28px; font-size: 13px; color: var(--muted); }
+.phone .pa-sd-days { grid-auto-rows: 40px; padding-bottom: 0; }
+.phone .pa-sd-days button span { width: 36px; height: 36px; font-size: 14px; }
+.phone .pa-sd-days button:disabled { opacity: .35; }
+.phone .pa-sd-dot { position: absolute; bottom: 1px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: var(--muted); z-index: 1; }
+.phone .pa-sd-days button.sel .pa-sd-dot { background: var(--p-primary); }
+.phone .pa-sd-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 6px 0 0; padding: 10px 24px 4px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.phone .pa-sd-sum b { font-weight: 500; color: var(--text); font-size: 14px; }
+.phone .pa-sd-list { padding: 0 12px 8px; }
+.phone .pa-sd-day { padding: 10px 12px 2px; font-size: 12.5px; font-weight: 500; color: var(--p-primary); }
+.phone .pa-sd-ring { position: relative; overflow: hidden; display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 2px 12px; border-radius: 12px; cursor: pointer; outline: none; }
+.phone .pa-sd-ring:focus-visible { box-shadow: inset 0 0 0 2px var(--p-primary); }
+.phone .pa-sd-ring:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.phone .pa-sd-ring.sub { padding-left: 46px; min-height: 44px; }
+.phone .pa-sd-ring.kept .pa-sd-t { color: var(--muted); }
+.phone .pa-sd-box { flex: none; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid var(--muted); border-radius: 3px; display: grid; place-items: center; }
+.phone .pa-sd-box.on, .phone .pa-sd-box.mid { background: var(--p-primary); border-color: var(--p-primary); }
+.phone .pa-sd-box.on::after { content: ""; width: 5px; height: 10px; margin-top: -2px; border: solid var(--p-on-primary); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.phone .pa-sd-box.mid::after { content: ""; width: 10px; height: 2px; background: var(--p-on-primary); }
+.phone .pa-sd-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.phone .pa-sd-t { font-size: 16px; line-height: 22px; font-variant-numeric: tabular-nums; }
+.phone .pa-sd-l { font-size: 12.5px; line-height: 17px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .pa-sd-tag { flex: none; font-size: 12px; color: var(--muted); }
+.phone .pa-sd-tag.rings { color: var(--p-primary); }
+.phone .pa-sd-exp { width: 40px; height: 40px; margin-right: -8px; }
+.phone .pa-sd-exp svg { transition: transform .15s; }
+.phone .pa-sd-exp.open svg { transform: rotate(180deg); }
+.phone .pa-sd-empty, .phone .pa-sd-quiet { padding: 10px 12px 2px; }
+.phone .pa-sd-quiet { font-size: 12.5px; color: var(--muted); }
+.phone .pa-sd-buttons { position: sticky; bottom: -16px; margin-bottom: -16px; padding: 12px 16px 16px; background: var(--p-sc-low); border-top: 1px solid var(--line); z-index: 2; }

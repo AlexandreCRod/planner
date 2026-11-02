@@ -182,11 +182,157 @@ export function unskip<T extends Clockish>(a: T, today: number): T | null {
   return upcomingSkips(a, today).length ? { ...a, skip: (a.skip ?? []).filter((d) => d < today) } : null;
 }
 
+/** "Skips today", "Skips tomorrow" or "Skips Fri 30", for one skipped day. */
+export const skipsOn = (day: number, today: number, date: (day: number) => string) =>
+  day === today ? "Skips today" : day === today + 1 ? "Skips tomorrow" : `Skips ${date(day)}`;
+
 /** The note for one skipped day: "Skips tomorrow", "Skips Fri 30"; for more, "Skips 3 days"; else "". */
 export function skipText(a: Clockish, today: number, date: (day: number) => string): string {
   if (a.pausedUntil != null && a.pausedUntil > today) return "";
   const days = upcomingSkips(a, today);
   if (!days.length) return "";
   if (days.length > 1) return `Skips ${days.length} days`;
-  return days[0] === today ? "Skips today" : days[0] === today + 1 ? "Skips tomorrow" : `Skips ${date(days[0])}`;
+  return skipsOn(days[0], today, date);
+}
+
+// ---------- One-tap Skip on each card, with Undo in its place (317) ----------
+
+/**
+ * Whether [a] would ring on local day [day] if it skipped nothing ("ring": it will; "off": it won't, because
+ * the day is skipped or the alarm is paused), or null when it wouldn't ring then anyway (it's off, it doesn't
+ * ring that day, or that day's ring has passed). A one-off rings on the day it next rings.
+ */
+export function ringState(a: Skippable, day: number, now: Date): "ring" | "off" | null {
+  if (!a.enabled) return null;
+  if (!isRepeating(a)) {
+    const next = nextRing(a, now);
+    return next && epochOfDate(next) === day ? "ring" : null;
+  }
+  if (!ringsOnDay({ ...a, skip: [], pausedUntil: null }, day) || ringAt(day, minuteOf(a)) <= now) return null;
+  return ringsOnDay(a, day) ? "ring" : "off";
+}
+
+/** The day [group]'s next ring would be (skips aside; a pause counts), or null. */
+function plainNextDay(group: Skippable[], now: Date): number | null {
+  let best: Date | null = null;
+  for (const a of group) {
+    if (!a.enabled) continue;
+    const at = nextRing({ ...a, skip: [] }, now);
+    if (at && (!best || at < best)) best = at;
+  }
+  return best ? epochOfDate(best) : null;
+}
+
+/**
+ * The day [group]'s next ring is skipped on, when it is: every alarm of it that would ring that day skips
+ * it (the card's Skip turned into Undo). Null when the next ring still rings (or there's none).
+ */
+export function skippedNext(group: Skippable[], now: Date): number | null {
+  const day = plainNextDay(group, now);
+  if (day === null) return null;
+  const due = group.filter((a) => ringState(a, day, now) !== null);
+  return due.length && due.every((a) => isRepeating(a) && (a.skip ?? []).includes(day)) ? day : null;
+}
+
+/** Undo of a card's Skip: the alarms of [group] that skip [day], ringing that day again (only those). */
+export function unskipDay<T extends Clockish>(group: T[], day: number): T[] {
+  return group.filter((a) => (a.skip ?? []).includes(day)).map((a) => ({ ...a, skip: (a.skip ?? []).filter((d) => d !== day) }));
+}
+
+// ---------- Skip days: a window of rings to preview and untick (317) ----------
+
+/** The longest window the Skip days sheet takes, so an alarm's skip list stays small. */
+export const SKIP_WINDOW_DAYS = 90;
+/** A pause up to this long becomes skip days when the sheet saves the alarm; a longer one stays a pause. */
+const PAUSE_TO_SKIPS_MAX = 366;
+
+/** One alarm's ring on one day of the window; [off]: it already won't ring (skipped or paused). */
+export interface WindowRing<T> { alarm: T; key: string; off: boolean }
+/** One bundle (or a single alarm) on one day: its rings, in time order. */
+export interface WindowEntry<T> { minute: number; rings: WindowRing<T>[] }
+export interface WindowDay<T> { day: number; entries: WindowEntry<T>[] }
+
+/** What names one ring in the sheet's ticks: the alarm and the day. */
+export const ringKey = (id: number, day: number) => `${id}@${day}`;
+
+/**
+ * Every ring of [alarms] from local day [from] to [to] (both included, at most SKIP_WINDOW_DAYS), day by day,
+ * bundled as the list bundles them (bundleAlarms), those already off (skipped, paused) marked. Days with no
+ * ring are left out, and so are rings that have passed.
+ */
+export function ringsBetween<T extends Skippable & { id: number }>(alarms: T[], from: number, to: number, now: Date, windowMin = BUNDLE_WINDOW_MIN): WindowDay<T>[] {
+  const groups = bundleAlarms(alarms.filter((a) => a.enabled), now, windowMin);
+  const last = Math.min(to, from + SKIP_WINDOW_DAYS - 1);
+  const out: WindowDay<T>[] = [];
+  for (let day = from; day <= last; day++) {
+    const entries: WindowEntry<T>[] = [];
+    for (const g of groups) {
+      const rings: WindowRing<T>[] = [];
+      for (const a of g) {
+        const st = ringState(a, day, now);
+        if (st) rings.push({ alarm: a, key: ringKey(a.id, day), off: st === "off" });
+      }
+      if (rings.length) entries.push({ minute: minuteOf(rings[0].alarm), rings });
+    }
+    if (entries.length) out.push({ day, entries: entries.sort((x, y) => x.minute - y.minute) });
+  }
+  return out;
+}
+
+/** Every ring of the window, by key: the sheet starts with all of them ticked (to be quiet). */
+export const windowKeys = <T>(days: WindowDay<T>[]) => days.flatMap((d) => d.entries.flatMap((e) => e.rings.map((r) => r.key)));
+
+/** How many rings saving would silence that ring now ([skips]), and how many already off would ring again ([back]). */
+export function windowCount<T>(days: WindowDay<T>[], off: ReadonlySet<string>): { skips: number; back: number } {
+  let skips = 0, back = 0;
+  for (const d of days) for (const e of d.entries) for (const r of e.rings) {
+    if (off.has(r.key) && !r.off) skips++;
+    else if (!off.has(r.key) && r.off) back++;
+  }
+  return { skips, back };
+}
+
+/**
+ * Saving the Skip days sheet: the alarms that change so that exactly the rings in [off] stay quiet in the
+ * window. A repeating alarm gets those days in its skip list (and loses the unticked ones); a one-off that
+ * rings in the window is switched off instead. A pause (from an older build) becomes skip days first and is
+ * cleared, so a paused ring can be unticked too. Days past are dropped from the skip lists.
+ */
+export function applyWindow<T extends Skippable & { id: number }>(days: WindowDay<T>[], off: ReadonlySet<string>, today: number): T[] {
+  const byAlarm = new Map<number, { alarm: T; rings: { day: number; key: string }[] }>();
+  for (const d of days) for (const e of d.entries) for (const r of e.rings) {
+    const x = byAlarm.get(r.alarm.id) ?? { alarm: r.alarm, rings: [] };
+    x.rings.push({ day: d.day, key: r.key });
+    byAlarm.set(r.alarm.id, x);
+  }
+  const out: T[] = [];
+  for (const { alarm: a, rings } of byAlarm.values()) {
+    if (!isRepeating(a)) {
+      if (a.enabled && rings.some((r) => off.has(r.key))) out.push({ ...a, enabled: false });
+      continue;
+    }
+    const skip = new Set((a.skip ?? []).filter((d) => d >= today));
+    let pausedUntil = a.pausedUntil != null && a.pausedUntil > today ? a.pausedUntil : null;
+    if (pausedUntil !== null && pausedUntil - today <= PAUSE_TO_SKIPS_MAX) {
+      const plain = { ...a, skip: [], pausedUntil: null };
+      for (let d = today; d < pausedUntil; d++) if (ringsOnDay(plain, d)) skip.add(d);
+      pausedUntil = null;
+    }
+    for (const r of rings) { if (off.has(r.key)) skip.add(r.day); else skip.delete(r.day); }
+    const next = [...skip].sort((x, y) => x - y);
+    const was = [...(a.skip ?? [])].sort((x, y) => x - y);
+    if (next.join() !== was.join() || pausedUntil !== (a.pausedUntil ?? null)) out.push({ ...a, skip: next, pausedUntil });
+  }
+  return out;
+}
+
+/** The Skip days sheet's quick choices, as [name, first day, last day]; "Rest of week" runs to Sunday. */
+export function quickWindows(today: number, nextDay: number | null): [string, number, number][] {
+  const sunday = today + 6 - ((((today + 3) % 7) + 7) % 7);
+  const out: [string, number, number][] = [];
+  if (nextDay !== null) out.push(["Next ring", nextDay, nextDay]);
+  out.push(["Tomorrow", today + 1, today + 1]);
+  if (sunday > today + 1) out.push(["Rest of week", today + 1, sunday]);
+  out.push(["Next 7 days", today + 1, today + 7], ["2 weeks", today + 1, today + 14]);
+  return out;
 }

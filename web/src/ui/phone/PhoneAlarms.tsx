@@ -9,13 +9,16 @@ import {
   type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, swipeRemoves, timerLeft, timerShare, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
-import { dayShort, epochOf, formatTime, relativeDay, use24h, weekday, ymd } from "../../domain/dates.ts";
+import { addMonths, dayShort, daysInMonth, epochOf, formatTime, monthLong, monthShort, relativeDay, startOfWeek, use24h, weekday, ymd } from "../../domain/dates.ts";
 import { type ClockAlarm, type ClockTimer, act, alarmState, hasAlarms, native, onNative, refreshAlarmState, useAlarmState } from "../../alarms/native.ts";
 import { onFlush, useSnapshot } from "../../store/store.ts";
 import { openItem } from "../shared/common.tsx";
 import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weatherView } from "../../alarms/weather.ts";
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
-import { CLOCK_FILTERS, type ClockFilter, type SeriesPlan, buildSeries, bundleAlarms, nextRingDay, seriesPlan, seriesProblem, seriesTimes, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, toggleFilter, unskip } from "../../domain/clockList.ts";
+import {
+  CLOCK_FILTERS, type ClockFilter, type SeriesPlan, SKIP_WINDOW_DAYS, applyWindow, buildSeries, bundleAlarms, nextRingDay, quickWindows, ringsBetween, seriesPlan, seriesProblem, seriesTimes,
+  shiftBundle, shownBy, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, toggleFilter, unskip, unskipDay, windowCount, windowKeys,
+} from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, IconButton, MIcon, Segmented, TopAppBar } from "./chrome.tsx";
@@ -23,7 +26,8 @@ import { useHorizontalSwipe } from "./gesture.ts";
 import { useHold as useLongPress } from "./hold.ts";
 import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
-import { DatePickerDialog, MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { type RangePick, rangeRole, slideRange, tapRange } from "./range.ts";
 import { spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
@@ -299,13 +303,17 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
   const [calOpen, setCalOpen] = useState(false);
   const [skipping, setSkipping] = useState<ClockAlarm[] | null>(null);
+  /** The Skip days sheet (317): for a bundle or an alarm, or every alarm, starting on one of its quick windows. */
+  const [skipDays, setSkipDays] = useState<{ group: ClockAlarm[]; scope: SkipScope; quick: string } | null>(null);
+  const groupOf = (a: ClockAlarm) => bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.some((x) => x.id === a.id)) ?? [a];
   return (
     <div className="pa-scroll">
       <PermissionCards />
       {!rings.rings && (
         <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
       )}
-      <NextAlarm alarms={alarms} calendar={cal} now={now} onSkip={(a) => setSkipping(bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.includes(a)) ?? [a])} />
+      {/* The top Skip… opens the Skip days sheet on every alarm (a holiday), at the next ring. */}
+      <NextAlarm alarms={alarms} calendar={cal} now={now} onSkip={(a) => setSkipDays({ group: groupOf(a), scope: "all", quick: "Next ring" })} />
       {cal.length > 0 && (
         <button className="pa-cal-line" onClick={() => setCalOpen(true)}>
           <MIcon name="oCalendarToday" size={18} />
@@ -324,7 +332,9 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
         : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} onOpen={() => setOpen((o) => toggleOpen(o, g))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
-      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined} /></Layer>}
+      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined}
+        onDays={() => setSkipDays({ group: skipping, scope: "group", quick: "Rest of week" })} /></Layer>}
+      {skipDays && <Layer><SkipDaysSheet all={alarms} group={skipDays.group} scope0={skipDays.scope} quick0={skipDays.quick} now={now} onClose={() => setSkipDays(null)} /></Layer>}
     </div>
   );
 }
@@ -430,8 +440,71 @@ function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; 
         <div className="t-body-medium muted pa-line">{scheduleLine(a, now)}</div>
       </div>
       <AlarmWeather a={a} now={now} fc={fc} />
-      <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
+      <div className="pa-side">
+        <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />
+        <SkipButton group={[a]} now={now} />
+      </div>
     </div>
+  );
+}
+
+const saveAll = (list: ClockAlarm[]) => Promise.all(list.map((a) => native.saveClock(a))).then(refreshAlarmState);
+/** "today", "tomorrow" or "Tue 3", after "won't ring". */
+const dayWord = (d: number, today: number) => (d === today ? "today" : d === today + 1 ? "tomorrow" : shortDay(d));
+/** When [group] would ring on [day], skips aside: "Tomorrow at 07:00", for a button's hover text. */
+const ringWhen = (group: ClockAlarm[], day: number) => {
+  const { y, m, d } = ymd(day);
+  const mins = group.filter((a) => a.enabled).map((a) => a.hour * 60 + a.minute);
+  return `${relative(new Date(y, m - 1, d))} at ${formatTime(mins.length ? Math.min(...mins) : 0)}`;
+};
+
+/**
+ * The one-tap Skip under a card's switch (317): the alarm, or the whole bundle, doesn't ring the next time it
+ * would, with Undo in the message; the card then says "Skips tomorrow" and the button turns into Undo, which
+ * brings that ring back. Hidden (but keeping its room) while there's nothing to skip.
+ */
+function SkipButton({ group, now }: { group: ClockAlarm[]; now: Date }) {
+  const today = todayNow();
+  const day = skippedNext(group, now);
+  const next = day === null ? skipNext(group, now) : [];
+  const nextDay = day ?? nextRingDay(group, now);
+  if (nextDay === null || (day === null && !next.length)) return <span className="pa-skipbtn none" aria-hidden="true" />;
+  const many = group.length > 1;
+  const when = ringWhen(group, nextDay);
+  const tap = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (day !== null) { void saveAll(unskipDay(group, day)); return; }
+    const before = group.filter((a) => next.some((c) => c.id === a.id));
+    void saveAll(next);
+    showSnackbar(`${many ? "These alarms" : "It"} won't ring ${dayWord(nextDay, today)}`, "Undo", () => void saveAll(before));
+  };
+  return (
+    <button className={`p-text-btn pa-skipbtn ${day !== null ? "undo" : ""}`} onClick={tap}
+      title={day !== null ? `Ring ${dayWord(day, today)} after all` : `Skip ${when}`}
+      aria-label={day !== null ? `Undo skip: ring ${dayWord(day, today)}` : `Skip ${when}`}>
+      {day !== null ? "Undo" : "Skip"}
+    </button>
+  );
+}
+
+/** Inside an open bundle, each alarm's own skip (317): a symbol, lit while its next ring is skipped. */
+function RowSkip({ a, now }: { a: ClockAlarm; now: Date }) {
+  const today = todayNow();
+  const day = skippedNext([a], now);
+  const next = day === null ? skipNext([a], now) : [];
+  const nextDay = day ?? nextRingDay([a], now);
+  if (nextDay === null || (day === null && !next.length)) return <span className="pa-rowskip none" aria-hidden="true" />;
+  const label = day !== null ? `${formatTime(a.hour * 60 + a.minute)} rings ${dayWord(day, today)} after all` : `Skip ${formatTime(a.hour * 60 + a.minute)} ${dayWord(nextDay, today)}`;
+  return (
+    <button className={`p-icon pa-rowskip ${day !== null ? "on" : ""}`} aria-pressed={day !== null} aria-label={label} title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (day !== null) { void saveAll(unskipDay([a], day)); return; }
+        void saveAll(next);
+        showSnackbar(`${formatTime(a.hour * 60 + a.minute)} won't ring ${dayWord(nextDay, today)}`, "Undo", () => void save(a));
+      }}>
+      <MIcon name="oAlarmOff" size={20} />
+    </button>
   );
 }
 
@@ -460,6 +533,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
   const h24 = use24h();
   const [picking, setPicking] = useState(false);
   const firstMin = first.hour * 60 + first.minute;
+  const skipDayOf = skippedNext(group, now);
   /** The heading time moved: every alarm in the bundle moves as much (110), with Undo. */
   const moveTo = (to: number) => {
     const moved = shiftBundle(group, to);
@@ -476,7 +550,8 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
         <div className="grow">
           {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
           <div className="t-body-medium muted pa-bundle-count">
-            <span>{series ? [first.label.trim(), `${group.length} alarms`, `every ${seriesPlan(group).every} min`].filter(Boolean).join(" · ") : `${group.length} alarms · ${on} on`}</span>
+            <span>{[series ? [first.label.trim(), `${group.length} alarms`, `every ${seriesPlan(group).every} min`].filter(Boolean).join(" · ") : skipDayOf !== null ? `${group.length} alarms` : `${group.length} alarms · ${on} on`,
+              skipDayOf !== null ? skipsOn(skipDayOf, todayNow(), shortDay) : ""].filter(Boolean).join(" · ")}</span>
             <AlarmWeather a={group.find((a) => a.enabled) ?? first} now={now} fc={fc} />
           </div>
           {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
@@ -487,7 +562,10 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
           </div>
         </div>
         <span className="muted pa-expand"><MIcon name={open ? "fExpandLess" : "fExpandMore"} /></span>
-        <Switch checked={on > 0} label="All on" onChange={(v) => void Promise.all(group.map((a) => native.saveClock({ ...a, enabled: v }))).then(refreshAlarmState)} />
+        <div className="pa-side">
+          <Switch checked={on > 0} label="All on" onChange={(v) => void Promise.all(group.map((a) => native.saveClock({ ...a, enabled: v }))).then(refreshAlarmState)} />
+          <SkipButton group={group} now={now} />
+        </div>
       </div>
       <div className={`pa-bundle-body ${open ? "open" : ""}`}>
         <div>
@@ -497,6 +575,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
                 <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
               </div>
+              <RowSkip a={a} now={now} />
               {!series && <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />}
             </div>
           ))}
@@ -523,7 +602,7 @@ function useHold(onHold: () => void, onTap: () => void) {
   const st = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
   const cb = useRef({ onHold, onTap });
   cb.current = { onHold, onTap };
-  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-bundle-start");
+  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-bundle-start, .pa-skipbtn, .pa-rowskip");
   const cancel = () => { if (st.current) clearTimeout(st.current.timer); };
   return {
     onPointerDown: (e: React.PointerEvent) => {
@@ -544,7 +623,7 @@ function useHold(onHold: () => void, onTap: () => void) {
     onClick: (e: React.MouseEvent) => {
       const p = st.current;
       st.current = null;
-      if (!p?.fired && !(e.target instanceof Element && e.target.closest(".p-switch, .pa-bundle-start"))) cb.current.onTap();
+      if (!p?.fired && !(e.target instanceof Element && e.target.closest(".p-switch, .pa-bundle-start, .pa-skipbtn, .pa-rowskip"))) cb.current.onTap();
     },
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); if (mouseMenu(e)) { cancel(); st.current = null; cb.current.onHold(); } },
   };
@@ -554,7 +633,7 @@ function useHold(onHold: () => void, onTap: () => void) {
  * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
  * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
  */
-function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: Date; onClose: () => void; onEdit?: () => void }) {
+function SkipSheet({ group, now, onClose, onEdit, onDays }: { group: ClockAlarm[]; now: Date; onClose: () => void; onEdit?: () => void; onDays: () => void }) {
   const today = todayNow();
   const nextDay = nextRingDay(group, now);
   const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
@@ -590,11 +669,228 @@ function SkipSheet({ group, now, onClose, onEdit }: { group: ClockAlarm[]; now: 
           <ListItem leading={<MIcon name="oAlarm" />} headline="Ring as usual" supporting="Stop skipping days"
             onClick={() => { close(); apply(back, many ? "These alarms ring as usual again" : "It rings as usual again"); }} />
         )}
+        {group.some((a) => a.enabled) && (
+          <ListItem leading={<MIcon name="oCalendarToday" />} headline="Skip a few days…" supporting="Pick the days, see each ring, keep any"
+            onClick={() => { close(); window.setTimeout(onDays, 210); }} />
+        )}
         {!next.length && !tomorrow.length && !back.length && (
           <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
         )}
         {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
         {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteAlarms(group); }} />}
+      </div>
+    )}</BottomSheet>
+  );
+}
+
+type SkipScope = "group" | "all";
+const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
+const WEEK_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+/** "Tue 3 Nov". */
+const dayLong = (d: number) => `${shortDay(d)} ${monthShort(ymd(d).m)}`;
+const ringsWord = (n: number) => `${n} ${n === 1 ? "ring" : "rings"}`;
+
+/**
+ * Skip days (317, replacing the editor's Pause): pick a window (a quick chip, or two days on the calendar,
+ * whose dots mark the days with rings), see every ring in it day by day, untick any to keep it ringing (a
+ * bundle's row opens into its alarms), then "Skip 3 rings", with Undo. For this bundle or alarm, or for every
+ * alarm. Rings already off (skipped, or paused by an older build) show ticked as already off; unticking one
+ * makes it ring. On a wide window it's a dialog. [onApply]: the editor's draft takes the result instead of
+ * it being saved.
+ */
+function SkipDaysSheet({ all, group, scope0, quick0, now, onClose, onApply }: {
+  all: ClockAlarm[]; group: ClockAlarm[]; scope0: SkipScope; quick0: string; now: Date; onClose: () => void; onApply?: (changed: ClockAlarm[]) => void;
+}) {
+  const today = todayNow();
+  const window0 = useClockPrefs().bundleWindow;
+  const [scope, setScope] = useState<SkipScope>(scope0);
+  // The alarms as they are now (the engine may have changed them since the sheet opened).
+  const mine = group.map((g) => all.find((a) => a.id === g.id) ?? g);
+  const scoped = scope === "all" ? all.filter((a) => a.enabled) : mine;
+  const quick = quickWindows(today, nextRingDay(scoped, now));
+  const [r, setR] = useState<RangePick>(() => {
+    const q = quick.find(([n]) => n === quick0) ?? quick.find(([n]) => n === "Next 7 days")!;
+    return { start: q[1], end: q[2], next: "start" };
+  });
+  const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const [month, setMonth] = useState(() => { const { y, m } = ymd(r.start); return epochOf(y, m, 1); });
+  const last = today + SKIP_WINDOW_DAYS - 1;
+  const end = r.next === "end" ? r.start : r.end;
+  const days = useMemo(() => ringsBetween(scoped, r.start, end, now, window0), [scoped, r.start, end, now, window0]);
+  const off = new Set(windowKeys(days).filter((k) => !kept.has(k)));
+  const count = windowCount(days, off);
+  const keptN = days.reduce((n, d) => n + d.entries.reduce((m, e) => m + e.rings.filter((x) => !x.off && kept.has(x.key)).length, 0), 0);
+  // The calendar: this month's days with a ring get a dot.
+  const { y, m } = ymd(month);
+  const n = daysInMonth(y, m);
+  const lead = month - startOfWeek(month, mondayFirst());
+  const dots = useMemo(() => new Set(ringsBetween(scoped, Math.max(today, month), Math.min(last, month + n - 1), now, window0).map((d) => d.day)), [scoped, month, n, today, last, now, window0]);
+  const cells: (number | null)[] = [...Array.from({ length: lead }, () => null), ...Array.from({ length: n }, (_, i) => month + i)];
+  while (cells.length % 7) cells.push(null);
+  const letters = mondayFirst() ? WEEK_LETTERS : [WEEK_LETTERS[6], ...WEEK_LETTERS.slice(0, 6)];
+  const drag = useRef<{ id: number; anchor: number; last: number; moved: boolean } | null>(null);
+  const dayAt = (x: number, yy: number) => {
+    const el = document.elementFromPoint(x, yy)?.closest<HTMLElement>("[data-day]");
+    const d = el ? Number(el.dataset.day) : NaN;
+    return Number.isFinite(d) && d >= today && d <= last ? d : null;
+  };
+  const pick = (d: number) => { setR((x) => tapRange(x, d)); feel("tick"); };
+  // The first quick choice that is the window picked ("Next ring" and "Tomorrow" can be the same day).
+  const quickOn = r.next === "start" ? quick.find(([, a, b]) => a === r.start && b === r.end)?.[0] : undefined;
+  const span = r.start === end ? dayLong(r.start) : `${shortDay(r.start)} – ${dayLong(end)}`;
+  const nd = end - r.start + 1;
+  const toggle = (keys: string[]) => setKept((k) => {
+    const next = new Set(k);
+    const anyTicked = keys.some((x) => !k.has(x));
+    for (const x of keys) { if (anyTicked) next.add(x); else next.delete(x); }
+    return next;
+  });
+  const keyed = (keys: string[]) => ({
+    role: "checkbox" as const, tabIndex: 0,
+    onClick: () => toggle(keys),
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(keys); } },
+  });
+  const paused = scoped.filter((a) => a.pausedUntil != null && a.pausedUntil > today);
+  const go = (close: () => void) => {
+    const changed = applyWindow(days, off, today);
+    close();
+    if (!changed.length) return;
+    if (onApply) { onApply(changed); return; }
+    const before = changed.map((c) => all.find((a) => a.id === c.id)).filter((a): a is ClockAlarm => !!a);
+    void saveAll(changed);
+    const when = r.start === end ? dayWord(r.start, today) : `${shortDay(r.start)} – ${shortDay(end)}`;
+    const text = !count.skips ? "Saved"
+      : scope === "group" ? `${group.length > 1 ? "These alarms" : "It"} won't ring ${when}` : `${ringsWord(count.skips)} skipped, ${when}`;
+    showSnackbar(text, "Undo", () => void saveAll(before));
+  };
+  return (
+    <BottomSheet onClose={onClose} className="pa-skipdays">{(close) => (
+      // Esc closes it on the phone build too (the browser's Esc is the shell's: desk.ts).
+      <div className="pa-sd" role="dialog" aria-label="Skip days" onKeyDown={(e) => { if (e.key === "Escape" && hasAlarms) { e.stopPropagation(); close(); } }}>
+        <div className="p-sheet-title">Skip days</div>
+        {!onApply && (
+          <div className="pa-sd-chips">
+            <FilterChip selected={scope === "group"} check onClick={() => setScope("group")}>{group.length > 1 ? "This bundle" : "This alarm"}</FilterChip>
+            <FilterChip selected={scope === "all"} check onClick={() => setScope("all")}>All alarms</FilterChip>
+          </div>
+        )}
+        <HScroll className="pa-sd-chips pa-sd-quick pa-noswipe">
+          {quick.map(([name, a, b]) => (
+            <FilterChip key={name} selected={name === quickOn} check onClick={() => { setR({ start: a, end: b, next: "start" }); const q = ymd(a); setMonth(epochOf(q.y, q.m, 1)); }}>{name}</FilterChip>
+          ))}
+        </HScroll>
+        <div className="pa-sd-cal">
+          <div className="p-dp-nav">
+            <span className="p-dp-month static">{monthLong(m)} {y}</span>
+            <span className="grow" />
+            <IconButton icon="fKeyboardArrowLeft" label="Previous month" disabled={month <= today - ymd(today).d + 1} onClick={() => setMonth(addMonths(month, -1))} />
+            <IconButton icon="fKeyboardArrowRight" label="Next month" disabled={month + n > last} onClick={() => setMonth(addMonths(month, 1))} />
+          </div>
+          <div className="p-dp-week">{letters.map((l, i) => <span key={i}>{l}</span>)}</div>
+          {/* Tap the first day, then the last; or slide across them. */}
+          <div className="p-dp-days p-mdp-days p-rdp-days pa-sd-days"
+            onPointerDown={(e) => {
+              if (drag.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+              const d = dayAt(e.clientX, e.clientY);
+              if (d === null) return;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              drag.current = { id: e.pointerId, anchor: d, last: d, moved: false };
+            }}
+            onPointerMove={(e) => {
+              const g = drag.current;
+              if (!g || e.pointerId !== g.id) return;
+              const d = dayAt(e.clientX, e.clientY);
+              if (d === null || d === g.last) return;
+              g.moved = true; g.last = d;
+              setR(slideRange(g.anchor, d));
+            }}
+            onPointerUp={(e) => {
+              const g = drag.current;
+              if (!g || g.id !== e.pointerId) return;
+              drag.current = null;
+              if (g.moved) setR(slideRange(g.anchor, g.last)); else pick(g.anchor);
+            }}
+            onPointerCancel={(e) => { if (drag.current?.id === e.pointerId) drag.current = null; }}>
+            {cells.map((d, i) => {
+              if (d === null) return <span key={i} />;
+              const role = r.next === "end" ? (d === r.start ? "single" : null) : rangeRole(r, d), col = i % 7;
+              const cls = [
+                role && role !== "inside" ? "sel" : "", role ? "band" : "", role === "single" ? "one" : "", role === "start" ? "rs" : "", role === "end" ? "re" : "",
+                col === 0 ? "c0" : "", col === 6 ? "c6" : "", d === month ? "m0" : "", d === month + n - 1 ? "m1" : "", d === today ? "today" : "",
+              ].join(" ");
+              return (
+                <button key={i} data-day={d} className={cls} disabled={d < today || d > last} aria-pressed={!!role}
+                  aria-label={`${dayLong(d)}${dots.has(d) ? ", has rings" : ""}`}
+                  // Enter or Space (no pointer): the same as a tap.
+                  onClick={(e) => { if (e.detail === 0) pick(d); }}>
+                  <span>{ymd(d).d}</span>{dots.has(d) && <i className="pa-sd-dot" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="pa-sd-sum"><b>{span}</b><span>{nd > 1 ? `${nd} days · ` : ""}{ringsWord(count.skips)} to skip{keptN ? `, ${keptN} kept` : ""}</span></div>
+        <div className="pa-sd-list">
+          {days.length === 0 && <div className="pa-sd-empty t-body-medium muted">No rings on {r.start === end ? "that day" : "those days"}.</div>}
+          {days.map((d) => (
+            <div key={d.day}>
+              <div className="pa-sd-day">{dayLong(d.day)}{d.day === today ? " · today" : d.day === today + 1 ? " · tomorrow" : ""}</div>
+              {d.entries.map((e) => {
+                const keys = e.rings.map((x) => x.key);
+                const ticked = keys.filter((k) => !kept.has(k)).length;
+                const state = ticked === keys.length ? "on" : ticked ? "mid" : "";
+                const allOff = e.rings.every((x) => x.off);
+                const tag = !ticked ? <span className="pa-sd-tag rings">Rings</span> : allOff ? <span className="pa-sd-tag">Already off</span> : null;
+                if (e.rings.length === 1) {
+                  const a = e.rings[0].alarm;
+                  return (
+                    <div key={keys[0]} className={`pa-sd-ring ${ticked ? "" : "kept"}`} aria-checked={!!ticked} {...keyed(keys)}>
+                      <span className={`pa-sd-box ${state}`} />
+                      <span className="pa-sd-tx"><span className="pa-sd-t">{formatTime(a.hour * 60 + a.minute)}</span>
+                        <span className="pa-sd-l">{[a.label.trim(), isRepeating(a) ? "" : "once"].filter(Boolean).join(" · ")}</span></span>
+                      {tag}
+                    </div>
+                  );
+                }
+                const ek = `${d.day}:${e.rings[0].alarm.id}`, isOpen = open.has(ek);
+                const first = e.rings[0].alarm, lastA = e.rings[e.rings.length - 1].alarm;
+                return (
+                  <div key={ek}>
+                    <div className={`pa-sd-ring ${ticked ? "" : "kept"}`} aria-checked={state === "mid" ? "mixed" : !!ticked} {...keyed(keys)}>
+                      <span className={`pa-sd-box ${state}`} />
+                      <span className="pa-sd-tx"><span className="pa-sd-t">{formatTime(first.hour * 60 + first.minute)} – {formatTime(lastA.hour * 60 + lastA.minute)}</span>
+                        <span className="pa-sd-l">{[first.label.trim(), `${e.rings.length} alarms`, state === "mid" ? `${keys.length - ticked} kept` : ""].filter(Boolean).join(" · ")}</span></span>
+                      {tag}
+                      <button className={`p-icon pa-sd-exp ${isOpen ? "open" : ""}`} aria-expanded={isOpen} aria-label={isOpen ? "Close the bundle" : "Each alarm"}
+                        onClick={(ev) => { ev.stopPropagation(); setOpen((o) => { const x = new Set(o); if (x.has(ek)) x.delete(ek); else x.add(ek); return x; }); }}
+                        onKeyDown={(ev) => ev.stopPropagation()}>
+                        <MIcon name="fExpandMore" />
+                      </button>
+                    </div>
+                    {isOpen && e.rings.map((x) => (
+                      <div key={x.key} className={`pa-sd-ring sub ${kept.has(x.key) ? "kept" : ""}`} aria-checked={!kept.has(x.key)} {...keyed([x.key])}>
+                        <span className={`pa-sd-box ${kept.has(x.key) ? "" : "on"}`} />
+                        <span className="pa-sd-tx"><span className="pa-sd-t">{formatTime(x.alarm.hour * 60 + x.alarm.minute)}</span>
+                          {x.alarm.label.trim() && <span className="pa-sd-l">{x.alarm.label.trim()}</span>}</span>
+                        {kept.has(x.key) ? <span className="pa-sd-tag rings">Rings</span> : x.off ? <span className="pa-sd-tag">Already off</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {paused.map((a) => (
+            <div key={a.id} className="pa-sd-quiet">{a.label.trim() || formatTime(a.hour * 60 + a.minute)} is paused until {shortDay(a.pausedUntil!)}: its rings show as already off.</div>
+          ))}
+        </div>
+        <div className="p-sheet-buttons pa-sd-buttons">
+          <TextButton onClick={close}>Cancel</TextButton>
+          <button className="p-filled-btn" disabled={!count.skips && !count.back} onClick={() => go(close)}>
+            {count.skips ? `Skip ${ringsWord(count.skips)}` : count.back ? "Save" : "Nothing to skip"}
+          </button>
+        </div>
       </div>
     )}</BottomSheet>
   );
@@ -622,7 +918,7 @@ function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNe
   const [dates, setDates] = useState<number[]>(alarm.dates ?? []);
   const [skip, setSkip] = useState<number[]>(alarm.skip ?? []);
   const [pausedUntil, setPausedUntil] = useState<number | null>(alarm.pausedUntil ?? null);
-  const [picker, setPicker] = useState<null | "dates" | "skip" | "until">(null);
+  const [picker, setPicker] = useState<null | "dates" | "skipDays">(null);
   const [sound, setSound] = useState(alarm.sound);
   const today = todayNow();
   const sched = { hour: Math.floor(minute / 60), minute: minute % 60, days, dates, skip, pausedUntil };
@@ -684,19 +980,16 @@ function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNe
             ? <TextButton onClick={() => setDates([])}>Weekdays</TextButton>
             : <TextButton onClick={() => setPicker("dates")}>Dates…</TextButton>}
         </div>
-        {/* The pause row stays while the alarm rings once (a quiet line instead), so picking the first day
-            (or clearing the last) doesn't make the sheet grow and the day buttons jump under the finger (72). */}
+        {/* "Skip days…" (317, in Pause's place) opens the Skip days sheet on this alarm as edited; Save keeps
+            what it picked. The row stays while the alarm rings once (a quiet line instead), so picking the first
+            day (or clearing the last) doesn't make the sheet grow and the day buttons jump under the finger (72). */}
         <div className="p-divider" />
         <div className="pa-erow pa-pause">
             <MIcon name="oEventBusy" />
-            {!repeating ? <span className="t-body-large muted grow pa-line">Pause: for repeating alarms</span>
-            : pause ? <>
-              <button className="pa-pause-text t-body-large" onClick={() => setPicker(pausedUntil != null && pausedUntil > today ? "until" : "skip")}>{pause}</button>
-              <IconButton icon="fClose" label="Stop pausing" onClick={() => { setSkip([]); setPausedUntil(null); }} />
-            </> : <>
-              <span className="t-body-large muted grow">Pause</span>
-              <TextButton onClick={() => setPicker("skip")}>Skip days</TextButton>
-              <TextButton onClick={() => setPicker("until")}>Until…</TextButton>
+            {!repeating ? <span className="t-body-large muted grow pa-line">Skip days: for repeating alarms</span>
+            : <>
+              <button className={`pa-pause-text t-body-large grow ${pause ? "" : "muted"}`} onClick={() => setPicker("skipDays")}>{pause || "Skip days…"}</button>
+              {pause && <IconButton icon="fClose" label="Ring as usual" onClick={() => { setSkip([]); setPausedUntil(null); }} />}
             </>}
         </div>
         <div className="p-divider" />
@@ -735,8 +1028,11 @@ function AlarmEditor({ alarm, isNew, group, onClose }: { alarm: ClockAlarm; isNe
     )}</BottomSheet>
     {pickTo && <TimePickerDialog step={1} value={to} onPick={setTo} onClose={() => setPickTo(false)} />}
     {picker === "dates" && <MultiDatePickerDialog title="Ring on these dates" value={dates} from={today} onPick={setDates} onClose={() => setPicker(null)} />}
-    {picker === "skip" && <MultiDatePickerDialog title="Skip these days" value={skip} from={today} onPick={(d) => { setSkip(d); if (d.length) setPausedUntil(null); }} onClose={() => setPicker(null)} />}
-    {picker === "until" && <DatePickerDialog value={pausedUntil ?? today + 7} onPick={(d) => { setPausedUntil(d > today ? d : null); setSkip([]); }} onClose={() => setPicker(null)} />}
+    {picker === "skipDays" && (() => {
+      const draft: ClockAlarm = { ...alarm, hour: Math.floor(minute / 60), minute: minute % 60, days, dates, skip, pausedUntil, enabled: true };
+      return <SkipDaysSheet all={[draft]} group={[draft]} scope0="group" quick0="Next ring" now={new Date()} onClose={() => setPicker(null)}
+        onApply={(changed) => { const c = changed[0]; if (c) { setSkip(c.skip ?? []); setPausedUntil(c.pausedUntil ?? null); } }} />;
+    })()}
   </>;
 }
 
