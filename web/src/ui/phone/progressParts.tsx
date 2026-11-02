@@ -24,16 +24,17 @@ export const tapProps = (open: () => void) => ({
 /**
  * A chart card: its title (and [side], beside it), the headline (its number, or the day a finger read on the
  * chart, kept after it lifts until a tap off the chart: [read] gives its two lines), the chart and what's under it.
- * [pan]: the chart moves through time, so the ‹ › and the window's dates go above the headline.
+ * [pan]: the chart moves through time, so the ‹ › and the window's dates go above the headline. [tall]: room
+ * for a long chip on its own line under the number (it keeps the height, so a reading doesn't move the chart).
  */
-export function ChartCard({ title, side, head, read, children, foot, pan }: {
-  title: string; side?: ReactNode; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode; pan?: Pan;
+export function ChartCard({ title, side, head, read, children, foot, pan, tall }: {
+  title: string; side?: ReactNode; head: ReactNode; read: [string, ReactNode] | null; children: ReactNode; foot?: ReactNode; pan?: Pan; tall?: boolean;
 }) {
   return (
     <div className="pg-card">
       <div className={`pg-ct ${pan ? "pans" : ""}`}><span>{title}</span>{pan && <BackToNow pan={pan} />}{side}</div>
       {pan && <PanBar pan={pan} />}
-      <div className="pg-head">{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
+      <div className={`pg-head ${tall ? "tall" : ""}`}>{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
       {children}
       {foot}
     </div>

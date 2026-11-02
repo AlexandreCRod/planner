@@ -20,7 +20,7 @@ import {
   type BodyWeight, type LiftPoint, bodyWeights, healthWeighIns, hiddenId, liftPoints, targetRpeOf, weeklyChange,
   weeklyHardSets, weightTrend,
 } from "../../domain/trends.ts";
-import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, restingHrFlag } from "../../domain/sleep.ts";
+import { type SleepField, type SleepNight, type SleepSource, avg7, avg7Line, clockOfMoment, fmtSleep, hrvRange, nightsOf7, restingHrFlag, sleepAverages, withRecord } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, saveHidden, saveWeighIn } from "../../store/training.ts";
 import { useWide } from "../../platform.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
@@ -459,8 +459,6 @@ function WeightCards({ tr, t }: { tr: Training; t: number }) {
 
 // ---------- Sleep ----------
 
-/** The mornings that have [field], oldest first. */
-const withField = (nights: readonly SleepNight[], field: SleepField) => nights.filter((n) => n[field] !== null);
 /** "last night" ("this morning") for today's, else its date. */
 const whenOf = (day: number, t: number, today: string) => (day === t ? today : formatDate(day));
 
@@ -478,7 +476,7 @@ const stagesOf = (n: SleepNight) => join(n.deepMin !== null && `deep ${fmtSleep(
  */
 function SleepCards({ tr, id, t, onNight }: { tr: Training; id: string; t: number; onNight: (day: number) => void }) {
   const field: SleepField = id === "rh" ? "restingHr" : id === "hrv" ? "hrvMs" : "totalMin";
-  const list = useMemo(() => withField(tr.sleep, field), [tr, field]);
+  const list = useMemo(() => withRecord(tr.sleep, field), [tr, field]);
   const line = useMemo(() => avg7Line(tr.sleep, field), [tr, field]);
   const span = useSpan(list.map((n) => n.day), t);
   const [at, setAt] = useState<number | null>(null);
@@ -505,9 +503,9 @@ function SleepCards({ tr, id, t, onNight }: { tr: Training; id: string; t: numbe
     const bars = shown.length <= 120;
     const each: Series = bars ? { kind: "bars", span: 1, color: SLEEP_DIM, pts } : { kind: "dots", r: 2.5, color: SLEEP_DIM, pts };
     const bed = n && n.bed && n.wake ? `bed ${clockOfMoment(n.bed)} → ${clockOfMoment(n.wake)}` : "";
-    return <>{switcher}<ChartCard title="Sleep per night" pan={span.pan}
+    return <>{switcher}<ChartCard title="Sleep per night" pan={span.pan} tall
       read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
-      head={last ? <Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)}` : null} /> : none}
+      head={last ? <Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)} · ${nightsOf7(sleepAverages(tr.sleep, last.day).nights)}` : null} /> : none}
       foot={<>{legend("Each night")}<div className="pg-foot">Tap a bar to open that night. Under 6 h before a quality or long run puts a moon on that session.</div></>}>
       {!span.back && (
         <div className="pg-lrow" {...tapProps(() => onNight(list[list.length - 1].day))}>
@@ -593,15 +591,17 @@ function bodyTiles(tr: Training, t: number): BodyTile[] {
   const out: BodyTile[] = [];
   const none = (id: string, name: string) => out.push({ id, name, value: "–", unit: "", sub: "Nothing from the watch yet", last: null, chart: () => null });
   const nights = (id: string, name: string, field: SleepField, unit: string, today: string, fmt: (v: number) => string, chart: BodyTile["chart"] | null, must: boolean) => {
-    const list = withField(tr.sleep, field), last = list[list.length - 1];
+    const list = withRecord(tr.sleep, field), last = list[list.length - 1];
     if (!last) { if (must) none(id, name); return; }
     const avg = avg7(tr.sleep, field, last.day);
     out.push({
-      id, name, value: fmt(last[field]!), unit, sub: join(last.day === t ? today : shortWhen(last.day, t), avg !== null && `avg ${fmt(avg)}`), last: last.day,
+      id, name, value: fmt(last[field]!), unit, last: last.day,
+      // Sleep's says how many nights its average is over, which leaves no room for the day in the tile.
+      sub: field === "totalMin" && avg !== null ? join(`avg ${fmt(avg)}`, nightsOf7(sleepAverages(tr.sleep, last.day).nights)) : join(last.day === t ? today : shortWhen(last.day, t), avg !== null && `avg ${fmt(avg)}`),
       chart: chart ?? lineTile(list.map((n) => ({ day: n.day, v: n[field]! })), SLEEP, t, id === "rh" ? MONTH : TWO_MONTHS, AVG_GAP),
     });
   };
-  const sleepList = withField(tr.sleep, "totalMin");
+  const sleepList = withRecord(tr.sleep, "totalMin");
   const sleepLast = sleepList[sleepList.length - 1];
   nights("sl", "Sleep", "totalMin", "", "last night", fmtSleep, sleepLast ? (stale) => {
     const domain = tileDays(sleepLast.day, t, DAILY - 1), avg = avg7(tr.sleep, "totalMin", sleepLast.day);

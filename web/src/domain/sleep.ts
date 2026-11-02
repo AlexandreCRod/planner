@@ -7,6 +7,8 @@
 // session that starts after 10:00 on the day it ends) never counts as the night.
 // Also the numbers drawn from them: the 7-day averages, the HRV normal range, and the quiet flags the
 // Training page shows (under 6 h before a key run, resting HR up two mornings in a row). Nothing is stored.
+// Every average counts only what was recorded (321): a morning with no number, or a 0 (a session that was
+// all awake), is left out, never counted as nothing, and a morning with only a resting HR is no sleep record.
 // A night's stages (308): the watch's stretches, cleaned for the chart; a night may have only totals (the Garmin
 // export always does; Health Connect may too), and then its timeline is empty.
 // Days are epoch-day numbers (domain/dates.ts).
@@ -86,7 +88,7 @@ export const USUAL_NIGHTS = 30;
 
 /** What's usual for the night on [day]: the averages over the 30 nights before it that have them; null where none do. */
 export function usualNight(nights: readonly SleepNight[], day: number): { asleep: number | null; stages: Record<NightStage, number> | null } {
-  const before = nights.filter((n) => n.day < day && n.totalMin !== null).slice(-USUAL_NIGHTS);
+  const before = withRecord(nights, "totalMin").filter((n) => n.day < day).slice(-USUAL_NIGHTS);
   const totals = before.flatMap((n) => { const x = nightTotals(n); return x ? [x] : []; });
   const avg = (k: NightStage) => mean(totals.map((x) => x[k]));
   return {
@@ -118,7 +120,7 @@ export function mergedNights(sleepJson: readonly Night[], hc: readonly HealthNig
   const garmin = new Map(sleepJson.map((n) => [n.day, n]));
   const watch = new Map<number, HealthNight>();
   for (const n of hc) {
-    if (isNap(n)) continue;
+    if (isNap(n) || n.totalMin <= 0) continue; // all awake: no sleep record, so it can't hide sleep.json's night
     const had = watch.get(n.day);
     if (!had || n.totalMin > had.totalMin) watch.set(n.day, n);
   }
@@ -144,28 +146,39 @@ export function mergedNights(sleepJson: readonly Night[], hc: readonly HealthNig
 
 export type SleepField = "totalMin" | "restingHr" | "hrvMs";
 
-/** The values of [field] on the mornings from [from] to [to] (both included). [nights] are oldest first. */
+/** Whether a morning has a record of [field]: a real number, not none and not 0. */
+export const hasRecord = (n: SleepNight, field: SleepField) => (n[field] ?? 0) > 0;
+/** The mornings that have a record of [field], in the order given. */
+export const withRecord = (nights: readonly SleepNight[], field: SleepField) => nights.filter((n) => hasRecord(n, field));
+
+/** The recorded values of [field] on the mornings from [from] to [to] (both included). [nights] are oldest first. */
 function valuesIn(nights: readonly SleepNight[], field: SleepField, from: number, to: number): number[] {
   const out: number[] = [];
-  for (const n of nights) if (n.day >= from && n.day <= to && n[field] !== null) out.push(n[field]!);
+  for (const n of nights) if (n.day >= from && n.day <= to && hasRecord(n, field)) out.push(n[field]!);
   return out;
 }
 const mean = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-/** The average of [field] over the 7 mornings to [day] (it included); null when none of them has one. */
+/** The average of [field] over those of the 7 mornings to [day] (it included) that have a record; null when none has. */
 export function avg7(nights: readonly SleepNight[], field: SleepField, day: number): number | null {
   const xs = valuesIn(nights, field, day - 6, day);
   return xs.length ? mean(xs) : null;
 }
 
-/** The 7-day averages of sleep, resting HR and HRV as of [day]. */
-export function sleepAverages(nights: readonly SleepNight[], day: number): { sleepMin: number | null; restingHr: number | null; hrvMs: number | null } {
-  return { sleepMin: avg7(nights, "totalMin", day), restingHr: avg7(nights, "restingHr", day), hrvMs: avg7(nights, "hrvMs", day) };
+/** The 7-day averages of sleep, resting HR and HRV as of [day], and how many [nights] the sleep one is over. */
+export function sleepAverages(nights: readonly SleepNight[], day: number): { sleepMin: number | null; nights: number; restingHr: number | null; hrvMs: number | null } {
+  return {
+    sleepMin: avg7(nights, "totalMin", day), nights: valuesIn(nights, "totalMin", day - 6, day).length,
+    restingHr: avg7(nights, "restingHr", day), hrvMs: avg7(nights, "hrvMs", day),
+  };
 }
+
+/** What a sleep average is based on: "5 of 7 nights", so one from few nights shows. */
+export const nightsOf7 = (count: number) => `${count} of 7 nights`;
 
 /** The 7-day average line: one point per morning that has [field], its value the average of the 7 mornings to it. */
 export function avg7Line(nights: readonly SleepNight[], field: SleepField): { day: number; v: number }[] {
-  return nights.filter((n) => n[field] !== null).map((n) => ({ day: n.day, v: avg7(nights, field, n.day)! }));
+  return withRecord(nights, field).map((n) => ({ day: n.day, v: avg7(nights, field, n.day)! }));
 }
 
 /** How many nights the HRV normal range is taken over, and the fewest it needs. */
@@ -179,7 +192,7 @@ export function hrvRange(nights: readonly SleepNight[], day: number): { lo: numb
   const xs: number[] = [];
   for (let i = nights.length - 1; i >= 0 && xs.length < HRV_NIGHTS; i--) {
     const n = nights[i];
-    if (n.day <= day && n.hrvMs !== null) xs.push(n.hrvMs);
+    if (n.day <= day && hasRecord(n, "hrvMs")) xs.push(n.hrvMs!);
   }
   if (xs.length < HRV_MIN_NIGHTS) return null;
   const m = mean(xs), sd = Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1));

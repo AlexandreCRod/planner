@@ -7,7 +7,7 @@ import { gameStats, playedGames } from "../../domain/cardio.ts";
 import { formatDate, formatTime } from "../../domain/dates.ts";
 import { type TodayCard, dayWord, leadLift, usualWeekKm, weeklyKm } from "../../domain/trainingToday.ts";
 import { type WeekBar, colourKind, fmtKm, runLine, runOf } from "../../domain/trainingWeek.ts";
-import { fmtSleep } from "../../domain/sleep.ts";
+import { fmtSleep, hasRecord } from "../../domain/sleep.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
 import type { Training } from "../../store/training.ts";
 import { snapshot } from "../../store/store.ts";
@@ -110,7 +110,7 @@ export function OverviewTiles({ tr, t, onOpen }: { tr: Training; t: number; onOp
     const weeks = weeklyKm(tr.runs, t), usual = usualWeekKm(weeks);
     const played = playedGames(tr.games, t), beat = played.filter((g) => g.session?.avgHr).slice(-LAST_GAMES);
     const { trend } = weightData(tr);
-    const sleep = [...tr.sleep].reverse().find((n) => n.totalMin !== null);
+    const sleep = [...tr.sleep].reverse().find((n) => hasRecord(n, "totalMin"));
     const month = rangeStart("1M", t)!;
     const lift = leadLift(liftsShown(tr), rangeStart("3M", t)!);
     const value = lift && (byMax(lift.added, lift.pts) ? (p: typeof lift.pts[number]) => p.e1rm : (p: typeof lift.pts[number]) => p.topKg);

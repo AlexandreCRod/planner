@@ -23,7 +23,7 @@ import {
 import { type TodayCard, todayCard, todayRows } from "../../domain/trainingToday.ts";
 import { type ColourKind, colourKind, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
-import { type SleepNight, fmtSleep, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
+import { type SleepNight, fmtSleep, nightsOf7, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
 import { type GameRef, addGame, moveGame, removeGame, saveGameLog, tickGame } from "../../store/futsal.ts";
 import { snapshot, withUndo } from "../../store/store.ts";
@@ -380,7 +380,7 @@ function Ring({ kind, done, label, onTick }: { kind: ColourKind | null; done: bo
 const keyRun = (s: Session) => s.kind === "run" && (s.tags.includes("quality") || s.dayType === "long");
 
 /**
- * "Slept 7 h 12 · 7-day average 7 h 05 · resting HR 51 · HRV 52": the latest morning, when it's today's or
+ * "Slept 7 h 12 · 7-day avg 7 h 05 · 5 of 7 nights · resting HR 51 · HRV 52": the latest morning, when it's today's or
  * yesterday's (else nothing shows); parts without data are left out. A tap opens the Sleep tab.
  */
 function SleepLine({ nights, t, onOpen }: { nights: readonly SleepNight[]; t: number; onOpen: () => void }) {
@@ -389,7 +389,7 @@ function SleepLine({ nights, t, onOpen }: { nights: readonly SleepNight[]; t: nu
   const avg = sleepAverages(nights, n.day);
   const title = n.totalMin !== null ? `Slept ${fmtSleep(n.totalMin)}` : "Last night";
   const parts = [
-    avg.sleepMin !== null && `7-day avg ${fmtSleep(avg.sleepMin)}`, n.restingHr !== null && `resting HR ${n.restingHr}`, n.hrvMs !== null && `HRV ${Math.round(n.hrvMs)}`,
+    avg.sleepMin !== null && `7-day avg ${fmtSleep(avg.sleepMin)}`, avg.sleepMin !== null && nightsOf7(avg.nights), n.restingHr !== null && `resting HR ${n.restingHr}`, n.hrvMs !== null && `HRV ${Math.round(n.hrvMs)}`,
   ].filter((x): x is string => !!x);
   const sub = parts.join(" · ");
   return (

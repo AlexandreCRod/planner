@@ -4,7 +4,7 @@ import { dayOf, isoOf } from "../src/domain/training.ts";
 import type { HealthDay, HealthNight } from "../src/domain/health.ts";
 import type { Night } from "../src/domain/trends.ts";
 import {
-  type SleepNight, avg7, avg7Line, clockAfter, clockOfMoment, fmtSleep, hrvRange, inBedMin, isNap, mergedNights, nightSpans, nightTotals, restingHrFlag, shortSleepBefore, sleepAverages, spanAt,
+  type SleepNight, avg7, avg7Line, clockAfter, clockOfMoment, fmtSleep, hrvRange, inBedMin, isNap, mergedNights, nightSpans, nightTotals, nightsOf7, restingHrFlag, shortSleepBefore, sleepAverages, spanAt,
   usualNight,
 } from "../src/domain/sleep.ts";
 
@@ -106,7 +106,7 @@ test("7-day averages: the 7 mornings to the day, skipping the ones without", () 
   close(avg7(nights, "restingHr", day), 55.5);      // 53..58 (i = 9 has none)
   close(avg7(nights, "hrvMs", day), 47);            // 45..49
   assert.equal(avg7(nights, "hrvMs", d("2026-10-22")), null);
-  assert.deepEqual(sleepAverages(nights, day), { sleepMin: 460, restingHr: 55.5, hrvMs: 47 });
+  assert.deepEqual(sleepAverages(nights, day), { sleepMin: 460, nights: 7, restingHr: 55.5, hrvMs: 47 });
   const line = avg7Line(nights, "restingHr");
   assert.equal(line.length, 9);
   close(line[0].v, 50);
@@ -190,6 +190,43 @@ test("reading the chart finds the stretch under the finger, else the nearest acr
 test("a night's stage totals: what's known, none when no stage is", () => {
   assert.deepEqual(nightTotals({ awakeMin: null, deepMin: 80, lightMin: 270, remMin: null }), { awake: 0, rem: 0, light: 270, deep: 80 });
   assert.equal(nightTotals({ awakeMin: 30, deepMin: null, lightMin: null, remMin: null }), null);
+});
+
+// The week of 25 to 31 Oct as sleep.csv has it: the 27th has only a resting HR, and only two days have an HRV.
+const realWeek = () => mergedNights(
+  [
+    garmin("2026-10-25", { totalMin: 343, restingHr: 46, hrvMs: 60 }), garmin("2026-10-26", { totalMin: 508, restingHr: 49, hrvMs: 50 }),
+  ],
+  [watch("2026-10-28", { totalMin: 379 }), watch("2026-10-29", { totalMin: 280 }), watch("2026-10-30", { totalMin: 612 }), watch("2026-10-31", { totalMin: 365 })],
+  [
+    hcDay("2026-10-27", { restingHr: 47 }), hcDay("2026-10-28", { restingHr: 45 }), hcDay("2026-10-29", { restingHr: 50 }),
+    hcDay("2026-10-30", { restingHr: 43 }), hcDay("2026-10-31", { restingHr: 48 }),
+  ],
+);
+
+test("321: a sleep average is the mean of the nights recorded, and says how many; a day with only a resting HR is no record", () => {
+  const avg = sleepAverages(realWeek(), d("2026-10-31"));
+  close(avg.sleepMin, (343 + 508 + 379 + 280 + 612 + 365) / 6);   // not ÷ 7: the 27th has only a resting HR
+  assert.equal(avg.nights, 6);
+  assert.equal(`${fmtSleep(avg.sleepMin!)} · ${nightsOf7(avg.nights)}`, "6 h 55 · 6 of 7 nights");
+  close(avg.restingHr, (46 + 49 + 47 + 45 + 50 + 43 + 48) / 7);   // the 27th does count here: it has one
+  close(avg.hrvMs, 55);                                           // 60 and 50: only the two days with one
+});
+
+test("321: a session that was all awake is no record, and doesn't hide sleep.json's night", () => {
+  const empty = watch("2026-10-28", { totalMin: 0, deepMin: 0, lightMin: 0, remMin: 0, awakeMin: 400 });
+  assert.equal(mergedNights([garmin("2026-10-28")], [empty], [])[0].totalMin, 450);
+  assert.deepEqual(mergedNights([], [empty], []), []);
+});
+
+test("321: a 0 from sleep.json or a reading counts nowhere", () => {
+  const nights = run("2026-10-25", 7, (i) => ({ totalMin: i % 2 ? 0 : 420, restingHr: i === 6 ? 0 : 50, hrvMs: i === 6 ? 0 : 40 }));
+  const day = d("2026-10-31");
+  assert.deepEqual(sleepAverages(nights, day), { sleepMin: 420, nights: 4, restingHr: 50, hrvMs: 40 });
+  assert.deepEqual(avg7Line(nights, "totalMin").map((p) => p.day - d("2026-10-25")), [0, 2, 4, 6]);
+  assert.equal(usualNight(nights, day + 1).asleep, 420);
+  const hrv = run("2026-09-01", 14, (i) => ({ hrvMs: i === 13 ? 0 : 50 }));
+  assert.equal(hrvRange(hrv, hrv[13].day), null);                 // 13 real nights: too few
 });
 
 test("usual is the 30 nights before, not the night itself, and leaves out nights without the number", () => {
