@@ -13,20 +13,21 @@
 .phone .pg-act { margin-right: 4px; }
 
 /* The list. */
-/* A group heading (249), the review's section label: 13 px/600 in the calm primary, 24 px above and 8 px below, so
+/* A group heading (249; the app's heading since 287: 14 px, medium, muted), 24 px above and 8 px below, so
    "Runs" and "Records", "Estimated max" and "Top set" read apart. The card titles use the same label. */
-.phone .pg-group { margin: 24px 0 4px; font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: .2px; color: var(--p-primary); }
+.phone .pg-group { margin: 24px 0 8px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
 .phone .pg-group.first { margin-top: 8px; }
 /* Body's More: the same label, a button that folds its rows (251). */
 .phone .pg-more { display: flex; align-items: center; gap: 4px; width: calc(100% + 16px); margin-left: -8px; margin-right: -8px; padding: 6px 8px; margin-bottom: 0;
   border: 0; border-radius: 8px; background: none; text-align: left; font-family: inherit; cursor: pointer; }
 .phone .pg-more:active { background: var(--p-sec-container); }
 .phone .pg-more svg { color: var(--muted); }
-.phone .pg-row { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 8px; margin: 0 -8px; border-radius: 12px; cursor: pointer;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line) 60%, transparent); transition: background-color .15s; }
+/* Each row a filled card (287), like Today's and Clock's: the surface colour, no line under it. */
+.phone .pg-row { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 16px; margin: 0 0 8px; border-radius: 16px; cursor: pointer;
+  background: var(--p-sc-low, var(--surface-2)); transition: background-color .15s; }
 .phone .pg-row:active, .phone .pg-row.sel { background: var(--p-sec-container); }
 .phone .pg-row.still { cursor: default; min-height: 52px; }
-.phone .pg-row.still:active { background: none; }
+.phone .pg-row.still:active { background: var(--p-sc-low, var(--surface-2)); }
 .phone .pg-row .n { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .phone .pg-row .n b { font-weight: 400; font-size: 16px; line-height: 22px; color: var(--text); }
 .phone .pg-row .n span { font-size: 13px; line-height: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -38,7 +39,7 @@
 /* A card. */
 .phone .pg-card { margin-bottom: 16px; padding: 14px 16px 14px; border-radius: 16px; background: var(--p-sc-low, var(--surface-2)); }
 .phone .pg-ct { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
-.phone .pg-ct > span:first-child { font-size: 13px; line-height: 18px; font-weight: 600; letter-spacing: .2px; color: var(--p-primary); }
+.phone .pg-ct > span:first-child { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
 .phone .pg-ct-read { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .pg-head { height: 56px; }
 .phone .pg-head.tall { height: 90px; }

@@ -30,7 +30,7 @@ import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
 import { canUseHealth, cardDismissed, connect, dismissCard, useHealth } from "../../health/healthConnect.ts";
 import { go, replaceRoute } from "../shared/common.tsx";
-import { AppBarActions, ChipRow, EmptyHint, FilterChip, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
+import { AppBarActions, ChipRow, EmptyHint, FilterChip, HeadCount, IconButton, MIcon, Scaffold, SectionHeader } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
@@ -275,7 +275,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
       {showToPlace && (
         <div className={`tr-toplace ${drag.over === "none" ? "over" : ""}`} data-drop="none">
-          <SectionHeader>To place</SectionHeader>
+          <SectionHeader>To place{v.toPlace.length > 0 && <HeadCount n={v.toPlace.length} />}</SectionHeader>
           {pickedSession
             ? <div className="tr-placing"><span>Tap a day for <b>{pickedSession.title}</b></span><TextButton onClick={() => setPicked(null)}>Cancel</TextButton></div>
             : !readOnly && v.toPlace.some((s) => (tr.entries.get(entryId(plan.id, s.id))?.status ?? "planned") === "planned") && <div className="tr-hint">Tap a session, then the day it goes on.</div>}

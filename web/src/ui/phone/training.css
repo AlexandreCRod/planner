@@ -81,7 +81,7 @@ html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now:
 .phone .tr-placing { display: flex; align-items: center; gap: 8px; padding: 0 8px 4px 16px; font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .tr-placing span { flex: 1; min-width: 0; }
 .phone .tr-cards { display: flex; flex-direction: column; gap: 8px; padding: 4px 16px 8px; }
-.phone .tr-card-place { display: flex; align-items: center; min-height: 56px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); transition: background-color .15s, border-color .15s, opacity .15s; }
+.phone .tr-card-place { display: flex; align-items: center; min-height: 56px; border: 1px solid transparent; border-radius: 12px; background: var(--p-sc-low, var(--surface-2)); transition: background-color .15s, border-color .15s, opacity .15s; }
 .phone .tr-card-place .main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px 0 8px 14px; border: 0; background: none; text-align: left; color: var(--muted); }
 .phone .tr-card-place .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .phone .tr-card-place .title { font-size: 16px; line-height: 22px; color: var(--text); }
@@ -394,3 +394,8 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-stats .l { font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .tr-stats-note { margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .tr-ring-mark { flex: none; width: 44px; height: 44px; margin-right: -6px; display: grid; place-items: center; color: var(--muted); }
+
+/* 287: Training's pages start 16 px from the screen's edge like every other page. Their own blocks carry the 16 px,
+   so the page itself has no side padding (phone.css's .p-content gave them 16 more, 32 in all). Filled cards, as
+   everywhere: the sessions to place are on the surface colour, not outlined. */
+.phone .p-content:is(.tr-home, .tr-week, .tr-session) { padding-left: 0; padding-right: 0; }

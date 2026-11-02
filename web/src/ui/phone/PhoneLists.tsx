@@ -15,7 +15,7 @@ import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
-import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyHint, FilterChip, FoldLine, HeadCount, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
 import { useNoteGrid } from "./noteDrag.ts";
@@ -172,7 +172,7 @@ function ScheduledList() {
             const n = new Set(collapsed);
             if (isCollapsed) n.delete(g); else n.add(g);
             setCollapsed(n);
-          }}>{g} · {list.length}</SectionHeader>
+          }}>{g}<HeadCount n={list.length} /></SectionHeader>
           {!isCollapsed && list.map((e, index) => row(e, (isDone) => hold.onToggle(g, key(e), e, index, isDone)))}
         </div>
       );
@@ -346,7 +346,8 @@ export const PhoneNotes = memo(function PhoneNotes() {
   const byId = useMemo(() => new Map(notes.map((n) => [n.id, n])), [notes]);
   // Notes and Pinned can be put in order; daily and hidden notes keep theirs.
   const canOrder = filter === "notes" || filter === "pinned";
-  const labelled = filter === "notes" && notes.some((n) => n.pinned) && notes.some((n) => !n.pinned);
+  const pinnedCount = notes.filter((n) => n.pinned).length;
+  const labelled = filter === "notes" && pinnedCount > 0 && pinnedCount < notes.length;
   const noteGrid = useNoteGrid({
     grid: () => grid.current, scroller: () => grid.current?.closest<HTMLElement>(".p-list") ?? null, order: liveOrder ?? shownIds,
     groupOf: (id) => { const n = byId.get(id); return !n || !canOrder ? null : n.pinned ? "pinned" : "other"; },
@@ -375,7 +376,7 @@ export const PhoneNotes = memo(function PhoneNotes() {
         {notes.length === 0 && <EmptyHint>{EMPTY_NOTES[filter]}</EmptyHint>}
         <div className="p-notegrid" ref={grid}>
           {/* "Pinned" over the pinned notes and "Others" over the rest, when there are both (227). */}
-          {labelled && <><div className="p-notelabel" data-label="pinned">Pinned</div><div className="p-notelabel" data-label="other">Others</div></>}
+          {labelled && <><div className="p-notelabel" data-label="pinned">Pinned<HeadCount n={pinnedCount} /></div><div className="p-notelabel" data-label="other">Others<HeadCount n={notes.length - pinnedCount} /></div></>}
           {notes.map((n) => <NoteCard key={n.id} n={n} s={s} sel={sel} onDragDown={canOrder ? noteGrid.down : undefined} />)}
         </div>
         <div className="p-endspace" />
@@ -754,7 +755,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
           {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
-        <div className="p-count">{count(results.length, "result")}</div>
+        {results.length > 0 && <div className="p-section p-count">Results<HeadCount n={results.length} /></div>}
         <div className="p-list">
           {results.map((i) => {
             const pv = preview(i.content, 80);

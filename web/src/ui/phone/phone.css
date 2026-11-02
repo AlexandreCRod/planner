@@ -642,7 +642,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-searchfield { display: flex; align-items: center; height: 56px; padding-left: 12px; color: var(--muted); }
 .phone .p-searchfield input { flex: 1; min-width: 0; height: 100%; margin-left: 16px; border: 0; background: none; outline: none; font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); caret-color: var(--p-primary); user-select: text; -webkit-user-select: text; }
 .phone .p-searchfield input::placeholder { color: var(--muted); }
-.phone .p-count { flex: none; padding: 4px 16px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
+.phone .p-section.p-count { flex: none; min-height: 0; padding: 4px 16px; }
 .phone .p-itemrow { display: flex; align-items: center; gap: 14px; padding: 7px 16px; }
 .phone .p-itemrow .grow { flex: 1; min-width: 0; }
 .phone .p-itemrow .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1342,7 +1342,6 @@ html.phone[data-theme="dark"] {
 .phone .today-list .p-taskbar .active, .phone .today-list .p-taskbar .stop { background: var(--p-primary); }
 .phone .today-list .p-taskbar .track { background: var(--p-sc-high); }
 .phone .today-list .p-taskbar.all .active { background: #86c79a; }
-.phone .today-list .p-tasks-head .n { font-weight: 400; }
 /* Under Today's Overdue heading the row's date is red instead of an "Overdue" pill (225). */
 .phone :is(.today-list, .p-rows) .task .sub .late { color: var(--danger); }
 .phone .pa-indicator { background: var(--p-strong); }
@@ -1809,3 +1808,13 @@ html.phone[data-theme="dark"] {
 .phone .ps-info { display: flex; margin-right: 4px; }
 .phone .ps-folder { min-height: 72px; }
 .phone .ps-folder-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--p-sc-high); color: var(--p-primary); }
+
+/* ---------- 287: one heading and count style. Every section heading is 14 px, medium, in the muted grey
+   (.p-section, Today's .section, Settings' parts); its count reads "Daily · 3", the number at regular weight. ---------- */
+.phone .p-hn { font-weight: 400; font-variant-numeric: tabular-nums; }
+.phone :is(.p-agenda-day, .p-notelabel, .p-rlist-group) { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
+/* The Agenda's days: the same heading, no tinted band. */
+.phone .p-agenda-day { padding: 16px 16px 4px; background: none; }
+.phone .p-notelabel { padding: 4px 4px 8px; }
+/* Today's headings are flex rows with a gap (styles.css .section); the count follows its word. */
+.phone .section:has(> .p-hn) { gap: 0; }

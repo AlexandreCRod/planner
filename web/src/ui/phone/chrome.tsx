@@ -204,6 +204,11 @@ export function SectionHeader({ children, onClick, expanded, className = "" }: {
     : <div className={`p-section ${className}`}>{body}</div>;
 }
 
+/** A heading's count (287): "Daily · 3", the number in the heading's grey at regular weight. */
+export function HeadCount({ n }: { n: ReactNode }) {
+  return <span className="p-hn">{"\u00a0· "}{n}</span>;
+}
+
 /** One line standing for what's folded away ("2 done ⌄", "2 earlier ⌄"); a tap shows them, another hides them. */
 export function FoldLine({ open, onToggle, text }: { open: boolean; onToggle: () => void; text: string }) {
   return (

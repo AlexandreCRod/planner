@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, DoneFold, HScroll, DropdownMenu, FoldLine, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, DoneFold, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -135,7 +135,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       </button>
     )}
     {shownOverdue.length > 0 && <>
-      <div className="section">Overdue</div>
+      <div className="section">Overdue<HeadCount n={shownOverdue.length} /></div>
       {rows(shownOverdue, `o${day}`, true, true)}
     </>}
     {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} />}
@@ -323,9 +323,9 @@ function RoutineListSheet({ s, t, onClose, onStreaks }: { s: Snapshot; t: number
         {todays.length > 0 && <div className="p-rlist-count">{done === todays.length ? `All ${todays.length} done today` : `${done} of ${todays.length} done today`}</div>}
         {rows.length === 0 && <div className="p-rlist-empty muted">No routines yet. Turn on Routine in a repeating task or event.</div>}
         <div className="p-rlist-rows">
-          {todays.length > 0 && others.length > 0 && <div className="p-rlist-group">Today</div>}
+          {todays.length > 0 && others.length > 0 && <div className="p-rlist-group">Today<HeadCount n={todays.length} /></div>}
           {todays.map((r) => row(r, close))}
-          {others.length > 0 && <div className="p-rlist-group">{todays.length ? "Other days" : "Not today"}</div>}
+          {others.length > 0 && <div className="p-rlist-group">{todays.length ? "Other days" : "Not today"}<HeadCount n={others.length} /></div>}
           {others.map((r) => row(r, close))}
         </div>
         {rows.length > 0 && (
@@ -397,7 +397,7 @@ function TasksHead({ done, total }: { done: number; total: number }) {
   const f = total ? done / total : 0;
   const text = tasksProgressText(done, total);
   return <>
-    <div className="section p-tasks-head">Tasks{text && <span className="n"> · {text}</span>}</div>
+    <div className="section p-tasks-head">Tasks{text && <HeadCount n={text} />}</div>
     {total > 0 && (
       <div className={`p-progress p-taskbar ${f >= 1 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {f > 0 && <span className="active" style={{ width: `${f * 100}%` }} />}
