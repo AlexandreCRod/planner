@@ -4,6 +4,8 @@
 // - Only what's on a day counts: a session on the day it was done, else the day it's placed, never if
 //   skipped (countedDay); futsal the same way (futsalDay), its games being the calendar's futsal events as
 //   trainingEntries gives them (item 240). Unplaced sessions, optional or not, never count.
+// - Another sport counts as futsal for the rules (323), with its own name in their words (ruleWords), unless
+//   its title says it's gentle (isGentleSport): that one counts only for the rules about whole days.
 // - A rule is its phase's. Rules between two items (the day before, the same day, days before) count when
 //   either item's day is in a phase with the rule, so they see across a phase's edge. gap, max_count,
 //   rest_days, weekdays, not_after and none look at the phase's own days. max_in_a_row counts days in a
@@ -13,7 +15,7 @@
 import { weekday } from "./dates.ts";
 import { count } from "./plural.ts";
 import {
-  type Entry, type Plan, type PlacementRule, type Selector, type Session, countedDay, entryId, futsalDay, sessionsOf,
+  type Entry, type Plan, type PlacementRule, type Selector, type Session, countedDay, entryId, futsalDay, isGentleSport, sessionsOf,
 } from "./training.ts";
 
 /** A session (by its id), or a futsal game (by its entry id, futsalLogId(event, day); null for a new one). */
@@ -45,6 +47,8 @@ export interface Breach {
   others: PlacedItem[];
   /** For rest_days, the phase's days; for max_in_a_row, the days in a row. */
   span: [number, number] | null;
+  /** What it's about in place of the plan's word "futsal": "futsal" for a game of it, else the sport's title. Empty when no game is in it. */
+  games: string[];
 }
 
 /** The worst level a placement breaks. */
@@ -57,8 +61,8 @@ const phaseAt = (plan: Plan, day: number) => plan.phases.findIndex((p) => day >=
 
 function matches(sel: Selector, it: PlacedItem): boolean {
   const s = it.session;
-  // Another sport (267) isn't futsal: only the rules about every day (rest days, days in a row) count it.
-  if ("kind" in sel) return s ? s.kind === sel.kind : sel.kind === "futsal" && !it.entry?.sport;
+  // A gentle sport isn't futsal: only the rules about every day (rest days, days in a row) count it.
+  if ("kind" in sel) return s ? s.kind === sel.kind : sel.kind === "futsal" && !(it.entry?.sport && isGentleSport(it.entry.title));
   if (!s) return false;
   if ("dayType" in sel) return s.dayType === sel.dayType;
   if ("tag" in sel) return s.tags.includes(sel.tag);
@@ -167,14 +171,22 @@ function evaluate(plan: Plan, items: PlacedItem[]): Found[] {
 
 const LEVEL_ORDER = ["avoid", "ideally", "note"];
 
+/** A game's name in a rule's words; null for a session. */
+const gameName = (it: PlacedItem) => (it.session ? null : it.entry?.sport ? it.entry.title : "futsal");
+
 /** [found] as [subject] sees them: one breach per rule, listing the other items, worst first. */
 function breachesOf(found: Found[], subject: PlacedItem): Breach[] {
   const by = new Map<string, Breach>();
   for (const f of found) {
     const k = `${f.rule.id}|${f.phase}|${f.span ?? ""}`;
-    const b = by.get(k) ?? { rule: f.rule, phase: f.phase, others: [], span: f.span };
+    const b = by.get(k) ?? { rule: f.rule, phase: f.phase, others: [], span: f.span, games: [] };
     by.set(k, b);
     if (f.listed) for (const it of f.items) if (it !== subject && !b.others.includes(it)) b.others.push(it);
+    // A rule about whole days takes in everything on them, so it speaks only of the item it's shown for.
+    for (const it of f.listed ? f.items : [subject]) {
+      const name = gameName(it);
+      if (name !== null && !b.games.includes(name)) b.games.push(name);
+    }
   }
   const out = [...by.values()];
   for (const b of out) b.others.sort((x, y) => x.day - y.day);
@@ -227,6 +239,18 @@ export function worstLevel(breaches: readonly Breach[]): Fit {
 /** For the popup's row of days: the worst level [item] would break on each of [days]. */
 export function dayFit(plan: Plan, entries: ReadonlyMap<string, Entry>, item: ItemRef, days: Iterable<number>): Map<number, Fit> {
   return new Map([...days].map((d) => [d, worstLevel(brokenRules(plan, entries, item, d))]));
+}
+
+/**
+ * A breach's text and why as the page shows them: the plan writes "futsal", which here becomes what the breach
+ * is about ("No basketball the day before the long run", "Futsal, Tennis and Padel at most 2× this week"). A title
+ * goes as typed, except that the first name's first letter follows the sentence.
+ */
+export function ruleWords(b: Breach): { text: string; why: string } {
+  const name = b.games.join(", ").replace(/, ([^,]*)$/, " and $1");
+  if (!name || name === "futsal") return { text: b.rule.text, why: b.rule.why };
+  const put = (words: string) => words.replace(/futsal/gi, (m) => name[0][m[0] === "F" ? "toUpperCase" : "toLowerCase"]() + name.slice(1));
+  return { text: put(b.rule.text), why: put(b.rule.why) };
 }
 
 /** Only the rules broken: notes left out. */

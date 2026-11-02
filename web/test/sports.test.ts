@@ -2,9 +2,9 @@
 // says futsal or football, else another sport; events of other categories never are; 240's data still reads.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { brokenNow, brokenRules } from "../src/domain/placement.ts";
+import { brokenNow, brokenRules, ruleWords } from "../src/domain/placement.ts";
 import {
-  dayOf, futsalGames, futsalLogId, gameKind, isFutsal, isGame, isSportsCategory, logCsv, phaseView, readPlan, sportsCategoryIds, trainingEntries,
+  dayOf, futsalGames, futsalLogId, gameKind, isFutsal, isGame, isGentleSport, isSportsCategory, logCsv, phaseView, readPlan, sportsCategoryIds, trainingEntries,
 } from "../src/domain/training.ts";
 import { weekBar } from "../src/domain/trainingWeek.ts";
 import { type Category, type Item, newItem } from "../src/domain/types.ts";
@@ -56,7 +56,7 @@ test("gameKind: the Sports category's events are games, futsal by the title; oth
   assert.equal(isGame(event({ categoryId: 5, title: "Climbing" })), false); // no Sports category known
 });
 
-test("another sport shows with its own title, counts for the days, not for futsal's rules; its CSV kind is sport", () => {
+test("another sport shows with its own title and counts for the days; its CSV kind is sport", () => {
   const tennis = event({ categoryId: 5, title: "Tennis", startDay: MON + 5, endDay: MON + 5 }); // the day before the long run
   const futsal = event({ categoryId: 5, title: "Futsal", startDay: MON + 2, endDay: MON + 2 });
   const dentist = event({ categoryId: 6, title: "Dentist", startDay: MON + 3, endDay: MON + 3 });
@@ -70,14 +70,30 @@ test("another sport shows with its own title, counts for the days, not for futsa
   const v = phaseView(plan, 0, es, es.values());
   assert.deepEqual(v.days.map((x) => x.items.map((i) => i.session?.id ?? i.entry.title)), [[], [], ["Futsal"], [], [], ["Tennis"], ["long"]]);
   assert.deepEqual(weekBar(v.days, []).segments.map((s) => s.kind), ["futsal", "futsal", "run"]);
-  // Tennis the day before the long run breaks no futsal rule; futsal there would.
-  assert.deepEqual([...brokenNow(plan, es).keys()], []);
-  assert.equal(brokenRules(plan, es, { futsal: futsalLogId(futsal.id, MON + 2) }, MON + 5).length, 1);
-  assert.equal(brokenRules(plan, es, { futsal: futsalLogId(tennis.id, MON + 5) }, MON + 5).length, 0);
-
   const rows = logCsv(plan, es.values()).split("\r\n");
   assert.equal(rows[2], ",futsal,done,2026-11-04,2026-11-04,,,,,Futsal,");
   assert.equal(rows[3], ",sport,planned,2026-11-07,,,,,,Tennis,");
+});
+
+test("323: a sport the day before the long run breaks futsal's rule, in its own name; a walk or yoga doesn't", () => {
+  const on = (title: string) => {
+    const e = event({ categoryId: 5, title, startDay: MON + 5, endDay: MON + 5 });
+    return { es: trainingEntries([plan], [], [e], [], SPORTS), id: futsalLogId(e.id, MON + 5) };
+  };
+  const b = on("Basketball");
+  const now = brokenNow(plan, b.es).get(b.id)!;
+  assert.deepEqual(now.map((x) => x.rule.id), ["no-futsal-before-long"]);
+  assert.equal(ruleWords(now[0]).text, "No basketball the day before the long run");
+  assert.deepEqual(brokenRules(plan, b.es, { session: "long" }, MON + 6).map((x) => ruleWords(x).text), ["No basketball the day before the long run"]);
+  for (const title of ["Walk", "Morning yoga", "dog walking"]) {
+    const g = on(title);
+    assert.equal(brokenNow(plan, g.es).size, 0, title);
+    assert.equal(brokenRules(plan, g.es, { futsal: g.id }, MON + 5).length, 0, title);
+  }
+  // It has to be the word.
+  assert.equal(isGentleSport("Sidewalk sprints"), false);
+  assert.equal(isGentleSport("Padel"), false);
+  assert.equal(isGentleSport("Sport"), false);
 });
 
 test("without a Sports category, only 240's futsal shows (as before)", () => {

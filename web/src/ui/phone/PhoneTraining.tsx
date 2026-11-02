@@ -13,7 +13,7 @@
 // Also here: Today's training line and the calendar's light marks.
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
-import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit } from "../../domain/placement.ts";
+import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
 import { freeDayLine } from "../../domain/todayPlan.ts";
 import {
@@ -603,11 +603,11 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
         {rules.map((b) => (
           <div key={`${b.phase}|${b.rule.id}`} className="tr-place-rule">
             <span className={`tr-level ${b.rule.level}`}>{b.rule.level === "avoid" ? "Avoid" : "Ideally"}</span>
-            <span className="text"><span className="x">{b.rule.text}</span>{b.rule.why && <span className="why">{b.rule.why}</span>}</span>
+            <span className="text"><span className="x">{ruleWords(b).text}</span>{b.rule.why && <span className="why">{ruleWords(b).why}</span>}</span>
           </div>
         ))}
         {all.filter((b) => b.rule.level === "note").map((b) => (
-          <div key={`${b.phase}|${b.rule.id}`} className="tr-place-note"><MIcon name="oLightbulb" size={14} /><span>{b.rule.text}</span></div>
+          <div key={`${b.phase}|${b.rule.id}`} className="tr-place-note"><MIcon name="oLightbulb" size={14} /><span>{ruleWords(b).text}</span></div>
         ))}
         <div className="tr-place-label">Or move it to</div>
         <div className="tr-place-days" role="radiogroup" aria-label="Move it to">

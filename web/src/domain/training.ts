@@ -521,6 +521,7 @@ export function futsalDay(e: Entry): number | null {
 // ---------- Futsal and other sports: calendar events (items 240, 267) ----------
 // A game is a normal calendar event of the Sports category (267): futsal when its title says futsal or
 // football, else another sport (its own title, a generic icon). One counts on every day it occurs.
+// Another sport follows futsal's placement rules unless its title says it's gentle (323, isGentleSport).
 // Done is a Completion {itemId, day}, as for routines. What was logged (how long, pain, effort, a note) is an
 // Entry with the id futsalLogId(itemId, day), made only when something is logged. The views (phaseView,
 // the placement rules, the week bar, logCsv, the day's type) read games as Entries made by gameEntry, put
@@ -537,6 +538,13 @@ const NO_SPORTS: ReadonlySet<number> = new Set();
 
 /** What an event is on Training: futsal, another sport, or nothing. */
 export type GameKind = "futsal" | "sport";
+
+/**
+ * Whether another sport's title plainly says it's gentle, a walk or yoga: it then counts only for the rules
+ * about whole days (rest days, days in a row). Any other sport counts as sprinty, so as futsal (323, the plan
+ * session's rule). Sports aren't told apart any further: their titles are free text.
+ */
+export const isGentleSport = (title: string) => /\b(walks?|walking|stroll|yoga|pilates|stretch(ing)?|mobility|tai chi|caminhada|ioga)\b/i.test(title);
 
 /**
  * Whether an event is on Training, and as what (267). Only events count:

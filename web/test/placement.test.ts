@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { weekday } from "../src/domain/dates.ts";
-import { type Breach, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, worstLevel } from "../src/domain/placement.ts";
+import { type Breach, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords, worstLevel } from "../src/domain/placement.ts";
 import { type Entry, dayOf, entryId, newEntry, readPlan } from "../src/domain/training.ts";
 
 // A made-up plan: two weeks, Mon 1 – Sun 14 Mar 2027 (the real one stays out of this public repo).
@@ -113,6 +113,61 @@ test("not_day_before: gym the day before the long run", () => {
   assert.deepEqual(brokenRules(p, es, { session: "g1" }, FRI), []);
   // Moving the long run itself sees the gym on the day before.
   assert.deepEqual(others(brokenRules(p, map(at("g1", FRI)), { session: "l1" }, SAT)[0]), ["g1@4"]);
+});
+
+const sport = (id: string, title: string, day: number) => futsal(id, day, { title, sport: true });
+/** Every rule about futsal, with the plan's words, as written in Week 1. */
+const FUTSAL_RULES = [
+  { id: "before-long", level: "avoid", check: { type: "not_day_before", a: { kind: "futsal" }, b: { day_type: "long" } }, text: "No futsal the day before the long run", why: "Tired legs." },
+  { id: "same-long", level: "avoid", check: { type: "not_same_day", a: { kind: "futsal" }, b: { day_type: "long" } }, text: "No futsal on the long-run day", why: "Two big loads." },
+  { id: "same-quality", level: "avoid", check: { type: "not_same_day", a: { kind: "futsal" }, b: { tag: "quality" } }, text: "No futsal on the quality-run day", why: "Two hard sessions." },
+  { id: "before-quality", level: "ideally", check: { type: "not_day_before", a: { kind: "futsal" }, b: { tag: "quality" } }, text: "Ideally no futsal the day before the quality run", why: "The reps need fresh legs." },
+  { id: "gym-futsal", level: "ideally", check: { type: "not_same_day", a: { kind: "gym" }, b: { kind: "futsal" } }, text: "Ideally no gym on a futsal day", why: "Futsal is already a hard day. If it must be, upper body only, before futsal." },
+  { id: "max-2", level: "ideally", check: { type: "max_count", a: { kind: "futsal" }, max: 2 }, text: "Futsal at most 2× this week", why: "Recovery." },
+  { id: "row", level: "ideally", check: { type: "max_in_a_row", max: 2 }, text: "At most 2 training days in a row (futsal counts)", why: "Fatigue." },
+];
+
+test("323: a sport breaks each of futsal's rules like futsal, a gentle one none of them", () => {
+  const p = planWith(FUTSAL_RULES);
+  const es = map(at("l1", SUN), at("q1", WED));
+  const asked = { futsal: "s" };
+  const on = (title: string, day: number) => ids(brokenRules(p, map(at("l1", SUN), at("q1", WED), sport("s", title, day)), asked, day));
+  assert.deepEqual(on("Basketball", SAT), ["before-long"]);
+  assert.deepEqual(on("Basketball", SUN), ["same-long"]);
+  assert.deepEqual(on("Basketball", WED), ["same-quality"]);
+  assert.deepEqual(on("Basketball", TUE), ["before-quality"]);
+  assert.deepEqual(on("Basketball", FRI), []);
+  for (const day of [SAT, SUN, WED, TUE]) assert.deepEqual(on("Evening yoga", day), [], `yoga on ${day - MON}`);
+  // Futsal itself, for the same days, as a yardstick: the same rules.
+  assert.deepEqual(ids(brokenRules(p, es, { futsal: null }, SAT)), ["before-long"]);
+});
+
+test("323: sports count toward futsal's weekly cap, gentle ones don't", () => {
+  const p = planWith(FUTSAL_RULES.filter((r) => r.id === "max-2"));
+  const mixed = brokenNow(p, map(futsal("f1", MON), sport("s1", "Basketball", WED), sport("s2", "Tennis", FRI)));
+  assert.deepEqual([...mixed.keys()], ["s2"]);                    // the third, by day
+  assert.deepEqual(brokenNow(p, map(futsal("f1", MON), sport("s1", "Basketball", WED), sport("s2", "Yoga", FRI))).size, 0);
+  assert.equal(ruleWords(mixed.get("s2")![0]).text, "Futsal, Basketball and Tennis at most 2× this week");
+});
+
+test("323: a gentle sport still counts for the whole-day rules, under its own name", () => {
+  const p = planWith(FUTSAL_RULES.filter((r) => r.id === "row"));
+  const now = brokenNow(p, map(futsal("f1", MON), at("e1", TUE), sport("y", "Yoga", WED)));
+  assert.equal(ruleWords(now.get("y")![0]).text, "At most 2 training days in a row (yoga counts)");
+  // From a session's side the rule keeps the plan's general words.
+  const es = map(futsal("f1", MON), sport("y", "Yoga", TUE));
+  assert.equal(ruleWords(brokenRules(p, es, { session: "e1" }, WED)[0]).text, "At most 2 training days in a row (futsal counts)");
+});
+
+test("323: a rule's words name the sport, not futsal, in the text and the why; futsal's own stay as written", () => {
+  const p = planWith(FUTSAL_RULES);
+  const b = brokenNow(p, map(at("g1", THU), sport("s", "Padel with Ana", THU))).get("g1")![0];
+  assert.deepEqual(ruleWords(b), { text: "Ideally no gym on a padel with Ana day", why: "Padel with Ana is already a hard day. If it must be, upper body only, before padel with Ana." });
+  const f = brokenNow(p, map(at("l1", SUN), futsal("f", SAT))).get("f")![0];
+  assert.deepEqual(ruleWords(f), { text: "No futsal the day before the long run", why: "Tired legs." });
+  // A rule with no game in it keeps its words, "futsal" and all.
+  const other = planWith([{ id: "wk", level: "ideally", check: { type: "weekdays", a: { day_type: "long" }, days: ["sun"] }, text: "Long run on Sunday", why: "Fine when futsal blocks the weekend." }]);
+  assert.equal(ruleWords(brokenNow(other, map(at("l1", SAT), sport("s", "Tennis", MON))).get("l1")![0]).why, "Fine when futsal blocks the weekend.");
 });
 
 test("not_same_day: futsal on the long-run day, and a futsal selector", () => {
