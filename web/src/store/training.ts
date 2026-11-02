@@ -17,7 +17,7 @@ import type { HealthDay, HealthNight, HealthSession } from "../domain/health.ts"
 import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
 import { type GameMatches, type GameSlot, matchGames } from "../domain/watchActivities.ts";
-import { type ActivityNote, type EventTimes, type Game, activityNotes, gamesOf, noteRecord, runIds } from "../domain/cardio.ts";
+import { type ActivityNote, type EventTimes, type Game, activityNotes, gamesOf, noteRecord, runEntry, runIds } from "../domain/cardio.ts";
 import { saveGameLog } from "./futsal.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
