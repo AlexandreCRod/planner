@@ -54,6 +54,9 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       const isCheck = (el: HTMLElement | undefined) => !!el && el.tagName === "P" && checklistDepth(el.textContent ?? "") >= 0;
       // A small gap after each run of checkbox lines, as lists have (the class is never saved: RichEditor's normalize).
       lines.forEach((el, i) => { const end = isCheck(el) && !isCheck(lines[i + 1]); if (el.classList.contains("pn-check-end") !== end) el.classList.toggle("pn-check-end", end); });
+      // Checkbox lines sit a little in, so their handles are clear of the screen's edge, where Android's back
+      // gesture starts (review of 2.10, finding 6). Never saved either.
+      lines.forEach((el) => { const c = isCheck(el); if (el.classList.contains("pn-check") !== c) el.classList.toggle("pn-check", c); });
       lines.forEach((el, i) => {
         if (!isCheck(el) || el.classList.contains("pn-folded")) return; // lines folded into "completed" have no handle
         const r = el.getBoundingClientRect();

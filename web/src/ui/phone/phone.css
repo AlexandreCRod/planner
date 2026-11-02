@@ -1488,12 +1488,15 @@ html.phone[data-theme="dark"] {
 /* ---------- Checklist handles in the note editor (ChecklistHandles.tsx) ----------
    A drag handle in the margin by each checklist line; the lifted line floats over the others, which
    slide out of its way. */
-/* The text starts where the title does; the handles hang in the margin to its left, unseen until a
-   line is pressed (or, with a mouse, pointed at) or dragged (227). */
+/* The text starts where the title does; the handles hang to the left of the checkbox lines, unseen until a
+   line is pressed (or, with a mouse, pointed at) or dragged (227). The checkbox lines sit 24 px in, so the
+   handles are at 24-44 px from the screen's edge, clear of Android's back gesture strip (review of 2.10,
+   finding 6; they were at 0-20 px, inside it). */
 .phone .pn-text { position: relative; }
-.phone .pn-handles { position: absolute; left: 0; top: 0; width: 20px; height: 0; }
+.phone .pn-text .rich > p.pn-check { padding-left: 24px; }
+.phone .pn-handles { position: absolute; left: 0; top: 0; width: 44px; height: 0; }
 .phone .pn-handle {
-  position: absolute; left: 0; width: 20px; height: 32px; padding: 0; border: 0; border-radius: 10px; display: grid; place-items: center;
+  position: absolute; left: 24px; width: 20px; height: 32px; padding: 0; border: 0; border-radius: 10px; display: grid; place-items: center;
   background: none; color: var(--pn-fg, var(--text)); opacity: 0; transition: opacity .2s; touch-action: none; -webkit-touch-callout: none;
 }
 .phone .pn-handle.on { opacity: .6; transition-duration: .1s; }
