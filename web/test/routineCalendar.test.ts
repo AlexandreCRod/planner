@@ -56,3 +56,4 @@ test("an old record without the field gets the default; the field syncs as part 
   const fromOtherDevice = JSON.parse(JSON.stringify({ ...tese, inCalendar: false })) as Item;
   assert.equal(calendarShows(fromOtherDevice, "chosen"), false);
 });
+
