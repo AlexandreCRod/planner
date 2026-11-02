@@ -11,7 +11,7 @@ import { showStreaks } from "../../store/routines.ts";
 import { noteCardText, preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, priorityColor } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
-import { KINDS, subtitle, typeLabel } from "../shared/kinds.ts";
+import { KINDS, searchEmpty, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
@@ -756,7 +756,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
         {results.length > 0 ? <div className="p-section p-count">Results<HeadCount n={results.length} /></div>
-          : <EmptyState icon="oSearch" title={q.trim() ? "Nothing found" : "Nothing here yet"} hint={q.trim() ? "Try other words or fewer filters" : "What you add shows up here"} />}
+          : <EmptyState icon="oSearch" {...searchEmpty(q, kinds.size > 0 || cat !== null || tag !== null)} />}
         <div className="p-list">
           {results.map((i) => {
             const pv = preview(i.content, 80);

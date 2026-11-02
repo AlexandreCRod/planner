@@ -29,3 +29,13 @@ export function subtitle(i: Item, s: Snapshot) {
   if (n) parts.push(count(n, "link"));
   return parts.join(" · ");
 }
+
+/**
+ * Search's empty block: "Nothing found" once words are typed or a kind, category or tag chip is picked
+ * (review of 2.10, finding 8), with a hint that fits; "Nothing here yet" only with nothing asked.
+ */
+export function searchEmpty(text: string, chipPicked: boolean): { title: string; hint: string } {
+  if (text.trim()) return { title: "Nothing found", hint: "Try other words or fewer filters" };
+  if (chipPicked) return { title: "Nothing found", hint: "Try fewer filters" };
+  return { title: "Nothing here yet", hint: "What you add shows up here" };
+}
