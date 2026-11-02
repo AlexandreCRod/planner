@@ -92,11 +92,11 @@ export function CardioCards({ tr, id, t, st, onOpen }: { tr: Training; id: strin
   if (id.startsWith("type:")) return <TypeCards tr={tr} type={typeOf(id)} t={t} st={st} onOpen={onOpen} />;
   if (id.startsWith("run:")) {
     const r = tr.runs.find((x) => x.id === id.slice(4));
-    return r ? <RunCard tr={tr} r={r} /> : <EmptyHint>This run isn't here any more.</EmptyHint>;
+    return r ? <RunCard key={r.id} tr={tr} r={r} /> : <EmptyHint>This run isn't here any more.</EmptyHint>;
   }
   if (id.startsWith("game:")) {
     const g = tr.games.find((x) => x.id === id.slice(5));
-    return g ? <GameCard tr={tr} g={g} t={t} /> : <EmptyHint>This game isn't here any more.</EmptyHint>;
+    return g ? <GameCard key={g.id} tr={tr} g={g} t={t} /> : <EmptyHint>This game isn't here any more.</EmptyHint>;
   }
   return null;
 }
