@@ -3,6 +3,7 @@
 // tap (a picker, a menu or a small sheet, saved at once), and an Edit button for the full editor. The
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { whenText } from "../../domain/itemWhen.ts";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
@@ -69,17 +70,8 @@ export function switchType(d: Draft, t: ItemType): Draft {
 /** "At the time", "15 minutes before", "1 day before", "10 minutes after"... */
 export { offsetText };
 
-/** "Thu, 15 Oct · 3 PM – 4 PM", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 9 AM"... */
-export function whenText(item: Item, day: number | null): string {
-  const start = day ?? item.startDay;
-  if (start === null) return "No date";
-  if (item.type !== "EVENT") return `Due ${formatDate(start)}${item.startMin !== null ? ` at ${formatTime(item.startMin)}` : ""}`;
-  const span = Math.max(0, (item.endDay ?? item.startDay ?? 0) - (item.startDay ?? 0));
-  const end = start + span;
-  const t = (m: number | null) => (m !== null ? formatTime(m) : "");
-  if (item.allDay) return span ? `All day, ${formatDate(start)} – ${formatDate(end)}` : `${formatDate(start)} · all day`;
-  return span ? `${formatDate(start)} ${t(item.startMin)} – ${formatDate(end)} ${t(item.endMin)}` : `${formatDate(start)} · ${t(item.startMin)} – ${t(item.endMin)}`;
-}
+/** "Thu, 15 Oct · 3 PM – 4 PM", "All day, 3 Aug – 10 Aug", "Due Fri, 16 Oct at 9 AM", a routine's "Today at 9 PM"... */
+export { whenText };
 
 const overdueText = (p: OverduePolicy) => p === "SHOW_OVERDUE" ? "If missed: stays overdue" : p === "CARRY_OVER" ? "If missed: moves to the next day" : "If missed: skip it";
 
@@ -775,7 +767,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
 
   return (
     <div className="p-scaffold pe-view">
-      <TopAppBar back title={isEvent ? "Event" : "Task"} actions={<>
+      <TopAppBar back title={routine ? "Routine" : isEvent ? "Event" : "Task"} actions={<>
         <IconButton icon="oContentCopy" label="Duplicate" onClick={duplicate} />
         <span className="p-menu-anchor">
           <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(item) && deleteDay !== null) setDeleteMenu(true); else { trashWithUndo(item); leave(); } }} />
@@ -1165,7 +1157,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   return (
     <div className="p-scaffold pe-editor">
       {header}
-      <TopAppBar className={header ? "nosat" : ""} title={isNew ? `New ${isEvent ? "event" : "task"}` : isEvent ? "Event" : "Task"} actions={<>
+      <TopAppBar className={header ? "nosat" : ""} title={isNew ? `New ${isEvent ? "event" : "task"}` : original && isRoutineItem(original) ? "Routine" : isEvent ? "Event" : "Task"} actions={<>
         {original && (
           <span className="p-menu-anchor">
             <IconButton icon="oDelete" label="Delete" onClick={() => { if (isRecurring(original) && deleteDay !== null) setDeleteMenu(true); else { trashWithUndo(original); leaveAll(); } }} />

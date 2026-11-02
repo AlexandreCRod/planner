@@ -33,15 +33,16 @@ import { type Selection, SelectBox, SelectedMark, SelectionBar, useSelection } f
 import { spring, useSwipePager } from "./pager.ts";
 import { flushSync } from "react-dom";
 import { count } from "../../domain/plural.ts";
-import { StreaksSheet } from "./StreaksSheet.tsx";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { keepValue, keptValue, useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 import { BottomSheet } from "./m3.tsx";
 
 // ---------- Tasks ----------
 
-const GROUPS = ["Daily", "Weekly", "Monthly", "Yearly", "One-time", "Anytime"] as const;
+// Routines have their own group at the top (286): one clear thing, not tasks in disguise among the Daily ones.
+const GROUPS = ["Routines", "Daily", "Weekly", "Monthly", "Yearly", "One-time", "Anytime"] as const;
 function groupOf(e: TaskEntry): (typeof GROUPS)[number] {
+  if (isRoutineItem(e.item)) return "Routines";
   switch (e.item.freq) {
     case "DAILY": return "Daily";
     case "WEEKLY": return "Weekly";
@@ -80,8 +81,6 @@ export const useTodosSheetOpen = () => useSyncExternalStore(onTodoWatch, () => t
 /** [back]: opened full-screen (Tasks not in the bottom bar, 241), with a back arrow. */
 export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: boolean }) {
   const [todo, setTodo] = useState(savedTab);
-  const [menu, setMenu] = useState(false);
-  const [streaksOpen, setStreaksOpen] = useState(false);
   const index = todo ? 1 : 0;
   const idx = useRef(index);
   idx.current = index;
@@ -114,13 +113,8 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
     allow: (t) => !t.closest("input, textarea, .p-chiprow"),
   });
   return (
-    <Scaffold title="Tasks" flush back={back} actions={<>
-      <AppBarActions />
-      <span className="p-menu-anchor">
-        <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />
-        <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[{ label: "Streaks", icon: "fLocalFireDepartment", onClick: () => setStreaksOpen(true) }]} />
-      </span>
-    </>}>
+    // Streaks live in one place, the routines list on Today (286), so the page has no ⋮ menu.
+    <Scaffold title="Tasks" flush back={back} actions={<AppBarActions />}>
       <div className="p-seg-wrap">
         <Segmented value={todo ? "todo" : "scheduled"} options={[["scheduled", "Scheduled"], ["todo", "To-do"]]} onChange={showTab} track={track} />
       </div>
@@ -134,7 +128,6 @@ export const PhoneTasks = memo(function PhoneTasks({ back = false }: { back?: bo
           </div>
         </div>
       </div>
-      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
     </Scaffold>
   );
 });
@@ -177,7 +170,7 @@ function ScheduledList() {
             const n = new Set(collapsed);
             if (isCollapsed) n.delete(g); else n.add(g);
             setCollapsed(n);
-          }}>{g} ({list.length})</SectionHeader>
+          }}>{g} · {list.length}</SectionHeader>
           {!isCollapsed && list.map((e, index) => row(e, (isDone) => hold.onToggle(g, key(e), e, index, isDone)))}
         </div>
       );

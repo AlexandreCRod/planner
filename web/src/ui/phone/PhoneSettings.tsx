@@ -36,7 +36,6 @@ import { BUNDLE_WINDOW_CHOICES, setClockPrefs, useClockPrefs } from "../../alarm
 import { ALARM_RING_CHOICES, CLOCK_RING_CHOICES, SNOOZE_CHOICES, setAlarmSettings, useAlarmSettings } from "../../alarms/settings.ts";
 import { formatTime } from "../../domain/dates.ts";
 import { count } from "../../domain/plural.ts";
-import { StreaksSheet } from "./StreaksSheet.tsx";
 import { canUseHealth, connect, disconnect, healthFound, readNow, useHealth } from "../../health/healthConnect.ts";
 import { watchStatus } from "../../domain/healthRead.ts";
 import { LOOKS, type LookKey, look, setLook, useLooks } from "./looks.ts";
@@ -250,7 +249,6 @@ export function PhoneSettings() {
   const [linger, setLinger] = useState(String(checkedLinger()));
   const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
-  const [streaksOpen, setStreaksOpen] = useState(false);
   const [dialog, setDialog] = useState<"" | "server" | "signout" | "sample">("");
   const [server, setServerShown] = useState(getServer());
   const [busy, setBusy] = useState(false);
@@ -317,7 +315,6 @@ export function PhoneSettings() {
           onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
         {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
         <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
-        <ListItem headline="Streaks" supporting="Each routine's current and best streak, and its last 14 days" onClick={() => setStreaksOpen(true)} />
 
         <SportsSection />
 
@@ -378,7 +375,6 @@ export function PhoneSettings() {
           <TextButton onClick={() => { resetSample(); setDialog(""); showSnackbar("Sample data put back"); }}>Reset</TextButton>
         </>}>Everything in Planner Test is replaced by the sample week. Your real app isn't touched.</Dialog>
       )}
-      {streaksOpen && <StreaksSheet onClose={() => setStreaksOpen(false)} />}
       {dialog === "signout" && (
         <Dialog title="Sign out?" onClose={() => setDialog("")} actions={<>
           <TextButton onClick={() => setDialog("")}>Cancel</TextButton>
