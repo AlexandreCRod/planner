@@ -1,7 +1,9 @@
 // Sideways drags that never get in the way of taps, the way Compose's detectHorizontalDragGestures
 // behaves: nothing happens until the finger has moved past the touch slop (8 dp) sideways, so a tap
 // that wobbles a little is still a tap; once a drag has started, the click it would end in is dropped.
-// No pointer capture and no preventDefault: the browser keeps vertical scrolling (touch-action: pan-y).
+// No pointer capture, and the browser keeps vertical scrolling (touch-action: pan-y) until a drag has
+// started; from then on the finger is the drag's, as with the pagers (335: on a phone a finger drifting
+// up or down mid-swipe let the browser take it for a scroll, which cancelled the swipe of a city card).
 import { useEffect, useRef } from "react";
 import { TOUCH_SLOP, swallowClick, textTouch } from "./press.ts";
 import { VelocityTracker } from "./motion.ts";
@@ -39,6 +41,7 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
     const el = ref.current;
     if (!el) return;
     let g: { id: number; x0: number; y0: number; dragging: boolean; done: boolean; vt: VelocityTracker; lastX: number } | null = null;
+    const noScroll = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
 
     const finish = (cancelled: boolean, t = 0) => {
       if (!g) return;
@@ -47,6 +50,7 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
+      el.removeEventListener("touchmove", noScroll);
       if (cur.dragging) {
         if (!cancelled) swallowNextClick();
         h.current.onEnd(cur.lastX - cur.x0, cancelled ? 0 : cur.vt.velocity(t));
@@ -63,6 +67,7 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
         if (h.current.accept && !h.current.accept(dx)) { g.done = true; return; }
         g.dragging = true;
         claimSwipe(e.pointerId);
+        el.addEventListener("touchmove", noScroll, { passive: false });
         h.current.onStart?.();
       }
       h.current.onMove(dx);
