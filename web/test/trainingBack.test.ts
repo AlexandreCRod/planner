@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { trainingBase, trainingSub } from "../src/ui/phone/trainingBack.ts";
+import { afterDayWeek, trainingBase, trainingSub } from "../src/ui/phone/trainingBack.ts";
 
 const q = (s: string) => new URLSearchParams(s);
 
@@ -33,4 +33,13 @@ test("from within Training, or to the week itself, nothing is added", () => {
 test("the week at a day opened cold has the overview under it, or back would have nowhere to go", () => {
   assert.equal(trainingBase("", "training", q("d=20380")), "#/training");
   assert.equal(trainingBase("", "training", q("d=20380&p=hm")), "#/training?p=hm");
+});
+
+test("leaving the week at a day for another tab puts the Training tab back on its overview", () => {
+  assert.equal(afterDayWeek("training", q("d=20380"), "today")?.toString(), "");
+  assert.equal(afterDayWeek("training", q("d=20380&p=hm"), "calendar")?.toString(), "p=hm");
+  assert.equal(afterDayWeek("training", q("d=20380"), "training"), null);   // the overview, a session on that week...
+  assert.equal(afterDayWeek("training", q("view=week"), "today"), null);    // the week plan stays open under the tab
+  assert.equal(afterDayWeek("training", q("s=gym-1&d=20380"), "today"), null);
+  assert.equal(afterDayWeek("today", q("d=20380"), "calendar"), null);
 });

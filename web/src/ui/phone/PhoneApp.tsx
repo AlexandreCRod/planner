@@ -39,7 +39,7 @@ import { ShellPos, afterFrame, clamp } from "./shellPos.ts";
 import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
-import { trainingBase, trainingSub } from "./trainingBack.ts";
+import { afterDayWeek, trainingBase, trainingSub } from "./trainingBack.ts";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Clock (the route "alarms") is the last where the alarm engine is (the phone build), not in a browser.
@@ -181,6 +181,9 @@ export function PhoneApp() {
     const on = (e: HashChangeEvent) => {
       under(e.oldURL ? hashRoute(e.oldURL)[0] : last);
       last = hashRoute(location.href)[0];
+      if (!e.oldURL || !tabsRef.current.some((t) => t.key === last)) return;
+      const left = afterDayWeek(...hashRoute(e.oldURL), last);
+      if (left) { trainingQ.current = left; trainingHash = `#/training${left.toString() ? `?${left}` : ""}`; }
     };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
