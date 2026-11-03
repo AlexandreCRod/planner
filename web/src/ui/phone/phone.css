@@ -1440,16 +1440,16 @@ html.phone[data-theme="dark"] {
 .phone .p-routines-line .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines-head .n { font-weight: 400; color: var(--text); font-variant-numeric: tabular-nums; }
 .phone .p-routines .p-rchips {
-  flex: 1; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
+  flex: 0 1 auto; min-width: 0; gap: 8px; padding: 8px 16px 8px 8px;
 }
 .phone .p-routines .p-rchip { height: 32px; max-width: 180px; overflow: visible; border-radius: 16px; padding: 0 12px 0 7px; font-size: 14px; line-height: 20px; }
 .phone .p-routines .p-rchip::after { content: ""; position: absolute; inset: -8px -4px; }
 .phone .p-routines .p-rchip .ring { width: 16px; height: 16px; }
 .phone .p-routines .p-rchip.p-rchip-all { padding: 0 8px; }
-/* The list button ends the line, pinned at its right outside the scrolling chips (user, 2026-11-03; was first, 329):
-   the chips scroll and fade out just before it. */
+/* The list button ends the chips, outside their scrolling part (user, 2026-11-03; was first, 329): right after the
+   last chip when they fit, else pinned at the line's right, the chips scrolling and fading out just before it. */
 .phone .p-routines .p-rchips { padding-right: 8px; }
-.phone .p-routines .p-rchip-end { margin-right: 16px; }
+.phone .p-routines .p-rchip-end { margin: 0 16px 0 4px; }
 
 /* ---------- Tasks on the calendar: outlined and lighter than events, with a small tick circle ----------
    Events keep the filled block with the thin stripe; a task is only an outline in its colour, on the
