@@ -18,7 +18,9 @@ type Look = {
 export const LOOKS = {
   /**
    * Settings' layout (259, with 229): folders (the pick since 337): a short list of its parts, each opening
-   * its own page with its card; or one page of grouped cards. A choice already made is kept. Read once, in PhoneSettings.
+   * its own page with its card; or one page of grouped cards. Read once, in PhoneSettings. A stored choice is kept;
+   * 2.10 stored nothing for its pick ("page"), so a "One page" chosen in 2.10 can't be told from never having
+   * chosen, and both open in folders (the layout the user asked for, 337). Since 2.10.1 every choice is stored.
    */
   settings: { page: "Settings", title: "Layout", pick: "folders", choices: [
     ["page", "One page", "Every setting on one page, in cards"],
@@ -142,12 +144,12 @@ export function look<K extends LookKey>(k: K): ValueOf<K> {
   return (v !== null && l.choices.some(([c]) => c === v) ? v : l.pick) as ValueOf<K>;
 }
 
-/** Sets a look (the pick goes back to being the default) and redraws what shows it. */
+/**
+ * Sets a look and redraws what shows it. The pick is stored too, so a choice made now is kept if the pick
+ * changes later (review of 2.10.1, finding 5: "One page" chosen while it was the pick wasn't kept).
+ */
 export function setLook<K extends LookKey>(k: K, v: ValueOf<K>) {
-  try {
-    if (v === LOOKS[k].pick) localStorage.removeItem(keyOf(k));
-    else localStorage.setItem(keyOf(k), v);
-  } catch { /* private mode */ }
+  try { localStorage.setItem(keyOf(k), v); } catch { /* private mode */ }
   version++;
   listeners.forEach((l) => l());
 }

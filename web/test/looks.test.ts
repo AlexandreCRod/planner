@@ -17,12 +17,22 @@ test("each look starts on its pick, and the pick is one of its choices", () => {
   }
 });
 
-test("a look is kept, an unknown value falls back to the pick, and the pick clears the key", () => {
+test("a look is kept, an unknown value falls back to the pick, and choosing the pick stores it too", () => {
   setLook("guides", "C");
   assert.equal(look("guides"), "C");
   assert.equal(kept.get("look.guides"), "C");
   kept.set("look.guides", "Z");
   assert.equal(look("guides"), "B");
+  // Review of 2.10.1, finding 5: the pick is stored, so the choice stays if the pick changes later.
   setLook("guides", "B");
-  assert.equal(kept.has("look.guides"), false);
+  assert.equal(kept.get("look.guides"), "B");
+  kept.delete("look.guides");
+});
+
+test("Settings opens in folders unless one page is stored", () => {
+  assert.equal(look("settings"), "folders");
+  setLook("settings", "page");
+  assert.equal(kept.get("look.settings"), "page");
+  assert.equal(look("settings"), "page");
+  kept.delete("look.settings");
 });
