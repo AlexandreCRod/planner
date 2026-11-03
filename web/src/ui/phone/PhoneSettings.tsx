@@ -305,7 +305,7 @@ export function PhoneSettings({ part }: { part?: string }) {
         </HScroll>
       </div>
       <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
-      <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Swiping a page changes the day or week"}
+      <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Swipes stay in the page; the bottom bar changes tab"}
         checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
       {!wide && swipesTabs && <SwitchRow title="Bottom bar changes the day" supporting="Slide along it to change the day"
         checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}

@@ -10,15 +10,21 @@ const kept = new Map<string, string>();
 const { BAR_DAYS_KEY, NO_SWIPE, SWIPE_TABS_KEY, barDays, barTarget, swipeTabs } = await import("../src/ui/phone/pager.ts");
 const { claimSwipe, clearSwipeClaim, swipeClaimed } = await import("../src/ui/phone/gesture.ts");
 
-test("pages change tab by default, and the bottom bar stays on tabs", () => {
+test("swipes stay inside the page by default (330); a choice already made is kept", () => {
   kept.clear();
-  assert.equal(swipeTabs(), true);
+  assert.equal(swipeTabs(), false);
   assert.equal(barDays(), false);
+  kept.set(SWIPE_TABS_KEY, "true");
+  assert.equal(swipeTabs(), true);
+  kept.set(SWIPE_TABS_KEY, "false");
+  assert.equal(swipeTabs(), false);
 });
 
 test("the bottom bar's option only counts while the pages change tabs", () => {
   kept.clear();
   kept.set(BAR_DAYS_KEY, "true");
+  assert.equal(barDays(), false); // the default: pages stay inside
+  kept.set(SWIPE_TABS_KEY, "true");
   assert.equal(barDays(), true);
   kept.set(SWIPE_TABS_KEY, "false");
   assert.equal(swipeTabs(), false);

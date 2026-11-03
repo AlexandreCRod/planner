@@ -18,11 +18,13 @@ export const SNAP_VELOCITY = FLICK;
 export const SWIPE_GAIN = 1.2;
 
 /**
- * Settings > "Swipe pages to change tab" (300), on by default: a sideways swipe on a page changes tab, and
- * days and weeks change on the top bar. Off, the pages change the day or week, as before.
+ * Settings > "Swipe pages to change tab" (300). Off by default since 330 (it was on): a sideways swipe stays
+ * inside the page (Today's days; the calendar's days, weeks and months, its header and grid alike; Clock's
+ * sections; Progress's tabs) and the bottom bar changes tab. On, a swipe on a page changes tab and days and
+ * weeks change on the top bar. A choice already made ("true" or "false") is kept.
  */
 export const SWIPE_TABS_KEY = "swipeTabs";
-export const swipeTabs = () => { try { return localStorage.getItem(SWIPE_TABS_KEY) !== "false"; } catch { return true; } };
+export const swipeTabs = () => { try { return localStorage.getItem(SWIPE_TABS_KEY) === "true"; } catch { return false; } };
 /** Settings > "Bottom bar changes days and weeks" (300), off by default; only while the pages change tabs. */
 export const BAR_DAYS_KEY = "barDays";
 export const barDays = () => { try { return swipeTabs() && localStorage.getItem(BAR_DAYS_KEY) === "true"; } catch { return false; } };
@@ -52,7 +54,9 @@ export function turnerSwipe(key: string, step: (dir: 1 | -1) => void, width: () 
   const t = turners[key];
   let from = 0;
   return {
-    accept: () => swipeTabs(),
+    // The top bar always turns the day or week: with pages changing tabs it's the only place that does, and
+    // with them staying inside the page the header moves along with the rest of it (330, 328).
+    accept: () => true,
     onStart: () => { t.current?.start(); from = 0; },
     onMove: (dx) => {
       if (!from) from = Math.sign(dx) * TOUCH_SLOP; // from where the slop ran out, as a pager's drag
