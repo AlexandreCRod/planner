@@ -1290,6 +1290,10 @@ html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), 
   background: var(--p-primary); color: var(--p-on-primary);
 }
 .phone .p-notecard .p-selmark { position: absolute; top: 8px; right: 8px; z-index: 1; }
+/* Several alarms picked (348): the same outline and tick, the tick in the card's top right corner, over the switch's corner. */
+.phone .pa-card.sel { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+.phone .pa-card .p-selmark { position: absolute; top: 4px; right: 4px; z-index: 1; }
+.phone .pa-selbar .p-appbar-title { flex: 1; min-width: 0; white-space: nowrap; }
 
 /* Today's "2 tasks without a date — see Tasks": a quiet link to the To-do tab. */
 .phone .today-list .p-anytime { display: block; width: 100%; margin-top: 6px !important; border: 0; background: none; text-align: left; font: inherit; font-size: 12px; line-height: 16px; letter-spacing: .4px; color: var(--muted); }

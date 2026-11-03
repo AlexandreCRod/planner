@@ -336,3 +336,24 @@ export function quickWindows(today: number, nextDay: number | null): [string, nu
   out.push(["Next 7 days", today + 1, today + 7], ["2 weeks", today + 1, today + 14]);
   return out;
 }
+
+// ---------- Selecting several alarms (348) ----------
+
+/** A tap or hold on a card while selecting: its alarms (a bundle's all) go in, or out if they all were in. */
+export function toggleAlarms(sel: ReadonlySet<number>, ids: readonly number[]): Set<number> {
+  const next = new Set(sel);
+  const all = ids.length > 0 && ids.every((id) => sel.has(id));
+  for (const id of ids) { if (all) next.delete(id); else next.add(id); }
+  return next;
+}
+
+/** The selected alarms, in time order (as a skip sheet lists them); ids no longer there drop out. */
+export const selectedAlarms = <T extends Clockish & { id: number }>(all: T[], sel: ReadonlySet<number>): T[] =>
+  all.filter((a) => sel.has(a.id)).sort((x, y) => x.hour * 60 + x.minute - (y.hour * 60 + y.minute));
+
+/** The selection bar's switch: "off" while any picked alarm is on (they all go off), else "on". */
+export const selectionSwitch = (picked: { enabled: boolean }[]): "on" | "off" => (picked.some((a) => a.enabled) ? "off" : "on");
+
+/** The alarms to save to turn [picked] [to] "on" or "off": only those not already so. */
+export const switchAlarms = <T extends { enabled: boolean }>(picked: T[], to: "on" | "off"): T[] =>
+  picked.filter((a) => a.enabled !== (to === "on")).map((a) => ({ ...a, enabled: to === "on" }));

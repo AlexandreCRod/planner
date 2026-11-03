@@ -244,3 +244,22 @@ test("Skip days' quick choices: next ring, tomorrow, rest of the week to Sunday,
   // Saturday: the rest of the week is Sunday only, the same as tomorrow, so it isn't offered; nor with no ring.
   assert.deepEqual(quickWindows(mon + 5, null).map(([n]) => n), ["Tomorrow", "Next 7 days", "2 weeks"]);
 });
+
+test("selecting several alarms: a card's tap adds its alarms, a bundle all of them, a second tap takes them out (348)", async () => {
+  const { toggleAlarms, selectedAlarms, selectionSwitch, switchAlarms } = await import("../src/domain/clockList.ts");
+  let sel: ReadonlySet<number> = new Set([5]);
+  sel = toggleAlarms(sel, [420, 430, 440]);            // a bundle
+  assert.deepEqual([...sel].sort((a, b) => a - b), [5, 420, 430, 440]);
+  sel = toggleAlarms(new Set([5, 420]), [420, 430, 440]); // partly in: the rest join it
+  assert.deepEqual([...sel].sort((a, b) => a - b), [5, 420, 430, 440]);
+  sel = toggleAlarms(sel, [420, 430, 440]);             // all in: out they go
+  assert.deepEqual([...sel], [5]);
+  const list = [alarm(22, 0), alarm(6, 30, 0, false), alarm(7, 0), alarm(9, 0)];
+  assert.deepEqual(selectedAlarms(list, new Set([1320, 390, 420, 999])).map((a) => a.id), [390, 420, 1320]);
+  // The switch turns them all off while any is on; all off, it turns them on. Only the changed ones are saved.
+  const picked = selectedAlarms(list, new Set([390, 420]));
+  assert.equal(selectionSwitch(picked), "off");
+  assert.deepEqual(switchAlarms(picked, "off").map((a) => [a.id, a.enabled]), [[420, false]]);
+  assert.equal(selectionSwitch([alarm(6, 30, 0, false)]), "on");
+  assert.deepEqual(switchAlarms(picked, "on").map((a) => [a.id, a.enabled]), [[390, true]]);
+});

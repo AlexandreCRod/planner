@@ -17,7 +17,8 @@ import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weathe
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import {
   CLOCK_FILTERS, type ClockFilter, type SeriesPlan, SKIP_WINDOW_DAYS, applyWindow, buildSeries, bundleAlarms, nextRingDay, quickWindows, ringsBetween, seriesPlan, seriesProblem, seriesTimes,
-  shiftBundle, shownBy, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, toggleFilter, unskip, unskipDay, windowCount, windowKeys,
+  selectedAlarms, selectionSwitch, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, switchAlarms, toggleAlarms, toggleFilter, unskip,
+  unskipDay, windowCount, windowKeys,
 } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
@@ -33,6 +34,8 @@ import { SlideStepper } from "./SlideStepper.tsx";
 import { feel } from "./haptics.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
+import { pushBack } from "./native.ts";
+import { SelectedMark } from "./Select.tsx";
 
 type Section = "alarm" | "timer" | "stopwatch" | "world";
 const SECTIONS: [Section, string][] = [["alarm", "Alarms"], ["timer", "Timer"], ["stopwatch", "Stopwatch"], ["world", "World clock"]];
@@ -159,6 +162,12 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const idx = useRef(index);
   idx.current = index;
   const [editing, setEditing] = useState<{ alarm: ClockAlarm; isNew: boolean } | null>(null);
+  // Several alarms picked (348): the top bar gives way to the selection's; back or ✕ ends it, as does leaving Alarms.
+  const [sel, setSel] = useState<ReadonlySet<number>>(new Set());
+  const selecting = sel.size > 0;
+  useEffect(() => (selecting ? pushBack(() => setSel(new Set())) : undefined), [selecting]);
+  useEffect(() => { if (index !== 0 || !active) setSel((x) => (x.size ? new Set() : x)); }, [index, active]);
+  const listApi = useRef<{ skip: (group: ClockAlarm[]) => void } | null>(null);
   const addingSw = useRef(new Set<number>());
   const [newTimer, setNewTimer] = useState(false);
   const [addZone, setAddZone] = useState(false);
@@ -223,7 +232,9 @@ export function PhoneAlarms({ active }: { active: boolean }) {
 
   return (
     <div className="p-scaffold pa-page">
-      <TopAppBar title="Clock" actions={<AppBarActions />} />
+      {selecting
+        ? <AlarmSelectionBar picked={selectedAlarms(st.alarms, sel)} onClear={() => setSel(new Set())} onSkip={(g) => listApi.current?.skip(g)} />
+        : <TopAppBar title="Clock" actions={<AppBarActions />} />}
       {/* The pill switch, as for every choice of 2–4 sections (287); a swipe between sections moves its thumb. */}
       <div className="pa-tabs">
         <Segmented value={SECTIONS[index][0]} options={SECTIONS} track={track} onChange={(k) => show(SECTIONS.findIndex(([x]) => x === k))} />
@@ -233,7 +244,8 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           {SECTIONS.map(([k], i) => (
             <div key={k} className="pa-section" style={{ left: `${i * 100}%` }} aria-hidden={i !== index}>
               {Math.abs(i - index) <= 1 || k === "alarm" ? (
-                k === "alarm" ? <AlarmList alarms={st.alarms} zone={st.zone} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} onNew={newAlarm} />
+                k === "alarm" ? <AlarmList alarms={st.alarms} zone={st.zone} rings={st.ring} active={active && index === i} onEdit={(a) => setEditing({ alarm: a, isNew: false })} onNew={newAlarm}
+                  sel={sel} setSel={setSel} api={listApi} />
                   : k === "timer" ? <TimersPane timers={st.tools.timers} active={active && index === i} onNew={() => setNewTimer(true)} />
                     : k === "stopwatch" ? <StopwatchPane active={active && index === i} />
                       : <WorldClockPane zones={st.tools.zones} local={st.zone} active={active && index === i} onAdd={() => setAddZone(true)} />
@@ -256,8 +268,10 @@ const save = (a: ClockAlarm) => act(native.saveClock(a));
 /** The alarms of [a]'s series, in time order; none if it isn't in one (244). */
 const seriesOf = (a: ClockAlarm, all: ClockAlarm[]) => (a.series == null ? [] : all.filter((x) => x.series === a.series).sort((x, y) => x.hour * 60 + x.minute - (y.hour * 60 + y.minute)));
 
-function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
+function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, api }: {
   alarms: ClockAlarm[]; zone: string; rings: { rings: boolean }; active: boolean; onEdit: (a: ClockAlarm) => void; onNew: () => void;
+  sel: ReadonlySet<number>; setSel: (f: (s: ReadonlySet<number>) => ReadonlySet<number>) => void;
+  api: React.MutableRefObject<{ skip: (group: ClockAlarm[]) => void } | null>;
 }) {
   // No chip on shows every alarm; the list opens with the filter chosen in Settings (71).
   const [show, setShow] = useState<ClockFilter | null>(() => clockPrefs().defaultFilter);
@@ -272,6 +286,11 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
   const [skipping, setSkipping] = useState<ClockAlarm[] | null>(null);
   /** The Skip days sheet (317): for a bundle or an alarm, or every alarm, starting on one of its quick windows. */
   const [skipDays, setSkipDays] = useState<{ group: ClockAlarm[]; scope: SkipScope; quick: string } | null>(null);
+  api.current = { skip: (g) => setSkipping(g) };
+  const selecting = sel.size > 0;
+  /** While selecting, a tap or hold on a card picks it (a bundle: all its alarms) or unpicks it (348). */
+  const pick = (g: ClockAlarm[]) => setSel((s) => toggleAlarms(s, g.map((a) => a.id)));
+  const picked = (g: ClockAlarm[]) => g.every((a) => sel.has(a.id));
   const groupOf = (a: ClockAlarm) => bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.some((x) => x.id === a.id)) ?? [a];
   return (
     <div className="pa-scroll">
@@ -296,10 +315,12 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
       {list.length === 0 && <EmptyState icon="oAlarm" title={!alarms.length ? (cal.length ? "No clock alarms" : "No alarms") : show === "weekdays" ? "No weekday alarms" : show === "weekend" ? "No weekend alarms" : show === "on" ? "No active alarms" : "No inactive alarms"} hint="Tap + to add one"
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
-        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
-        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} onOpen={() => setOpen((o) => toggleOpen(o, g))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
+        ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} picked={selecting ? picked(g) : undefined}
+          onClick={() => (selecting ? pick(g) : onEdit(g[0]))} onHold={() => (selecting ? pick(g) : setSkipping(g))} />
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} picked={selecting ? picked(g) : undefined}
+          onOpen={() => (selecting ? pick(g) : setOpen((o) => toggleOpen(o, g)))} onEdit={(a) => (selecting ? pick([a]) : onEdit(a))} onHold={() => (selecting ? pick(g) : setSkipping(g))} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
-      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)}
+      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onSelect={selecting ? undefined : () => setSel(() => new Set(skipping.map((a) => a.id)))}
         onDays={() => setSkipDays({ group: skipping, scope: "group", quick: "Rest of week" })} /></Layer>}
       {skipDays && <Layer><SkipDaysSheet all={alarms} group={skipDays.group} scope0={skipDays.scope} quick0={skipDays.quick} now={now} onClose={() => setSkipDays(null)} /></Layer>}
     </div>
@@ -397,10 +418,11 @@ function AlarmWeather({ a, now, fc }: { a: ClockAlarm; now: Date; fc: Hourly | n
   return <span className="pa-cardwx" aria-label={`${v.label}, ${v.text} when it rings`}><MIcon name={v.icon} size={18} />{v.text}</span>;
 }
 
-function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; fc: Hourly | null; onClick: () => void; onHold: () => void }) {
+function AlarmCard({ a, now, fc, picked, onClick, onHold }: { a: ClockAlarm; now: Date; fc: Hourly | null; picked?: boolean; onClick: () => void; onHold: () => void }) {
   const hold = useHold(onHold, onClick);
   return (
-    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" {...hold}>
+    <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"} ${picked ? "sel" : ""}`} role="button" aria-pressed={picked} {...hold}>
+      {picked && <SelectedMark />}
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label pa-line">{a.label.trim()}</div>}
         <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onHoldStill={onHold} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
@@ -489,8 +511,35 @@ function deleteAlarms(group: ClockAlarm[]) {
     () => void gone.then((taken) => Promise.all(group.map((a, i) => native.saveClock(a, taken[i].snoozeUntil)))).then(refreshAlarmState));
 }
 
-function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
-  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
+/**
+ * The top bar while several alarms are picked (348): ✕, how many, then what fits them all: Skip… (the skip
+ * popup for them together), the switch (off while any is on, else on) and Delete, each with Undo. Each action
+ * ends the selection.
+ */
+function AlarmSelectionBar({ picked, onClear, onSkip }: { picked: ClockAlarm[]; onClear: () => void; onSkip: (group: ClockAlarm[]) => void }) {
+  const to = selectionSwitch(picked);
+  const n = picked.length, them = n === 1 ? "Alarm" : `${n} alarms`;
+  const flip = () => {
+    const changed = switchAlarms(picked, to);
+    onClear();
+    if (!changed.length) return;
+    const before = picked.filter((a) => changed.some((c) => c.id === a.id));
+    void saveAll(changed);
+    showSnackbar(`${changed.length === 1 ? "Alarm" : `${changed.length} alarms`} turned ${to}`, "Undo", () => void saveAll(before));
+  };
+  return (
+    <header className="p-appbar p-selbar pa-selbar">
+      <IconButton icon="fClose" label="Stop selecting" onClick={onClear} />
+      <div className="p-appbar-title">{n} selected</div>
+      <TextButton onClick={() => { onClear(); onSkip(picked); }} disabled={!n}>Skip…</TextButton>
+      <TextButton onClick={flip} disabled={!n} aria-label={`Turn ${them.toLowerCase()} ${to}`}>{to === "off" ? "Turn off" : "Turn on"}</TextButton>
+      <IconButton icon="oDelete" label="Delete" disabled={!n} onClick={() => { onClear(); deleteAlarms(picked); }} />
+    </header>
+  );
+}
+
+function BundleCard({ group, now, fc, open, picked, onOpen, onEdit, onHold }: {
+  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; picked?: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
 }) {
   const hold = useHold(onHold, onOpen);
   const on = group.filter((a) => a.enabled).length;
@@ -512,7 +561,8 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
       () => void Promise.all(group.map((a) => native.saveClock(a))).then(refreshAlarmState));
   };
   return (
-    <div className={`pa-card pa-bundle ${on ? "" : "off"}`}>
+    <div className={`pa-card pa-bundle ${on ? "" : "off"} ${picked ? "sel" : ""}`} aria-pressed={picked}>
+      {picked && <SelectedMark />}
       <div className="pa-bundle-head" role="button" {...hold}>
         <div className="grow">
           {/* The weather once for the bundle (74): when its first alarm that's on rings next. */}
@@ -602,7 +652,7 @@ function useHold(onHold: () => void, onTap: () => void) {
  * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
  * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
  */
-function SkipSheet({ group, now, onClose, onDays }: { group: ClockAlarm[]; now: Date; onClose: () => void; onDays: () => void }) {
+function SkipSheet({ group, now, onClose, onDays, onSelect }: { group: ClockAlarm[]; now: Date; onClose: () => void; onDays: () => void; onSelect?: () => void }) {
   const today = todayNow();
   const nextDay = nextRingDay(group, now);
   const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
@@ -646,6 +696,8 @@ function SkipSheet({ group, now, onClose, onDays }: { group: ClockAlarm[]; now: 
           <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
         )}
         {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteAlarms(group); }} />}
+        {/* Several alarms at once (348): this one picked, then a tap on others adds them. */}
+        {onSelect && <ListItem leading={<MIcon name="oCheckBox" />} headline="Select more" supporting="Then tap other alarms to add them" onClick={() => { close(); onSelect(); }} />}
       </div>
     )}</BottomSheet>
   );
