@@ -39,6 +39,7 @@ import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutine
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { estimateLine } from "../../domain/estimate.ts";
 import { training } from "../../store/training.ts";
 import { watchHead } from "./WatchRuns.tsx";
 
@@ -814,6 +815,9 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         {/* A game the watch recorded (268): its stats in short; a tap opens Training on that day. */}
         {isEvent && day !== null && (() => {
           const w = training().watchGames.byGame.get(futsalLogId(item.id, day));
+          // Marked done with no watch data: its estimate (340).
+          const est = w ? null : training().gameEstimates.get(futsalLogId(item.id, day));
+          if (est) return <InfoRow icon="oAvTimer" tint={color} text={estimateLine(est)} sub="Estimate: no watch data" onClick={() => go(`training?d=${day}`)} />;
           return w ? <InfoRow icon="oAvTimer" tint={color} text={`From the watch · ${statLine(sessionStats(w, venueOf(w, item.title)))}`}
             sub={watchHead(w).replace("From the watch · ", "")} onClick={() => go(`training?d=${day}`)} /> : null;
         })()}

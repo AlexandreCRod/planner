@@ -46,9 +46,10 @@ import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { Scale, gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
-import { LooseWatchRow, WatchRunChips, WatchStatsGrid, useWatchRunAsks, useWatchRunTicks, watchHead } from "./WatchRuns.tsx";
+import { EstimateStats, LooseWatchRow, WatchRunChips, WatchStatsGrid, useWatchRunAsks, useWatchRunTicks, watchHead } from "./WatchRuns.tsx";
 import type { HealthSession } from "../../domain/health.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { type Estimate, estimateLine, runEstimate } from "../../domain/estimate.ts";
 import "./training.css";
 
 /** Held this long, a placed session lifts to be dragged to another day (as a note card does). */
@@ -319,7 +320,8 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           {items.length === 0 && !looseOn(day).length && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
             <div key={s.id} data-item={e.id}>
-              <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === e.id}
+              <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null}
+                est={s.kind === "run" && e.status === "done" && !runOf(tr.runs, s.id) ? runEstimate(s, e, e.doneDay ?? day, tr.runs, tr.healthSessions) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === e.id}
                 slept={keyRun(s) && day <= t ? shortSleepBefore(tr.sleep, day) : null} lastNight={day === t}
                 warn={broken.get(s.id)?.length ?? 0} onWarn={() => setWarn({ item: { session: s.id }, day, undo: null })}
                 onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly ? undefined : drag.props(e.id, !!s.locked)} />
@@ -327,7 +329,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
             </div>
           ) : (
             <div key={e.id} data-item={e.id}>
-              <FutsalRow e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)}
+              <FutsalRow e={e} watch={tr.watchGames.byGame.get(e.id)} est={tr.gameEstimates.get(e.id) ?? null} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)}
                 lifted={drag.lifted === e.id} dragProps={readOnly ? undefined : drag.props(e.id, true)} />
               {asked === e.id && e.status === "done" && <GameAskRow plan={plan} e={e} onDone={() => setAsked(null)} />}
             </div>
@@ -434,13 +436,14 @@ function RuleMark({ n, onOpen }: { n: number; onOpen: () => void }) {
   );
 }
 
-function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWarn, onTick, onOpen, dragProps }: {
-  s: Session; e: Entry; run: Run | null; selected: boolean; lifted: boolean; slept: number | null; lastNight: boolean; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void;
+function SessionRow({ s, e, run, est, selected, lifted, slept, lastNight, warn, onWarn, onTick, onOpen, dragProps }: {
+  s: Session; e: Entry; run: Run | null; est: Estimate | null; selected: boolean; lifted: boolean; slept: number | null; lastNight: boolean; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void;
   dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
 }) {
   const kind = colourKind({ session: s, entry: e });
   // A done run matched to one from the watch shows how it went instead of the plan's text.
-  const ran = run ? runLine(run) : "";
+  // With none, an estimate from the recorded runs (340), each guessed value with "≈".
+  const ran = run ? runLine(run) : est ? estimateLine(est) : "";
   return (
     <div className={`tr-row ${e.status} ${kind ? `k-${kind}` : ""} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind={kind} done={e.status === "done"} label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`} onTick={onTick} />
@@ -459,13 +462,14 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
  * A game (futsal or another sport, 267): its event's title, then its time, how long it was and the note;
  * with the watch's session for it (268), how long, heart rate and calories from the watch instead.
  */
-function FutsalRow({ e, watch, warn, onWarn, onTick, onOpen, lifted, dragProps }: {
-  e: Entry; watch: HealthSession | undefined; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void; lifted: boolean;
+function FutsalRow({ e, watch, est, warn, onWarn, onTick, onOpen, lifted, dragProps }: {
+  e: Entry; watch: HealthSession | undefined; est: Estimate | null; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void; lifted: boolean;
   dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
 }) {
   const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
   const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
-  const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : "";
+  // Marked done with no watch data: its estimate (340), "≈" on each guessed value.
+  const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : est ? estimateLine(est) : "";
   return (
     <div className={`tr-row ${e.status} k-futsal ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
@@ -547,6 +551,10 @@ function FutsalSheet({ plan, ph, entry, t, watch, onPlaced, onClose }: {
         {watch && entry && <>
           <div className="tr-label">{watchHead(watch)}</div>
           <WatchStatsGrid stats={sessionStats(watch, venueOf(watch, entry.title))} inset />
+        </>}
+        {!watch && entry && training().gameEstimates.get(entry.id) && <>
+          <div className="tr-label">Estimate: no watch data</div>
+          <EstimateStats x={training().gameEstimates.get(entry.id)!} what="game" inset />
         </>}
         <div className="tr-label">Day</div>
         <ChipRow>{days.map((d) => <FilterChip key={d} selected={d === day} onClick={() => setDay(d)}>{formatDate(d)}</FilterChip>)}</ChipRow>

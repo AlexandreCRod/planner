@@ -24,7 +24,8 @@ import { openExternal } from "./native.ts";
 import { isWide } from "../../platform.ts";
 import { runOf } from "../../domain/trainingWeek.ts";
 import { runStats, sessionStats, strengthOn } from "../../domain/watchActivities.ts";
-import { WatchStatsGrid, watchHead } from "./WatchRuns.tsx";
+import { EstimateStats, WatchStatsGrid, watchHead } from "./WatchRuns.tsx";
+import { runEstimate } from "../../domain/estimate.ts";
 import { KIND_LABEL, Scale, fmtKg, phaseNames, planQ, sessionIcon, setsText } from "./trainingParts.tsx";
 
 /** Saves a session's entry: the latest copy, the plan's title and detail kept with it, then [patch]. */
@@ -147,6 +148,12 @@ export function SessionView({ tr, lp, sessionId, readOnly, onClose, closeIcon, o
 function SessionWatch({ tr, s, e, day, t }: { tr: Training; s: Session; e: Entry; day: number | null; t: number }) {
   if (s.kind === "run") {
     const run = runOf(tr.runs, s.id);
+    // Done with no watch data: an estimate from the recorded runs (340).
+    const est = !run && e.status === "done" ? runEstimate(s, e, e.doneDay ?? day ?? t, tr.runs, tr.healthSessions) : null;
+    if (est) return <>
+      <SectionHeader>Estimate: no watch data</SectionHeader>
+      <EstimateStats x={est} what="run" />
+    </>;
     if (!run) return null;
     const hs = tr.healthSessions.find((x) => x.id === run.id);
     return <>

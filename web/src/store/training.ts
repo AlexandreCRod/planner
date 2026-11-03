@@ -19,6 +19,7 @@ import { type SleepNight, mergedNights } from "../domain/sleep.ts";
 import { hiddenWatchRuns, mergedRuns, tickedEntry, typedRuns, watchLinks, watchRunSteps } from "../domain/healthRuns.ts";
 import { type GameMatches, type GameSlot, matchGames } from "../domain/watchActivities.ts";
 import { type ActivityNote, type EventTimes, type Game, activityNotes, gamesOf, noteRecord, runEntry, runIds } from "../domain/cardio.ts";
+import { type Estimate, gameEstimate } from "../domain/estimate.ts";
 import { saveGameLog } from "./futsal.ts";
 import { listOf, putRecords, storeVersion, subscribe } from "./store.ts";
 
@@ -76,6 +77,11 @@ export interface Training {
   notes: Map<string, ActivityNote>;
   /** The order of each day the user dragged into one, by dayOrderId (domain/dayOrder.ts, 324). */
   orders: Map<string, string[]>;
+  /**
+   * Games (futsal or another sport) marked done that the watch didn't catch: their estimated stats, by entry id
+   * (domain/estimate.ts, 340). Worked out here on read, never stored: one goes once its watch data arrives.
+   */
+  gameEstimates: Map<string, Estimate>;
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -156,9 +162,16 @@ export function training(): Training {
     games: [],
     notes: activityNotes(listOf<ActivityNote>("trainingNotes")),
     orders: dayOrders(listOf<DayOrder>("trainingOrder")),
+    gameEstimates: new Map(),
   };
   data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
-  data.games = gamesOf(shown.values(), data.watchGames, eventTimes(items));
+  const times = eventTimes(items);
+  data.games = gamesOf(shown.values(), data.watchGames, times);
+  for (const e of shown.values()) {
+    if (e.kind !== "futsal" || e.status !== "done") continue;
+    const x = gameEstimate(e, data.watchGames.byGame.has(e.id), shown.values(), data.watchGames.byGame, e.itemId !== undefined ? times.get(e.itemId) : undefined, data.watchGames.loose);
+    if (x) data.gameEstimates.set(e.id, x);
+  }
   cache = { version: v, data };
   return data;
 }

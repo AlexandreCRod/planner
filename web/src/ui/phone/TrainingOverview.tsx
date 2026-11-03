@@ -9,6 +9,7 @@ import { type TodayCard, dayWord, leadLift, usualWeekKm, weeklyKm } from "../../
 import { type WeekBar, colourKind, fmtKm, runLine, runOf } from "../../domain/trainingWeek.ts";
 import { fmtSleep, hasRecord } from "../../domain/sleep.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { estimateLine, runEstimate } from "../../domain/estimate.ts";
 import type { Training } from "../../store/training.ts";
 import { snapshot } from "../../store/store.ts";
 import { rangeStart } from "./chartMath.ts";
@@ -75,7 +76,9 @@ export function TodayRow({ tr, card, t, onOpen, onStart, onLog }: { tr: Training
   if (card.kind === "done") {
     const s = card.session, run = s?.kind === "run" ? runOf(tr.runs, s.id) : null, watch = !s ? tr.watchGames.byGame.get(card.entry.id) : undefined;
     const title = s?.title ?? card.entry.title;
-    const sub = run ? runLine(run) : watch ? statLine(sessionStats(watch, venueOf(watch, title))) : s?.detail ?? "";
+    // Done with no watch data: its estimate (340), each guessed value with "≈".
+    const est = run || watch ? null : s ? (s.kind === "run" ? runEstimate(s, card.entry, card.entry.doneDay ?? t, tr.runs, tr.healthSessions) : null) : tr.gameEstimates.get(card.entry.id) ?? null;
+    const sub = run ? runLine(run) : watch ? statLine(sessionStats(watch, venueOf(watch, title))) : est ? estimateLine(est) : s?.detail ?? "";
     return row(<Bub cls="tr-dn" icon="fCheck" />, "Today · done", title, sub, `${title}, done. Open its log`);
   }
   if (card.kind === "place") {

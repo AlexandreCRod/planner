@@ -10,6 +10,7 @@ import { dayOfSession, entryFor, entryId } from "../../domain/training.ts";
 import { fmtKm } from "../../domain/trainingWeek.ts";
 import type { HealthSession } from "../../domain/health.ts";
 import { type WatchStats, APPROX_NOTE, sessionStats, statItems, statLine, venueOf } from "../../domain/watchActivities.ts";
+import { type Estimate, estimateNote } from "../../domain/estimate.ts";
 import { kindIcon } from "./trainingParts.tsx";
 import { type LoadedPlan, type Training, applyWatchRuns, saveEntry, saveHidden, training } from "../../store/training.ts";
 import { isNative } from "../../platform.ts";
@@ -99,6 +100,24 @@ export function WatchStatsGrid({ stats, inset }: { stats: WatchStats; inset?: bo
     <div className={`tr-stats ${inset ? "inset" : ""}`}>
       <div className="grid">{items.map((x) => <div key={x.label}><span className="v">{x.value}</span><span className="l">{x.label}</span></div>)}</div>
       {stats.approx && <div className="tr-stats-note">{APPROX_NOTE}</div>}
+    </div>
+  );
+}
+
+/**
+ * Estimated stats for an activity marked done with no watch data (340): the same grid, every guessed value
+ * with "≈" and the grid paler, and the plain line saying what it is and what it's from.
+ */
+export function EstimateStats({ x, what, inset }: { x: Estimate; what: "game" | "run"; inset?: boolean }) {
+  const items: { label: string; value: string }[] = [];
+  if (x.durationS >= 60) items.push({ label: "Time", value: `${Math.round(x.durationS / 60)} min` });
+  if (x.distanceKm !== null) items.push({ label: "Distance", value: `≈ ${x.distanceKm.toFixed(1).replace(/\.0$/, "")} km` });
+  if (x.avgHr !== null) items.push({ label: "Avg HR", value: `≈ ${x.avgHr} bpm` });
+  if (x.kcal !== null) items.push({ label: "Calories", value: `≈ ${x.kcal} kcal` });
+  return (
+    <div className={`tr-stats est ${inset ? "inset" : ""}`}>
+      <div className="grid">{items.map((i) => <div key={i.label}><span className="v">{i.value}</span><span className="l">{i.label}</span></div>)}</div>
+      <div className="tr-stats-note">{estimateNote(x, what)}</div>
     </div>
   );
 }

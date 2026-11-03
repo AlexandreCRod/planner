@@ -398,6 +398,9 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-stats .grid > div { display: flex; flex-direction: column; min-width: 0; }
 .phone .tr-stats .v { font-size: 17px; line-height: 22px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .tr-stats .l { font-size: 12px; line-height: 16px; color: var(--muted); }
+/* An estimate (340): the same grid, dashed and without the fill, so it never reads as the watch's own numbers. */
+.phone .tr-stats.est .grid { background: none; border: 1px dashed var(--p-outline); }
+.phone .tr-stats.est .v { color: var(--muted); }
 .phone .tr-stats-note { margin-top: 6px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .phone .tr-ring-mark { flex: none; width: 44px; height: 44px; margin-right: -6px; display: grid; place-items: center; color: var(--muted); }
 

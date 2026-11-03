@@ -11,6 +11,7 @@ import {
   runNote, runSeconds, runTypeName, tally, tallyHours, typeStats,
 } from "../../domain/cardio.ts";
 import type { Run, RunType } from "../../domain/trends.ts";
+import { type Estimate, estimateNote } from "../../domain/estimate.ts";
 import { type LoadedPlan, type Training, saveGameNote, saveRunNote } from "../../store/training.ts";
 import { type TimeWindow, type WindowKey, WINDOWS, allWindows, barLabels, dayMonth, hasEarlier, rangeWindow } from "./chartMath.ts";
 import { EmptyState, MIcon, Segmented } from "./chrome.tsx";
@@ -121,7 +122,7 @@ export function CardioList({ tr, lp, t, st, sel, onOpen }: { tr: Training; lp: L
         </div>
         <RunsPage tr={tr} lp={lp} runs={now.runs} t={t} sel={sel} onOpen={onOpen} />
       </>
-      : <FutsalPage pan={pan} list={now.games} notes={tr.notes} t={t} sel={sel} onOpen={onOpen} />}
+      : <FutsalPage pan={pan} list={now.games} notes={tr.notes} est={tr.gameEstimates} t={t} sel={sel} onOpen={onOpen} />}
     <div className="p-endspace" />
   </>;
 }
@@ -235,21 +236,26 @@ function RunsPage({ tr, lp, runs, t, sel, onOpen }: { tr: Training; lp: LoadedPl
   </>;
 }
 
-function GameRow({ g, note, sel, onOpen }: { g: Game; note: string; sel: string | null; onOpen: (id: string) => void }) {
+function GameRow({ g, note, est, sel, onOpen }: { g: Game; note: string; est: Estimate | undefined; sel: string | null; onOpen: (id: string) => void }) {
   const id = `game:${g.id}`, w = gameWatch(g), s = gameSeconds(g);
+  // No watch data: the estimated heart rate (340), with "≈".
+  const hr = w?.avgHr != null ? String(Math.round(w.avgHr)) : est?.avgHr != null ? `≈ ${est.avgHr}` : null;
   return (
     <div className={`pg-row ${sel === id ? "sel" : ""}`} {...tapProps(() => onOpen(id))}>
       <span className="tr-bub k-futsal"><MIcon name={kindIcon("futsal")} size={20} /></span>
-      <div className="n"><b>{g.title}</b><span>{join(formatDate(g.day), s > 0 && `${Math.round(s / 60)} min`, w?.distanceKm != null && `${w.approx ? "≈ " : ""}${kmFixed(w.distanceKm)} km`, !g.fromEvent && "no event")}</span><NoteLine note={note} /></div>
-      <div className="v">{w?.avgHr != null ? Math.round(w.avgHr) : "—"}<span>{w?.avgHr != null ? "avg bpm" : ""}</span></div>
+      <div className="n"><b>{g.title}</b><span>{join(formatDate(g.day), s > 0 ? `${Math.round(s / 60)} min` : !w && est ? `${Math.round(est.durationS / 60)} min` : false, w?.distanceKm != null && `${w.approx ? "≈ " : ""}${kmFixed(w.distanceKm)} km`, !g.fromEvent && "no event", !w && est && "estimate")}</span><NoteLine note={note} /></div>
+      <div className="v">{hr ?? "—"}<span>{hr !== null ? "avg bpm" : ""}</span></div>
     </div>
   );
 }
 
-function FutsalPage({ pan, list, notes, t, sel, onOpen }: { pan: Pan; list: Game[]; notes: ReadonlyMap<string, ActivityNote>; t: number; sel: string | null; onOpen: (id: string) => void }) {
+function FutsalPage({ pan, list, notes, est, t, sel, onOpen }: { pan: Pan; list: Game[]; notes: ReadonlyMap<string, ActivityNote>; est: ReadonlyMap<string, Estimate>; t: number; sel: string | null; onOpen: (id: string) => void }) {
   const [at, setAt] = useState<number | null>(null);
   if (!list.length) return <><PanBar pan={pan} /><div className="pg-hint">No games in this range.</div></>;
   const st = gameStats(list);
+  // Totals may include estimates (340), saying so; "usual", "hardest" and the chart are recorded games only.
+  const guessed = list.flatMap((g) => { const x = !g.session ? est.get(g.id) : undefined; return x?.kcal != null ? [x.kcal] : []; });
+  const kcal = st.kcal + guessed.reduce((a, b) => a + b, 0);
   const beat = list.filter((g) => g.session?.avgHr), last = beat[beat.length - 1], r = at !== null ? beat[at] : null;
   const days = beat.map((g) => g.day), a = days[0], z = days[days.length - 1];
   return <>
@@ -268,10 +274,10 @@ function FutsalPage({ pan, list, notes, t, sel, onOpen }: { pan: Pan; list: Game
       <Tile a="Games" b={String(st.count)} c={hours(st.seconds / 3600)} />
       <Tile a="A usual game" b={st.usualMin !== null ? <>{Math.round(st.usualMin)} <small>min</small></> : "—"} c={st.avgHr !== null ? `avg ${Math.round(st.avgHr)} bpm` : ""} />
       <Tile a="Hardest" b={st.hardest ? <>{Math.round(st.hardest.session!.maxHr!)} <small>bpm</small></> : "—"} c={st.hardest ? `max · ${formatDate(st.hardest.day)}` : ""} />
-      <Tile a="Calories" b={st.kcal ? fmtSteps(st.kcal) : "—"} c="kcal in this range" />
+      <Tile a="Calories" b={kcal ? fmtSteps(kcal) : "—"} c={guessed.length ? `kcal · incl. ${guessed.length === 1 ? "1 estimate" : `${guessed.length} estimates`}` : "kcal in this range"} />
     </div>
     <Group title="Games" right={list.length > LATEST_GAMES ? `latest of ${list.length}` : undefined} />
-    <Latest key={list.length} list={list} shown={LATEST_GAMES} row={(g) => <GameRow key={g.id} g={g} note={gameNote(g, notes)} sel={sel} onOpen={onOpen} />} />
+    <Latest key={list.length} list={list} shown={LATEST_GAMES} row={(g) => <GameRow key={g.id} g={g} note={gameNote(g, notes)} est={g.session ? undefined : est.get(g.id)} sel={sel} onOpen={onOpen} />} />
   </>;
 }
 
@@ -388,6 +394,8 @@ function gameTimes(g: Game): string {
 
 function GameCard({ tr, g, t }: { tr: Training; g: Game; t: number }) {
   const w = gameWatch(g), venue = gameVenue(g), s = gameSeconds(g);
+  // Marked done with no watch data: estimated calories and heart rate (340), with "≈".
+  const est = !g.session ? tr.gameEstimates.get(g.id) : undefined;
   const usual = useMemo(() => gameStats(playedGames(tr.games, t)), [tr, t]);
   const [at, setAt] = useState<number | null>(null);
   // The heart rate every 15 s; 0 where there was no reading.
@@ -403,11 +411,15 @@ function GameCard({ tr, g, t }: { tr: Training; g: Game; t: number }) {
       <div className="t">{g.title}</div>
       <div className="s">{join(formatDate(g.day), gameTimes(g))}</div>
       {g.fromEvent && <div className="ev"><MIcon name="oToday" size={14} />Title from your calendar event</div>}
+      {est && <div className="ev"><MIcon name="oAvTimer" size={14} />Estimate: no watch data</div>}
     </div>
     <div className="pg-tiles pg-gap">
-      <Tile a="Time" b={s > 0 ? <>{Math.round(s / 60)} <small>min</small></> : "—"} c={usual.usualMin !== null ? `your usual: ${Math.round(usual.usualMin)}` : ""} />
-      <Tile a="Calories" b={w?.kcal != null ? <>{Math.round(w.kcal)} <small>kcal</small></> : "—"} c={usual.usualKcal !== null ? `usual ${Math.round(usual.usualKcal)}` : ""} />
-      <Tile a="Heart rate" b={w?.avgHr != null ? <>{Math.round(w.avgHr)} <small>avg</small></> : "—"} c={w?.maxHr != null ? `max ${Math.round(w.maxHr)} bpm` : ""} />
+      <Tile a="Time" b={s > 0 ? <>{Math.round(s / 60)} <small>min</small></> : est ? <>{Math.round(est.durationS / 60)} <small>min</small></> : "—"}
+        c={s <= 0 && est ? "the event's length" : usual.usualMin !== null ? `your usual: ${Math.round(usual.usualMin)}` : ""} />
+      <Tile a="Calories" b={w?.kcal != null ? <>{Math.round(w.kcal)} <small>kcal</small></> : est?.kcal != null ? <>≈ {est.kcal} <small>kcal</small></> : "—"}
+        c={!w && est?.kcal != null ? "estimate" : usual.usualKcal !== null ? `usual ${Math.round(usual.usualKcal)}` : ""} />
+      <Tile a="Heart rate" b={w?.avgHr != null ? <>{Math.round(w.avgHr)} <small>avg</small></> : est?.avgHr != null ? <>≈ {est.avgHr} <small>avg</small></> : "—"}
+        c={w?.maxHr != null ? `max ${Math.round(w.maxHr)} bpm` : !w && est?.avgHr != null ? "estimate" : ""} />
       <Tile a="Distance" b={w?.distanceKm != null ? <>{w.approx ? "≈ " : ""}{kmFixed(w.distanceKm)} <small>km</small></> : "—"}
         c={w?.distanceKm != null ? (w.approx ? "indoors or out isn't known" : "from GPS") : venue === "indoor" ? "indoors: no GPS" : ""} />
     </div>
@@ -422,5 +434,6 @@ function GameCard({ tr, g, t }: { tr: Training; g: Game; t: number }) {
     )}
     {g.entry && <LogCard e={g.entry} />}
     {g.session && <div className="pg-foot">From Garmin, through Health Connect.</div>}
+    {est && <div className="pg-foot">Estimate: no watch data. {estimateNote(est, "game")} It goes once the watch's data for this game arrives.</div>}
   </>;
 }
