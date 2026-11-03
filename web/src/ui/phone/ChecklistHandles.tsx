@@ -77,7 +77,9 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const attach = () => {
       const root = editor(), box = host();
       if (!root || !box) return false;
-      mo.observe(root, { childList: true, subtree: true, characterData: true });
+      // Classes too: folding "N done" only changes a class, and a folded line's handle must go with it (its handles
+      // show at rest since 331).
+      mo.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
       ro.observe(root);
       ro.observe(box);
       attached = true;
