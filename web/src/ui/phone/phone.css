@@ -1454,6 +1454,8 @@ html.phone[data-theme="dark"] {
 .phone .p-routines .p-rchip::after { content: ""; position: absolute; inset: -8px -4px; }
 .phone .p-routines .p-rchip .ring { width: 16px; height: 16px; }
 .phone .p-routines .p-rchip.p-rchip-all { padding: 0 8px; }
+/* The list button leads the line (329), right after "Routines 1/3", outside the scrolling chips. */
+.phone .p-routines .p-rchip-lead { margin-left: 4px; }
 
 /* ---------- Tasks on the calendar: outlined and lighter than events, with a small tick circle ----------
    Events keep the filled block with the thin stripe; a task is only an outline in its colour, on the

@@ -243,6 +243,10 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
       <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
         Routines{total > 0 && <span className="n">{done}/{total}</span>}
       </button>
+      {/* The list button first, before the chips (329): always in sight, never scrolled away. */}
+      <button className="p-rchip p-rchip-all p-rchip-lead" aria-label="All routines" onClick={() => setAll(true)}>
+        <MIcon name="fFormatListBulleted" size={18} />
+      </button>
       <HScroll className="p-rchips" role="list">
         {list.map((e) => {
           const ticked = e.status === "DONE";
@@ -253,9 +257,6 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
               onToggle={() => { if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); }} onOpen={() => openItem(e.item, e.day)} />
           );
         })}
-        <button className="p-rchip p-rchip-all" aria-label="All routines" onClick={() => setAll(true)}>
-          <MIcon name="fFormatListBulleted" size={18} />
-        </button>
       </HScroll>
       <RoutineSheets s={s} t={t} open={all} onClose={() => setAll(false)} />
     </div>
