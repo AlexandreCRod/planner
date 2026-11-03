@@ -443,7 +443,7 @@ function SessionRow({ s, e, run, est, selected, lifted, slept, lastNight, warn, 
   const kind = colourKind({ session: s, entry: e });
   // A done run matched to one from the watch shows how it went instead of the plan's text.
   // With none, an estimate from the recorded runs (340), each guessed value with "≈".
-  const ran = run ? runLine(run) : est ? estimateLine(est) : "";
+  const ran = run ? runLine(run) : est ? estimateLine(est, true, true) : "";
   return (
     <div className={`tr-row ${e.status} ${kind ? `k-${kind}` : ""} ${selected ? "sel" : ""} ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind={kind} done={e.status === "done"} label={e.status === "done" ? `${s.title}: done. Tap to undo` : `Mark ${s.title} done`} onTick={onTick} />
@@ -469,7 +469,7 @@ function FutsalRow({ e, watch, est, warn, onWarn, onTick, onOpen, lifted, dragPr
   const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
   const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
   // Marked done with no watch data: its estimate (340), "≈" on each guessed value.
-  const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : est ? estimateLine(est) : "";
+  const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : est ? estimateLine(est, true, true) : "";
   return (
     <div className={`tr-row ${e.status} k-futsal ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />

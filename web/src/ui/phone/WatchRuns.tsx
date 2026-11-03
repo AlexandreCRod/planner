@@ -10,7 +10,7 @@ import { dayOfSession, entryFor, entryId } from "../../domain/training.ts";
 import { fmtKm } from "../../domain/trainingWeek.ts";
 import type { HealthSession } from "../../domain/health.ts";
 import { type WatchStats, APPROX_NOTE, sessionStats, statItems, statLine, venueOf } from "../../domain/watchActivities.ts";
-import { type Estimate, estimateNote } from "../../domain/estimate.ts";
+import { type Estimate, estimateNote, estimateTime } from "../../domain/estimate.ts";
 import { kindIcon } from "./trainingParts.tsx";
 import { type LoadedPlan, type Training, applyWatchRuns, saveEntry, saveHidden, training } from "../../store/training.ts";
 import { isNative } from "../../platform.ts";
@@ -110,7 +110,7 @@ export function WatchStatsGrid({ stats, inset }: { stats: WatchStats; inset?: bo
  */
 export function EstimateStats({ x, what, inset }: { x: Estimate; what: "game" | "run"; inset?: boolean }) {
   const items: { label: string; value: string }[] = [];
-  if (x.durationS >= 60) items.push({ label: "Time", value: `${Math.round(x.durationS / 60)} min` });
+  if (x.durationS >= 60) items.push({ label: "Time", value: estimateTime(x) });
   if (x.distanceKm !== null) items.push({ label: "Distance", value: `≈ ${x.distanceKm.toFixed(1).replace(/\.0$/, "")} km` });
   if (x.avgHr !== null) items.push({ label: "Avg HR", value: `≈ ${x.avgHr} bpm` });
   if (x.kcal !== null) items.push({ label: "Calories", value: `≈ ${x.kcal} kcal` });

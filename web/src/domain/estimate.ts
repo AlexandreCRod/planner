@@ -9,6 +9,10 @@
 //   average heart rate. Medians, so one odd game (a watch left running) doesn't pull it.
 // - A run's distance: the plan's target when the session names one ("8 km"), else its length ÷ the usual pace
 //   of that kind of run; its length, when not logged, from the plan ("45 min") or the target ÷ the usual pace.
+//   Reps ("6 x 1 km", "4×4 min", "8x1' / 1'") are never taken for the run's distance or time (review of 2.10.1,
+//   finding 3); an interval session that names nothing else takes its logged length, else the usual length of that
+//   same session's recorded runs (3 or more), else it gets no estimate.
+// - Every guessed value has "≈", the time too when it isn't the logged (or, for a game, the event's) length.
 import type { HealthSession } from "./health.ts";
 import type { Entry, Session } from "./training.ts";
 import type { Run } from "./trends.ts";
@@ -32,6 +36,8 @@ export interface Recorded {
 export interface Estimate {
   /** Its own length (logged or planned), seconds; 0 when not known. */
   durationS: number;
+  /** The length is a guess (the plan's, or the usual), not logged or the event's: shown with "≈". */
+  timeGuessed: boolean;
   kcal: number | null;
   avgHr: number | null;
   /** Runs only. */
@@ -73,7 +79,7 @@ export function estimateGame(series: string, day: number, durationS: number, his
   if (!list.length) return null;
   const u = usual(list, durationS);
   if (u.kcal === null && u.avgHr === null) return null;
-  return { durationS, ...u, distanceKm: null, from: list.length, same };
+  return { durationS, timeGuessed: false, ...u, distanceKm: null, from: list.length, same };
 }
 
 /** A game's series: its calendar event when it has one, else its title. */
@@ -108,15 +114,27 @@ export function gameEstimate(e: Entry, watched: boolean, entries: Iterable<Entry
 
 // ---------- Runs ----------
 
-/** The kilometres a plan session names ("Easy 8 km", "10K"); null when it names none. */
+// A set of reps, with its recovery: "6 x 1 km", "5x1km", "4×4 min", "Fartlek 8x1' / 1'", "6 x 400 m".
+const UNIT = String.raw`(?:km\b|k\b|mins?\b|minutes?\b|m\b|secs?\b|s\b|'|")?`;
+const NUM = String.raw`\d+(?:[.,]\d+)?`;
+const REPS = new RegExp(String.raw`\d+\s*[x×]\s*${NUM}\s*${UNIT}(?:\s*\/\s*${NUM}\s*${UNIT})?`, "gi");
+
+/** [text] without its reps, which say nothing of the whole run's distance or time. */
+export const withoutReps = (text: string) => text.replace(REPS, " ");
+/** Whether [text] names reps ("6 x 1 km"): an interval session. */
+export const namesReps = (text: string) => withoutReps(text) !== text;
+
+/** The kilometres a plan session names ("Easy 8 km", "10K"), never a rep's ("6 x 1 km"); null when it names none. */
 export function targetKm(text: string): number | null {
+  text = withoutReps(text);
   const m = text.match(/(\d+(?:[.,]\d+)?)\s*(?:km|k)\b/i);
   const v = m ? Number(m[1].replace(",", ".")) : NaN;
   return v > 0 && v < 100 ? v : null;
 }
 
-/** The minutes a plan session names ("45 min", "1 h 10 min", "60'"); null when it names none. */
+/** The minutes a plan session names ("45 min", "1 h 10 min", "60'"), never a rep's ("4×4 min"); null when it names none. */
 export function targetMin(text: string): number | null {
+  text = withoutReps(text);
   const h = text.match(/(\d+(?:[.,]\d+)?)\s*h(?:ours?|rs?)?\b(?:\s*(\d+)\s*(?:min|m)\b)?/i);
   if (h) return Math.round(Number(h[1].replace(",", ".")) * 60 + Number(h[2] ?? 0));
   const m = text.match(/(\d+)\s*(?:min(?:utes?|s)?|')(?![a-z])/i);
@@ -150,21 +168,30 @@ export function runEstimate(s: Pick<Session, "title" | "detail">, e: Pick<Entry,
   const km = targetKm(text);
   let durationS = e.durationMin ? e.durationMin * 60 : (targetMin(text) ?? 0) * 60;
   if (!durationS && km !== null && pace !== null) durationS = Math.round(km * pace);
+  // Intervals that name only their reps: the usual length of that same session, when it has been recorded.
+  if (!durationS && same && namesReps(text)) durationS = Math.round(median(list.map((h) => h.durationS))!);
   if (!durationS) return null;
   const distanceKm = km ?? (pace !== null ? Math.round((durationS / pace) * 10) / 10 : null);
   const u = usual(list, durationS);
-  return { durationS, ...u, distanceKm, from: list.length, same };
+  return { durationS, timeGuessed: !e.durationMin, ...u, distanceKm, from: list.length, same };
 }
 
 // ---------- Words ----------
 
-/** "≈ 640 kcal · ≈ 148 bpm" (with its length first when [withTime]): a row's short line. */
-export function estimateLine(x: Estimate, withTime = true): string {
+/** An estimate's length: "45 min", or "≈ 45 min" when it's a guess. */
+export const estimateTime = (x: Estimate) => `${x.timeGuessed ? "≈ " : ""}${Math.round(x.durationS / 60)} min`;
+
+/**
+ * "≈ 640 kcal · ≈ 148 bpm" (with its length first when [withTime]); with [tag] it ends "· estimate", for a row
+ * whose heading doesn't already say "Estimate: no watch data" (the week plan, Today's done card).
+ */
+export function estimateLine(x: Estimate, withTime = true, tag = false): string {
   return [
-    withTime && x.durationS >= 60 ? `${Math.round(x.durationS / 60)} min` : "",
+    withTime && x.durationS >= 60 ? estimateTime(x) : "",
     x.distanceKm !== null ? `≈ ${x.distanceKm.toFixed(1).replace(/\.0$/, "")} km` : "",
     x.avgHr !== null ? `≈ ${x.avgHr} bpm` : "",
     x.kcal !== null ? `≈ ${x.kcal} kcal` : "",
+    tag ? "estimate" : "",
   ].filter(Boolean).join(" · ");
 }
 

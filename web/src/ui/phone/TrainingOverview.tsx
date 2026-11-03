@@ -78,7 +78,7 @@ export function TodayRow({ tr, card, t, onOpen, onStart, onLog }: { tr: Training
     const title = s?.title ?? card.entry.title;
     // Done with no watch data: its estimate (340), each guessed value with "≈".
     const est = run || watch ? null : s ? (s.kind === "run" ? runEstimate(s, card.entry, card.entry.doneDay ?? t, tr.runs, tr.healthSessions) : null) : tr.gameEstimates.get(card.entry.id) ?? null;
-    const sub = run ? runLine(run) : watch ? statLine(sessionStats(watch, venueOf(watch, title))) : est ? estimateLine(est) : s?.detail ?? "";
+    const sub = run ? runLine(run) : watch ? statLine(sessionStats(watch, venueOf(watch, title))) : est ? estimateLine(est, true, true) : s?.detail ?? "";
     return row(<Bub cls="tr-dn" icon="fCheck" />, "Today · done", title, sub, `${title}, done. Open its log`);
   }
   if (card.kind === "place") {

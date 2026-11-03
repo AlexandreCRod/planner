@@ -97,3 +97,52 @@ test("a run's estimate: the plan's km when it names them, else its length over t
   assert.equal(runEstimate({ title: "Easy run", detail: "8 km" }, { status: "planned", durationMin: null }, 12, runs, kcal), null);
   assert.equal(runEstimate({ title: "Easy run", detail: "8 km" }, { status: "done", durationMin: null }, 12, [], []), null);
 });
+
+// Review of 2.10.1, finding 3: a rep's length isn't the run's ("6 x 1 km" read as a 1 km run).
+test("reps are never the run's distance or time", () => {
+  assert.equal(targetKm("Intervals 6 x 1 km"), null);
+  assert.equal(targetKm("2 x 3 km at T pace"), null);
+  assert.equal(targetKm("5x1km reps"), null);
+  assert.equal(targetKm("HMP intervals 3×2 km @ 5:50/km"), null);
+  assert.equal(targetMin("Fartlek 8x1' / 1'"), null);
+  assert.equal(targetMin("Threshold 4×4 min @ 5:25/km"), null);
+  assert.equal(targetMin("6 x 1 km"), null);
+  // What the plan says besides its reps still counts.
+  assert.equal(targetKm("Easy 8 km + 6 x 100 m strides"), 8);
+  assert.equal(targetMin("45 min easy + 6 strides"), 45);
+  assert.equal(targetMin("15 min + 3 strides"), 15);
+  assert.equal(targetKm("12 km: 10 easy + last 2 @ HMP"), 12);
+  assert.equal(targetKm("Easy 8 km"), 8);
+  assert.equal(targetKm("10K"), 10);
+  assert.equal(targetMin("45 min"), 45);
+});
+
+test("an interval run with no logged time takes that session's usual length, else gets no estimate", () => {
+  // Three recorded "Intervals" runs: 50, 55 and 60 min, about 9-10 km.
+  const runs = [run(1, "Intervals", 9, 333, 160, "quality"), run(5, "Intervals", 10, 330, 162, "quality"), run(9, "Intervals", 10, 360, 158, "quality")];
+  const kcal = [] as HealthSession[];
+  const x = runEstimate({ title: "Intervals", detail: "6 x 1 km" }, { status: "done", durationMin: null }, 12, runs, kcal)!;
+  assert.equal(x.durationS, 3300); // median of 2997, 3300, 3600
+  assert.equal(x.distanceKm, 9.9); // 3300 s at the usual 5:33 a km, not 1 km
+  assert.equal(x.timeGuessed, true);
+  // Logged: its own length.
+  const y = runEstimate({ title: "Intervals", detail: "6 x 1 km" }, { status: "done", durationMin: 48 }, 12, runs, kcal)!;
+  assert.equal(y.durationS, 2880);
+  assert.equal(y.timeGuessed, false);
+  // Fewer than 3 of that session recorded: the kind's runs don't say how long these reps take, so no estimate.
+  const easy = [run(1, "Easy run", 6, 360, 140), run(5, "Easy run", 6, 340, 144), run(9, "Easy run", 7, 350, 142)];
+  assert.equal(runEstimate({ title: "Fartlek", detail: "8x1' / 1'" }, { status: "done", durationMin: null }, 12, easy, kcal), null);
+  assert.equal(runEstimate({ title: "Intervals", detail: "2 x 3 km" }, { status: "done", durationMin: null }, 12, easy, kcal), null);
+});
+
+// Review of 2.10.1, finding 4: the rows say "estimate", and a guessed time has "≈".
+test("a row's estimate line says estimate, and a time from the plan or the usual pace has ≈", () => {
+  const runs = [run(1, "Easy run", 6, 360, 140), run(5, "Easy run", 6, 340, 144), run(9, "Easy run", 7, 350, 142)];
+  const b = runEstimate({ title: "Easy run", detail: "8 km" }, { status: "done", durationMin: null }, 12, runs, [])!;
+  assert.equal(estimateLine(b, true, true), "≈ 47 min · ≈ 8 km · ≈ 142 bpm · estimate");
+  const c = runEstimate({ title: "Easy run", detail: "8 km" }, { status: "done", durationMin: 40 }, 12, runs, [])!;
+  assert.equal(estimateLine(c, true, true), "40 min · ≈ 8 km · ≈ 142 bpm · estimate");
+  // A game's length is its log's or its event's: no "≈" on it.
+  const g = estimateGame("event:7", 31, 90 * 60, [rec(10, "event:7", 60, 600, 150)])!;
+  assert.equal(estimateLine(g, true, true), "90 min · ≈ 150 bpm · ≈ 900 kcal · estimate");
+});
