@@ -4,13 +4,14 @@
 //   user's own data.
 // - The user's own: which day each session goes on, ticks, skips, notes, effort and pain, the sets
 //   lifted, futsal, records ("trainingEntries", "trainingLifts"), and which plan changes were seen
-//   ("trainingState"). Keyed by plan id + session id and by exercise id, never by text or position, and
+//   ("trainingState"), and the order of a day's sessions and games ("trainingOrder", dayOrder.ts). Keyed by plan id + session id and by exercise id, never by text or position, and
 //   each copies what it was logged against (title, target), so history still reads right after the plan
 //   renames, replaces or drops a session.
 // Exercise ids are permanent across all plans (the plan session keeps a growing catalogue), so history and
 // bests carry on from one plan to the next. Session ids are per plan.
 // Runs, meals, body weight and the lift and run trends are in trends.ts (same two owners).
 import { epochOf, ymd } from "./dates.ts";
+import { type DayOrders, dayOrderId, inDayOrder } from "./dayOrder.ts";
 import { futsalItemId } from "./ids.ts";
 import { occurrences } from "./recurrence.ts";
 import { type Category, type Completion, type Item, newItem } from "./types.ts";
@@ -706,7 +707,7 @@ export interface WeekItem { session: Session | null; entry: Entry }
 export interface PhaseView {
   /** Sessions with no day yet, in the plan's order. */
   toPlace: Session[];
-  /** Every day of the phase, with what's on it: sessions in the plan's order, then futsal. */
+  /** Every day of the phase, with what's on it: in the user's order (324), else sessions in the plan's order, then futsal. */
   days: { day: number; items: WeekItem[] }[];
 }
 
@@ -714,7 +715,7 @@ export interface PhaseView {
  * A phase as the page shows it: what's left to place, and each day with its sessions and futsal. Futsal is
  * read from [allEntries] as trainingEntries gives them: the calendar's futsal events.
  */
-export function phaseView(plan: Plan, phase: number, entries: ReadonlyMap<string, Entry>, allEntries: Iterable<Entry>): PhaseView {
+export function phaseView(plan: Plan, phase: number, entries: ReadonlyMap<string, Entry>, allEntries: Iterable<Entry>, orders?: DayOrders): PhaseView {
   const ph = plan.phases[phase];
   const toPlace: Session[] = [];
   const byDay = new Map<number, WeekItem[]>();
@@ -737,18 +738,19 @@ export function phaseView(plan: Plan, phase: number, entries: ReadonlyMap<string
     if (e.planId !== plan.id || e.kind !== "futsal" || e.deletedAt !== null || e.day === null) continue;
     if (e.day >= ph.start && e.day <= ph.end) byDay.get(e.day)!.push({ session: null, entry: e });
   }
-  const days = [...byDay.entries()].sort((a, b) => a[0] - b[0]).map(([day, items]) => ({ day, items }));
+  const days = [...byDay.entries()].sort((a, b) => a[0] - b[0])
+    .map(([day, items]) => ({ day, items: inDayOrder(items, (w) => w.entry.id, orders?.get(dayOrderId(plan.id, day))) }));
   return { toPlace, days };
 }
 
-/** What's on a day across the plan: for the Today line and the calendar's marks. */
-export function sessionsOnDay(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): { session: Session; entry: Entry }[] {
+/** What's on a day across the plan, in the day's order (the user's, else the plan's): for the Today line and the overview. */
+export function sessionsOnDay(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>, orders?: DayOrders): { session: Session; entry: Entry }[] {
   const out: { session: Session; entry: Entry }[] = [];
   for (const s of sessionsOf(plan)) {
     const e = entries.get(entryId(plan.id, s.id));
     if (dayOfSession(s, e) === day) out.push({ session: s, entry: entryFor(plan, s, entries) });
   }
-  return out;
+  return inDayOrder(out, (x) => x.entry.id, orders?.get(dayOrderId(plan.id, day)));
 }
 
 /** Days with a session on them (placed or set by the plan), for the calendar's light marks. */

@@ -151,6 +151,12 @@ html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now:
 .phone .tr-ring:is(.k-run, .k-gym, .k-futsal)[aria-pressed="true"]::before { background: var(--k); box-shadow: none; }
 .phone .tr-ring.pop { animation: tr-pop .32s cubic-bezier(.3, 1.6, .5, 1); }
 @keyframes tr-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.18); } 100% { transform: none; } }
+/* A held row's own day: the others slide out of its way (324); on another day a line marks where it goes. */
+.phone .tr-day.over [data-item] { transition: transform .2s cubic-bezier(.2, 0, 0, 1); }
+.phone .tr-day [data-item] { position: relative; }
+.phone [data-item][data-dropline]::before { content: ""; position: absolute; left: 12px; right: 12px; height: 3px; border-radius: 2px; background: var(--p-primary); pointer-events: none; }
+.phone [data-item][data-dropline="before"]::before { top: -2px; }
+.phone [data-item][data-dropline="after"]::before { bottom: -2px; }
 /* A held row's copy, following the finger. */
 .phone .tr-ghost { position: fixed; z-index: 70; margin: 0; pointer-events: none; background: var(--p-sc-high, var(--surface-2)); opacity: 1;
   box-shadow: 0 2px 6px rgb(0 0 0 / .18), 0 8px 20px rgb(0 0 0 / .14); transform: scale(1.02); will-change: transform; }

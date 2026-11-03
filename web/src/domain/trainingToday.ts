@@ -2,6 +2,7 @@
 // (a session to start or log, a game, done, rest, nothing placed), what's next on a rest day, the weekly km for the
 // Runs tile, and which lift the Lifts tile follows. Days are epoch-day numbers (domain/dates.ts).
 import { dayShort, startOfWeek, weekday } from "./dates.ts";
+import { type DayOrders, dayOrderId, inDayOrder } from "./dayOrder.ts";
 import { type Entry, type Plan, type Session, dayOfSession, entryId, leftToPlace, sessionsOf, sessionsOnDay } from "./training.ts";
 import type { Run } from "./trends.ts";
 
@@ -19,11 +20,10 @@ export type TodayCard =
 
 export interface NextUp { title: string; day: number }
 
-/** The day's game (futsal, or another sport by its own title, 267): the first not done, else the first. */
-export function gameOn(plan: Plan, day: number, entries: ReadonlyMap<string, Entry>): Entry | undefined {
-  const games = [...entries.values()].filter((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
-  return games.find((g) => g.status !== "done") ?? games[0];
-}
+/** The day's games (futsal, or another sport by its own title, 267). */
+const gamesOn = (plan: Plan, day: number, entries: ReadonlyMap<string, Entry>) =>
+  [...entries.values()].filter((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
+
 
 /** The first session or game after [t] not done or skipped, the session first on a day that has both. */
 export function nextUp(plan: Plan, entries: ReadonlyMap<string, Entry>, t: number): NextUp | null {
@@ -37,15 +37,19 @@ export function nextUp(plan: Plan, entries: ReadonlyMap<string, Entry>, t: numbe
   return ahead.reduce<NextUp | null>((a, b) => (!a || b.day < a.day ? b : a), null);
 }
 
-/** The row for today: a session waiting comes first, then a game, then done; a free day says what's to place, else rest. */
-export function todayCard(plan: Plan, entries: ReadonlyMap<string, Entry>, t: number): TodayCard {
+/**
+ * The row for today: the first thing waiting in the day's order (the user's, 324; else the plan's sessions, then
+ * the game), then done; a free day says what's to place, else rest.
+ */
+export function todayCard(plan: Plan, entries: ReadonlyMap<string, Entry>, t: number, orders?: DayOrders): TodayCard {
   const on = sessionsOnDay(plan, t, entries).filter((x) => x.entry.status !== "skipped");
-  const game = gameOn(plan, t, entries);
-  const open = on.filter((x) => x.entry.status === "planned");
-  if (open.length) return { kind: "session", session: open[0].session, entry: open[0].entry, more: open.length - 1 };
-  if (game && game.status !== "done") return { kind: "game", game };
-  if (on.length) return { kind: "done", session: on[0].session, entry: on[0].entry };
-  if (game) return { kind: "done", session: null, entry: game };
+  const games = gamesOn(plan, t, entries);
+  const all = inDayOrder<{ session: Session | null; entry: Entry }>([...on, ...games.map((g) => ({ session: null, entry: g }))],
+    (x) => x.entry.id, orders?.get(dayOrderId(plan.id, t)));
+  const first = all.find((x) => x.entry.status === "planned");
+  if (first?.session) return { kind: "session", session: first.session, entry: first.entry, more: on.filter((x) => x.entry.status === "planned").length - 1 };
+  if (first) return { kind: "game", game: first.entry };
+  if (all.length) return { kind: "done", session: all[0].session, entry: all[0].entry };
   const left = leftToPlace(plan, t, entries).length;
   return left ? { kind: "place", left } : { kind: "rest", next: nextUp(plan, entries, t) };
 }

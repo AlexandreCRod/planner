@@ -11,7 +11,8 @@
 // Sleep), and two quiet markers: a moon on a key run (quality or long) after a night under 6 h, and a small
 // heart on a day whose resting HR is up 7+ on its 7-day average two mornings running (domain/sleep.ts).
 // Also here: Today's training line and the calendar's light marks.
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { flushSync } from "react-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
 import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
@@ -24,7 +25,8 @@ import { type TodayCard, todayCard, todayRows } from "../../domain/trainingToday
 import { type ColourKind, colourKind, runLine, runOf, summaryKm, weekBar } from "../../domain/trainingWeek.ts";
 import type { Run } from "../../domain/trends.ts";
 import { type SleepNight, fmtSleep, nightsOf7, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
-import { type LoadedPlan, type Training, activeOf, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
+import { type LoadedPlan, type Training, activeOf, saveDayOrder, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
+import { dayOrderId, droppedOrder, inDayOrder } from "../../domain/dayOrder.ts";
 import { type GameRef, addGame, moveGame, removeGame, saveGameLog, tickGame } from "../../store/futsal.ts";
 import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
@@ -35,6 +37,7 @@ import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
 import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { type Animation, GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
 import { TrainingFind } from "./TrainingFind.tsx";
@@ -133,7 +136,7 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   if (!plan.phases.length) return scaffold(<EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" />);
   const phase = phaseIndexAt(plan, t), ph = plan.phases[phase];
   const bar = weekBar(phaseView(plan, phase, tr.entries, tr.entries.values()).days, tr.runs);
-  const card = todayCard(plan, tr.entries, t);
+  const card = todayCard(plan, tr.entries, t, tr.orders);
   const openWeek = () => { feel("tick"); go(`training?view=week${planQ(planId)}`); };
   const openToday = (c: TodayCard) => {
     feel("tick");
@@ -197,6 +200,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   useEffect(() => () => { kept = { plan: plan.id, phase, scroll: scroller.current?.scrollTop ?? 0 }; });
 
   const sessions = useMemo(() => new Map(sessionsOf(plan).map((s) => [s.id, s])), [plan]);
+  const sessionByEntry = useMemo(() => new Map(sessionsOf(plan).map((s) => [entryId(plan.id, s.id), s])), [plan]);
   // What breaks a placement rule now, by session id or futsal entry id: the rows' markers.
   const broken = useMemo(() => (readOnly ? new Map<string, Breach[]>() : brokenNow(plan, tr.entries)), [plan, tr.entries, readOnly]);
   const check = (item: ItemRef, day: number, undo: () => void) => checkPlaced(lp, item, day, undo);
@@ -213,13 +217,19 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
     if (w) setWarn(w);
     else showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
   };
-  const drag = useDayDrag(scroller, place);
+  // A row let go on a day: its place there is kept as that day's order (324); on another day it moves there too.
+  const dropped = (id: string, to: DayDrop) => {
+    if (to.day !== null) saveDayOrder(plan.id, to.day, droppedOrder(to.ids, id, to.index));
+    const s = sessionByEntry.get(id);
+    if (s && (to.day === null || !to.ids.includes(id))) place(s.id, to.day);
+  };
+  const drag = useDayDrag(scroller, dropped);
   useWatchRunTicks(readOnly);
   const watchAsks = useWatchRunAsks(tr, lp, t, readOnly);
 
   if (!plan.phases.length) return <Scaffold title="Training"><EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" /></Scaffold>;
   const ph = plan.phases[phase];
-  const v = phaseView(plan, phase, tr.entries, tr.entries.values());
+  const v = phaseView(plan, phase, tr.entries, tr.entries.values(), tr.orders);
   const [short, long] = phaseNames(ph.name);
   const bar = weekBar(v.days, tr.runs);
   // A summary that's only a distance moves from the date line to the bar's km.
@@ -308,18 +318,19 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           <WatchRunChips lp={lp} asks={watchAsks.get(day)} />
           {items.length === 0 && !looseOn(day).length && <div className="tr-rest">{picked ? "Tap to put it here" : "Rest"}</div>}
           {items.map(({ session: s, entry: e }) => s ? (
-            <div key={s.id}>
-              <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === s.id}
+            <div key={s.id} data-item={e.id}>
+              <SessionRow s={s} e={e} run={s.kind === "run" && e.status === "done" ? runOf(tr.runs, s.id) : null} selected={wide && sessionId === s.id} lifted={drag.lifted === e.id}
                 slept={keyRun(s) && day <= t ? shortSleepBefore(tr.sleep, day) : null} lastNight={day === t}
                 warn={broken.get(s.id)?.length ?? 0} onWarn={() => setWarn({ item: { session: s.id }, day, undo: null })}
-                onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly || s.locked ? undefined : drag.props(s.id)} />
+                onTick={() => tick(s, e)} onOpen={() => open(s.id)} dragProps={readOnly ? undefined : drag.props(e.id, !!s.locked)} />
               {asked === e.id && e.status === "done" && <AskRow lp={lp} s={s} e={e} onDone={() => setAsked(null)} />}
             </div>
           ) : (
-            <Fragment key={e.id}>
-              <FutsalRow e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)} />
+            <div key={e.id} data-item={e.id}>
+              <FutsalRow e={e} watch={tr.watchGames.byGame.get(e.id)} warn={broken.get(e.id)?.length ?? 0} onWarn={() => setWarn({ item: { futsal: e.id }, day, undo: null })} onTick={() => tickFutsal(e)} onOpen={() => !readOnly && setFutsal(e)}
+                lifted={drag.lifted === e.id} dragProps={readOnly ? undefined : drag.props(e.id, true)} />
               {asked === e.id && e.status === "done" && <GameAskRow plan={plan} e={e} onDone={() => setAsked(null)} />}
-            </Fragment>
+            </div>
           ))}
           {looseOn(day).map((x) => <LooseWatchRow key={x.id} s={x} />)}
         </div>
@@ -448,12 +459,15 @@ function SessionRow({ s, e, run, selected, lifted, slept, lastNight, warn, onWar
  * A game (futsal or another sport, 267): its event's title, then its time, how long it was and the note;
  * with the watch's session for it (268), how long, heart rate and calories from the watch instead.
  */
-function FutsalRow({ e, watch, warn, onWarn, onTick, onOpen }: { e: Entry; watch: HealthSession | undefined; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void }) {
+function FutsalRow({ e, watch, warn, onWarn, onTick, onOpen, lifted, dragProps }: {
+  e: Entry; watch: HealthSession | undefined; warn: number; onWarn: () => void; onTick: () => void; onOpen: () => void; lifted: boolean;
+  dragProps?: { onPointerDown: (ev: React.PointerEvent<HTMLElement>) => void; onContextMenu: (ev: React.MouseEvent) => void };
+}) {
   const item = e.itemId !== undefined ? snapshot().byId.get(e.itemId) : undefined;
   const at = item && !item.allDay && item.startMin !== null ? formatTime(item.startMin) : "";
   const fromWatch = watch ? statLine(sessionStats(watch, venueOf(watch, e.title))) : "";
   return (
-    <div className={`tr-row ${e.status} k-futsal`} role="button" onClick={onOpen}>
+    <div className={`tr-row ${e.status} k-futsal ${lifted ? "lifted" : ""}`} role="button" onClick={onOpen} {...dragProps}>
       <Ring kind="futsal" done={e.status === "done"} label={e.status === "done" ? `${e.title}: done. Tap to undo` : `Mark ${e.title} done`} onTick={onTick} />
       <KindIcon kind="futsal" icon={gameIcon(e)} />
       <span className="tr-row-text">
@@ -689,44 +703,149 @@ function HealthCard() {
   );
 }
 
+/** Where a held row is let go: a day (null for To place), and its place among what's on that day. */
+export interface DayDrop { day: number | null; index: number; ids: string[] }
+
+/** The drop's settle runs on 0..1, so it needs its own (much finer) resting point (as rowDrag.ts). */
+const SETTLE = { ...GLIDE_SPRING, restDelta: 0.002, restSpeed: 0.05 };
+
+interface Slot { id: string; el: HTMLElement; top: number; h: number }
+interface DayDragState {
+  id: string; stay: boolean; pointer: number; x0: number; y0: number; fy: number; el: HTMLElement; held: boolean; timer: number;
+  ghost: HTMLElement | null; gTop: number; gH: number; over: string | null; raf: number; stop: () => void;
+  /** The row's own day, its rows when lifted (tops from the day's top), its index there, and the place it would land (-1: none yet). */
+  home: string | null; dayEl: HTMLElement | null; rows: Slot[]; from: number; to: number; line: HTMLElement | null; lineAfter: boolean;
+}
+
 /**
- * Holding a placed session lifts it; dragged over a day (or To place) and let go, it goes there. The list
- * doesn't scroll under the finger while one is held, but does near its top and bottom edges.
+ * Holding a placed session (or a game) lifts it: a copy follows the finger. Over its own day the others slide out
+ * of its way, as a to-do's do (rowDrag.ts), and its faded row shows where it lands (324); over another day a line
+ * marks the place; over To place it's taken off its day. A game stays on its own day (its event's day moves from
+ * the game's sheet), as does a session the plan locked. The list doesn't scroll under the finger while one is held, but does near its top and bottom
+ * edges. Rows are the [data-item] elements inside each [data-drop] day, in the order shown.
  */
-function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day: number | null) => void) {
+function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (id: string, to: DayDrop) => void) {
   const [lifted, setLifted] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const g = useRef<{ sid: string; id: number; x0: number; y0: number; fy: number; el: HTMLElement; held: boolean; timer: number;
-    ghost: HTMLElement | null; over: string | null; raf: number; stop: () => void } | null>(null);
+  const g = useRef<DayDragState | null>(null);
   const dropRef = useRef(onDrop);
   dropRef.current = onDrop;
+  const settling = useRef<Animation | null>(null);
 
-  const hover = (d: NonNullable<typeof g.current>) => {
-    const el = document.elementFromPoint(d.x0, d.fy)?.closest<HTMLElement>("[data-drop]");
-    const key = el?.dataset.drop ?? null;
-    if (key !== d.over) { d.over = key; setOver(key); if (key) feel("tick"); }
+  /** The copy's middle, on the screen now. */
+  const mid = (d: DayDragState) => d.gTop + (d.fy - d.y0) + d.gH / 2;
+  const clearLine = (d: DayDragState) => { if (d.line) { delete d.line.dataset.dropline; d.line = null; } };
+  const unshift = (d: DayDragState) => { for (const r of d.rows) r.el.style.transform = ""; };
+
+  /** Over its own day: the place under the copy's middle, the others moved out of its way. */
+  const reorder = (d: DayDragState) => {
+    const m = mid(d) - (d.dayEl?.getBoundingClientRect().top ?? 0);
+    let to = 0;
+    d.rows.forEach((r, i) => { if (i !== d.from && r.top + r.h / 2 < m) to++; });
+    if (to === d.to) return;
+    if (d.to !== -1) feel("tick");
+    d.to = to;
+    const me = d.rows[d.from];
+    if (!me) return;
+    let gap = 0;
+    d.rows.forEach((r, i) => {
+      if (i === d.from) return;
+      const dy = i > d.from && i <= to ? -me.h : i < d.from && i >= to ? me.h : 0;
+      if (dy) gap -= Math.sign(dy) * r.h;
+      r.el.style.transform = dy ? `translate3d(0,${dy}px,0)` : "";
+    });
+    me.el.style.transform = gap ? `translate3d(0,${gap}px,0)` : "";
+  };
+  /** Over another day: the place among its rows, marked by a line above the row it goes before (or under the last). */
+  const placeIn = (d: DayDragState, day: HTMLElement) => {
+    const rows = [...day.querySelectorAll<HTMLElement>("[data-item]")];
+    const m = mid(d);
+    let to = 0;
+    for (const r of rows) { const b = r.getBoundingClientRect(); if (b.top + b.height / 2 < m) to++; }
+    const el = rows[Math.min(to, rows.length - 1)] ?? null, after = to >= rows.length;
+    if (el !== d.line || after !== d.lineAfter) {
+      clearLine(d);
+      if (el) { el.dataset.dropline = after ? "after" : "before"; d.line = el; d.lineAfter = after; if (d.to !== -1 && d.to !== to) feel("tick"); }
+    }
+    d.to = to;
+  };
+
+  const hover = (d: DayDragState) => {
+    const el = document.elementFromPoint(d.x0, d.fy)?.closest<HTMLElement>("[data-drop]") ?? null;
+    // A game (or a locked session) stays on its own day.
+    const key = el && (!d.stay || el.dataset.drop === d.home) ? el.dataset.drop ?? null : null;
+    if (key !== d.over) {
+      if (d.over === d.home) unshift(d);
+      clearLine(d);
+      d.to = -1;
+      d.over = key;
+      setOver(key);
+      if (key && key !== d.home) feel("tick");
+    }
+    if (!el || key === null || key === "none") return;
+    if (key === d.home) reorder(d); else placeIn(d, el);
   };
   const end = () => {
     const d = g.current;
-    if (!d) return;
+    if (!d) return null;
     clearTimeout(d.timer);
     cancelAnimationFrame(d.raf);
     d.ghost?.remove();
+    clearLine(d);
     d.stop();
+    if (d.held && d.dayEl) anchor.current = { el: d.dayEl, top: d.dayEl.getBoundingClientRect().top };
     g.current = null;
     setLifted(null);
     setOver(null);
+    return d;
   };
-  useEffect(() => end, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { const d = end(); if (d) unshift(d); settling.current?.stop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Lifting shows To place above the days (and letting go may hide it): the list scrolls by as much, so the days
+  // stay where they were under the finger.
+  const anchor = useRef<{ el: HTMLElement; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const d = g.current, sc = scroller.current, a = anchor.current;
+    anchor.current = null;
+    if (!sc) return;
+    if (lifted && d?.held) {
+      const dy = d.el.getBoundingClientRect().top - d.gTop;
+      if (Math.abs(dy) > 1) { sc.scrollTop += dy; hover(d); }
+    } else if (!lifted && a?.el.isConnected) {
+      const dy = a.el.getBoundingClientRect().top - a.top;
+      if (Math.abs(dy) > 1) sc.scrollTop += dy;
+    }
+  }, [lifted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const props = (sid: string) => ({
+  /** Lets go of [d] over [key]: the rows are drawn where they go at once, and the row glides from under the finger into its place. */
+  const drop = (d: DayDragState, key: string | null) => {
+    const was = d.gTop + (d.fy - d.y0);
+    const home = key === d.home;
+    if (key === null || (home && (d.to === d.from || d.to < 0))) { unshift(d); return; } // back where it was: the others slide back too
+    const day = key === "none" ? null : Number(key);
+    const ids = home ? d.rows.map((r) => r.id)
+      : [...(document.querySelector(`[data-drop="${key}"]`)?.querySelectorAll<HTMLElement>("[data-item]") ?? [])].map((x) => x.dataset.item!);
+    const list = scroller.current;
+    if (list) list.dataset.reorder = "";
+    flushSync(() => dropRef.current(d.id, { day, index: Math.max(0, d.to), ids }));
+    unshift(d);
+    if (list) delete list.dataset.reorder;
+    const row = document.querySelector<HTMLElement>(`[data-item="${CSS.escape(d.id)}"]`);
+    if (!row || day === null) return;
+    const dy = was - row.getBoundingClientRect().top;
+    settling.current?.stop();
+    row.style.transform = `translate3d(0,${dy}px,0)`;
+    settling.current = animateSpring(1, 0, 0, (k) => { row.style.transform = k ? `translate3d(0,${dy * k}px,0)` : ""; },
+      () => { row.style.transform = ""; settling.current = null; }, SETTLE);
+  };
+
+  const props = (id: string, stay = false) => ({
     onPointerDown: (ev: React.PointerEvent<HTMLElement>) => {
       if (g.current || !ev.isPrimary || (ev.pointerType === "mouse" && ev.button !== 0)) return;
       if ((ev.target as Element).closest(".tr-ring, .tr-warn")) return;
       const el = ev.currentTarget;
       const move = (e: PointerEvent) => {
         const d = g.current;
-        if (!d || e.pointerId !== d.id) return;
+        if (!d || e.pointerId !== d.pointer) return;
         if (!d.held) { if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > TOUCH_SLOP) end(); return; }
         d.fy = e.clientY;
         if (d.ghost) d.ghost.style.transform = `translate3d(0,${e.clientY - d.y0}px,0) scale(1.02)`;
@@ -734,19 +853,20 @@ function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day:
       };
       const up = (e: PointerEvent) => {
         const d = g.current;
-        if (!d || e.pointerId !== d.id) return;
+        if (!d || e.pointerId !== d.pointer) return;
         const target = d.held && e.type === "pointerup" ? d.over : null;
         if (d.held) swallowClick(500);
         end();
-        if (target !== null) dropRef.current(sid, target === "none" ? null : Number(target));
+        if (d.held) drop(d, target);
       };
       const noScroll = (e: TouchEvent) => { if (g.current?.held && e.cancelable) e.preventDefault(); };
       window.addEventListener("pointermove", move, { passive: true });
       window.addEventListener("pointerup", up, { passive: true });
       window.addEventListener("pointercancel", up, { passive: true });
       document.addEventListener("touchmove", noScroll, { passive: false });
-      const d = {
-        sid, id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, fy: ev.clientY, el, held: false, timer: 0, ghost: null as HTMLElement | null, over: null, raf: 0,
+      const d: DayDragState = {
+        id, stay, pointer: ev.pointerId, x0: ev.clientX, y0: ev.clientY, fy: ev.clientY, el, held: false, timer: 0, ghost: null, gTop: 0, gH: 0, over: null, raf: 0,
+        home: null, dayEl: null, rows: [], from: 0, to: -1, line: null, lineAfter: false,
         stop: () => {
           window.removeEventListener("pointermove", move);
           window.removeEventListener("pointerup", up);
@@ -757,16 +877,29 @@ function useDayDrag(scroller: RefObject<HTMLElement>, onDrop: (sid: string, day:
       g.current = d;
       d.timer = window.setTimeout(() => {
         if (g.current !== d) return;
+        settling.current?.stop();
         d.held = true;
         feel("pickup");
-        // A copy of the row follows the finger; the row itself stays, faded, where it was.
+        // Its day's rows as they are now, and the row's place among them.
+        const day = el.closest<HTMLElement>("[data-drop]");
+        d.home = day?.dataset.drop ?? null;
+        d.dayEl = day;
+        const top0 = day?.getBoundingClientRect().top ?? 0;
+        d.rows = [...(day?.querySelectorAll<HTMLElement>("[data-item]") ?? [])].map((x) => {
+          x.style.transform = "";
+          const b = x.getBoundingClientRect();
+          return { id: x.dataset.item!, el: x, top: b.top - top0, h: b.height };
+        });
+        d.from = Math.max(0, d.rows.findIndex((r) => r.id === id));
+        // A copy of the row follows the finger; the row itself stays, faded, where it will land.
         const r = el.getBoundingClientRect();
+        d.gTop = r.top; d.gH = r.height;
         const ghost = el.cloneNode(true) as HTMLElement;
         ghost.classList.add("tr-ghost");
         Object.assign(ghost.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
         document.body.appendChild(ghost);
         d.ghost = ghost;
-        setLifted(sid);
+        setLifted(id);
         hover(d);
         // Near the top or bottom edge, the list scrolls (the finger stays put, so the day under it changes).
         let last = performance.now();
@@ -802,10 +935,12 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
   const lp = activeOf(tr, t);
   if (!lp || day < lp.plan.start || day > lp.plan.end) return null;
   const { plan } = lp;
-  const on = sessionsOnDay(plan, day, tr.entries).filter((x) => x.entry.status !== "skipped");
+  const on = sessionsOnDay(plan, day, tr.entries, tr.orders).filter((x) => x.entry.status !== "skipped");
   // The day's game (futsal, or another sport by its own title, 267).
   const game = [...tr.entries.values()].find((e) => e.planId === plan.id && e.kind === "futsal" && e.deletedAt === null && e.day === day);
   const futsal = game ? (game.sport ? game.title : "Futsal") : "";
+  // Put first on the day (324), the game leads the line.
+  const gameFirst = !!game && on.length > 0 && inDayOrder([on[0].entry.id, game.id], (x) => x, tr.orders.get(dayOrderId(plan.id, day)))[0] === game.id;
   let text: string, icon = "oDirectionsRun", target = `training?d=${day}`, rest = false;
   if (on.length) {
     text = on.length === 1 ? [on[0].session.title, on[0].session.detail].filter(Boolean).join(" · ") : on.map((x) => x.session.title).join(" + ");
@@ -818,7 +953,7 @@ export function TrainingLine({ day, t }: { day: number; t: number }) {
     if (line === "place") text = `${count(left, "session")} to place this week`;
     else { text = futsal || "Rest day"; rest = !futsal; }
   }
-  if (on.length && futsal) text += ` · ${futsal}`;
+  if (on.length && futsal) text = gameFirst ? `${futsal} · ${text}` : `${text} · ${futsal}`;
   const done = on.length > 0 && on.every((x) => x.entry.status === "done");
   return (
     <button className={`tr-todayline ${rest ? "rest" : ""} ${done ? "done" : ""}`} onClick={() => go(target)}>

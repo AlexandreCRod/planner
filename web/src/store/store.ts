@@ -28,6 +28,8 @@ export const KINDS = [
   "todoNumber",
   // Notes on runs and games with no training log to hold them (294, domain/cardio.ts): written only by the app.
   "trainingNotes",
+  // The order of a training day's sessions and games as the user dragged it (324, domain/dayOrder.ts): one per plan and day, written only by the app.
+  "trainingOrder",
 ] as const;
 /** The kinds every Worker takes; the others wait on the device until the Worker says it takes any kind. */
 export const FIRST_KINDS: readonly Kind[] = KINDS.slice(0, 9);

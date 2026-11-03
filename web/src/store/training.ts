@@ -5,6 +5,7 @@
 // read once per pushed copy. The watch's data from Health Connect (healthSessions, healthNights, healthDays) is here too.
 import { useSyncExternalStore } from "react";
 import { today } from "../domain/dates.ts";
+import { type DayOrder, dayOrderId, dayOrders } from "../domain/dayOrder.ts";
 import {
   type Entry, type Lift, type Plan, type PlanFile, type SeenPlan, PLAN_FILE, activePlan, entryFor, readPlan, sessionsOf, sportsCategoryIds, trainingEntries,
 } from "../domain/training.ts";
@@ -73,6 +74,8 @@ export interface Training {
   games: Game[];
   /** The notes on runs and games with no log to hold them, by id (domain/cardio.ts). */
   notes: Map<string, ActivityNote>;
+  /** The order of each day the user dragged into one, by dayOrderId (domain/dayOrder.ts, 324). */
+  orders: Map<string, string[]>;
 }
 
 const read = new WeakMap<PlanFile, { plan: Plan | null; problems: string[] }>();
@@ -152,6 +155,7 @@ export function training(): Training {
     watchGames: matchGames(gameSlots(shown, items), healthSessions),
     games: [],
     notes: activityNotes(listOf<ActivityNote>("trainingNotes")),
+    orders: dayOrders(listOf<DayOrder>("trainingOrder")),
   };
   data.sleep = mergedNights(data.nights, data.healthNights, data.healthDays);
   data.games = gamesOf(shown.values(), data.watchGames, eventTimes(items));
@@ -194,6 +198,10 @@ export function saveEntry(e: Entry) { putRecords("trainingEntries", [{ ...e, upd
 export function saveLift(l: Lift) { putRecords("trainingLifts", [{ ...l, updatedAt: Date.now() }]); }
 export function saveSeen(s: SeenPlan) { putRecords("trainingState", [{ ...s, updatedAt: Date.now() }]); }
 export function saveWeighIn(w: WeighIn) { putRecords("trainingWeighIns", [{ ...w, updatedAt: Date.now() }]); }
+/** Keeps the order of what's on [day] of [planId]: entry ids, first to last (324). */
+export function saveDayOrder(planId: string, day: number, order: string[]) {
+  putRecords("trainingOrder", [{ id: dayOrderId(planId, day), planId, day, order, updatedAt: Date.now() } satisfies DayOrder]);
+}
 export function saveHidden(h: Hidden) { putRecords("trainingHidden", [{ ...h, updatedAt: Date.now() }]); }
 
 /** Keeps or clears a note in the records beside the log: an empty one is a soft delete, so it syncs. */
