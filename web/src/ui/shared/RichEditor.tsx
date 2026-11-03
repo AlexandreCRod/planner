@@ -345,7 +345,10 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   };
 
   useEffect(() => {
-    if (el.current) { el.current.innerHTML = sanitize(initialHtml); liveGaps(el.current); }
+    // Ticked lines fold at once, not a frame later (review of 2.10.1, finding 2): the note session reads the text
+    // back right after this effect, so text from the store that arrives with a ticked line out of place is read
+    // already reordered, and the reorder never counts as the user's own edit (which kept later synced edits out).
+    if (el.current) { el.current.innerHTML = sanitize(initialHtml); liveGaps(el.current); layoutDone(); }
     document.execCommand("defaultParagraphSeparator", false, "p");
   }, [initialHtml, revision]);
   // The "Start writing" hint goes as soon as anything is there: typing, but also a box, a bullet or a

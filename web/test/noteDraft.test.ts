@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { afterSave, baselineOf, draftOf, editorText, localChanges, noteToSave, rebase } from "../src/domain/noteDraft.ts";
+import { foldOrder } from "../src/domain/checklist.ts";
 import { type Item, newItem } from "../src/domain/types.ts";
 
 // Item 132: edits made on the PC didn't stay. Two ways a note's edit was lost:
@@ -100,4 +101,31 @@ test("an edited note keeps a place stored on it, and the editor never writes one
   assert.equal(plan.item.location, "Lisbon");
   assert.equal(plan.item.lat, 38.7);
   assert.equal(plan.item.content, "<p>b</p>");
+});
+
+// Review of 2.10.1, finding 2: text from an older build arrives while the note is open, with a ticked line out
+// of place. The editor folds it (ticked lines last) as it loads it, and the session reads that back as what the
+// editor shows; a later edit from the same device must still load, and nothing is saved from here.
+test("text that arrives with a ticked line out of place is folded as it loads, and a later remote edit still loads", () => {
+  const html = (lines: string[]) => lines.map((l) => `<p>${l}</p>`).join("");
+  const shown = (lines: string[]) => html((foldOrder(lines) ?? lines.map((_, k) => k)).map((k) => lines[k]));
+  const note = { ...opened, content: html(["☐ Milk", "☑ Eggs"]) };
+  let base = baselineOf(note, "");
+  // The PC (2.10) types "Bread" after the ticked line; it syncs.
+  const first = ["☐ Milk", "☑ Eggs", "☐ Bread"];
+  let r = rebase(base, editorNow(note, html(["☐ Milk", "☑ Eggs"])), draftOf({ ...note, content: html(first) }, ""));
+  assert.deepEqual(r.load, { content: html(first) });
+  // The editor shows it folded at once, and that's what is read back as shown.
+  const inEditor = shown(first);
+  assert.equal(inEditor, html(["☐ Milk", "☐ Bread", "☑ Eggs"]));
+  base = { ...r.baseline, shownContent: inEditor };
+  assert.deepEqual(localChanges(base, editorNow(note, inEditor)), {}, "the fold is not an edit made here");
+  // The PC types a second line; it loads too.
+  const second = [...first, "☐ Jam"];
+  r = rebase(base, editorNow(note, inEditor), draftOf({ ...note, content: html(second) }, ""));
+  assert.deepEqual(r.load, { content: html(second) });
+  // Had the text been read back before the fold (2.10.1's timing), the fold would have counted as the user's
+  // edit, and the second line wouldn't have loaded.
+  const early = { ...base, shownContent: html(first) };
+  assert.deepEqual(rebase(early, editorNow(note, inEditor), draftOf({ ...note, content: html(second) }, "")).load, {});
 });
