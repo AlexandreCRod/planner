@@ -21,6 +21,12 @@ object Notifications {
     const val CH_ALARM = "alarms"
     const val CH_UPCOMING = "upcoming"
     const val CH_TIMER = "timers"
+    /**
+     * Running stopwatches (350): their own channel at the default importance, without a sound, so the line shows
+     * with an icon in the status bar and on the lock screen. On "Timers" (low importance) Android, and HyperOS,
+     * file it among the silent ones, whose icons are hidden and which a locked screen may leave out.
+     */
+    const val CH_STOPWATCH = "stopwatch"
     /** "Starting now" when an item starts: pops up, but without a sound. */
     const val CH_STARTING = "starting"
 
@@ -55,6 +61,13 @@ object Notifications {
                     description = "Time left on running timers"
                     setSound(null, null)
                     enableVibration(false)
+                },
+                NotificationChannel(CH_STOPWATCH, "Stopwatch", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "A running stopwatch, counting; tap its time to pause it"
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 },
                 NotificationChannel(CH_STARTING, "Starting now", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "When a task or event that had a reminder starts; pops up quietly while you use the phone"

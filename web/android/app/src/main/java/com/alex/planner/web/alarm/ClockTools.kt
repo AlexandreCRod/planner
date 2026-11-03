@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.alex.planner.web.R
 import kotlinx.serialization.Serializable
 import java.time.Duration
@@ -237,7 +238,8 @@ object ClockTools {
             "hide" -> synchronized(lock) { hiddenLines += id }
             "show" -> synchronized(lock) { hiddenLines -= id }
             else -> {
-                if (action == "remove") synchronized(lock) { hiddenLines -= id }
+                // A reset or a delete for good ends the hiding its Undo needed.
+                if (action == "remove" || action == "reset") synchronized(lock) { hiddenLines -= id }
                 val now = System.currentTimeMillis()
                 change(context) { stopwatchAction(it, action, id, name, now) }
             }
@@ -259,24 +261,34 @@ object ClockTools {
      */
     const val SW_NOTIFICATION = 780_000
 
-    /** One quiet line per running stopwatch, counting by itself (the system's chronometer), in the card's group. */
+    /**
+     * One line per running stopwatch, counting by itself (the system's chronometer). Not in the card's group
+     * (350): on the user's Xiaomi the lines didn't show; a child of the group is drawn under the card's summary
+     * (which is redrawn, or taken down, right as the line is posted), so a stopwatch now stands on its own, on its
+     * own channel (silent by the channel: NotificationCompat's setSilent would put it in a "silent" group of its
+     * own, without a summary), shown in full on the lock screen too.
+     */
     private fun showStopwatches(context: Context) {
         val now = System.currentTimeMillis()
         val hidden = synchronized(lock) { hiddenLines.toSet() }
         val running = runningStopwatches(current(context), now, hidden)
+        val nm = NotificationManagerCompat.from(context)
         running.forEachIndexed { i, (label, from) ->
-            val b = NotificationCompat.Builder(context, Notifications.CH_TIMER)
+            val b = NotificationCompat.Builder(context, Notifications.CH_STOPWATCH)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(label)
                 .setContentText("Running")
                 .setContentIntent(Notifications.openSectionIntent(context, "stopwatch", 3))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
                 .setUsesChronometer(true).setWhen(from).setShowWhen(true)
-            Notifications.notify(context, SW_NOTIFICATION + i, b, from)
+            if (nm.areNotificationsEnabled()) runCatching { nm.notify(SW_NOTIFICATION + i, b.build()) }
         }
-        for (i in running.size until MAX_STOPWATCHES) Notifications.cancel(context, SW_NOTIFICATION + i)
+        for (i in running.size until MAX_STOPWATCHES) nm.cancel(SW_NOTIFICATION + i)
+        // Lines of an older build were in the card's group: its summary is drawn again without them.
+        Card.refresh(context)
     }
 
     // ---- World clock ----

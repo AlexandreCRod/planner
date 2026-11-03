@@ -1179,6 +1179,7 @@ function StopwatchPane({ active }: { active: boolean }) {
   const lengths = lapLengths(sw.laps);
   const run = (a: "start" | "pause" | "lap" | "reset", id = sw.id) => {
     if (a === "reset") { reset(id); return; }
+    if (a === "start") askForStopwatchLine();
     pendingReset.current.get(id)?.();   // started again before the Undo went: the reset goes first
     void act(native.stopwatch(a, { id }));
   };
@@ -1190,7 +1191,9 @@ function StopwatchPane({ active }: { active: boolean }) {
     const offFlush = onFlush(commit);
     pendingReset.current.set(id, commit);
     setResetting((l) => new Set([...l, id]));
-    showSnackbar(`${label} reset`, "Undo", () => { if (done) return; finish(); unReset(id); }, { onGone: commit });
+    // Its notification goes at once too, and comes back on Undo (350: a long press on a running one resets it).
+    void act(native.stopwatch("hide", { id }));
+    showSnackbar(`${label} reset`, "Undo", () => { if (done) return; finish(); unReset(id); void act(native.stopwatch("show", { id })); }, { onGone: commit });
   };
   const shown = stopwatchParts(total);
   const remove = (id: number, label: string) => {
@@ -1204,14 +1207,12 @@ function StopwatchPane({ active }: { active: boolean }) {
   };
   return (
     <div className="pa-scroll pa-sw">
-      {/* A tap on the count starts it when stopped (326); while it runs the count is only a count, so a stray
-          tap never stops it. */}
-      {sw.startedAt != null
-        ? <div className="pa-sw-time">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
-        : <div className="pa-sw-time tap" role="button" tabIndex={0} aria-label={total > 0 ? "Resume" : "Start"}
-          onClick={() => run("start")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run("start"); } }}>
-          {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
-        </div>}
+      {/* A tap on the count starts it, and pauses it while it runs (350; 326 had it do nothing then); a long
+          press resets it, with Undo. */}
+      <SwCount className="pa-sw-time" running={sw.startedAt != null} total={total} label={stopwatchLabel(sw, 0)}
+        onTap={() => run(sw.startedAt != null ? "pause" : "start")} onReset={() => run("reset")}>
+        {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
+      </SwCount>
       <div className="pa-buttons center">
         {sw.startedAt != null ? <>
           <button className="p-outlined-btn" onClick={() => run("lap")}>Lap</button>
@@ -1247,7 +1248,36 @@ function StopwatchPane({ active }: { active: boolean }) {
   );
 }
 
-/** One added stopwatch: its name (tap to type one), its count (a tap starts it while stopped), the last lap, and its buttons. */
+let askedForLine = false;
+/**
+ * A running stopwatch shows in the notifications (350): with them off for the app, it asks once per visit,
+ * with the reason, the first time one starts.
+ */
+function askForStopwatchLine() {
+  if (askedForLine || !hasAlarms || alarmState().perms.notifications) return;
+  askedForLine = true;
+  void ensureNotifications("A running stopwatch shows in your notifications, counting, so you can see it and pause it from there.");
+}
+
+/**
+ * A stopwatch's count (350): a tap starts it, or pauses it while it runs; a long press (a right-click) resets
+ * it once it has counted, with Undo (the pane's reset).
+ */
+function SwCount({ className, running, total, label, onTap, onReset, children }: {
+  className: string; running: boolean; total: number; label: string; onTap: () => void; onReset: () => void; children: ReactNode;
+}) {
+  const hold = useLongPress(total > 0 ? onReset : undefined);
+  const { fired, ...press } = hold;
+  return (
+    <div className={`${className} tap`} role="button" tabIndex={0} aria-label={`${running ? "Pause" : total > 0 ? "Resume" : "Start"} ${label}`}
+      {...press} onClick={() => { if (!fired()) onTap(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onTap(); } }}>
+      {children}
+    </div>
+  );
+}
+
+/** One added stopwatch: its name (tap to type one), its count (a tap starts or pauses it, a long press resets it), the last lap, and its buttons. */
 function StopwatchCard({ sw, label, placeholder, now, onRun, onDelete }: {
   sw: { id: number; name?: string; startedAt: number | null; accumulatedMs: number; laps: number[] }; label: string; placeholder: string; now: number;
   onRun: (a: "start" | "pause" | "lap" | "reset") => void; onDelete: () => void;
@@ -1267,12 +1297,10 @@ function StopwatchCard({ sw, label, placeholder, now, onRun, onDelete }: {
         <IconButton icon="fClose" label={`Delete ${label}`} onClick={onDelete} />
       </div>
       <div className="pa-timer-row">
-        {running
-          ? <div className="pa-time36 grow">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
-          : <div className="pa-time36 grow muted tap" role="button" tabIndex={0} aria-label={total > 0 ? `Resume ${label}` : `Start ${label}`}
-            onClick={() => onRun("start")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRun("start"); } }}>
-            {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
-          </div>}
+        <SwCount className={`pa-time36 grow ${running ? "" : "muted"}`} running={running} total={total} label={label}
+          onTap={() => onRun(running ? "pause" : "start")} onReset={() => onRun("reset")}>
+          {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
+        </SwCount>
         {running
           ? <button className="p-outlined-btn pa-small-btn" onClick={() => onRun("lap")}>Lap</button>
           : total > 0 && <IconButton icon="fReplay" label={`Reset ${label}`} onClick={() => onRun("reset")} />}

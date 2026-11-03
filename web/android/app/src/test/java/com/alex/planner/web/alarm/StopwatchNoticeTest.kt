@@ -80,4 +80,32 @@ class StopwatchNoticeTest {
         assertEquals(listOf("Stopwatch"), lines())
         assertEquals(1, ClockTools.stopwatches(ClockTools.current(ctx)).size)
     }
+
+    /**
+     * 350: the stopwatch didn't show on the user's Xiaomi. Its line now stands on its own (not a child of the
+     * card's group, whose summary is redrawn or taken down as the line comes), on its own channel at the default
+     * importance (not among the silent ones), and in full on the lock screen.
+     */
+    @Test fun aRunningStopwatchStandsOnItsOwnLoudEnoughToShowButSilent() {
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        val n = nm.getNotification(ClockTools.SW_NOTIFICATION)
+        assertNotNull(n)
+        assertEquals(null, n.group)
+        assertEquals(Notifications.CH_STOPWATCH, n.channelId)
+        assertEquals(android.app.Notification.VISIBILITY_PUBLIC, n.visibility)
+        val ch = ctx.getSystemService(NotificationManager::class.java).getNotificationChannel(Notifications.CH_STOPWATCH)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, ch.importance)
+        assertEquals(null, ch.sound)
+        assertEquals(android.app.Notification.VISIBILITY_PUBLIC, ch.lockscreenVisibility)
+    }
+
+    /** 350: a reset (a long press on the count) hides the line while its Undo stands; reset for good, a new start shows again. */
+    @Test fun aResetsHiddenLineShowsAgainOnceItStartsAfresh() {
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        ClockTools.stopwatch(ctx, "hide", 0, "")
+        assertEquals(null, nm.getNotification(ClockTools.SW_NOTIFICATION))
+        ClockTools.stopwatch(ctx, "reset", 0, "")
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        assertEquals("Stopwatch", title(ClockTools.SW_NOTIFICATION))
+    }
 }
