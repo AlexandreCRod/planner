@@ -428,7 +428,7 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
               </div>
             ))}
             {/* Ticked boxes fold away, as Keep does. */}
-            {text.ticked > 0 && <div className="ticked">+ {text.ticked} ticked</div>}
+            {text.ticked > 0 && <div className="ticked">+ {text.ticked} done</div>}
           </div>
         )}
         {/* No date (227): the tags, pictures and links, when there are any. */}

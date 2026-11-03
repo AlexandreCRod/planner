@@ -2,7 +2,7 @@
 // its checklists: a paragraph starting with "☐ " / "☑ ", indented by Braille blanks (U+2800).
 import { type RefObject, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from "react";
 import { editorText } from "../../domain/noteDraft.ts";
-import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTicked, completedSections, editorJoins, enterSplitsAt, forwardDeleteTakesBox, joinDrops, tickAnchor, tickMoveOrder, withoutBoxes } from "../../domain/checklist.ts";
+import { backspaceTakesBox, boxGapFix, checklistLead, checklistRun, checklistTicked, completedSections, editorJoins, enterSplitsAt, foldOrder, forwardDeleteTakesBox, joinDrops, tickAnchor, tickMoveOrder, tickPlace, withoutBoxes } from "../../domain/checklist.ts";
 import { SIZE_MARK, sizeStyle, withoutMarks } from "../../domain/textSize.ts";
 import { feel } from "../phone/haptics.ts";
 import { linkAtCaretIn, linkInEditable, paintLinks, unpaintLinks } from "./linkHit.ts";
@@ -19,8 +19,8 @@ const INDENT = "⠀⠀⠀";
 const DONE_STYLE = "text-decoration: line-through; color: #9e9e9e";
 /** Whether the "Completed" sections start folded on this device (the last choice made on any of them). */
 const FOLD_KEY = "completedFolded";
-/** Room above a section's first line for its "N completed" bar (the same in the style sheet). */
-const HEAD_H = 34;
+/** Room above a section's first line for its "N done" line (the same in the style sheet). */
+const HEAD_H = 32;
 
 interface DoneHead { key: string; top: number; count: number; folded: boolean }
 
@@ -264,6 +264,8 @@ export const RichEditor = forwardRef<RichEditorHandle, {
   const headsKey = useRef("");
   // Which checklists' completed sections are folded, by the text of their first line.
   const folded = useRef(new Map<string, boolean>());
+  // While the keyboard composes a word, lines aren't moved under it (layoutDone).
+  const composing = useRef(false);
   // The caret marks of sizes picked with nothing selected (see sizeAtCaret).
   const marks = useRef(new Set<HTMLElement>());
   useEffect(() => {
@@ -274,14 +276,37 @@ export const RichEditor = forwardRef<RichEditorHandle, {
 
   /**
    * Gives each checklist's completed lines (the ticked ones at its end, see completedSections) their marks:
-   * room above the first for the "N completed" bar, and hidden when folded. The marks are classes, never
+   * room above the first for the "N done" line, and hidden when folded. The marks are classes, never
    * saved (normalize), so the note's text stays exactly the lines in order.
    */
   const layoutDone = () => {
     const root = el.current, box = wrap.current;
     if (!root || !box) return;
-    const lines = [...root.children] as HTMLElement[];
-    const texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
+    let lines = [...root.children] as HTMLElement[];
+    let texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
+    // Ticked lines always fold (339): one left among the open ones (an older note, a line typed after a
+    // ticked one) joins the others at the end, remembering where it was so unticking puts it back.
+    // Not while typing a word (the keyboard's composition) or dragging a line.
+    const order = composing.current || root.querySelector(".pn-lifted") ? null : foldOrder(texts);
+    if (order) {
+      order.forEach((k, j) => {
+        const l = lines[k];
+        if (k === j || !checklistTicked(texts[k]) || "after" in l.dataset || "at" in l.dataset) return;
+        const after = tickAnchor(texts, k), at = tickPlace(texts, k);
+        if (after !== null) l.dataset.after = after;
+        if (at !== null) l.dataset.at = String(at);
+      });
+      const sel = getSelection();
+      const keep = sel && sel.rangeCount && root.contains(sel.anchorNode) ? [sel.anchorNode!, sel.anchorOffset, sel.focusNode!, sel.focusOffset] as const : null;
+      const lo = order.findIndex((k, j) => k !== j);
+      let hi = order.length - 1;
+      while (order[hi] === hi) hi--;
+      const end = lines[hi].nextSibling;
+      for (const k of order.slice(lo, hi + 1)) root.insertBefore(lines[k], end);
+      if (keep) sel!.setBaseAndExtent(...keep);
+      lines = [...root.children] as HTMLElement[];
+      texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
+    }
     const secs = completedSections(texts);
     const out: DoneHead[] = [];
     const hidden = new Set<number>(), firsts = new Set<number>();
@@ -437,7 +462,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     return caret === null ? null : { block, caret };
   };
 
-  /** The next (or previous) line on screen: lines folded into a "completed" section are skipped. */
+  /** The next (or previous) line on screen: lines folded into a "done" section are skipped. */
   const lineBeside = (block: HTMLElement, down: boolean): HTMLElement | null => {
     if (block.parentElement !== el.current) return null;
     let n = (down ? block.nextElementSibling : block.previousElementSibling) as HTMLElement | null;
@@ -822,10 +847,15 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     const lines = [...root.children] as HTMLElement[];
     const texts = lines.map((l) => (l.tagName === "P" ? l.textContent ?? "" : ""));
     // A ticked line remembers the open line above it (saved with the note), so unticking puts it back there.
+    // Its place among the open items too, for when that line is gone by the time it's unticked (339).
     const anchor = checked ? null : tickAnchor(texts, lines.indexOf(block));
-    const order = tickMoveOrder(texts, lines.indexOf(block), (k) => lines[k]?.dataset.after ?? null);
+    const place = checked ? null : tickPlace(texts, lines.indexOf(block));
+    const placeOf = (k: number) => { const v = lines[k]?.dataset.at; return v === undefined || !/^\d+$/.test(v) ? null : Number(v); };
+    const order = tickMoveOrder(texts, lines.indexOf(block), (k) => lines[k]?.dataset.after ?? null, placeOf);
     if (anchor !== null) block.dataset.after = anchor;
     else delete block.dataset.after;
+    if (place !== null) block.dataset.at = String(place);
+    else delete block.dataset.at;
     if (order) {
       const lo = order.findIndex((k, j) => k !== j);
       let hi = order.length - 1;
@@ -924,13 +954,14 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
         style={{ minHeight, fontFamily: fontFamily ? `"Planner Boxes", ${fontFamily}` : undefined }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
-        onCompositionEnd={() => tidyMarks(true)}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={() => { composing.current = false; tidyMarks(true); }}
         data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} {...linkHandlers} />
       {heads.map((h) => (
         <button key={h.key} type="button" className={h.folded ? "pn-done-head is-folded" : "pn-done-head"} style={{ top: h.top, height: HEAD_H - 4 }}
           aria-expanded={!h.folded} onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFold(h)}>
+          {h.count} done
           <svg className="pn-done-chev" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          {h.count} completed
         </button>
       ))}
     </div>

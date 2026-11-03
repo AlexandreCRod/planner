@@ -116,10 +116,11 @@ a { color: var(--acc); }
 .login { height: 100%; display: grid; place-items: center; padding: 20px; }
 .login .card { padding: 28px; width: min(420px, 100%); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow); }
 
-/* Ticked checklist lines sit in a folding "N completed" section at the end of their list (RichEditor).
-   The first of them leaves room above it for the bar; folded, they're hidden but for that room. */
+/* Ticked checklist lines sit in a folding "N done ⌄" section at the end of their list (RichEditor), the
+   same words and chevron as the task lists' fold (339). The first of them leaves room above it for the
+   line; folded, they're hidden but for that room. */
 .rich-wrap { position: relative; }
-.rich > p.pn-done-first { margin-top: 34px; }
+.rich > p.pn-done-first { margin-top: 32px; }
 .rich > p.pn-folded { display: none; }
 .rich > p.pn-done-first.pn-folded { display: block; max-height: 0; overflow: hidden; margin-bottom: 8px; }
 .pn-done-head {
@@ -128,5 +129,5 @@ a { color: var(--acc); }
 }
 .pn-done-head:hover, .pn-done-head:focus-visible { opacity: .9; background: color-mix(in srgb, currentColor 8%, transparent); }
 .pn-done-chev { transition: transform .2s cubic-bezier(.2, 0, 0, 1); }
-.pn-done-head.is-folded .pn-done-chev { transform: rotate(-90deg); }
+.pn-done-head:not(.is-folded) .pn-done-chev { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .pn-done-head, .pn-done-chev { transition: none; } }

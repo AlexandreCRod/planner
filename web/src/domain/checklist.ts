@@ -46,11 +46,19 @@ export function checklistSlots(texts: string[], from: number): number[] {
   const [s, e] = checklistBlock(texts, from);
   const n = e - s + 1;
   const d = checklistDepth(texts[from]);
+  // A top-level item stays on its side of the "N done" fold (339): an open one among the open items, a
+  // ticked one among the ticked ones at the end. Dropped past the fold, an open line used to end the list,
+  // so the fold went and the ticked lines showed among the others.
+  const items = runItems(texts, run);
+  const at = items.findIndex((it) => it.s === from);
+  const k = doneTail(items);
+  const tailStart = k < items.length ? items[k].s : run[1] + 1;
+  const fits = (i: number) => at < 0 || (items[at].done && at >= k ? i >= tailStart : i <= tailStart);
   const out: number[] = [];
   for (let i = run[0]; i <= run[1] + 1; i++) {
     if (i > s && i <= e) continue;
     const startsBlock = i > run[1] || checklistDepth(texts[i]) <= d;
-    if (startsBlock) out.push(i > e ? i - n : i);
+    if (startsBlock && fits(i)) out.push(i > e ? i - n : i);
   }
   return [...new Set(out)];
 }
@@ -148,7 +156,8 @@ const labelOf = (text: string) => text.slice(Math.max(0, checklistLead(text))).t
 
 /**
  * What item [i], just ticked, remembers so that unticking puts it back: the words of the open item
- * above it ("" when it was the first open one). Null when line [i] isn't an item of a checklist.
+ * above it ("" when it was the first open one). Null when line [i] isn't an item of a checklist, or
+ * when the open item above has no words (an empty box): then only its place counts (tickPlace).
  */
 export function tickAnchor(texts: string[], i: number): string | null {
   const run = checklistRun(texts, i);
@@ -156,8 +165,47 @@ export function tickAnchor(texts: string[], i: number): string | null {
   const items = runItems(texts, run);
   const at = items.findIndex((it) => it.s === i);
   if (at < 0) return null;
-  for (let k = at - 1; k >= 0; k--) if (!items[k].done) return labelOf(texts[items[k].s]);
+  for (let k = at - 1; k >= 0; k--) if (!items[k].done) return labelOf(texts[items[k].s]) || null;
   return "";
+}
+
+/**
+ * The other half of what a ticked item remembers (339): how many open items were above it. Unticking
+ * uses it when the remembered words are gone (that line was deleted or reworded since). Null when
+ * line [i] isn't an item of a checklist.
+ */
+export function tickPlace(texts: string[], i: number): number | null {
+  const run = checklistRun(texts, i);
+  if (!run) return null;
+  const items = runItems(texts, run);
+  const at = items.findIndex((it) => it.s === i);
+  if (at < 0) return null;
+  return items.slice(0, at).filter((it) => !it.done).length;
+}
+
+/**
+ * Ticked lines always fold (339): the order that puts every checklist's open items first and its ticked
+ * ones after them, each side keeping its order, as the old line indexes; null when it's so already.
+ * A note ticked by an older version, a line typed after a ticked one, or a merged edit can leave a
+ * ticked item among the open ones (or an open one below them), and the fold only takes the ticked items
+ * at the very end. Sub-items stay under their parent, ticked or not.
+ */
+export function foldOrder(texts: string[]): number[] | null {
+  const out = texts.map((_, k) => k);
+  let moved = false;
+  for (let i = 0; i < texts.length; i++) {
+    const run = checklistRun(texts, i);
+    if (!run) continue;
+    i = run[1];
+    const items = runItems(texts, run);
+    const k = doneTail(items);
+    if (items.slice(0, k).every((it) => !it.done)) continue;
+    const lines = (want: boolean) => items.filter((it) => it.done === want).flatMap((it) => out.slice(it.s, it.e + 1));
+    const sorted = [...lines(false), ...lines(true)];
+    out.splice(run[0], sorted.length, ...sorted);
+    moved = true;
+  }
+  return moved ? out : null;
 }
 
 /**
@@ -185,9 +233,10 @@ function placeBack(texts: string[], items: { s: number }[], k: number, anchor: s
  * the order of the old line indexes, or null when nothing moves. A ticked item (with its sub-items)
  * goes to the end of its checklist; an unticked one, if it was in the completed section, goes back to
  * where it was (see tickAnchor; [anchorOf] gives a line's remembered neighbour), else to the end of
- * the open items, just above the completed ones. Sub-items never move on their own: they follow their parent.
+ * the open items, just above the completed ones ([placeOf] gives how many open items were above it when ticked,
+ * used when its neighbour is gone). Sub-items never move on their own: they follow their parent.
  */
-export function tickMoveOrder(texts: string[], i: number, anchorOf: (line: number) => string | null = () => null): number[] | null {
+export function tickMoveOrder(texts: string[], i: number, anchorOf: (line: number) => string | null = () => null, placeOf: (line: number) => number | null = () => null): number[] | null {
   const run = checklistRun(texts, i);
   if (!run) return null;
   const items = runItems(texts, run);
@@ -207,7 +256,8 @@ export function tickMoveOrder(texts: string[], i: number, anchorOf: (line: numbe
     if (!wasTail) return null;
     const without = items.filter((_, k) => k !== at);
     const k = doneTail(without);
-    const back = placeBack(texts, without, k, anchorOf(s), anchorOf);
+    // Its remembered neighbour first; else how many open items were above it; else the end of the open ones.
+    const back = placeBack(texts, without, k, anchorOf(s), anchorOf) ?? placeOf(s);
     const place = back === null ? k : Math.min(back, k);
     if (place === at) return null; // already there
     to = place < without.length ? without[place].s - (without[place].s > s ? block.length : 0) : run[1] + 1 - block.length;

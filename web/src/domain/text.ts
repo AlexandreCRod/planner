@@ -105,7 +105,7 @@ export interface NoteCardText { lines: NoteLine[]; ticked: number; more: boolean
 
 /**
  * What a note's card shows: its lines in order with the ticked checklist lines taken out (the card says
- * "+ 2 ticked" under them instead, as Keep does), at most [maxLines] lines and about [maxChars]
+ * "+ 2 done" under them instead, as Keep does), at most [maxLines] lines and about [maxChars]
  * characters, a line cut short ending in "…". [more]: lines left out (not counting the ticked ones).
  */
 export function noteCardText(html: string, maxChars = 220, maxLines = 8): NoteCardText {

@@ -1506,6 +1506,8 @@ html.phone[data-theme="dark"] {
    finding 6; they were at 0-20 px, inside it). */
 .phone .pn-text { position: relative; }
 .phone .pn-text .rich > p.pn-check { padding-left: 24px; }
+/* The "N done ⌄" line starts where the boxes do (339). */
+.phone .pn-text .pn-done-head { left: 22px; }
 .phone .pn-handles { position: absolute; left: 0; top: 0; width: 44px; height: 0; }
 .phone .pn-handle {
   position: absolute; left: 24px; width: 20px; height: 32px; padding: 0; border: 0; border-radius: 10px; display: grid; place-items: center;

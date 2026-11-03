@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, moveChecklistBlock, tickAnchor, tickMoveOrder, withoutBoxes } from "../src/domain/checklist.ts";
+import { checklistBlock, checklistDepth, checklistRun, checklistSlots, checklistTicked, completedSections, enterSplitsAt, foldOrder, moveChecklistBlock, tickAnchor, tickMoveOrder, tickPlace, withoutBoxes } from "../src/domain/checklist.ts";
 
 const note = ["Shopping", "☐ Milk", "☑ Eggs", "⠀⠀⠀☐ Free range", "☐ Bread", "", "☐ Other list"];
 
@@ -152,4 +152,49 @@ test("A checklist line's box keeps a no-break space before its text (256)", asyn
   assert.deepEqual(boxGapFix("⠀⠀⠀☐Milk"), { at: 4, replace: 0 }); // lost already: put back
   assert.deepEqual(boxGapFix("☑"), { at: 1, replace: 0 });
   assert.equal(boxGapFix("Milk"), null);
+});
+
+test("ticked lines always fold: a ticked item among open ones joins the others at the end (339)", () => {
+  const order = (t: string[]) => applyOrder(t, foldOrder(t));
+  // An older note, ticked here and there: open items first, then the ticked ones, each in its order.
+  assert.deepEqual(order(["☐ Oat", "☑ Eggs", "☐ Spinach", "☑ Lemons", "☐ Yoghurt"]), ["☐ Oat", "☐ Spinach", "☐ Yoghurt", "☑ Eggs", "☑ Lemons"]);
+  // A line typed after the ticked ones (Enter on a ticked line) goes up above them, the fold stays.
+  assert.deepEqual(order(["☐ A", "☑ B", "☑ C", "☐ new"]), ["☐ A", "☐ new", "☑ B", "☑ C"]);
+  // Sub-items stay with their parent, ticked or not; other text and other lists are left alone.
+  assert.deepEqual(order(["Title", "☑ A", "⠀⠀⠀☐ a", "☐ B", "", "☑ X", "☐ Y"]), ["Title", "☐ B", "☑ A", "⠀⠀⠀☐ a", "", "☐ Y", "☑ X"]);
+  // Already folded: nothing moves.
+  assert.equal(foldOrder(["☐ A", "☐ B", "☑ C", "☑ D"]), null);
+  assert.equal(foldOrder(["☐ A", "⠀⠀⠀☑ a", "☐ B"]), null);
+  assert.equal(foldOrder(["Plain", "text"]), null);
+});
+
+test("a dragged line stays on its side of the fold (339)", () => {
+  const t = ["☐ A", "☐ B", "☐ C", "☑ D", "☑ E"];
+  // C (the last open one) can go before A or B or stay, never past D or E: that ended the list with an open
+  // line, so the fold went and the ticked lines showed among the others.
+  assert.deepEqual(checklistSlots(t, 2), [0, 1, 2]);
+  assert.deepEqual(checklistSlots(t, 0), [0, 1, 2]);
+  // A ticked one moves among the ticked ones only.
+  assert.deepEqual(checklistSlots(t, 4), [3, 4]);
+  // Every drop the handles allow keeps the fold whole.
+  for (const from of [0, 1, 2, 3, 4]) for (const to of checklistSlots(t, from)) {
+    assert.equal(completedSections(moveChecklistBlock(t, t, from, to))[0]?.count, 2, `${from} -> ${to}`);
+  }
+});
+
+test("unticking: its remembered place counts when its neighbour is gone (339)", () => {
+  // The open item above an item has no words (an empty box): only the place is remembered.
+  assert.equal(tickAnchor(["☐ A", "☐ ", "☑ B"], 2), null);
+  assert.equal(tickPlace(["☐ A", "☐ ", "☑ B"], 2), 2);
+  assert.equal(tickPlace(["☑ X", "☐ A", "☑ B", "☐ C"], 2), 1);
+  assert.equal(tickPlace(["Text", "☑ A"], 0), null);
+  // B was second among the open items; A above it was reworded since ("A2"): back to second, not the end.
+  const t = ["☐ A2", "☐ C", "☐ D", "☐ B", "☑ E"];
+  const after = (line: number) => (line === 3 ? "A" : null), place = (line: number) => (line === 3 ? 1 : null);
+  assert.deepEqual(applyOrder(t, tickMoveOrder(t, 3, after, place)), ["☐ A2", "☐ B", "☐ C", "☐ D", "☑ E"]);
+  // Its place is further down than the open items now go: the end of the open ones.
+  const far = (line: number) => (line === 3 ? 9 : null);
+  assert.equal(tickMoveOrder(t, 3, after, far), null);
+  // Through a closed note and sync too: both are kept on the line itself (data-after, data-at), which
+  // older versions keep as they are and ignore.
 });
