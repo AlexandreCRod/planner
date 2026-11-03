@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, EmptyState, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, EmptyState, FitLine, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -519,20 +519,22 @@ export function PhoneToday() {
   return (
     <div className="p-scaffold">
       <header className="p-appbar tall" ref={head}>
+        {/* The arrows keep their place whatever the day (341): the title has a slot of its own width, and a long
+            weekday fits itself in it. */}
         <div className="p-dayrow">
           <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => turn(-1)} />
           <button className="p-dayswitch" aria-label="Go to a day" onClick={() => setPicking(true)}>
-            <span className="big">{word ?? WEEKDAYS[weekday(day) - 1]}</span>
+            <FitLine className="big" text={word ?? WEEKDAYS[weekday(day) - 1]} />
             <span className="small">{word ? formatDate(day) : formatDateShort(day)}</span>
           </button>
           <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => turn(1)} />
         </div>
         <span className="grow" />
         <TestChip />
-        {!isToday && <IconButton icon="oToday" label="Today" onClick={() => show(t)} />}
+        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341). */}
+        {!isToday && <IconButton className="p-today-btn" icon="oToday" label="Today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
-        {/* On another day, Today takes its place (the bar has no room for both beside a long weekday). */}
-        {isToday && <TodosButton s={s} onClick={() => setTodosOpen(true)} />}
+        <TodosButton s={s} onClick={() => setTodosOpen(true)} />
         <AppBarActions />
       </header>
       {todosOpen && createPortal(<TodosSheet back={todosBack} onClose={() => { setTodosOpen(false); setTodosBack(null); }} />, document.body)}

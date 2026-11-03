@@ -152,9 +152,19 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-svg { flex: none; display: block; }
 /* Today's bar (HomeScreen.kt: TopAppBar with expandedHeight 76 dp, DaySwitcher as its title, which
    M3 insets 16 dp; the arrows sit in the title slot, so they take the title's colour, onSurface). */
-.phone .p-dayrow { display: flex; align-items: center; min-width: 0; margin-left: 12px; }
+/* The day arrows stay still (341): ‹ at the bar's start, the title in a slot of one width (what's left once the
+   bar holds its most: the arrows 2 × 44, Today 40 and three 48 px icons, 280 px with the edges), then ›.
+   A long title fits itself in (FitLine). Planner Test's TEST chip sits small in the bar's top corner there,
+   taking no room from the row. */
+html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
+.phone .p-appbar.tall { position: relative; }
+.phone .p-appbar.tall > .p-testchip { position: absolute; left: 12px; top: calc(var(--sat) + 2px); margin: 0; padding: 0 5px; font-size: 9px; line-height: 13px; }
+.phone .p-dayrow { flex: none; display: flex; align-items: center; min-width: 0; }
 .phone .p-icon.title-icon { color: var(--text); }
-.phone .p-dayswitch { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; padding: 0 6px; border: 0; background: none; font: inherit; text-align: left; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone :is(.p-dayrow, .p-calhead) > .p-icon.title-icon { width: 44px; }
+.phone .p-icon.p-today-btn { width: 40px; }
+.phone .p-dayswitch { position: relative; overflow: hidden; flex: none; width: var(--day-slot); display: flex; flex-direction: column; align-items: center; padding: 0 4px; border: 0; background: none; font: inherit; text-align: center; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone .p-fitline { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phone .p-dayswitch .big { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; color: var(--text); white-space: nowrap; }
 .phone .p-dayswitch .small { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
 .phone .p-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 16px 104px; }
@@ -249,8 +259,8 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 
 /* ---------- Calendar (CalendarScreen.kt, TimeGrid.kt) ---------- */
 .phone .p-cal { position: relative; }
-.phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px 0 16px; }
-.phone .p-calhead h2 { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px; }
+.phone .p-calhead h2 { flex: none; width: var(--day-slot); text-align: center; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 
 .phone .pg { display: flex; flex-direction: column; height: 100%; min-height: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -531,7 +541,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-rows .event .grow > .ellipsis:first-child { font-size: 15px; line-height: 20px; letter-spacing: .25px; }
 
 /* ---------- Calendar ---------- */
-.phone .p-calhead { padding: 0 4px 0 16px; }
+.phone .p-calhead { padding: 0 4px; }
 .phone .p-calhead h2 { margin: 0; }
 .phone .p-hpager { position: relative; flex: none; overflow: hidden; touch-action: pan-y; }
 .phone .p-yearview { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
