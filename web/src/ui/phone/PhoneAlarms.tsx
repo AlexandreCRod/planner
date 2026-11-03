@@ -3,10 +3,10 @@
 // switch (287). The four sections also turn with a finger swiped sideways, live like a pager, with the
 // switch's thumb riding along. Everything here is kept and rung by the native alarm engine (alarms/native.ts);
 // in a browser the tab isn't shown.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, isRepeating, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, MAX_STOPWATCHES, isRepeating, newStopwatchId, stopwatchLabel, stopwatchesOf, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, swipeRemoves, timerLeft, timerShare, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { addMonths, dayShort, daysInMonth, epochOf, formatTime, monthLong, monthShort, relativeDay, startOfWeek, use24h, weekday, ymd } from "../../domain/dates.ts";
@@ -24,7 +24,6 @@ import { useAlarmSettings } from "../../alarms/settings.ts";
 import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, IconButton, MIcon, Segmented, TopAppBar } from "./chrome.tsx";
 import { useHorizontalSwipe } from "./gesture.ts";
 import { useHold as useLongPress } from "./hold.ts";
-import { pushBack } from "./native.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
 import { MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { type RangePick, rangeRole, slideRange, tapRange } from "./range.ts";
@@ -160,22 +159,22 @@ export function PhoneAlarms({ active }: { active: boolean }) {
   const idx = useRef(index);
   idx.current = index;
   const [editing, setEditing] = useState<{ alarm: ClockAlarm; isNew: boolean } | null>(null);
-  const [menu, setMenu] = useState(false);
+  const addingSw = useRef(new Set<number>());
   const [newTimer, setNewTimer] = useState(false);
   const [addZone, setAddZone] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   /** The pill switch's thumb, moved along by a swipe between sections (as on Tasks and Progress). */
   const track = useRef<((p: number | null) => void) | null>(null);
   const stopSlide = useRef<(() => void) | null>(null);
-  // The + button adds what the section shown holds (70): an alarm, a timer, a city; on the stopwatch,
-  // which has nothing to add, it offers the list of everything instead.
+  // The + button adds what the section shown holds (70): an alarm, a timer, a city, or another stopwatch
+  // running beside the first (327).
   const addHere = useRef<() => void>(() => {});
   addHere.current = () => {
     const k = SECTIONS[idx.current][0];
     if (k === "alarm") newAlarm();
     else if (k === "timer") setNewTimer(true);
     else if (k === "world") setAddZone(true);
-    else setMenu(true);
+    else void addStopwatch();
   };
   useEffect(() => { const open = () => addHere.current(); addMenuListeners.add(open); return () => { addMenuListeners.delete(open); }; }, []);
 
@@ -212,10 +211,14 @@ export function PhoneAlarms({ active }: { active: boolean }) {
     show(0);
     setEditing({ alarm: { id: 0, hour: 7, minute: 0, label: "", days: 0, enabled: true, color: 0, sound: null }, isNew: true });
   };
-  const startStopwatch = async () => {
-    show(2);
-    const sw = alarmState().tools.stopwatch;
-    if (sw.startedAt == null) await act(native.stopwatch("start"));
+  /** Another stopwatch, counting at once; up to MAX_STOPWATCHES. */
+  const addStopwatch = async () => {
+    // Quick taps count the ones still on their way to the engine too.
+    const list = [...stopwatchesOf(alarmState().tools), ...[...addingSw.current].map((id) => ({ id }))];
+    const id = newStopwatchId(list, Date.now());
+    if (id === null) { showSnackbar(`Up to ${MAX_STOPWATCHES} stopwatches`); return; }
+    addingSw.current.add(id);
+    try { await act(native.stopwatch("add", { id })); } finally { addingSw.current.delete(id); }
   };
 
   return (
@@ -239,47 +242,11 @@ export function PhoneAlarms({ active }: { active: boolean }) {
           ))}
         </div>
       </div>
-      {/* Where the shell's + button sits: its menu opens above it. */}
-      <div className="p-menu-anchor pa-fab-anchor">
-        <AddDial open={menu} onClose={() => setMenu(false)} items={[
-          { label: "New alarm", icon: "oAlarm", onClick: newAlarm },
-          { label: "Start a timer", icon: "oTimer", onClick: () => { show(1); setNewTimer(true); } },
-          { label: "Start the stopwatch", icon: "oAvTimer", onClick: () => void startStopwatch() },
-          { label: "Add a world clock", icon: "oPublic", onClick: () => { show(3); setAddZone(true); } },
-        ]} />
-      </div>
       {editing && <Layer><AlarmEditor alarm={editing.alarm} isNew={editing.isNew} group={seriesOf(editing.alarm, st.alarms)} onClose={() => setEditing(null)} /></Layer>}
       {newTimer && <Layer><NewTimerDialog onClose={() => setNewTimer(false)} /></Layer>}
       {addZone && <Layer><ZonePickerDialog local={st.zone} onClose={() => setAddZone(false)} /></Layer>}
     </div>
   );
-}
-
-/**
- * What the + button adds on this page: round symbols stacked above it (the first one nearest the
- * button), each scaling in on a short stagger. Holding one shows its name (press.ts), a tap picks it,
- * and a tap outside or back closes the stack.
- */
-function AddDial({ open, onClose, items }: { open: boolean; onClose: () => void; items: { label: string; icon: string; onClick: () => void }[] }) {
-  const [shown, setShown] = useState(open);
-  const [leaving, setLeaving] = useState(false);
-  useLayoutEffect(() => {
-    if (open) { setShown(true); setLeaving(false); }
-    else if (shown) { setLeaving(true); const t = window.setTimeout(() => { setShown(false); setLeaving(false); }, 120); return () => clearTimeout(t); }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => (open ? pushBack(onClose) : undefined), [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!shown) return null;
-  return <>
-    <div className="p-menu-scrim" onPointerDown={onClose} />
-    <div className={`pa-dial ${leaving ? "out" : ""}`} role="menu">
-      {items.map((it, i) => (
-        <button key={it.label} role="menuitem" className="pa-dial-btn" aria-label={it.label} style={{ animationDelay: `${i * 28}ms` }}
-          onClick={() => { onClose(); it.onClick(); }}>
-          <MIcon name={it.icon} />
-        </button>
-      ))}
-    </div>
-  </>;
 }
 
 // ---------- Alarms ----------
@@ -1137,26 +1104,43 @@ function Field({ label, value, onChange, numeric, autoFocus, onEnter }: {
 
 // ---------- Stopwatch ----------
 
+/**
+ * The first stopwatch big, as it always was; the ones added with + (327, up to MAX_STOPWATCHES) as smaller cards
+ * under its buttons, each with Start/Pause, Lap, Reset, an optional name and a delete with Undo. The engine keeps
+ * them all (ClockTools.kt), counting from timestamps, so they run on with the app closed.
+ */
 function StopwatchPane({ active }: { active: boolean }) {
-  const sw = useAlarmState().tools.stopwatch;
-  const running = sw.startedAt != null;
+  const all = stopwatchesOf(useAlarmState().tools);
+  // A deleted one leaves at once, but is only really deleted once its Undo has gone unused (as a timer).
+  const [leaving, setLeaving] = useState<ReadonlySet<number>>(new Set());
+  const stay = (id: number) => setLeaving((l) => new Set([...l].filter((x) => x !== id)));
+  const sw = all[0];
+  const more = all.slice(1).filter((x) => !leaving.has(x.id));
+  const running = all.some((x) => x.startedAt != null);
   const now = useTick(31, active && running);
   const total = elapsed(sw, now);
   const lengths = lapLengths(sw.laps);
-  const run = (a: "start" | "pause" | "lap" | "reset") => void act(native.stopwatch(a));
+  const run = (a: "start" | "pause" | "lap" | "reset", id = sw.id) => void act(native.stopwatch(a, { id }));
   const shown = stopwatchParts(total);
+  const remove = (id: number, label: string) => {
+    let done = false;
+    const commit = () => { if (done) return; done = true; offFlush(); void act(native.stopwatch("remove", { id })).then(() => stay(id)); };
+    const offFlush = onFlush(commit);
+    setLeaving((l) => new Set([...l, id]));
+    showSnackbar(`${label} deleted`, "Undo", () => { if (done) return; done = true; offFlush(); stay(id); }, { onGone: commit });
+  };
   return (
     <div className="pa-scroll pa-sw">
       {/* A tap on the count starts it when stopped (326); while it runs the count is only a count, so a stray
           tap never stops it. */}
-      {running
+      {sw.startedAt != null
         ? <div className="pa-sw-time">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
         : <div className="pa-sw-time tap" role="button" tabIndex={0} aria-label={total > 0 ? "Resume" : "Start"}
           onClick={() => run("start")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); run("start"); } }}>
           {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
         </div>}
       <div className="pa-buttons center">
-        {running ? <>
+        {sw.startedAt != null ? <>
           <button className="p-outlined-btn" onClick={() => run("lap")}>Lap</button>
           <button className="pa-tonal" onClick={() => run("pause")}>Pause</button>
         </> : <>
@@ -1164,8 +1148,19 @@ function StopwatchPane({ active }: { active: boolean }) {
           <button className="p-filled-btn" onClick={() => run("start")}>{total > 0 ? "Resume" : "Start"}</button>
         </>}
       </div>
+      {more.length > 0 && (
+        <div className="pa-sw-more">
+          {more.map((x) => {
+            // Named by its place among all of them (as the notification does).
+            const i = all.findIndex((y) => y.id === x.id), label = stopwatchLabel(x, i);
+            return <StopwatchCard key={x.id} sw={x} label={label} placeholder={stopwatchLabel({}, i)} now={now}
+              onRun={(a) => run(a, x.id)} onDelete={() => remove(x.id, label)} />;
+          })}
+        </div>
+      )}
       {lengths.length > 0 && <>
         <div className="p-divider pa-sw-divider" />
+        {more.length > 0 && <div className="pa-sw-lapshead t-body-medium muted">Laps · {stopwatchLabel(sw, 0)}</div>}
         {/* Newest lap first, like a phone's clock app. */}
         {lengths.map((len, i) => ({ n: i + 1, len, at: sw.laps[i] })).reverse().map((l) => (
           <div key={l.n} className="pa-lap">
@@ -1175,6 +1170,44 @@ function StopwatchPane({ active }: { active: boolean }) {
           </div>
         ))}
       </>}
+    </div>
+  );
+}
+
+/** One added stopwatch: its name (tap to type one), its count (a tap starts it while stopped), the last lap, and its buttons. */
+function StopwatchCard({ sw, label, placeholder, now, onRun, onDelete }: {
+  sw: { id: number; name?: string; startedAt: number | null; accumulatedMs: number; laps: number[] }; label: string; placeholder: string; now: number;
+  onRun: (a: "start" | "pause" | "lap" | "reset") => void; onDelete: () => void;
+}) {
+  const running = sw.startedAt != null;
+  const total = elapsed(sw, now);
+  const shown = stopwatchParts(total);
+  const [name, setName] = useState(sw.name ?? "");
+  useEffect(() => setName(sw.name ?? ""), [sw.name]);
+  const save = () => { const v = name.trim(); if (v !== (sw.name ?? "").trim()) void act(native.stopwatch("rename", { id: sw.id, name: v })); };
+  const laps = sw.laps.length, last = laps ? sw.laps[laps - 1] - (laps > 1 ? sw.laps[laps - 2] : 0) : 0;
+  return (
+    <div className={`pa-card pa-swcard ${running ? "running" : ""}`}>
+      <div className="pa-timer-head">
+        <input className="pa-sw-name grow" value={name} placeholder={placeholder} aria-label={`Name of ${label}`} enterKeyHint="done" maxLength={40}
+          onChange={(e) => setName(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+        <IconButton icon="fClose" label={`Delete ${label}`} onClick={onDelete} />
+      </div>
+      <div className="pa-timer-row">
+        {running
+          ? <div className="pa-time36 grow">{shown.main}<span className="pa-sw-cs">.{shown.cs}</span></div>
+          : <div className="pa-time36 grow muted tap" role="button" tabIndex={0} aria-label={total > 0 ? `Resume ${label}` : `Start ${label}`}
+            onClick={() => onRun("start")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRun("start"); } }}>
+            {shown.main}<span className="pa-sw-cs">.{shown.cs}</span>
+          </div>}
+        {running
+          ? <button className="p-outlined-btn pa-small-btn" onClick={() => onRun("lap")}>Lap</button>
+          : total > 0 && <IconButton icon="fReplay" label={`Reset ${label}`} onClick={() => onRun("reset")} />}
+        {running
+          ? <button className="pa-tonal pa-small-btn" onClick={() => onRun("pause")}>Pause</button>
+          : <button className="p-filled-btn pa-small-btn" onClick={() => onRun("start")}>{total > 0 ? "Resume" : "Start"}</button>}
+      </div>
+      {laps > 0 && <div className="pa-swcard-lap muted">Lap {laps} · <span className="mono">{formatDuration(last, true)}</span></div>}
     </div>
   );
 }

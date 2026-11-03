@@ -282,6 +282,28 @@ export const timerShare = (t: { durationMs: number }, leftMs: number) =>
 export const elapsed = (sw: { startedAt: number | null; accumulatedMs: number }, now: number) =>
   sw.accumulatedMs + (sw.startedAt !== null ? Math.max(0, now - sw.startedAt) : 0);
 
+// Parallel stopwatches (327): the first one is the one there always was (id 0); the page may add up to four
+// more beside it. The page decides (which, what, how many); the engine (ClockTools.kt) carries it out.
+
+export const MAX_STOPWATCHES = 5;
+type SwLike = { id?: number; name?: string; startedAt: number | null; accumulatedMs: number; laps: number[] };
+
+/** Every stopwatch, the first one first, each with its id (the first's is 0 on engines before 327). */
+export function stopwatchesOf<S extends SwLike>(tools: { stopwatch: S; moreStopwatches?: S[] }): (S & { id: number })[] {
+  return [{ ...tools.stopwatch, id: tools.stopwatch.id ?? 0 }, ...(tools.moreStopwatches ?? []).filter((x) => typeof x.id === "number").map((x) => ({ ...x, id: x.id! }))];
+}
+
+/** Its own name, else "Stopwatch", "Stopwatch 2"... by its place (the notification says the same, ClockTools.stopwatchLabel). */
+export const stopwatchLabel = (sw: { name?: string }, index: number) => sw.name?.trim() || (index === 0 ? "Stopwatch" : `Stopwatch ${index + 1}`);
+
+/** The id for one added at [now]: its time, moved on past any taken. Null when there are already [MAX_STOPWATCHES]. */
+export function newStopwatchId(list: readonly { id: number }[], now: number): number | null {
+  if (list.length >= MAX_STOPWATCHES) return null;
+  let id = Math.max(1, Math.floor(now));
+  while (list.some((x) => x.id === id)) id++;
+  return id;
+}
+
 /** Each lap's own length, oldest first. */
 export const lapLengths = (laps: number[]) => laps.map((t, i) => t - (i > 0 ? laps[i - 1] : 0));
 

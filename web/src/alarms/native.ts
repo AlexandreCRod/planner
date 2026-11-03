@@ -18,8 +18,10 @@ export interface ClockAlarm {
 }
 /** A countdown (ClockTools.kt): running, it keeps when it ends; paused, what's left. */
 export interface ClockTimer { id: number; durationMs: number; label: string; endAt: number | null; remainingMs: number }
-export interface Stopwatch { startedAt: number | null; accumulatedMs: number; laps: number[] }
-export interface ClockToolsState { timers: ClockTimer[]; stopwatch: Stopwatch; zones: string[] }
+/** A stopwatch (ClockTools.kt). id and name are missing from engines before 327 (the first one is id 0). */
+export interface Stopwatch { id?: number; name?: string; startedAt: number | null; accumulatedMs: number; laps: number[] }
+/** moreStopwatches: the ones added beside the first (327); missing from engines before it. */
+export interface ClockToolsState { timers: ClockTimer[]; stopwatch: Stopwatch; moreStopwatches?: Stopwatch[]; zones: string[] }
 export interface RingState { rings: boolean }
 /** xiaomi: a Xiaomi, Redmi or POCO phone (missing from engines before 2.9.1): Settings guides to its Autostart and battery saver. */
 export interface Perms { notifications: boolean; fullScreen: boolean; exact: boolean; batteryExempt: boolean; xiaomi?: boolean }
@@ -54,7 +56,7 @@ interface Plugin {
   saveClock(o: { json: string; snoozeUntil?: number }): Promise<{ id: number }>;
   deleteClock(o: { id: number }): Promise<{ snoozeUntil?: number }>;
   timer(o: { action: string; id?: number; durationMs?: number; label?: string; json?: string }): Promise<void>;
-  stopwatch(o: { action: string }): Promise<void>;
+  stopwatch(o: { action: string; id?: number; name?: string }): Promise<void>;
   zone(o: { action: "add" | "remove"; zone: string }): Promise<void>;
   setRingEvents(o: { value: boolean }): Promise<void>;
   pickSound(o: { current: string | null; title?: string }): Promise<{ picked: boolean; uri?: string | null; name?: string | null }>;
@@ -108,7 +110,9 @@ export const native = {
   /** "restore": [json] is the timer as read before it was deleted, and it comes back just so. */
   timer: (action: "start" | "pause" | "resume" | "plus" | "reset" | "delete" | "restore", o: { id?: number; durationMs?: number; label?: string; json?: string } = {}) =>
     call((p) => p.timer({ action, ...o }), undefined),
-  stopwatch: (action: "start" | "pause" | "lap" | "reset") => call((p) => p.stopwatch({ action }), undefined),
+  /** Stopwatch [id] (0, the default, is the first one); "add" makes one with [id] and [name], counting at once (327). */
+  stopwatch: (action: "start" | "pause" | "lap" | "reset" | "rename" | "add" | "remove", o: { id?: number; name?: string } = {}) =>
+    call((p) => p.stopwatch({ action, ...o }), undefined),
   zone: (action: "add" | "remove", zone: string) => call((p) => p.zone({ action, zone }), undefined),
   setRingEvents: (value: boolean) => call((p) => p.setRingEvents({ value }), undefined),
   pickSound: (current: string | null, title?: string) => call((p) => p.pickSound({ current, title }), { picked: false }),

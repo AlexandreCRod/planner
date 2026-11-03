@@ -1175,6 +1175,18 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 /* Stopwatch: 00:00:00 centred on the screen, the hundredths smaller beside it, digits that don't shift. */
 .phone .pa-sw-time { align-self: stretch; text-align: center; padding: 40px 16px 24px; font-family: Roboto, system-ui, sans-serif; font-weight: 300; font-size: 56px; line-height: 68px; font-variant-numeric: tabular-nums; }
 .phone .pa-sw-cs { font-size: 28px; color: var(--muted); }
+/* Stopwatches added beside the first (327): smaller cards under its buttons. */
+.phone .pa-sw-more { display: flex; flex-direction: column; gap: 12px; padding: 24px 16px 0; }
+.phone .pa-swcard { position: relative; padding: 2px 4px 10px 20px; }
+.phone .pa-swcard .pa-sw-name { min-width: 0; height: 36px; padding: 0; border: 0; background: none; outline: none; color: var(--muted); font: inherit; font-size: 14px; }
+.phone .pa-swcard .pa-sw-name:focus { color: var(--text); box-shadow: inset 0 -2px 0 var(--p-primary); }
+.phone .pa-swcard .pa-sw-name::placeholder { color: var(--muted); opacity: 1; }
+.phone .pa-swcard .pa-time36 { font-weight: 300; }
+.phone .pa-swcard .pa-time36 .pa-sw-cs { font-size: 20px; }
+.phone .pa-swcard .pa-time36.tap { cursor: pointer; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+.phone .pa-swcard .pa-time36.tap:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 2px; }
+.phone .pa-swcard-lap { padding: 2px 0 0; font-size: 13px; line-height: 18px; }
+.phone .pa-sw-lapshead { padding: 12px 24px 0; }
 .phone .pa-presets { justify-content: center; }
 
 /* Segmented buttons: one calm indicator under the chosen segment, sliding between them (and following a
@@ -1335,16 +1347,6 @@ html.phone[data-theme="dark"] {
 /* Under Today's Overdue heading the row's date is red instead of an "Overdue" pill (225). */
 .phone :is(.today-list, .p-rows) .task .sub .late { color: var(--danger); }
 
-/* Alarms' + stack: round symbols above the button, no names (holding one shows it). */
-.phone .pa-dial { position: absolute; right: 4px; bottom: 68px; z-index: 40; display: flex; flex-direction: column-reverse; gap: 12px; }
-.phone .pa-dial-btn {
-  position: relative; overflow: hidden; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center;
-  background: var(--p-sc-high); color: var(--text); box-shadow: 0 2px 6px rgb(0 0 0 / .22), 0 1px 2px rgb(0 0 0 / .16);
-  animation: pa-dial-in .26s cubic-bezier(.34, 1.4, .64, 1) both;
-}
-.phone .pa-dial.out .pa-dial-btn { animation: pa-dial-out .12s linear forwards; }
-@keyframes pa-dial-in { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.6); } }
-@keyframes pa-dial-out { to { opacity: 0; transform: scale(.85); } }
 /* World clock cards, a touch smaller. */
 /* No ✕ since 2.10 (233: swipe left or hold to remove): the same height as with it, the time 18 px in. */
 .phone .pa-city { padding: 8px 18px 8px 18px; border-radius: 20px; min-height: 64px; box-sizing: border-box; }

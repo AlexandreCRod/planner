@@ -35,11 +35,14 @@ data class ClockTimer(
 }
 
 /**
- * The stopwatch: when it was (re)started and how much it had counted before. Elapsed time is worked
- * out from those, never counted in memory, so it survives the app being closed.
+ * A stopwatch: when it was (re)started and how much it had counted before. Elapsed time is worked
+ * out from those, never counted in memory, so it survives the app being closed. The first one (id 0)
+ * is the one there always was; the page can add more beside it (327), each with an id and an optional name.
  */
 @Serializable
 data class Stopwatch(
+    val id: Long = 0,
+    val name: String = "",
     val startedAt: Long? = null,
     val accumulatedMs: Long = 0,
     /** Total elapsed time at each lap, oldest first. */
@@ -50,6 +53,7 @@ data class Stopwatch(
     fun start(now: Long) = if (running) this else copy(startedAt = now)
     fun pause(now: Long) = if (!running) this else copy(startedAt = null, accumulatedMs = elapsed(now))
     fun lap(now: Long) = copy(laps = laps + elapsed(now))
+    fun reset() = copy(startedAt = null, accumulatedMs = 0, laps = emptyList())
     /** Each lap's own length, oldest first. */
     fun lapLengths(): List<Long> = laps.mapIndexed { i, t -> t - (laps.getOrNull(i - 1) ?: 0) }
 }
@@ -57,7 +61,10 @@ data class Stopwatch(
 @Serializable
 data class ClockToolsState(
     val timers: List<ClockTimer> = emptyList(),
+    /** The first stopwatch (as before 327, so an update keeps a running one running). */
     val stopwatch: Stopwatch = Stopwatch(),
+    /** The ones added beside it (327), in the order added. */
+    val moreStopwatches: List<Stopwatch> = emptyList(),
     /** World clock: time zone ids, in the order added. */
     val zones: List<String> = emptyList(),
 )
@@ -120,8 +127,11 @@ object ClockTools {
         Notifications.cancel(context, notificationId(id))
     }
 
-    /** After a reboot or an update: running timers are set again, and their notifications come back. */
-    fun rescheduleAll(context: Context) = current(context).timers.forEach { if (it.running) arm(context, it); showNotification(context, it) }
+    /** After a reboot or an update: running timers are set again, and their notifications come back (and the stopwatches'). */
+    fun rescheduleAll(context: Context) {
+        current(context).timers.forEach { if (it.running) arm(context, it); showNotification(context, it) }
+        showStopwatches(context)
+    }
 
     private fun pending(context: Context, id: Long, create: Boolean): PendingIntent? {
         val intent = Intent(context, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_TIMER)
@@ -184,9 +194,71 @@ object ClockTools {
         Notifications.notify(context, notificationId(t.id), b, t.endAt ?: now)
     }
 
-    // ---- Stopwatch ----
+    // ---- Stopwatches (327) ----
+    // The page decides (which one, what to do, how many there may be: StopwatchPane, domain/alarms.ts); this
+    // carries it out, with the phone's own clock, and keeps the notification of the running ones.
 
-    fun saveStopwatch(context: Context, sw: Stopwatch) = change(context) { it.copy(stopwatch = sw) }
+    const val MAX_STOPWATCHES = 5
+
+    /** Every stopwatch, the first one first. */
+    fun stopwatches(s: ClockToolsState): List<Stopwatch> = listOf(s.stopwatch) + s.moreStopwatches
+
+    /**
+     * [s] after [action] on stopwatch [id] at [now]: "start", "pause", "lap", "reset", "rename" ([name]),
+     * "add" (a new one, [id] and [name] from the page, counting from [now]) and "remove" (not the first). An
+     * unknown id or action changes nothing.
+     */
+    fun stopwatchAction(s: ClockToolsState, action: String, id: Long, name: String, now: Long): ClockToolsState {
+        if (action == "add") {
+            if (stopwatches(s).any { it.id == id } || stopwatches(s).size >= MAX_STOPWATCHES) return s
+            return s.copy(moreStopwatches = s.moreStopwatches + Stopwatch(id = id, name = name).start(now))
+        }
+        if (action == "remove") return s.copy(moreStopwatches = s.moreStopwatches.filterNot { it.id == id })
+        val fn: (Stopwatch) -> Stopwatch = when (action) {
+            "start" -> { sw -> sw.start(now) }
+            "pause" -> { sw -> sw.pause(now) }
+            "lap" -> { sw -> sw.lap(now) }
+            "reset" -> { sw -> sw.reset() }
+            "rename" -> { sw -> sw.copy(name = name) }
+            else -> return s
+        }
+        return if (id == s.stopwatch.id) s.copy(stopwatch = fn(s.stopwatch))
+        else s.copy(moreStopwatches = s.moreStopwatches.map { if (it.id == id) fn(it) else it })
+    }
+
+    fun stopwatch(context: Context, action: String, id: Long, name: String) {
+        val now = System.currentTimeMillis()
+        change(context) { stopwatchAction(it, action, id, name, now) }
+        showStopwatches(context)
+    }
+
+    /** A stopwatch's name in the notification: its own, else "Stopwatch", "Stopwatch 2"... by its place (as the page says). */
+    fun stopwatchLabel(sw: Stopwatch, index: Int) = sw.name.trim().ifBlank { if (index == 0) "Stopwatch" else "Stopwatch ${index + 1}" }
+
+    /** The running ones, as the notification lists them: name and when it would have started counting from zero. */
+    fun runningStopwatches(s: ClockToolsState, now: Long): List<Pair<String, Long>> =
+        stopwatches(s).mapIndexedNotNull { i, sw -> if (sw.running) stopwatchLabel(sw, i) to (now - sw.elapsed(now)) else null }
+
+    private const val SW_NOTIFICATION = 779_000
+
+    /** One quiet line per running stopwatch, counting by itself (the system's chronometer), in the card's group. */
+    private fun showStopwatches(context: Context) {
+        val now = System.currentTimeMillis()
+        val running = runningStopwatches(current(context), now)
+        running.forEachIndexed { i, (label, from) ->
+            val b = NotificationCompat.Builder(context, Notifications.CH_TIMER)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(label)
+                .setContentText("Running")
+                .setContentIntent(Notifications.openSectionIntent(context, "stopwatch", 3))
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+                .setUsesChronometer(true).setWhen(from).setShowWhen(true)
+            Notifications.notify(context, SW_NOTIFICATION + i, b, from)
+        }
+        for (i in running.size until MAX_STOPWATCHES) Notifications.cancel(context, SW_NOTIFICATION + i)
+    }
 
     // ---- World clock ----
 
