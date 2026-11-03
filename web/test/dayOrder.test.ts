@@ -2,7 +2,7 @@
 // Today line follow it; with none (or for what it doesn't list) the plan's order stays.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dayOrderId, dayOrders, droppedOrder, inDayOrder } from "../src/domain/dayOrder.ts";
+import { dayOrderId, dayOrders, droppedOrder, inDayOrder, orderWithout } from "../src/domain/dayOrder.ts";
 import { type Entry, type Plan, dayOf, entryFor, futsalLogId, newEntry, phaseView, readPlan, sessionsOf, sessionsOnDay } from "../src/domain/training.ts";
 import { todayCard } from "../src/domain/trainingToday.ts";
 
@@ -82,4 +82,19 @@ test("the overview's row for today is the first thing waiting in the day's order
   const all = entries({ ...game, status: "done" }, entry("easy", { status: "done" }), entry("gym", { status: "done" }), entry("core", { status: "done" }));
   const done = todayCard(plan, all, TUE, order("p:core", game.id));
   assert.ok(done.kind === "done" && done.session?.id === "core");
+});
+
+// Review of 2.10.1, finding 7: Mon ordered C, B, A by a drag; B goes to Tue, and later comes back to Mon.
+test("a session that leaves a day leaves its order record, so put back later it goes after the others", () => {
+  const plan = ["p:a", "p:b", "p:c"];
+  const mon = ["p:c", "p:b", "p:a"];
+  const left = orderWithout(mon, "p:b")!;
+  assert.deepEqual(left, ["p:c", "p:a"]);
+  // What Mon shows meanwhile is the same either way.
+  assert.deepEqual(inDayOrder(["p:a", "p:c"], (x) => x, left), ["p:c", "p:a"]);
+  // B back on Mon: last, as anything the record doesn't list (not between C and A again).
+  assert.deepEqual(inDayOrder(plan, (x) => x, left), ["p:c", "p:a", "p:b"]);
+  // A record that doesn't list it, or no record: nothing to write.
+  assert.equal(orderWithout(["p:a"], "p:b"), null);
+  assert.equal(orderWithout(undefined, "p:b"), null);
 });

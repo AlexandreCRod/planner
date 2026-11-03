@@ -26,7 +26,7 @@ import { type ColourKind, colourKind, runLine, runOf, summaryKm, weekBar } from 
 import type { Run } from "../../domain/trends.ts";
 import { type SleepNight, fmtSleep, nightsOf7, restingHrFlag, shortSleepBefore, sleepAverages } from "../../domain/sleep.ts";
 import { type LoadedPlan, type Training, activeOf, saveDayOrder, saveEntry, saveSeen, training, useTraining } from "../../store/training.ts";
-import { dayOrderId, droppedOrder, inDayOrder } from "../../domain/dayOrder.ts";
+import { dayOrderId, droppedOrder, inDayOrder, orderWithout } from "../../domain/dayOrder.ts";
 import { type GameRef, addGame, moveGame, removeGame, saveGameLog, tickGame } from "../../store/futsal.ts";
 import { snapshot, withUndo } from "../../store/store.ts";
 import { useWide } from "../../platform.ts";
@@ -205,24 +205,41 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   // What breaks a placement rule now, by session id or futsal entry id: the rows' markers.
   const broken = useMemo(() => (readOnly ? new Map<string, Breach[]>() : brokenNow(plan, tr.entries)), [plan, tr.entries, readOnly]);
   const check = (item: ItemRef, day: number, undo: () => void) => checkPlaced(lp, item, day, undo);
-  const place = (sid: string, day: number | null) => {
+  /** Writes [day]'s order, and returns how to put back the order it had. */
+  const writeOrder = (day: number, order: string[]) => {
+    const was = training().orders.get(dayOrderId(plan.id, day));
+    saveDayOrder(plan.id, day, order);
+    return () => saveDayOrder(plan.id, day, was ? [...was] : []);
+  };
+  /** Moves session [sid] to [day] (null: To place); [drop]: let go at a place among that day's rows (324). */
+  const place = (sid: string, day: number | null, drop?: { ids: string[]; index: number }) => {
     const s = sessions.get(sid);
     if (!s || s.locked) return;
     const before = entryFor(plan, s, training().entries);
-    if (dayOfSession(s, training().entries.get(before.id)) === day) { setPicked(null); return; }
+    const from = dayOfSession(s, training().entries.get(before.id));
+    if (from === day) { setPicked(null); return; }
+    // The day it leaves no longer lists it (review of 2.10.1, finding 7), and a drop keeps its place on the new day.
+    const restore: (() => void)[] = [];
+    const left = from === null ? null : orderWithout(training().orders.get(dayOrderId(plan.id, from)), before.id);
+    if (from !== null && left) restore.push(writeOrder(from, left));
+    if (day !== null && drop) restore.push(writeOrder(day, droppedOrder(drop.ids, before.id, drop.index)));
     patchEntry(lp, s, { day });
     feel("settle");
     setPicked(null);
+    const undo = () => { saveEntry(before); restore.forEach((r) => r()); };
     // On a day that breaks a rule, the sheet says so (and can undo it); else the usual snackbar.
-    const w = day === null ? null : check({ session: sid }, day, () => saveEntry(before));
+    const w = day === null ? null : check({ session: sid }, day, undo);
     if (w) setWarn(w);
-    else showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
+    else showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", undo);
   };
-  // A row let go on a day: its place there is kept as that day's order (324); on another day it moves there too.
+  // A row let go on a day: its place there is kept as that day's order (324), with Undo (rule 7, review of
+  // 2.10.1, finding 6); on another day it moves there too.
   const dropped = (id: string, to: DayDrop) => {
-    if (to.day !== null) saveDayOrder(plan.id, to.day, droppedOrder(to.ids, id, to.index));
     const s = sessionByEntry.get(id);
-    if (s && (to.day === null || !to.ids.includes(id))) place(s.id, to.day);
+    if (s && (to.day === null || !to.ids.includes(id))) { place(s.id, to.day, to.day === null ? undefined : to); return; }
+    if (to.day === null) return;
+    const undo = writeOrder(to.day, droppedOrder(to.ids, id, to.index));
+    showSnackbar("Order changed", "Undo", undo);
   };
   const drag = useDayDrag(scroller, dropped);
   useWatchRunTicks(readOnly);

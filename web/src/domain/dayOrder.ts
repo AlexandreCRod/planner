@@ -51,3 +51,12 @@ export function droppedOrder(ids: readonly string[], moved: string, to: number):
   out.splice(Math.max(0, Math.min(out.length, to)), 0, moved);
   return out;
 }
+
+/**
+ * Day [from]'s order once entry [id] has left it (moved to another day, or back to To place): its record
+ * without [id], so the record always matches what's on the day and the entry, put back later, goes after the
+ * listed ones like anything new (review of 2.10.1, finding 7). Null when the record doesn't list it.
+ */
+export function orderWithout(order: readonly string[] | undefined, id: string): string[] | null {
+  return order?.includes(id) ? order.filter((x) => x !== id) : null;
+}
