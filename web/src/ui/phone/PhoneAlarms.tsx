@@ -299,7 +299,7 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew }: {
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} onClick={() => onEdit(g[0])} onHold={() => setSkipping(g)} />
         : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} onOpen={() => setOpen((o) => toggleOpen(o, g))} onEdit={onEdit} onHold={() => setSkipping(g)} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
-      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onEdit={skipping.length === 1 ? () => onEdit(skipping[0]) : undefined}
+      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)}
         onDays={() => setSkipDays({ group: skipping, scope: "group", quick: "Rest of week" })} /></Layer>}
       {skipDays && <Layer><SkipDaysSheet all={alarms} group={skipDays.group} scope0={skipDays.scope} quick0={skipDays.quick} now={now} onClose={() => setSkipDays(null)} /></Layer>}
     </div>
@@ -403,7 +403,7 @@ function AlarmCard({ a, now, fc, onClick, onHold }: { a: ClockAlarm; now: Date; 
     <div className={`pa-card pa-alarm ${a.enabled ? "" : "off"}`} role="button" {...hold}>
       <div className="grow">
         {a.label.trim() && <div className="t-body-medium pa-label pa-line">{a.label.trim()}</div>}
-        <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
+        <div className="pa-time48"><HeldTime step={1} min={a.hour * 60 + a.minute} onHoldStill={onHold} onChange={(m) => void save({ ...a, hour: Math.floor(m / 60), minute: m % 60 })} /></div>
         <div className="t-body-medium muted pa-line">{scheduleLine(a, now)}</div>
       </div>
       <AlarmWeather a={a} now={now} fc={fc} />
@@ -524,7 +524,7 @@ function BundleCard({ group, now, fc, open, onOpen, onEdit, onHold }: {
           {/* The first time can be held (a drum) or tapped (the time picker): the whole bundle moves with it. */}
           <div className={`pa-time36 ${h24 ? "" : "h12"}`}>
             <span className="pa-bundle-start" role="button" aria-label="Move the whole bundle" onClick={(e) => { e.stopPropagation(); setPicking(true); }}>
-              <HeldTime step={1} min={firstMin} onChange={moveTo} />
+              <HeldTime step={1} min={firstMin} onHoldStill={onHold} onChange={moveTo} />
             </span> – {formatTime(last.hour * 60 + last.minute)}
           </div>
         </div>
@@ -563,13 +563,15 @@ function swallowNextClick() {
 
 /**
  * A tap or a long press (a right-click with the mouse) on an alarm card: handlers to spread on it. A press
- * on the held digits (their drum), a switch or the bundle's start time is theirs, not the card's.
+ * on the held digits, a switch or the bundle's start time is theirs, not the card's; the digits hand a hold
+ * that lifts without moving back to the card (347), so only a hold that moves on turns their drum.
  */
 function useHold(onHold: () => void, onTap: () => void) {
   const st = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
   const cb = useRef({ onHold, onTap });
   cb.current = { onHold, onTap };
-  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-bundle-start, .pa-skipbtn, .pa-rowskip");
+  // The bundle's start time is the card's to hold between its digits (its tap opens the time picker).
+  const theirs = (t: EventTarget) => t instanceof Element && !!t.closest(".tw-part, .p-switch, .pa-skipbtn, .pa-rowskip");
   const cancel = () => { if (st.current) clearTimeout(st.current.timer); };
   return {
     onPointerDown: (e: React.PointerEvent) => {
@@ -600,7 +602,7 @@ function useHold(onHold: () => void, onTap: () => void) {
  * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
  * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
  */
-function SkipSheet({ group, now, onClose, onEdit, onDays }: { group: ClockAlarm[]; now: Date; onClose: () => void; onEdit?: () => void; onDays: () => void }) {
+function SkipSheet({ group, now, onClose, onDays }: { group: ClockAlarm[]; now: Date; onClose: () => void; onDays: () => void }) {
   const today = todayNow();
   const nextDay = nextRingDay(group, now);
   const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
@@ -643,7 +645,6 @@ function SkipSheet({ group, now, onClose, onEdit, onDays }: { group: ClockAlarm[
         {!next.length && !tomorrow.length && !back.length && (
           <div className="pa-skip-none t-body-medium muted">{group.some((a) => a.enabled) ? "Nothing to skip: no ring is coming." : "Off, so there's nothing to skip."}</div>
         )}
-        {onEdit && <ListItem leading={<MIcon name="oEdit" />} headline="Edit alarm" onClick={() => { close(); window.setTimeout(onEdit, 210); }} />}
         {many && <ListItem leading={<MIcon name="oDelete" />} headline={`Delete all ${group.length} alarms`} onClick={() => { close(); deleteAlarms(group); }} />}
       </div>
     )}</BottomSheet>

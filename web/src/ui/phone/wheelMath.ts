@@ -83,3 +83,11 @@ export const joinDuration = ({ h, m, s }: { h: number; m: number; s: number }): 
 
 /** A duration wheel's rows: 0..n−1, two digits for minutes and seconds. */
 export const durationRows = (n: number, pad: boolean): string[] => Array.from({ length: n }, (_, i) => (pad ? String(i).padStart(2, "0") : String(i)));
+
+/** How far (px) a held finger moves on before it turns a drum: half as far again as a tap's slop (8). */
+export const HELD_MOVE = 12;
+/**
+ * The finger, still down after a hold that went down at (x0, y0), has moved on enough to turn a drum (347),
+ * so a resting finger's tremble is still a still hold.
+ */
+export const heldMoved = (x0: number, y0: number, x: number, y: number) => Math.hypot(x - x0, y - y0) > HELD_MOVE;

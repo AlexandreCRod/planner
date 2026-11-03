@@ -17,7 +17,7 @@ import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
-import { durationRows, joinDuration, joinTime, nearestSlot, passesNoon, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
+import { durationRows, heldMoved, joinDuration, joinTime, nearestSlot, passesNoon, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
 
 export interface WheelOptions {
   count: number;
@@ -160,6 +160,8 @@ export interface DrumRequest {
   label: string;
   /** The finger still down from the hold: it turns the drum, and once it rests the value is picked. */
   pointerId?: number;
+  /** It folds as that finger lifts, turned or not (347: the drum only while the finger is down). */
+  foldOnLift?: boolean;
   onPick: (i: number) => void;
 }
 
@@ -186,7 +188,7 @@ export function DrumHost() {
  * rests and folds away; opened by a hold that just lets go, it stays for swipes and taps (each rest
  * picks) until a tap on its middle or outside.
  */
-function Drum({ anchor, values, index, wrap, label, pointerId, onPick, onClose }: DrumRequest & { onClose: () => void }) {
+function Drum({ anchor, values, index, wrap, label, pointerId, foldOnLift, onPick, onClose }: DrumRequest & { onClose: () => void }) {
   const n = values.length;
   const [g] = useState(() => {
     const r = anchor.getBoundingClientRect(), cs = getComputedStyle(anchor);
@@ -308,7 +310,7 @@ function Drum({ anchor, values, index, wrap, label, pointerId, onPick, onClose }
     return () => el.removeEventListener("wheel", onWheel);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handing = useHandoff(pointerId, drive, (turned) => { if (turned) foldOnRest.current = true; });
+  const handing = useHandoff(pointerId, drive, (turned) => { if (turned) foldOnRest.current = true; else if (foldOnLift) fold(); });
 
   const rowStyle = { height: g.rowH, lineHeight: `${g.rowH}px`, top: (g.H - g.rowH) / 2 };
   return (
@@ -373,14 +375,18 @@ let swallowClick = false;
  * so the row or button under it doesn't open too. A right-click opens it as well (with no pointer to
  * hand on: the mouse wheel, clicks and the arrow keys turn it then).
  */
-export function holdProps(onHold: (pointerId?: number) => void): HTMLAttributes<HTMLElement> {
+export function holdProps(onHold: (pointerId?: number) => void, onStill?: () => void): HTMLAttributes<HTMLElement> {
   return {
     onPointerDown: (e) => {
       if (e.button !== 0 || !e.isPrimary) return;
       if (hold) clearTimeout(hold.timer);
       swallowClick = false;
       const h = { id: e.pointerId, x0: e.clientX, y0: e.clientY, fired: false, timer: 0 };
-      h.timer = window.setTimeout(() => { h.fired = true; swallowClick = true; feel("pickup"); onHold(h.id); }, HOLD_MS);
+      h.timer = window.setTimeout(() => {
+        h.fired = true; swallowClick = true; feel("pickup");
+        if (onStill) afterHold(h.id, h.x0, h.y0, () => onHold(h.id), onStill);
+        else onHold(h.id);
+      }, HOLD_MS);
       hold = h;
     },
     onPointerMove: (e) => {
@@ -396,9 +402,54 @@ export function holdProps(onHold: (pointerId?: number) => void): HTMLAttributes<
       if (!mouseMenu(e)) return;
       if (hold) { clearTimeout(hold.timer); hold = null; }
       e.stopPropagation();
-      onHold();
+      // With a hold of the card's own (347), a right-click is the card's too.
+      if (onStill) onStill(); else onHold();
     },
   };
+}
+
+/**
+ * After a hold on digits that only turn while the finger moves (347): the finger moving on opens the drum
+ * ([turn], which takes the finger over); lifting it without moving is the card's own long press ([still]).
+ * Until one of them, the page under the finger doesn't scroll, so the move reaches the drum.
+ */
+function afterHold(pointerId: number, x0: number, y0: number, turn: () => void, still: () => void) {
+  let turning = false;
+  // Kept on until the lift, also once the drum has the finger: a move let through could start a scroll.
+  const noScroll = (e: TouchEvent) => { if (e.cancelable) e.preventDefault(); };
+  const done = () => {
+    suspendOverscroll(false);
+    window.removeEventListener("pointermove", move, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", up, true);
+    document.removeEventListener("touchmove", noScroll, true);
+  };
+  const move = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId || turning || !heldMoved(x0, y0, e.clientX, e.clientY)) return;
+    turning = true;
+    turn();
+  };
+  const up = (e: PointerEvent) => {
+    if (e.pointerId !== pointerId) return;
+    done();
+    hold = null;
+    if (turning || e.type === "pointercancel") return;
+    swallowAnyClick();
+    still();
+  };
+  suspendOverscroll(true);
+  window.addEventListener("pointermove", move, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", up, true);
+  document.addEventListener("touchmove", noScroll, { capture: true, passive: false });
+}
+
+
+/** The click a lift may make lands wherever (a sheet's scrim opened under it): dropped, for 400 ms. */
+function swallowAnyClick() {
+  const eat = (e: MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+  window.addEventListener("click", eat, { capture: true, once: true });
+  window.setTimeout(() => window.removeEventListener("click", eat, { capture: true }), 400);
 }
 
 const two = (n: number) => String(n).padStart(2, "0");
@@ -408,7 +459,14 @@ const two = (n: number) => String(n).padStart(2, "0");
  * and where it rests is the new time. [step]: the minutes offered (5 for tasks and events, keeping an
  * odd minute the time already has; 1 for alarms).
  */
-export function HeldTime({ min, onChange, step = 5, className = "" }: { min: number; onChange: (min: number) => void; step?: number; className?: string }) {
+export function HeldTime({ min, onChange, step = 5, className = "", onHoldStill }: {
+  min: number; onChange: (min: number) => void; step?: number; className?: string;
+  /**
+   * Alarms (347): the drum opens only once the held finger moves on, and goes when it lifts; a hold lifted
+   * without moving is the card's own long press, this.
+   */
+  onHoldStill?: () => void;
+}) {
   const h24 = use24h();
   const hEl = useRef<HTMLSpanElement>(null), mEl = useRef<HTMLSpanElement>(null), pEl = useRef<HTMLSpanElement>(null);
   const hours = wheelHours(h24);
@@ -416,7 +474,7 @@ export function HeldTime({ min, onChange, step = 5, className = "" }: { min: num
   const t = splitTime(min, h24, minutes);
   const hourText = (x: number) => (h24 ? two(x) : String(x));
   const hold = (el: React.RefObject<HTMLSpanElement | null>, label: string, values: string[], index: number, wrap: boolean, to: (i: number) => number) =>
-    holdProps((id) => { if (el.current) openDrum({ anchor: el.current, label, values, index, wrap, pointerId: id, onPick: (i) => onChange(to(i)) }); });
+    holdProps((id) => { if (el.current) openDrum({ anchor: el.current, label, values, index, wrap, pointerId: id, foldOnLift: !!onHoldStill, onPick: (i) => onChange(to(i)) }); }, onHoldStill);
   return (
     <span className={`p-heldtime ${className}`}>
       <span ref={hEl} className="tw-part" {...hold(hEl, "Hours", hours.map(hourText), t.hour, true, (i) => joinTime(i, t.minute, t.pm, h24, minutes))}>{hourText(hours[t.hour])}</span>

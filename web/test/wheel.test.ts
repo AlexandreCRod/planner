@@ -115,3 +115,13 @@ test("on a 12-hour clock the AM/PM wheel flips as the hour wheel passes 11 ↔ 1
   assert.equal(passesNoon(0, 1), false);
   assert.equal(passesNoon(5, 6), false);
 });
+
+test("a held alarm time turns only once the finger moves on; a resting finger's tremble is a still hold (347)", async () => {
+  const { heldMoved } = await import("../src/ui/phone/wheelMath.ts");
+  // Down at (100, 300): a few px either way, even past a tap's 8 px slop, is still a hold to lift.
+  assert.equal(heldMoved(100, 300, 103, 296), false);
+  assert.equal(heldMoved(100, 300, 100, 309), false);
+  // A real move up or down turns the drum.
+  assert.equal(heldMoved(100, 300, 100, 285), true);
+  assert.equal(heldMoved(100, 300, 100, 320), true);
+});
