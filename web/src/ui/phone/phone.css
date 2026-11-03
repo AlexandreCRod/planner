@@ -609,7 +609,7 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone .p-notecard .title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: .1px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .phone .p-notecard .text { margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; opacity: .85; overflow-wrap: anywhere; }
 /* One line of the note each (227): checklist lines with a real box, lists with their mark; a long
-   paragraph wraps to at most 4 lines. Ticked boxes are left out, counted in "+ 2 ticked". */
+   paragraph wraps to at most 4 lines. Ticked boxes are left out, counted in "+ 2 done". */
 .phone .p-notecard .text .ln { display: flex; align-items: flex-start; min-width: 0; }
 .phone .p-notecard .text .ln .t { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; max-height: 64px; }
 .phone .p-notecard .text .ln.mk + .ln.mk { margin-top: 2px; }
