@@ -293,6 +293,14 @@ export function stopwatchesOf<S extends SwLike>(tools: { stopwatch: S; moreStopw
   return [{ ...tools.stopwatch, id: tools.stopwatch.id ?? 0 }, ...(tools.moreStopwatches ?? []).filter((x) => typeof x.id === "number").map((x) => ({ ...x, id: x.id! }))];
 }
 
+/**
+ * A stopwatch as shown while its Reset still has Undo (341): the engine is only told once the Undo has gone
+ * unused, so until then the page shows it at zero, without laps. Started again meanwhile, it's the engine's.
+ */
+export function shownAfterReset<S extends SwLike & { id: number }>(sw: S, resetting: ReadonlySet<number>): S {
+  return resetting.has(sw.id) && sw.startedAt == null ? { ...sw, accumulatedMs: 0, laps: [] } : sw;
+}
+
 /** Its own name, else "Stopwatch", "Stopwatch 2"... by its place (the notification says the same, ClockTools.stopwatchLabel). */
 export const stopwatchLabel = (sw: { name?: string }, index: number) => sw.name?.trim() || (index === 0 ? "Stopwatch" : `Stopwatch ${index + 1}`);
 

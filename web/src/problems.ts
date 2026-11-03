@@ -37,9 +37,25 @@ export function logLatest(kind: string, message: string, detail = "") {
   } catch { /* the log itself must never throw */ }
 }
 
-export function clearProblems() {
+/**
+ * Empties the log; returns its Undo (341, 279's rule), which puts the cleared entries back after any
+ * logged since, newest first and the newest 50 kept, as the log always is.
+ */
+export function clearProblems(): () => void {
+  const cleared = problems();
   localStorage.removeItem(KEY);
   listeners.forEach((l) => l());
+  return () => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(restoredLog(problems(), cleared)));
+      listeners.forEach((l) => l());
+    } catch { /* the log itself must never throw */ }
+  };
+}
+
+/** The log after an Undo of Clear: what came in since, then what was cleared, newest first, at most MAX. */
+export function restoredLog(since: readonly Problem[], cleared: readonly Problem[]): Problem[] {
+  return [...since, ...cleared].sort((a, b) => b.at - a.at).slice(0, MAX);
 }
 
 export function onProblems(fn: () => void): () => void {

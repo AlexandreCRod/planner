@@ -13,7 +13,7 @@ import {
   NO_DAY, PRIORITIES, priorityColor, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
-  type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot,
+  type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot, withUndo,
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
@@ -324,8 +324,10 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
  * An item's alarms or notifications. [onDate]: a task with no date yet, whose reminders can't ring
  * until it has one; its rows say so, with a row to pick the date and time there and then.
  */
-function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
+function AlertSection({ alarms, all, type, timed, onChange, onDate, undoable }: {
   alarms: boolean; all: Reminder[]; type: ItemType; timed: boolean; onChange: (r: Reminder[]) => void; onDate?: (day: number, min: number) => void;
+  /** Saved at once (the item page, not the editor's draft): a ✕ takes it off with Undo (341, 279's rule). */
+  undoable?: boolean;
 }) {
   const mine = all.map((r, i) => [r, i] as const).filter(([r]) => !r.wake && (r.type === "ALARM") === alarms);
   const wake = alarms ? wakePlan(all) : null;
@@ -336,6 +338,11 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
   const icon = alarms ? "oAlarm" : "oNotifications";
   const set = (i: number, r: Reminder) => onChange(all.map((x, j) => (j === i ? r : x)));
   const untimed = ` (${formatTime(useAlarmSettings().defaultTaskTime)})`;
+  const remove = (next: Reminder[], what: string) => {
+    if (!undoable) { onChange(next); return; }
+    const undo = withUndo(() => onChange(next));
+    showSnackbar(`${what} removed`, "Undo", undo);
+  };
   const pickSound = async (i: number, r: Reminder) => {
     const p = await native.pickSound(r.soundUri, "Alarm sound");
     if (p.picked) set(i, { ...r, soundUri: p.uri ?? null });
@@ -358,7 +365,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
             label={r.type === "REMINDER" ? "Pops up with a sound (tap for silent)" : "Silent (tap to pop up with a sound)"}
             onClick={() => set(i, { ...r, type: r.type === "REMINDER" ? "NOTIFICATION" : "REMINDER" })} />
         )}
-        <IconButton icon="fClose" label="Remove" onClick={() => onChange(all.filter((_, j) => j !== i))} />
+        <IconButton icon="fClose" label="Remove" onClick={() => remove(all.filter((_, j) => j !== i), alarms ? "Alarm" : "Notification")} />
       </FieldRow>
     ))}
     {onDate && mine.length > 0 && (
@@ -377,7 +384,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
           <IconButton icon="oMusicNote" className={wakeSound ? "primary" : ""} label={wakeSound ? "Alarm sound (custom)" : "Alarm sound (default)"}
             onClick={() => { void native.pickSound(wakeSound, "Alarm sound").then((p) => { if (p.picked) onChange(withWakePlan(all, wake, p.uri ?? null)); }); }} />
         )}
-        <IconButton icon="fClose" label="Remove wake-up alarms" onClick={() => onChange(withWakePlan(all, null))} />
+        <IconButton icon="fClose" label="Remove wake-up alarms" onClick={() => remove(withWakePlan(all, null), "Wake-up alarms")} />
       </FieldRow>
     )}
     {alarms && !wake && type === "EVENT" && timed && (
@@ -632,13 +639,19 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
         <div key={item.id} className="p-li two" role="button" onClick={() => { onLeave?.(); openItem(item); }}>
           <span className="lead"><MIcon name={typeIcon(item)} color={s.colorOf(item)} /></span>
           <span className="text"><span className="headline ellipsis">{item.title || "Untitled"}</span><span className="supporting small">{typeLabel(item)} · {label}</span></span>
-          {removable && <span className="trail"><IconButton icon="fClose" label="Remove link" onClick={() => removeLink(id, item.id)} /></span>}
+          {removable && <span className="trail" onClick={(e) => e.stopPropagation()}><IconButton icon="fClose" label="Remove link" onClick={() => unlinkWithUndo(id, item)} /></span>}
         </div>
       ))}
       {picking && <ItemPicker s={s} exclude={new Set([id, ...s.neighbours(id)])} onClose={() => setPicking(false)}
         onPick={(target) => { const me = ensureSaved ? ensureSaved() : id; if (me) addLink(me, target); }} />}
     </div>
   );
+}
+
+/** Takes a link off at once, with Undo putting it back (341, 279's rule). */
+function unlinkWithUndo(id: number, other: Item) {
+  const undo = withUndo(() => removeLink(id, other.id));
+  showSnackbar(`Link to “${other.title || "Untitled"}” removed`, "Undo", undo);
 }
 
 /** Searchable list of items to link to (ItemPickerDialog). */
@@ -882,7 +895,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       {(editing === "alarms" || editing === "notifications") && (
         <BottomSheet onClose={() => setEditing(null)}>{() => <>
           <div className="p-sheet-title small">{editing === "alarms" ? "Alarms" : "Notifications"}</div>
-          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders}
+          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders} undoable
             onDate={item.startDay === null ? (day, min) => commit({ ...item, startDay: day, startMin: min, allDay: false }) : undefined} />
           <AlertsHint className="pad" />
         </>}</BottomSheet>

@@ -631,7 +631,7 @@ export function PhoneProblems() {
   return (
     <Scaffold title="Problem log" back flush actions={list.length > 0 ? <>
       <TextButton onClick={copy}>Copy</TextButton>
-      <TextButton onClick={clearProblems}>Clear</TextButton>
+      <TextButton onClick={() => { const undo = clearProblems(); showSnackbar("Problem log cleared", "Undo", undo); }}>Clear</TextButton>
     </> : undefined}>
       <div className="p-content ps">
         {list.length === 0 && <EmptyState icon="oTaskAlt" title="No problems" hint="Nothing has gone wrong on this device" />}

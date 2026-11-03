@@ -62,7 +62,7 @@ export function MoveSheet({ lp, s, onMoved, onClose }: {
     // Once this sheet has gone (as the futsal sheet does), the placement sheet if a rule breaks, else the snackbar.
     window.setTimeout(() => {
       if (day !== null && onMoved?.(s.id, day, () => saveEntry(before))) return;
-      showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`);
+      showSnackbar(day === null ? `${s.title} back in To place` : `${s.title} on ${formatDate(day)}`, "Undo", () => saveEntry(before));
     }, 210);
   };
   return (
@@ -365,6 +365,13 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
     write({ sets: sets.slice(0, -1) });
     showSnackbar(`Set ${before.length} removed`, "Undo", () => write({ sets: before }));
   };
+  /** Takes any set off from its number's dialog, with Undo as − Set has (341). */
+  const removeSet = (k: number) => {
+    const before = sets;
+    feel("tick");
+    write({ sets: sets.filter((_, j) => j !== k) });
+    showSnackbar(`Set ${k + 1} removed`, "Undo", () => write({ sets: before }));
+  };
   const allDone = sets.length > 0 && sets.every((st) => st.done);
   const tracked = useMemo(() => new Set([...exs.values()].filter((e) => e.trackBests).map((e) => e.id)), [exs]);
   const bests = lift ? newBestsIn(lift, tr.lifts, tracked, plan.bestsSince) : [];
@@ -421,7 +428,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
         <NumberDialog what={editing.what} set={editing.k + 1} value={sets[editing.k]?.[editing.what] ?? null}
           canRemove={sets.length > 1} onClose={() => setEditing(null)}
           onSave={(v) => setNumber(editing.k, editing.what, v)}
-          onRemove={() => write({ sets: sets.filter((_, j) => j !== editing.k) })} />
+          onRemove={() => removeSet(editing.k)} />
       )}
       {guide && <GuideSheet tr={tr} lp={lp} id={doing} planned={x.exercise} swaps={x.swaps} onSwap={readOnly ? undefined : swapTo} startFull={guide === "full"} onClose={() => setGuide("")} />}
     </div>

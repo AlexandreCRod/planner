@@ -12,7 +12,7 @@ import { importImage, importVideo } from "../../store/images.ts";
 import { MAX_VIDEO_BYTES, isVideo } from "../../domain/media.ts";
 import { MediaLens, MediaStrip, MediaViewer } from "./NoteMedia.tsx";
 import { useMouseSelect } from "./mouseSelect.ts";
-import { addImage, removeImage, snapshot } from "../../store/store.ts";
+import { addImage, removeImage, saveItem, snapshot } from "../../store/store.ts";
 import { openItem, replaceRoute } from "../shared/common.tsx";
 import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/noteStyle.ts";
 import { RichEditor } from "../shared/RichEditor.tsx";
@@ -38,6 +38,8 @@ const PATTERNS = ["Plain", "Lines", "Grid", "Dots"];
 export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | null; day: number | null; shown?: boolean; onSaved?: (id: number) => void }) {
   const note = useNoteSession({ id, day, newTitle: isoOf });
   const { s, base, rich, noteId, title, setTitle, tags, setTags, style, setStyle } = note;
+  const idNow = useRef(noteId);
+  idNow.current = noteId;
   const [focused, setFocused] = useState(false);
   const [held, setHeld] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -157,7 +159,12 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
             { label: "Show another note", icon: "oSplitscreen", onClick: () => setPicking(true) },
             { label: style.hidden ? "Show on Notes page" : "Hide from Notes page", icon: style.hidden ? "oVisibility" : "oVisibilityOff", onClick: () => {
               setStyle({ ...style, hidden: !style.hidden });
-              showSnackbar(style.hidden ? "Shown on the Notes page again" : "Hidden from the Notes page. Search still finds it.");
+              if (style.hidden) showSnackbar("Shown on the Notes page again");
+              // Undo through the store (341), so it works after the note is closed too; the open note follows.
+              else showSnackbar("Hidden from the Notes page. Search still finds it.", "Undo", () => {
+                const it = snapshot().byId.get(idNow.current);
+                if (it) saveItem({ ...it, hidden: false });
+              });
             } },
             { label: "Insert template", icon: "oViewQuilt", onClick: () => setOpen("templates") },
             { label: "Version history", icon: "oHistory", disabled: !noteId, onClick: () => setOpen("versions") },
