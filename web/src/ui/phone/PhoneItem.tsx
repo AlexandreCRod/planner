@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { whenText } from "../../domain/itemWhen.ts";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -17,11 +17,12 @@ import {
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
-import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
+import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, RoutineRing, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { findLinks } from "../../domain/links.ts";
 import { linkAtCaretOf, linkInTextarea } from "../shared/linkHit.ts";
 import { useLinkGesture } from "../shared/linkGesture.ts";
 import { useWebLinks } from "./WebLinks.tsx";
+import { STREAK_DAYS, StreakDays, StreakKey } from "./StreaksSheet.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
 import { useHold } from "./hold.ts";
@@ -35,7 +36,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, fitWake, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
-import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
+import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutineItem, isRoutineSeries, localDayMinute, localMs, recentDays, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
@@ -637,7 +638,7 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
       {rows.length === 0 && <div className="pe-small pad">Connect this to other notes, tasks or events with Link.</div>}
       {rows.map(({ item, label, removable }) => (
         <div key={item.id} className="p-li two" role="button" onClick={() => { onLeave?.(); openItem(item); }}>
-          <span className="lead"><MIcon name={typeIcon(item)} color={s.colorOf(item)} /></span>
+          <span className="lead">{isRoutineItem(item) ? <RoutineRing size={24} color={s.colorOf(item)} /> : <MIcon name={typeIcon(item)} color={s.colorOf(item)} />}</span>
           <span className="text"><span className="headline ellipsis">{item.title || "Untitled"}</span><span className="supporting small">{typeLabel(item)} · {label}</span></span>
           {removable && <span className="trail" onClick={(e) => e.stopPropagation()}><IconButton icon="fClose" label="Remove link" onClick={() => unlinkWithUndo(id, item)} /></span>}
         </div>
@@ -679,16 +680,14 @@ function ItemPicker({ s, exclude, onPick, onClose }: { s: Snapshot; exclude: Set
 
 // ---------- History (routines) ----------
 
-/** A routine's history and streak, on its own page (shown whatever the Streak badges setting). */
+/**
+ * A routine's history and streak, on its own page (shown whatever the Streak badges setting): its last days
+ * drawn as the Streaks sheet draws them (341, 221's colours; no more red squares).
+ */
 function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   const t = todayEpoch();
   const st = streak(item, s.done, t);
   const rs = routineStreak(item, s.done, t);
-  const done = s.done.days(item.id);
-  // The last 30 days (today included), in week columns as before.
-  const first = t - 29;
-  const gridStart = first - (weekday(first) - 1);
-  const weeks = Math.ceil((t - gridStart + 1) / 7);
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
@@ -697,19 +696,8 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
         <span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
       </div>
       {rs.broken && <div className="pe-small">Last one was missed: the streak starts again</div>}
-      <div className="pe-heat">
-        {Array.from({ length: weeks }, (_, w) => (
-          <div key={w}>
-            {Array.from({ length: 7 }, (_, di) => {
-              const day = gridStart + w * 7 + di;
-              // Today, still open, isn't missed yet.
-              const cls = day < first ? "out" : day > t ? "future" : done.has(day) ? "done" : day < t && occursOn(item, day) ? "missed" : "";
-              return <span key={di} className={cls} />;
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="pe-small">Filled = done, red = missed</div>
+      <StreakDays days={recentDays(item, s.done, t, STREAK_DAYS)} />
+      <StreakKey days={STREAK_DAYS} className="pe-stats-key" />
     </div>
   );
 }

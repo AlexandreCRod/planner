@@ -4,16 +4,21 @@ import { describe } from "../../domain/recurrence.ts";
 import { type Item, isRecurring } from "../../domain/types.ts";
 import type { Snapshot } from "../../store/store.ts";
 import { count } from "../../domain/plural.ts";
+import { isRoutineItem } from "../../domain/routines.ts";
 
+/** A routine (task or event) is "Routine" wherever it's named (341, 286), never "Recurring task". */
 export const typeLabel = (i: Item) =>
-  i.type === "TASK" ? (i.freq !== "NONE" ? "Recurring task" : "Task") : i.type === "EVENT" ? (i.freq !== "NONE" ? "Recurring event" : "Event") : i.noteDay !== null ? "Daily note" : "Note";
+  isRoutineItem(i) ? "Routine"
+  : i.type === "TASK" ? (i.freq !== "NONE" ? "Recurring task" : "Task") : i.type === "EVENT" ? (i.freq !== "NONE" ? "Recurring event" : "Event") : i.noteDay !== null ? "Daily note" : "Note";
 
+/** Search's kind chips: each item is in one of them (a routine only in Routines, 341). */
 export const KINDS: [string, string, (i: Item) => boolean][] = [
   ["ALL", "All", () => true],
-  ["EVENTS", "Events", (i) => i.type === "EVENT" && !isRecurring(i)],
-  ["RECURRING_EVENTS", "Recurring events", (i) => i.type === "EVENT" && isRecurring(i)],
-  ["TASKS", "Tasks", (i) => i.type === "TASK" && !isRecurring(i)],
-  ["RECURRING_TASKS", "Recurring tasks", (i) => i.type === "TASK" && isRecurring(i)],
+  ["EVENTS", "Events", (i) => i.type === "EVENT" && !isRecurring(i) && !isRoutineItem(i)],
+  ["RECURRING_EVENTS", "Recurring events", (i) => i.type === "EVENT" && isRecurring(i) && !isRoutineItem(i)],
+  ["TASKS", "Tasks", (i) => i.type === "TASK" && !isRecurring(i) && !isRoutineItem(i)],
+  ["ROUTINES", "Routines", (i) => isRoutineItem(i)],
+  ["RECURRING_TASKS", "Recurring tasks", (i) => i.type === "TASK" && isRecurring(i) && !isRoutineItem(i)],
   ["NOTES", "Notes", (i) => i.type === "NOTE" && i.noteDay === null],
   ["DAILY_NOTES", "Daily notes", (i) => i.type === "NOTE" && i.noteDay !== null],
 ];

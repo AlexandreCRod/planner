@@ -15,7 +15,7 @@ import { KINDS, searchEmpty, subtitle, typeLabel } from "../shared/kinds.ts";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
-import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyState, FilterChip, FoldLine, HeadCount, IconButton, MIcon, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
+import { AppBarActions, ChipDivider, ChipRow, DoneFold, DropdownMenu, EmptyState, FilterChip, FoldLine, HeadCount, IconButton, MIcon, RoutineRing, Scaffold, SectionHeader, Segmented, TopAppBar } from "./chrome.tsx";
 import { onColor } from "./PhoneCalendar.tsx";
 import { findInNextNote } from "./NoteFind.tsx";
 import { useNoteGrid } from "./noteDrag.ts";
@@ -689,8 +689,8 @@ const TYPE_ICON: Record<ItemType, string> = { TASK: "oTaskAlt", EVENT: "fEvent",
 /** The kinds Search starts with when opened from a page: that page's own (none: All). */
 const PAGE_KINDS: Record<string, string[]> = {
   notes: ["NOTES"],
-  tasks: ["TASKS", "RECURRING_TASKS"],
-  calendar: ["EVENTS", "RECURRING_EVENTS"],
+  tasks: ["TASKS", "ROUTINES", "RECURRING_TASKS"],
+  calendar: ["EVENTS", "RECURRING_EVENTS", "ROUTINES"],
 };
 
 export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; from?: string }) {
@@ -750,7 +750,8 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
       <div className="p-content flush">
         {/* One row (232): the kinds, a thin line, then the categories and tags. */}
         <ChipRow className="search">
-          {KINDS.map(([k, l]) => <FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
+          {/* A kind with nothing in it shows no chip (341: with Routines their own kind, Recurring tasks is often empty). */}
+          {KINDS.filter(([k]) => k === "ALL" || kinds.has(k) || (counts.get(k) ?? 0) > 0).map(([k, l]) => <FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
           {(s.categories.length > 0 || s.tags.length > 0) && <ChipDivider />}
           {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
@@ -764,7 +765,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
             return (
               <div key={i.id} className={`p-itemrow ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined}
                 {...sel.pressProps(i.id)} onClick={(e) => sel.tap(i.id, () => { if (i.type === "NOTE") findInNextNote(q); openItem(i); }, e)}>
-                <MIcon name={TYPE_ICON[i.type]} size={20} color={s.colorOf(i)} />
+                {isRoutineItem(i) ? <RoutineRing color={s.colorOf(i)} /> : <MIcon name={TYPE_ICON[i.type]} size={20} color={s.colorOf(i)} />}
                 <div className="grow">
                   <div className="title">{displayTitle(i)}</div>
                   <div className="sub">{subtitle(i, s)}{pv && <><br />{pv}</>}</div>

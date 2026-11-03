@@ -11,7 +11,6 @@ import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCatego
 import { confirmDeletes, resetLocal, restoreDeletes, serverStorageBytes, signOut, syncNow } from "../../store/sync.ts";
 import { sizeText, STORAGE_LIMIT, storageUse } from "../../domain/storage.ts";
 import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
-import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, isTestApp, setServer, useWide } from "../../platform.ts";
 import { resetSample } from "../../store/sample.ts";
@@ -265,7 +264,6 @@ export function PhoneSettings({ part }: { part?: string }) {
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
-  const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
   const [dialog, setDialog] = useState<"" | "server" | "signout" | "sample">("");
   const [server, setServerShown] = useState(getServer());
@@ -328,8 +326,7 @@ export function PhoneSettings({ part }: { part?: string }) {
       <ChoiceRow title="Ticked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
       <SwitchRow title="Carry unfinished tasks over to today" supporting={carry ? "Missed tasks move to today, not routines" : "Off: a missed task stays on its own day"} checked={carry}
         onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
-      {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
-      <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
+      {/* Streak badges live in the routines sheet's Streaks, beside the streaks themselves (341, 286). */}
     </> },
     ...(hasCategories ? [{ key: "training", title: "Training", icon: "oDirectionsRun", summary: "Which categories count as sport", body: <SportsSection /> }] : []),
     ...(hasAlarms ? [{ key: "alarms", title: "Reminders & alarms", icon: "oAlarm", summary: `Snooze ${alarmPrefs.snoozeMinutes} min · quiet hours ${alarmPrefs.quietHoursEnabled ? "on" : "off"}`, body: <AlarmSettingsSection /> }]

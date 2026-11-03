@@ -22,6 +22,15 @@ const ALIAS: Record<string, string> = {
  * A Material icon (Compose's own path data), 24 dp unless told otherwise, in the current text colour; a few
  * drawn ones add round-capped lines (ICON_STROKES).
  */
+/** A routine's mark where a list shows each thing's kind icon (341, 215): its ring, as its chips and rows draw it. */
+export function RoutineRing({ size = 20, color }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="p-svg" style={color ? { color } : undefined}>
+      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
 export function MIcon({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
   const key = ALIAS[name] ?? name;
   return (
