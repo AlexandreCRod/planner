@@ -140,7 +140,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <div className="section">Overdue<HeadCount n={shownOverdue.length} /></div>
       {rows(shownOverdue, `o${day}`, true, true)}
     </>}
-    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length}
+    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} overdueLeft={overdue.filter((e) => e.status === "OVERDUE").length}
       fold={{ count: doneFold.length, open: doneOpen, onToggle: () => setDoneOpen(!doneOpen) }} />}
     {rows(shownTasks, `t${day}`, false)}
     {wide && !nothing && dayTasks.length === 0 && doneFold.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
@@ -402,9 +402,9 @@ function PhoneNotePreview({ html, isToday }: { html: string | null; isToday: boo
  * "Tasks · 1 of 3 done", the bar under it. With ticked tasks folded away ([fold]), the count is the fold itself
  * (333): "Tasks · 1 of 3 done ⌄", a tap shows them at the end of the tasks, another hides them.
  */
-function TasksHead({ done, total, fold }: { done: number; total: number; fold?: { count: number; open: boolean; onToggle: () => void } }) {
+function TasksHead({ done, total, overdueLeft, fold }: { done: number; total: number; overdueLeft: number; fold?: { count: number; open: boolean; onToggle: () => void } }) {
   const f = total ? done / total : 0;
-  const text = tasksProgressText(done, total) || (fold ? `${fold.count} done` : "");
+  const text = tasksProgressText(done, total, overdueLeft) || (fold ? `${fold.count} done` : "");
   return <>
     {fold && fold.count > 0
       ? <button className="section p-tasks-head p-head-fold" aria-expanded={fold.open} aria-label={`Tasks, ${text}. ${fold.open ? "Hide" : "Show"} the ${fold.count} done`} onClick={fold.onToggle}>
@@ -412,7 +412,7 @@ function TasksHead({ done, total, fold }: { done: number; total: number; fold?: 
       </button>
       : <div className="section p-tasks-head">Tasks{text && <HeadCount n={text} />}</div>}
     {total > 0 && (
-      <div className={`p-progress p-taskbar ${f >= 1 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+      <div className={`p-progress p-taskbar ${f >= 1 && overdueLeft <= 0 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {f > 0 && <span className="active" style={{ width: `${f * 100}%` }} />}
         {f < 1 && <span className="track" style={{ marginLeft: f > 0 ? 4 : 0 }}><span className="stop" /></span>}
       </div>
