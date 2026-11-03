@@ -152,9 +152,19 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-svg { flex: none; display: block; }
 /* Today's bar (HomeScreen.kt: TopAppBar with expandedHeight 76 dp, DaySwitcher as its title, which
    M3 insets 16 dp; the arrows sit in the title slot, so they take the title's colour, onSurface). */
-.phone .p-dayrow { display: flex; align-items: center; min-width: 0; margin-left: 12px; }
+/* The day arrows stay still (341): ‹ at the bar's start, the title in a slot of one width (what's left once the
+   bar holds its most: the arrows 2 × 44, Today 40 and three 48 px icons, 280 px with the edges), then ›.
+   A long title fits itself in (FitLine). Planner Test's TEST chip sits small in the bar's top corner there,
+   taking no room from the row. */
+html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
+.phone .p-appbar.tall { position: relative; }
+.phone .p-appbar.tall > .p-testchip { position: absolute; left: 12px; top: calc(var(--sat) + 2px); margin: 0; padding: 0 5px; font-size: 9px; line-height: 13px; }
+.phone .p-dayrow { flex: none; display: flex; align-items: center; min-width: 0; }
 .phone .p-icon.title-icon { color: var(--text); }
-.phone .p-dayswitch { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; padding: 0 6px; border: 0; background: none; font: inherit; text-align: left; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone :is(.p-dayrow, .p-calhead) > .p-icon.title-icon { width: 44px; }
+.phone .p-icon.p-today-btn { width: 40px; }
+.phone .p-dayswitch { position: relative; overflow: hidden; flex: none; width: var(--day-slot); display: flex; flex-direction: column; align-items: center; padding: 0 4px; border: 0; background: none; font: inherit; text-align: center; border-radius: 8px; min-width: 0; color: var(--text); }
+.phone .p-fitline { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phone .p-dayswitch .big { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0; color: var(--text); white-space: nowrap; }
 .phone .p-dayswitch .small { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
 .phone .p-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 16px 104px; }
@@ -183,6 +193,8 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
   border: 2px solid var(--muted); border-radius: 2px; background: transparent;
 }
 .phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked { border-color: var(--c, var(--p-primary)); background: var(--c, var(--p-primary)) var(--p-check) center / 20px no-repeat; }
+/* A routine ticks in its ring, as its chips and the routines sheet do (341: circles for things that come back). */
+.phone :is(.today-list, .p-rows) .task.routine input[type=checkbox] { border-radius: 50%; }
 .phone :is(.today-list, .p-rows) .task .grow { padding: 5px 0; }
 .phone :is(.today-list, .p-rows) .task .title { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .phone :is(.today-list, .p-rows) .task .title.done { color: var(--muted); }
@@ -247,8 +259,8 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 
 /* ---------- Calendar (CalendarScreen.kt, TimeGrid.kt) ---------- */
 .phone .p-cal { position: relative; }
-.phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px 0 16px; }
-.phone .p-calhead h2 { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .p-calhead { flex: none; position: relative; display: flex; align-items: center; height: 52px; margin-top: 6px; padding: 0 4px; }
+.phone .p-calhead h2 { flex: none; width: var(--day-slot); text-align: center; min-width: 0; margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: .15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .p-calbody { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 
 .phone .pg { display: flex; flex-direction: column; height: 100%; min-height: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -529,7 +541,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-rows .event .grow > .ellipsis:first-child { font-size: 15px; line-height: 20px; letter-spacing: .25px; }
 
 /* ---------- Calendar ---------- */
-.phone .p-calhead { padding: 0 4px 0 16px; }
+.phone .p-calhead { padding: 0 4px; }
 .phone .p-calhead h2 { margin: 0; }
 .phone .p-hpager { position: relative; flex: none; overflow: hidden; touch-action: pan-y; }
 .phone .p-yearview { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
@@ -597,7 +609,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-notecard .title { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: .1px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .phone .p-notecard .text { margin-top: 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; opacity: .85; overflow-wrap: anywhere; }
 /* One line of the note each (227): checklist lines with a real box, lists with their mark; a long
-   paragraph wraps to at most 4 lines. Ticked boxes are left out, counted in "+ 2 ticked". */
+   paragraph wraps to at most 4 lines. Ticked boxes are left out, counted in "+ 2 done". */
 .phone .p-notecard .text .ln { display: flex; align-items: flex-start; min-width: 0; }
 .phone .p-notecard .text .ln .t { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; max-height: 64px; }
 .phone .p-notecard .text .ln.mk + .ln.mk { margin-top: 2px; }
@@ -818,13 +830,6 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pe-stats { padding: 0 16px 8px; }
 .phone .pe-stats-row { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; font-size: 14px; line-height: 20px; color: var(--text); }
 .phone .pe-stats-row .fire { display: inline-flex; align-items: center; gap: 2px; font-weight: 500; }
-.phone .pe-heat { display: flex; gap: 3px; margin: 8px 0 4px; }
-.phone .pe-heat > div { display: flex; flex-direction: column; gap: 3px; }
-.phone .pe-heat span { width: 14px; height: 14px; border-radius: 3px; background: var(--p-sc-highest); }
-.phone .pe-heat span.done { background: var(--p-primary); }
-.phone .pe-heat span.missed { background: color-mix(in srgb, var(--danger) 35%, transparent); }
-.phone .pe-heat span.future { background: transparent; }
-.phone .pe-heat span.out { visibility: hidden; }
 .phone .pe-links { padding-bottom: 8px; }
 .phone .pe-links-head { display: flex; align-items: center; padding-right: 8px; }
 .phone .pe-links-head .p-section { flex: 1; padding-bottom: 10px; }
@@ -1328,7 +1333,6 @@ html.phone[data-theme="dark"] {
 .phone .p-filled-btn { background: var(--p-strong); color: var(--p-on-strong); }
 .phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked, .phone .p-checkbox:checked { border-color: var(--p-strong); background-color: var(--p-strong); }
 .phone .p-selmark { background: var(--p-strong); color: var(--p-on-strong); }
-.phone .pe-heat span.done { background: var(--p-strong); }
 .phone .p-progress .active, .phone .p-progress .stop { background: var(--p-strong); }
 /* Today's tasks bar under "Tasks · 1 of 2 done" (225): the accent on a raised track, so done and to do are
    easy to tell apart; green once all are done. */
@@ -1597,6 +1601,11 @@ html.phone[data-theme="dark"] {
 .phone .p-streak-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 24px 4px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
 .phone .p-streak-key { display: inline-flex; align-items: center; gap: 5px; }
 .phone .p-streak-key span { width: 8px; height: 8px; border-radius: 50%; }
+/* On a routine's own page (341): the same dots and key as the Streaks sheet, under its numbers. */
+.phone .pe-stats .p-streak-days { margin-top: 10px; }
+.phone .pe-stats .p-streak-foot.pe-stats-key { padding: 8px 0 0; }
+/* The Streaks sheet's own setting, under the key (moved from Settings, 341). */
+.phone .p-streak-badges { margin-top: 4px; border-top: 1px solid var(--line); }
 
 /* The update popup (UpdateHost.tsx): which version, the release notes as plain text, a quiet progress bar. */
 .phone .p-update-version { color: var(--muted); margin-bottom: 12px; }

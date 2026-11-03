@@ -97,6 +97,10 @@ test("the Tasks heading counts the day's tasks done, says All done at the end, a
   assert.equal(tasksProgressText(0, 3), "0 of 3 done");
   assert.equal(tasksProgressText(2, 2), "All done");
   assert.equal(tasksProgressText(0, 0), "");
+  // 341: overdue tasks still open above the heading: not "All done", the plain count instead.
+  assert.equal(tasksProgressText(3, 3, 2), "3 of 3 done");
+  assert.equal(tasksProgressText(1, 3, 2), "1 of 3 done");
+  assert.equal(tasksProgressText(3, 3, 0), "All done");
 });
 
 test("a list keeps its open rows and folds the ticked ones at its end, except one just ticked and still held (284)", () => {

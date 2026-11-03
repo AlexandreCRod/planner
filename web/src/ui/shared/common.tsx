@@ -6,6 +6,7 @@ import { formatTime, relativeDay } from "../../domain/dates.ts";
 import { taskPill } from "../../domain/taskRow.ts";
 import { type AlertType, PRIORITIES, isRecurring, type Item, priorityColor } from "../../domain/types.ts";
 import { reminderKind } from "../../domain/reminders.ts";
+import { isRoutineItem } from "../../domain/routines.ts";
 import { type Snapshot, toggleCompletion } from "../../store/store.ts";
 import { streakSymbol } from "../../store/routines.ts";
 import { feel } from "../phone/haptics.ts";
@@ -173,7 +174,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay = false, onToggle, 
     {linked && <span className="sub-icon link"><Icon name="link" size={14} /></span>}
   </>;
   return (
-    <div className={`task ${past ? "past" : ""}`} style={{ ["--c" as string]: color }} onClick={() => (onOpen ? onOpen() : openItem(item, entry.day))}>
+    <div className={`task ${past ? "past" : ""} ${isRoutineItem(item) ? "routine" : ""}`} style={{ ["--c" as string]: color }} onClick={() => (onOpen ? onOpen() : openItem(item, entry.day))}>
       <span className={`bar ${plain ? "none" : ""}`} style={{ background: color }} />
       <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { if (e.target.checked) feel("confirm"); onToggle?.(e.target.checked); toggleCompletion(item.id, completionDay(entry), e.target.checked); }} />

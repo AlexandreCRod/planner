@@ -55,10 +55,14 @@ export function splitDone<T>(list: readonly T[], isDone: (x: T) => boolean, held
   return { open, done };
 }
 
-/** The words after Today's "Tasks ·" heading (225): "1 of 2 done", "All done", or none without tasks. */
-export function tasksProgressText(done: number, total: number): string {
+/**
+ * The words after Today's "Tasks ·" heading (225): "1 of 2 done", "All done", or none without tasks.
+ * [overdueLeft]: overdue tasks still open above it; "All done" only once they're done too (341, rule 5),
+ * until then the plain count ("3 of 3 done").
+ */
+export function tasksProgressText(done: number, total: number, overdueLeft = 0): string {
   if (total <= 0) return "";
-  return done >= total ? "All done" : `${done} of ${total} done`;
+  return done >= total && overdueLeft <= 0 ? "All done" : `${done} of ${total} done`;
 }
 
 export const taskOver = (e: TaskEntry, now: number) => e.status === "DONE" && e.day !== null && e.item.startMin !== null && toTimestamp(e.day, e.item.startMin) <= now;

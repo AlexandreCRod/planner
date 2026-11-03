@@ -11,7 +11,6 @@ import { changed, deleteCategory, deleteForever, emptyTrash, restore, saveCatego
 import { confirmDeletes, resetLocal, restoreDeletes, serverStorageBytes, signOut, syncNow } from "../../store/sync.ts";
 import { sizeText, STORAGE_LIMIT, storageUse } from "../../domain/storage.ts";
 import { type Problem, clearProblems, onProblems, problems, problemsText } from "../../problems.ts";
-import { STREAK_STYLES, type StreakStyle, setStreakStyle, streakStyle } from "../../store/routines.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { getServer, isNative, isTestApp, setServer, useWide } from "../../platform.ts";
 import { resetSample } from "../../store/sample.ts";
@@ -265,7 +264,6 @@ export function PhoneSettings({ part }: { part?: string }) {
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
   const [linger, setLinger] = useState(String(checkedLinger()));
-  const [streaks, setStreaks] = useState<StreakStyle>(streakStyle());
   const [carry, setCarry] = useState(carryOver());
   const [dialog, setDialog] = useState<"" | "server" | "signout" | "sample">("");
   const [server, setServerShown] = useState(getServer());
@@ -319,17 +317,17 @@ export function PhoneSettings({ part }: { part?: string }) {
         : "The indicator follows your finger"} checked={barReversed}
         onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
     </> },
-    { key: "calendar", title: "Calendar & tasks", icon: "oCalendarToday", summary: `Week starts ${monday ? "Monday" : "Sunday"} · ticked tasks`, body: <>
+    { key: "calendar", title: "Calendar & tasks", icon: "oCalendarToday", summary: `Week starts ${monday ? "Monday" : "Sunday"} · done tasks`, body: <>
       <SwitchRow title="Week starts on Monday" checked={monday} onChange={(v) => { setMonday(v); redraw("weekStartsMonday", String(v)); }} />
       {/* In the app, times follow the phone's own 24-hour setting (Android's Date & time settings). */}
       {!isNative && <ChoiceRow title="Time format" value={clock} options={CLOCKS} onPick={(v) => { setClock(v); redraw("clockFormat", v); }} />}
       <ChoiceRow title="Date format" value={dates} options={DATE_STYLES} onPick={(v) => { setDates(v); redraw("dateFormat", v); }} />
-      {/* One setting for where a ticked task goes (284): it stays, then folds into the list's "5 done" line. */}
-      <ChoiceRow title="Ticked tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
+      {/* One setting for where a done task goes (284): it stays, then folds into the list's "5 done" line. One
+          word for finished things, "done", as everywhere else (341). */}
+      <ChoiceRow title="Done tasks" value={linger} options={LINGER} onPick={(v) => { setLinger(v); store("checkedLinger", v); }} />
       <SwitchRow title="Carry unfinished tasks over to today" supporting={carry ? "Missed tasks move to today, not routines" : "Off: a missed task stays on its own day"} checked={carry}
         onChange={(v) => { setCarry(v); redraw("carryOver", String(v)); }} />
-      {/* The days-in-a-row badge by each routine on Today and the task lists (off unless chosen). */}
-      <ChoiceRow title="Streak badges" value={streaks} options={STREAK_STYLES} onPick={(v) => { setStreaks(v); setStreakStyle(v); }} />
+      {/* Streak badges live in the routines sheet's Streaks, beside the streaks themselves (341, 286). */}
     </> },
     ...(hasCategories ? [{ key: "training", title: "Training", icon: "oDirectionsRun", summary: "Which categories count as sport", body: <SportsSection /> }] : []),
     ...(hasAlarms ? [{ key: "alarms", title: "Reminders & alarms", icon: "oAlarm", summary: `Snooze ${alarmPrefs.snoozeMinutes} min · quiet hours ${alarmPrefs.quietHoursEnabled ? "on" : "off"}`, body: <AlarmSettingsSection /> }]
@@ -631,7 +629,7 @@ export function PhoneProblems() {
   return (
     <Scaffold title="Problem log" back flush actions={list.length > 0 ? <>
       <TextButton onClick={copy}>Copy</TextButton>
-      <TextButton onClick={clearProblems}>Clear</TextButton>
+      <TextButton onClick={() => { const undo = clearProblems(); showSnackbar("Problem log cleared", "Undo", undo); }}>Clear</TextButton>
     </> : undefined}>
       <div className="p-content ps">
         {list.length === 0 && <EmptyState icon="oTaskAlt" title="No problems" hint="Nothing has gone wrong on this device" />}

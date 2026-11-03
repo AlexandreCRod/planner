@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, EmptyState, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, EmptyState, FitLine, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -140,7 +140,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <div className="section">Overdue<HeadCount n={shownOverdue.length} /></div>
       {rows(shownOverdue, `o${day}`, true, true)}
     </>}
-    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length}
+    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} overdueLeft={overdue.filter((e) => e.status === "OVERDUE").length}
       fold={{ count: doneFold.length, open: doneOpen, onToggle: () => setDoneOpen(!doneOpen) }} />}
     {rows(shownTasks, `t${day}`, false)}
     {wide && !nothing && dayTasks.length === 0 && doneFold.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
@@ -403,9 +403,9 @@ function PhoneNotePreview({ html, isToday }: { html: string | null; isToday: boo
  * "Tasks · 1 of 3 done", the bar under it. With ticked tasks folded away ([fold]), the count is the fold itself
  * (333): "Tasks · 1 of 3 done ⌄", a tap shows them at the end of the tasks, another hides them.
  */
-function TasksHead({ done, total, fold }: { done: number; total: number; fold?: { count: number; open: boolean; onToggle: () => void } }) {
+function TasksHead({ done, total, overdueLeft, fold }: { done: number; total: number; overdueLeft: number; fold?: { count: number; open: boolean; onToggle: () => void } }) {
   const f = total ? done / total : 0;
-  const text = tasksProgressText(done, total) || (fold ? `${fold.count} done` : "");
+  const text = tasksProgressText(done, total, overdueLeft) || (fold ? `${fold.count} done` : "");
   return <>
     {fold && fold.count > 0
       ? <button className="section p-tasks-head p-head-fold" aria-expanded={fold.open} aria-label={`Tasks, ${text}. ${fold.open ? "Hide" : "Show"} the ${fold.count} done`} onClick={fold.onToggle}>
@@ -413,7 +413,7 @@ function TasksHead({ done, total, fold }: { done: number; total: number; fold?: 
       </button>
       : <div className="section p-tasks-head">Tasks{text && <HeadCount n={text} />}</div>}
     {total > 0 && (
-      <div className={`p-progress p-taskbar ${f >= 1 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+      <div className={`p-progress p-taskbar ${f >= 1 && overdueLeft <= 0 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {f > 0 && <span className="active" style={{ width: `${f * 100}%` }} />}
         {f < 1 && <span className="track" style={{ marginLeft: f > 0 ? 4 : 0 }}><span className="stop" /></span>}
       </div>
@@ -520,20 +520,22 @@ export function PhoneToday() {
   return (
     <div className="p-scaffold">
       <header className="p-appbar tall" ref={head}>
+        {/* The arrows keep their place whatever the day (341): the title has a slot of its own width, and a long
+            weekday fits itself in it. */}
         <div className="p-dayrow">
           <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous day" onClick={() => turn(-1)} />
           <button className="p-dayswitch" aria-label="Go to a day" onClick={() => setPicking(true)}>
-            <span className="big">{word ?? WEEKDAYS[weekday(day) - 1]}</span>
+            <FitLine className="big" text={word ?? WEEKDAYS[weekday(day) - 1]} />
             <span className="small">{word ? formatDate(day) : formatDateShort(day)}</span>
           </button>
           <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next day" onClick={() => turn(1)} />
         </div>
         <span className="grow" />
         <TestChip />
-        {!isToday && <IconButton icon="oToday" label="Today" onClick={() => show(t)} />}
+        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341). */}
+        {!isToday && <IconButton className="p-today-btn" icon="oToday" label="Today" onClick={() => show(t)} />}
         {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
-        {/* On another day, Today takes its place (the bar has no room for both beside a long weekday). */}
-        {isToday && <TodosButton s={s} onClick={() => setTodosOpen(true)} />}
+        <TodosButton s={s} onClick={() => setTodosOpen(true)} />
         <AppBarActions />
       </header>
       {todosOpen && createPortal(<TodosSheet back={todosBack} onClose={() => { setTodosOpen(false); setTodosBack(null); }} />, document.body)}

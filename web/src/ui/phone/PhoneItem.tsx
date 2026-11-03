@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { whenText } from "../../domain/itemWhen.ts";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, occursOn, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, parseIntList } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -13,15 +13,16 @@ import {
   NO_DAY, PRIORITIES, priorityColor, cssColor, isRecurring, newItem,
 } from "../../domain/types.ts";
 import {
-  type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot,
+  type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot, withUndo,
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
 import { typeLabel } from "../shared/kinds.ts";
-import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
+import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, RoutineRing, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { findLinks } from "../../domain/links.ts";
 import { linkAtCaretOf, linkInTextarea } from "../shared/linkHit.ts";
 import { useLinkGesture } from "../shared/linkGesture.ts";
 import { useWebLinks } from "./WebLinks.tsx";
+import { STREAK_DAYS, StreakDays, StreakKey } from "./StreaksSheet.tsx";
 import { AssistChip, BottomSheet, ColorPickerDialog, ExtendedFab, SheetButtons, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { feel } from "./haptics.ts";
 import { useHold } from "./hold.ts";
@@ -35,7 +36,7 @@ import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../
 import { openExternal } from "./native.ts";
 import { useAlarmSettings } from "../../alarms/settings.ts";
 import { DEFAULT_REMINDER_MIN, WAKE_START, type WakePlan, defaultAlert, firstReminders, fitWake, followDefaults, isDefaultReminders, wakeMax, wakePlan, wakeSpan, wakeText, withWakePlan } from "../../domain/reminders.ts";
-import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutineItem, isRoutineSeries, localDayMinute, localMs, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
+import { canBeRoutine, doneTiming, routineInCalendar, routineSeriesOf, isRoutineItem, isRoutineSeries, localDayMinute, localMs, recentDays, routineEntry, routineStreak, timingOf } from "../../domain/routines.ts";
 import { setRoutine, streakSymbol } from "../../store/routines.ts";
 import { futsalLogId } from "../../domain/training.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
@@ -324,8 +325,10 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
  * An item's alarms or notifications. [onDate]: a task with no date yet, whose reminders can't ring
  * until it has one; its rows say so, with a row to pick the date and time there and then.
  */
-function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
+function AlertSection({ alarms, all, type, timed, onChange, onDate, undoable }: {
   alarms: boolean; all: Reminder[]; type: ItemType; timed: boolean; onChange: (r: Reminder[]) => void; onDate?: (day: number, min: number) => void;
+  /** Saved at once (the item page, not the editor's draft): a ✕ takes it off with Undo (341, 279's rule). */
+  undoable?: boolean;
 }) {
   const mine = all.map((r, i) => [r, i] as const).filter(([r]) => !r.wake && (r.type === "ALARM") === alarms);
   const wake = alarms ? wakePlan(all) : null;
@@ -336,6 +339,11 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
   const icon = alarms ? "oAlarm" : "oNotifications";
   const set = (i: number, r: Reminder) => onChange(all.map((x, j) => (j === i ? r : x)));
   const untimed = ` (${formatTime(useAlarmSettings().defaultTaskTime)})`;
+  const remove = (next: Reminder[], what: string) => {
+    if (!undoable) { onChange(next); return; }
+    const undo = withUndo(() => onChange(next));
+    showSnackbar(`${what} removed`, "Undo", undo);
+  };
   const pickSound = async (i: number, r: Reminder) => {
     const p = await native.pickSound(r.soundUri, "Alarm sound");
     if (p.picked) set(i, { ...r, soundUri: p.uri ?? null });
@@ -358,7 +366,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
             label={r.type === "REMINDER" ? "Pops up with a sound (tap for silent)" : "Silent (tap to pop up with a sound)"}
             onClick={() => set(i, { ...r, type: r.type === "REMINDER" ? "NOTIFICATION" : "REMINDER" })} />
         )}
-        <IconButton icon="fClose" label="Remove" onClick={() => onChange(all.filter((_, j) => j !== i))} />
+        <IconButton icon="fClose" label="Remove" onClick={() => remove(all.filter((_, j) => j !== i), alarms ? "Alarm" : "Notification")} />
       </FieldRow>
     ))}
     {onDate && mine.length > 0 && (
@@ -377,7 +385,7 @@ function AlertSection({ alarms, all, type, timed, onChange, onDate }: {
           <IconButton icon="oMusicNote" className={wakeSound ? "primary" : ""} label={wakeSound ? "Alarm sound (custom)" : "Alarm sound (default)"}
             onClick={() => { void native.pickSound(wakeSound, "Alarm sound").then((p) => { if (p.picked) onChange(withWakePlan(all, wake, p.uri ?? null)); }); }} />
         )}
-        <IconButton icon="fClose" label="Remove wake-up alarms" onClick={() => onChange(withWakePlan(all, null))} />
+        <IconButton icon="fClose" label="Remove wake-up alarms" onClick={() => remove(withWakePlan(all, null), "Wake-up alarms")} />
       </FieldRow>
     )}
     {alarms && !wake && type === "EVENT" && timed && (
@@ -630,15 +638,21 @@ export function PhoneLinks({ id, s, ensureSaved, onLeave }: { id: number; s: Sna
       {rows.length === 0 && <div className="pe-small pad">Connect this to other notes, tasks or events with Link.</div>}
       {rows.map(({ item, label, removable }) => (
         <div key={item.id} className="p-li two" role="button" onClick={() => { onLeave?.(); openItem(item); }}>
-          <span className="lead"><MIcon name={typeIcon(item)} color={s.colorOf(item)} /></span>
+          <span className="lead">{isRoutineItem(item) ? <RoutineRing size={24} color={s.colorOf(item)} /> : <MIcon name={typeIcon(item)} color={s.colorOf(item)} />}</span>
           <span className="text"><span className="headline ellipsis">{item.title || "Untitled"}</span><span className="supporting small">{typeLabel(item)} · {label}</span></span>
-          {removable && <span className="trail"><IconButton icon="fClose" label="Remove link" onClick={() => removeLink(id, item.id)} /></span>}
+          {removable && <span className="trail" onClick={(e) => e.stopPropagation()}><IconButton icon="fClose" label="Remove link" onClick={() => unlinkWithUndo(id, item)} /></span>}
         </div>
       ))}
       {picking && <ItemPicker s={s} exclude={new Set([id, ...s.neighbours(id)])} onClose={() => setPicking(false)}
         onPick={(target) => { const me = ensureSaved ? ensureSaved() : id; if (me) addLink(me, target); }} />}
     </div>
   );
+}
+
+/** Takes a link off at once, with Undo putting it back (341, 279's rule). */
+function unlinkWithUndo(id: number, other: Item) {
+  const undo = withUndo(() => removeLink(id, other.id));
+  showSnackbar(`Link to “${other.title || "Untitled"}” removed`, "Undo", undo);
 }
 
 /** Searchable list of items to link to (ItemPickerDialog). */
@@ -666,16 +680,14 @@ function ItemPicker({ s, exclude, onPick, onClose }: { s: Snapshot; exclude: Set
 
 // ---------- History (routines) ----------
 
-/** A routine's history and streak, on its own page (shown whatever the Streak badges setting). */
+/**
+ * A routine's history and streak, on its own page (shown whatever the Streak badges setting): its last days
+ * drawn as the Streaks sheet draws them (341, 221's colours; no more red squares).
+ */
 function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
   const t = todayEpoch();
   const st = streak(item, s.done, t);
   const rs = routineStreak(item, s.done, t);
-  const done = s.done.days(item.id);
-  // The last 30 days (today included), in week columns as before.
-  const first = t - 29;
-  const gridStart = first - (weekday(first) - 1);
-  const weeks = Math.ceil((t - gridStart + 1) / 7);
   return (
     <div className="pe-stats">
       <div className="pe-stats-row">
@@ -684,19 +696,8 @@ function TaskStats({ item, s }: { item: Item; s: Snapshot }) {
         <span>{Math.round(st.rate30 * 100)}% recent</span><span>{st.total} total</span>
       </div>
       {rs.broken && <div className="pe-small">Last one was missed: the streak starts again</div>}
-      <div className="pe-heat">
-        {Array.from({ length: weeks }, (_, w) => (
-          <div key={w}>
-            {Array.from({ length: 7 }, (_, di) => {
-              const day = gridStart + w * 7 + di;
-              // Today, still open, isn't missed yet.
-              const cls = day < first ? "out" : day > t ? "future" : done.has(day) ? "done" : day < t && occursOn(item, day) ? "missed" : "";
-              return <span key={di} className={cls} />;
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="pe-small">Filled = done, red = missed</div>
+      <StreakDays days={recentDays(item, s.done, t, STREAK_DAYS)} />
+      <StreakKey days={STREAK_DAYS} className="pe-stats-key" />
     </div>
   );
 }
@@ -882,7 +883,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       {(editing === "alarms" || editing === "notifications") && (
         <BottomSheet onClose={() => setEditing(null)}>{() => <>
           <div className="p-sheet-title small">{editing === "alarms" ? "Alarms" : "Notifications"}</div>
-          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders}
+          <AlertSection alarms={editing === "alarms"} all={reminders} type={item.type} timed={timed} onChange={commitReminders} undoable
             onDate={item.startDay === null ? (day, min) => commit({ ...item, startDay: day, startMin: min, allDay: false }) : undefined} />
           <AlertsHint className="pad" />
         </>}</BottomSheet>

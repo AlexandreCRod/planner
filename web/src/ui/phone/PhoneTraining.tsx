@@ -126,9 +126,10 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   useWatchRunTicks(false);
   const scaffold = (children: ReactNode) => (
     // The page's own icons, then search and settings in their usual last two spots (285). Training's own search
-    // stays until the one search (292) takes it in.
+    // stays until the one search (292) takes it in, as a page with a magnifier (341), so it never looks like the
+    // main search's magnifier beside it.
     <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
-      <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
+      <IconButton icon="oFindInPage" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
       <AppBarActions />
@@ -365,7 +366,7 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
   return (
     <Scaffold title={<span className="tr-title">{long || short}<span className="sub">{plan.name}</span></span>} back flush actions={readOnly ? <>
-      <IconButton icon="oSearch" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
+      <IconButton icon="oFindInPage" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
     </> : undefined}>

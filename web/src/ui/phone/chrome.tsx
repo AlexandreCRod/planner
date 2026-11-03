@@ -22,6 +22,15 @@ const ALIAS: Record<string, string> = {
  * A Material icon (Compose's own path data), 24 dp unless told otherwise, in the current text colour; a few
  * drawn ones add round-capped lines (ICON_STROKES).
  */
+/** A routine's mark where a list shows each thing's kind icon (341, 215): its ring, as its chips and rows draw it. */
+export function RoutineRing({ size = 20, color }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="p-svg" style={color ? { color } : undefined}>
+      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
 export function MIcon({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
   const key = ALIAS[name] ?? name;
   return (
@@ -74,6 +83,53 @@ export function TopAppBar({ title, back, actions, tall, className = "", navIcon 
       {actions}
     </header>
   );
+}
+
+/**
+ * One line of a title in a slot of fixed width (341: the day arrows never move): [text] if it fits, else [alt]
+ * (a shorter form, e.g. "Nov 2026" for "November 2026"), else the font made smaller until it fits (not
+ * below [min] px; past that it's cut with "…").
+ */
+export function FitLine({ text, alt, className = "", min = 15 }: { text: string; alt?: string; className?: string; min?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [useAlt, setUseAlt] = useState(false);
+  const shown = useAlt && alt ? alt : text;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.fontSize = "";
+      // Whether the long form fits, measured whatever is shown now (the slot can grow: a window made wider).
+      const wantAlt = !!alt && alt !== text && textWidth(text, el) > el.clientWidth;
+      if (wantAlt !== useAlt) { setUseAlt(wantAlt); return; }
+      let size = parseFloat(getComputedStyle(el).fontSize);
+      if (el.scrollWidth <= el.clientWidth) return;
+      while (el.scrollWidth > el.clientWidth && size > min) { size -= 1; el.style.fontSize = `${size}px`; }
+      // The widths are whole pixels: one more step, so a fraction left over isn't cut to "…".
+      if (size > min) el.style.fontSize = `${size - 1}px`;
+    };
+    fit();
+    // The web font may arrive after the first layout, and the slot changes with the window.
+    let live = true;
+    void document.fonts?.ready.then(() => { if (live) fit(); });
+    // Only a change of width counts: fitting changes the font, never the slot's width, so it can't loop.
+    let width = el.clientWidth;
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (el.clientWidth !== width) { width = el.clientWidth; fit(); } }) : null;
+    ro?.observe(el);
+    return () => { live = false; ro?.disconnect(); };
+  }, [text, alt, useAlt, min]);
+  return <span ref={ref} className={`p-fitline ${className}`}>{shown}</span>;
+}
+
+let measurer: CanvasRenderingContext2D | null = null;
+/** [text]'s width in [el]'s font, as one unbroken line. */
+function textWidth(text: string, el: HTMLElement): number {
+  measurer ??= document.createElement("canvas").getContext("2d");
+  if (!measurer) return 0;
+  const cs = getComputedStyle(el);
+  measurer.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const spacing = parseFloat(cs.letterSpacing) || 0;
+  return measurer.measureText(text).width + spacing * text.length;
 }
 
 /** "Planner Test"'s marker in every top bar (129), so it's never taken for the real app; nothing in the real app. */

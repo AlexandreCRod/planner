@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, MAX_STOPWATCHES, isRepeating, newStopwatchId, stopwatchLabel, stopwatchesOf, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
+  type CalendarAlarm, CALENDAR_ALARM_DAYS, NARROW_DAYS, TIMER_PRESETS, MAX_STOPWATCHES, isRepeating, newStopwatchId, shownAfterReset, stopwatchLabel, stopwatchesOf, pauseText, tidySchedule, stopwatchParts, cityName, cityZones, daysText, elapsed, formatDuration, lapLengths,
   nextRing, presetText, repeatText, swipeRemoves, timerLeft, timerShare, timerUndoMs, untilText, zoneClock, zoneDayLabel, zoneOffsetLabel,
 } from "../../domain/alarms.ts";
 import { addMonths, dayShort, daysInMonth, epochOf, formatTime, monthLong, monthShort, relativeDay, startOfWeek, use24h, weekday, ymd } from "../../domain/dates.ts";
@@ -1110,7 +1110,11 @@ function Field({ label, value, onChange, numeric, autoFocus, onEnter }: {
  * them all (ClockTools.kt), counting from timestamps, so they run on with the app closed.
  */
 function StopwatchPane({ active }: { active: boolean }) {
-  const all = stopwatchesOf(useAlarmState().tools);
+  // A Reset shows at once, but the engine is only told once its Undo has gone unused (341), as a delete.
+  const [resetting, setResetting] = useState<ReadonlySet<number>>(new Set());
+  const unReset = (id: number) => setResetting((l) => new Set([...l].filter((x) => x !== id)));
+  const pendingReset = useRef(new Map<number, () => void>());
+  const all = stopwatchesOf(useAlarmState().tools).map((x) => shownAfterReset(x, resetting));
   // A deleted one leaves at once, but is only really deleted once its Undo has gone unused (as a timer).
   const [leaving, setLeaving] = useState<ReadonlySet<number>>(new Set());
   const stay = (id: number) => setLeaving((l) => new Set([...l].filter((x) => x !== id)));
@@ -1120,7 +1124,21 @@ function StopwatchPane({ active }: { active: boolean }) {
   const now = useTick(31, active && running);
   const total = elapsed(sw, now);
   const lengths = lapLengths(sw.laps);
-  const run = (a: "start" | "pause" | "lap" | "reset", id = sw.id) => void act(native.stopwatch(a, { id }));
+  const run = (a: "start" | "pause" | "lap" | "reset", id = sw.id) => {
+    if (a === "reset") { reset(id); return; }
+    pendingReset.current.get(id)?.();   // started again before the Undo went: the reset goes first
+    void act(native.stopwatch(a, { id }));
+  };
+  const reset = (id: number) => {
+    const label = stopwatchLabel(all.find((x) => x.id === id) ?? {}, Math.max(0, all.findIndex((x) => x.id === id)));
+    let done = false;
+    const finish = () => { done = true; offFlush(); pendingReset.current.delete(id); };
+    const commit = () => { if (done) return; finish(); void act(native.stopwatch("reset", { id })).then(() => unReset(id)); };
+    const offFlush = onFlush(commit);
+    pendingReset.current.set(id, commit);
+    setResetting((l) => new Set([...l, id]));
+    showSnackbar(`${label} reset`, "Undo", () => { if (done) return; finish(); unReset(id); }, { onGone: commit });
+  };
   const shown = stopwatchParts(total);
   const remove = (id: number, label: string) => {
     let done = false;
