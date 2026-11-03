@@ -107,7 +107,10 @@ function Tile({ icon, cls, name, value, unit, sub, chart, onOpen }: { icon: stri
 const shape = (pts: readonly { day: number; v: number }[], color: string, gap = Infinity) =>
   pts.length ? <MiniChart kind="line" pts={pts} domain={[pts[0].day, Math.max(pts[pts.length - 1].day, pts[0].day + 1)]} color={color} height={TILE_H} gap={gap} /> : null;
 
-/** Runs, Futsal, Body and Lifts: where each stands, and the shape of the last while. */
+/**
+ * Runs, Futsal, Body and Lifts: where each stands, and the shape of the last while. The first two are named
+ * "Cardio · Runs" and "Cardio · Futsal" (341), as the Progress tab and its switch they open.
+ */
 export function OverviewTiles({ tr, t, onOpen }: { tr: Training; t: number; onOpen: (route: string) => void }) {
   const d = useMemo(() => {
     const weeks = weeklyKm(tr.runs, t), usual = usualWeekKm(weeks);
@@ -125,10 +128,10 @@ export function OverviewTiles({ tr, t, onOpen }: { tr: Training; t: number; onOp
   const slept = d.sleep && d.sleep.day >= t - 1 ? `slept ${fmtSleep(d.sleep.totalMin!)}` : "";
   return (
     <div className="pg-tiles">
-      <Tile icon={kindIcon("run")} cls="k-run" name="Runs" value={week.toFixed(1)} unit="km" sub={join("this week", d.usual !== null && `avg ${Math.round(d.usual)}`)}
+      <Tile icon={kindIcon("run")} cls="k-run" name="Cardio · Runs" value={week.toFixed(1)} unit="km" sub={join("this week", d.usual !== null && `avg ${Math.round(d.usual)}`)}
         onOpen={() => { showCardio("runs"); onOpen("tab=runs"); }}
         chart={<MiniChart kind="bars" pts={d.weeks.map((v, i) => ({ day: i, v }))} domain={[0, d.weeks.length - 1]} color={RUN} height={TILE_H} dimLast />} />
-      <Tile icon={kindIcon("futsal")} cls="k-futsal" name="Futsal" value={game ? String(Math.round(game.session!.avgHr!)) : "–"} unit={game ? "bpm" : ""}
+      <Tile icon={kindIcon("futsal")} cls="k-futsal" name="Cardio · Futsal" value={game ? String(Math.round(game.session!.avgHr!)) : "–"} unit={game ? "bpm" : ""}
         sub={game ? join(shortWhen(game.day, t), d.usualHr !== null && `usual ${Math.round(d.usualHr)}`) : "No games yet"}
         onOpen={() => { showCardio("futsal"); onOpen("tab=runs"); }}
         chart={shape(d.beat.map((g) => ({ day: g.day, v: g.session!.avgHr! })), FUTSAL)} />

@@ -68,7 +68,7 @@ export function TrainingFind({ tr, lp, planId }: { tr: Training; lp: LoadedPlan;
             {CHIPS.map(([o, l]) => <FilterChip key={o} selected={only === o} onClick={() => setOnly(o)}>{l}</FilterChip>)}
           </ChipRow>
         )}
-        {!t && <EmptyState icon="oSearch" title="Search training" hint="Find a session, an exercise or words in the guides" />}
+        {!t && <EmptyState icon="oFindInPage" title="Search training" hint="Find a session, an exercise or words in the guides" />}
         {t && count === 0 && <EmptyState icon="oSearch" title="Nothing found" hint={`Nothing for “${t}”`} />}
         {shown("sessions") && hits.sessions.length > 0 && <>
           <SectionHeader>Sessions</SectionHeader>
