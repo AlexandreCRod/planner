@@ -307,7 +307,7 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 /* Not the old PC rows' flex (styles.css .task), which would shrink the text to its width and fade its end even when it fits. */
 .phone :is(.pg-block, .pg-chip).task { display: block; }
 .phone .pg-block b { font-weight: 500; display: block; overflow: hidden; white-space: nowrap; }
-.phone .pg-block.one :is(b, .tm) {
+.phone .pg-block.one .pg-text {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
 }
 .phone .pg-block .tm { display: block; font-size: 9px; line-height: 11px; opacity: .85; white-space: nowrap; }
