@@ -239,7 +239,12 @@ object ClockTools {
     fun runningStopwatches(s: ClockToolsState, now: Long): List<Pair<String, Long>> =
         stopwatches(s).mapIndexedNotNull { i, sw -> if (sw.running) stopwatchLabel(sw, i) to (now - sw.elapsed(now)) else null }
 
-    private const val SW_NOTIFICATION = 779_000
+    /**
+     * The running stopwatches' lines: 780000-780004. The other fixed ranges: the card 776000-776001, the ringing
+     * service 777000-777001, timers 778000-778999 and clock alarms' "Missed alarm" 779000-779999 (review of 2.10.1,
+     * finding 1: the stopwatches had 779000-779004 and wiped a missed notice for an alarm id ending in 000-004).
+     */
+    const val SW_NOTIFICATION = 780_000
 
     /** One quiet line per running stopwatch, counting by itself (the system's chronometer), in the card's group. */
     private fun showStopwatches(context: Context) {
