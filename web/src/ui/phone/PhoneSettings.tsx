@@ -290,10 +290,11 @@ export function PhoneSettings({ part }: { part?: string }) {
 
   const accentName = ACCENTS.find(([, c]) => c === accent)?.[0] ?? "Blue";
   const parts: Part[] = [
-    { key: "appearance", title: "Appearance", icon: "oPalette", summary: `${theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"} theme · ${accentName} accent`, body: <>
+    { key: "appearance", title: "Appearance", icon: "oPalette", summary: `${theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"} theme · ${accentName} highlight`, body: <>
       <div className="ps-pad ps-look">
         <Segmented value={theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={setTheme} />
-        <div className="ps-label">Accent colour</div>
+        {/* Plain words for the accent (337): what it colours. */}
+        <div className="ps-label">Highlight colour<small className="ps-label-sub">Buttons, switches and the chosen tab</small></div>
         {/* One line that scrolls, faded at its ends (229, 232). */}
         <HScroll className="ps-accents">
           {ACCENTS.map(([name, c]) => (
@@ -305,7 +306,7 @@ export function PhoneSettings({ part }: { part?: string }) {
         </HScroll>
       </div>
       <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
-      <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Swipes stay in the page; the bottom bar changes tab"}
+      <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Off: swipes stay in the page"}
         checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
       {!wide && swipesTabs && <SwitchRow title="Bottom bar changes the day" supporting="Slide along it to change the day"
         checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}

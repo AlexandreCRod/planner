@@ -17,10 +17,10 @@ type Look = {
 /** Every look, in the Looks page's order. */
 export const LOOKS = {
   /**
-   * Settings' layout (259, with 229): one page of grouped cards (the pick), or folders: a short list of its
-   * parts, each opening its own page with its card. Read once, in PhoneSettings.
+   * Settings' layout (259, with 229): folders (the pick since 337): a short list of its parts, each opening
+   * its own page with its card; or one page of grouped cards. A choice already made is kept. Read once, in PhoneSettings.
    */
-  settings: { page: "Settings", title: "Layout", pick: "page", choices: [
+  settings: { page: "Settings", title: "Layout", pick: "folders", choices: [
     ["page", "One page", "Every setting on one page, in cards"],
     ["folders", "Folders", "A short list; each part opens its own page"],
   ] },
