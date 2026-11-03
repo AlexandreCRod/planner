@@ -228,10 +228,14 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 /* What folds away (chrome.tsx FoldLine): "2 done ⌄" at the end of every list of tasks (284), Today's
    "2 earlier ⌄"; a tap shows them. Its words line up with the rows' titles. */
 .phone :is(.today-list, .p-rows) .p-fold {
-  display: flex; align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 0 16px 0 52px; border: 0; background: none; text-align: left;
+  display: flex; align-items: center; gap: 4px; width: 100%; min-height: 32px; padding: 0 16px 0 52px; border: 0; background: none; text-align: left;
   font: inherit; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted);
 }
 .phone :is(.today-list, .p-rows) .p-fold svg { opacity: .8; }
+/* Where the list has a heading, the fold is the heading's count (333): "Tasks · 1 of 3 done ⌄", one tap target
+   across the line, the words and colours of the heading, the chevron after them. */
+.phone .today-list .section.p-head-fold { display: flex; align-items: center; width: 100%; border: 0; background: none; text-align: left; font-family: inherit; cursor: pointer; }
+.phone .today-list .section.p-head-fold svg { margin-left: 4px; opacity: .8; color: var(--muted); }
 /* The wide Today's quick actions on a task (wide.css shows them on hover). */
 .phone .task .p-quick { display: none; }
 

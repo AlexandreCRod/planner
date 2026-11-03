@@ -15,7 +15,7 @@ import { clearTodoNumber, showTodoNumber, todosCleared } from "../../store/todoN
 import { useHold } from "./hold.ts";
 import { showStreaks, streakSymbol } from "../../store/routines.ts";
 import { EventRow, TaskRow, go, openItem, useCheckedHold, useNow } from "../shared/common.tsx";
-import { AppBarActions, DoneFold, EmptyState, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
+import { AppBarActions, EmptyState, HScroll, DropdownMenu, FoldLine, HeadCount, IconButton, MIcon, type MenuItem, TestChip } from "./chrome.tsx";
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
@@ -71,6 +71,8 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
   const isToday = day === t;
   // The events already over fold into one line on the phone; a tap shows them.
   const [earlierOpen, setEarlierOpen] = useState(false);
+  // The ticked tasks folded into the heading ("Tasks · 1 of 3 done ⌄", 333): shown under the tasks once opened.
+  const [doneOpen, setDoneOpen] = useState(false);
   // Routines: their own checklist, out of the task lists below, never overdue.
   const routines = routinesOnDay(s.items, s.done, day, t);
   // With routines but none on this day, the row still holds the button to list them all.
@@ -138,10 +140,11 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
       <div className="section">Overdue<HeadCount n={shownOverdue.length} /></div>
       {rows(shownOverdue, `o${day}`, true, true)}
     </>}
-    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length} />}
+    {(shownTasks.length > 0 || doneFold.length > 0 || (wide && !nothing)) && <TasksHead done={doneCount} total={dayTasks.length}
+      fold={{ count: doneFold.length, open: doneOpen, onToggle: () => setDoneOpen(!doneOpen) }} />}
     {rows(shownTasks, `t${day}`, false)}
     {wide && !nothing && dayTasks.length === 0 && doneFold.length === 0 && <div className="hint empty">No tasks {dayWord}.</div>}
-    <DoneFold count={doneFold.length} rows={() => doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)} />
+    {doneOpen && doneFold.map((e) => <TaskRow key={`d${rowKey(e)}`} entry={e} s={s} now={now} showDay={e.day !== day} />)}
   </>;
   const schedule = <>
     {(dayEvents.length > 0 || (wide && !nothing)) && <div className="section">Schedule</div>}
@@ -395,11 +398,19 @@ function PhoneNotePreview({ html, isToday }: { html: string | null; isToday: boo
  * The Tasks heading with the day's progress (225): "Tasks · 1 of 2 done" ("All done" once every one is
  * ticked), and under it Material 3's linear progress indicator, full width: 4 dp, a 4 dp gap, a stop dot.
  */
-function TasksHead({ done, total }: { done: number; total: number }) {
+/**
+ * "Tasks · 1 of 3 done", the bar under it. With ticked tasks folded away ([fold]), the count is the fold itself
+ * (333): "Tasks · 1 of 3 done ⌄", a tap shows them at the end of the tasks, another hides them.
+ */
+function TasksHead({ done, total, fold }: { done: number; total: number; fold?: { count: number; open: boolean; onToggle: () => void } }) {
   const f = total ? done / total : 0;
-  const text = tasksProgressText(done, total);
+  const text = tasksProgressText(done, total) || (fold ? `${fold.count} done` : "");
   return <>
-    <div className="section p-tasks-head">Tasks{text && <HeadCount n={text} />}</div>
+    {fold && fold.count > 0
+      ? <button className="section p-tasks-head p-head-fold" aria-expanded={fold.open} aria-label={`Tasks, ${text}. ${fold.open ? "Hide" : "Show"} the ${fold.count} done`} onClick={fold.onToggle}>
+        Tasks<HeadCount n={text} /><MIcon name={fold.open ? "fExpandLess" : "fExpandMore"} size={18} />
+      </button>
+      : <div className="section p-tasks-head">Tasks{text && <HeadCount n={text} />}</div>}
     {total > 0 && (
       <div className={`p-progress p-taskbar ${f >= 1 ? "all" : ""}`} role="progressbar" aria-label="Tasks done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
         {f > 0 && <span className="active" style={{ width: `${f * 100}%` }} />}
