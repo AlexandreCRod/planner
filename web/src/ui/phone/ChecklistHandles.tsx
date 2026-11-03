@@ -1,7 +1,7 @@
 // Reordering a note's checklist like Google Keep: each checklist line gets a drag handle in the margin
-// beside it (outside the text, so typing and selecting text are untouched). The handles can't be seen
-// until a line is pressed (or, with a mouse, pointed at): then that line's shows, and stays while it's
-// dragged (227). Drag a handle: the line
+// beside it (outside the text, so typing and selecting text are untouched). The handles always show
+// (331; 227 hid them until pressed); a pressed (or, with a mouse, pointed-at) line's is stronger, and stays so
+// while it's dragged. Drag a handle: the line
 // (with the lines indented under it) lifts and follows the finger, the others in its list slide out of
 // the way, and on release it settles into its new place. The note's text itself is what changes (its
 // paragraphs move), so it's saved and synced like any edit. Which moves are allowed comes from
