@@ -34,7 +34,7 @@ import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
 import { setEventEnd } from "./eventTime.ts";
-import { BLOCK_LINE, blockLines } from "./blockLines.ts";
+import { BLOCK_LINE, blockLines, tickOwnLine } from "./blockLines.ts";
 import { wheelZoom } from "./keys.ts";
 
 type Mode = "day" | "3day" | "week" | "month" | "year" | "agenda";
@@ -1339,14 +1339,15 @@ function Block({ p, s, pxPerMin, compact }: { p: Placed; s: Snapshot; pxPerMin: 
   const h = Math.max(14, (p.end - p.start) * pxPerMin);
   const tiny = h < 22;
   const lines = tiny ? 1 : blockLines(h);
+  // The title is one line, fading at the edge (334); the tick has the first line to itself when there's room.
+  const own = !tiny && tickOwnLine(h, ticks);
   return (
-    <div className={`pg-block ${tiny ? "tiny" : ""} ${lines > 1 ? "wrap" : "one"} ${isTask ? "task" : ""} ${p.o.completed ? "done" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
+    <div className={`pg-block ${tiny ? "tiny" : ""} one ${isTask ? "task" : ""} ${p.o.completed ? "done" : ""}`} data-key={`${p.o.item.id}-${p.o.day}`}
       style={{
         top: p.start * pxPerMin, height: h, left: `${(p.col / p.cols) * 100}%`, width: `${100 / p.cols}%`, ["--c" as string]: c,
       }}>
-      <span className="pg-text" style={lines > 1 ? { height: lines * BLOCK_LINE } : undefined}>
-        {/* The tick sits in the first line, so the lines under it use the block's whole width. */}
-        {ticks && <span className={`pg-tick ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
+      <span className="pg-text" style={{ height: lines * BLOCK_LINE }}>
+        {ticks && <span className={`pg-tick ${own ? "own" : ""} ${p.o.completed ? "on" : ""}`}>{p.o.completed && <MIcon name="fCheck" size={8} />}</span>}
         <b style={{ textDecoration: p.o.completed ? "line-through" : undefined }}>{displayTitle(p.o.item)}</b>
         {h >= 40 && !isTask && <span className="tm">{compact ? formatTime(p.start) : `${formatTime(p.start)}–${formatTime(Math.min(DAY_MIN - 1, p.end))}`}</span>}
       </span>

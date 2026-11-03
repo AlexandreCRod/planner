@@ -300,26 +300,14 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
   padding: 2px 4px; overflow: hidden; font-size: 11px; line-height: 12px; font-weight: 500;
   transition: box-shadow .15s, opacity .15s;
 }
-/* The title (231): over as many whole lines as the block holds ("wrap": breaking between words, inside a word
-   only when it's wider than the block), or one line in a short block ("one"); the text is cut by the block's
-   edge only, its last line faded over its last few px there, never shortened to "Dent…". BLOCK_LINE and
-   blockLines in PhoneCalendar.tsx hold the line height. */
+/* The title (334, was 231's wrapping): one line that never wraps, fading out over its last 8 px at the block's
+   edge; the time under it the same. The text box is cut to the whole lines the block holds (BLOCK_LINE and
+   blockLines in blockLines.ts), so no line is cut through its letters. A tick on its own first line: .pg-tick.own. */
 .phone .pg-block .pg-text { display: block; height: 100%; overflow: hidden; }
 /* Not the old PC rows' flex (styles.css .task), which would shrink the text to its width and fade its end even when it fits. */
 .phone :is(.pg-block, .pg-chip).task { display: block; }
-.phone .pg-block b { font-weight: 500; display: block; }
-.phone .pg-block.wrap .pg-text {
-  overflow-wrap: anywhere;
-  /* Whole lines only (the height is set to them); the last one fades out over its end, should the text go on. */
-  --fade: linear-gradient(#000, #000) top / 100% calc(100% - 12px) no-repeat, linear-gradient(to right, #000 calc(100% - 8px), transparent) bottom / 100% 12px no-repeat;
-  -webkit-mask: var(--fade); mask: var(--fade);
-}
-.phone .pg-block.wrap .tm {
-  line-height: 12px; overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-}
-.phone .pg-block.one .pg-text {
-  white-space: nowrap;
+.phone .pg-block b { font-weight: 500; display: block; overflow: hidden; white-space: nowrap; }
+.phone .pg-block.one :is(b, .tm) {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
 }
 .phone .pg-block .tm { display: block; font-size: 9px; line-height: 11px; opacity: .85; white-space: nowrap; }
@@ -1475,6 +1463,8 @@ html.phone[data-theme="dark"] {
   border: 1.3px solid color-mix(in srgb, var(--c) 80%, var(--text)); border-radius: 50%; color: var(--bg);
 }
 .phone .pg-tick svg { width: 8px; height: 8px; }
+/* With two lines or more the tick has the first line to itself and the title starts under it, full width (334). */
+.phone .pg-tick.own { float: none; margin: 1px 0 1px; }
 .phone .pg-tick.on { background: color-mix(in srgb, var(--c) 80%, var(--text)); }
 .phone .pg-block.tiny .pg-tick { width: 8px; height: 8px; margin: 1px 2px 0 0; border-width: 1.1px; }
 .phone .pg-block.tiny .pg-tick svg { width: 6px; height: 6px; }
