@@ -226,9 +226,22 @@ object ClockTools {
         else s.copy(moreStopwatches = s.moreStopwatches.map { if (it.id == id) fn(it) else it })
     }
 
+    /**
+     * Stopwatches deleted on the page whose Undo is still offered: their line goes at once and comes back on Undo
+     * (review of 2.10.1, finding 6). Only in memory: the delete is committed when the app is put away.
+     */
+    private val hiddenLines = mutableSetOf<Long>()
+
     fun stopwatch(context: Context, action: String, id: Long, name: String) {
-        val now = System.currentTimeMillis()
-        change(context) { stopwatchAction(it, action, id, name, now) }
+        when (action) {
+            "hide" -> synchronized(lock) { hiddenLines += id }
+            "show" -> synchronized(lock) { hiddenLines -= id }
+            else -> {
+                if (action == "remove") synchronized(lock) { hiddenLines -= id }
+                val now = System.currentTimeMillis()
+                change(context) { stopwatchAction(it, action, id, name, now) }
+            }
+        }
         showStopwatches(context)
     }
 
@@ -236,8 +249,8 @@ object ClockTools {
     fun stopwatchLabel(sw: Stopwatch, index: Int) = sw.name.trim().ifBlank { if (index == 0) "Stopwatch" else "Stopwatch ${index + 1}" }
 
     /** The running ones, as the notification lists them: name and when it would have started counting from zero. */
-    fun runningStopwatches(s: ClockToolsState, now: Long): List<Pair<String, Long>> =
-        stopwatches(s).mapIndexedNotNull { i, sw -> if (sw.running) stopwatchLabel(sw, i) to (now - sw.elapsed(now)) else null }
+    fun runningStopwatches(s: ClockToolsState, now: Long, hidden: Set<Long> = emptySet()): List<Pair<String, Long>> =
+        stopwatches(s).mapIndexedNotNull { i, sw -> if (sw.running && sw.id !in hidden) stopwatchLabel(sw, i) to (now - sw.elapsed(now)) else null }
 
     /**
      * The running stopwatches' lines: 780000-780004. The other fixed ranges: the card 776000-776001, the ringing
@@ -249,7 +262,8 @@ object ClockTools {
     /** One quiet line per running stopwatch, counting by itself (the system's chronometer), in the card's group. */
     private fun showStopwatches(context: Context) {
         val now = System.currentTimeMillis()
-        val running = runningStopwatches(current(context), now)
+        val hidden = synchronized(lock) { hiddenLines.toSet() }
+        val running = runningStopwatches(current(context), now, hidden)
         running.forEachIndexed { i, (label, from) ->
             val b = NotificationCompat.Builder(context, Notifications.CH_TIMER)
                 .setSmallIcon(R.drawable.ic_notification)

@@ -110,8 +110,11 @@ export const native = {
   /** "restore": [json] is the timer as read before it was deleted, and it comes back just so. */
   timer: (action: "start" | "pause" | "resume" | "plus" | "reset" | "delete" | "restore", o: { id?: number; durationMs?: number; label?: string; json?: string } = {}) =>
     call((p) => p.timer({ action, ...o }), undefined),
-  /** Stopwatch [id] (0, the default, is the first one); "add" makes one with [id] and [name], counting at once (327). */
-  stopwatch: (action: "start" | "pause" | "lap" | "reset" | "rename" | "add" | "remove", o: { id?: number; name?: string } = {}) =>
+  /**
+   * Stopwatch [id] (0, the default, is the first one); "add" makes one with [id] and [name], counting at once (327);
+   * "hide"/"show": its notification line goes while its delete can still be undone, and comes back on Undo.
+   */
+  stopwatch: (action: "start" | "pause" | "lap" | "reset" | "rename" | "add" | "remove" | "hide" | "show", o: { id?: number; name?: string } = {}) =>
     call((p) => p.stopwatch({ action, ...o }), undefined),
   zone: (action: "add" | "remove", zone: string) => call((p) => p.zone({ action, zone }), undefined),
   setRingEvents: (value: boolean) => call((p) => p.setRingEvents({ value }), undefined),

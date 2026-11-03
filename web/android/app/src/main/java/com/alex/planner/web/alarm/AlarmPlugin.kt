@@ -374,7 +374,7 @@ class AlarmPlugin : Plugin() {
     fun stopwatch(call: PluginCall) {
         // Pages before 327 send only an action, for the first stopwatch (id 0); "reset" was also any other word.
         val action = call.getString("action") ?: "reset"
-        val known = action in setOf("start", "pause", "lap", "reset", "rename", "add", "remove")
+        val known = action in setOf("start", "pause", "lap", "reset", "rename", "add", "remove", "hide", "show")
         ClockTools.stopwatch(context, if (known) action else "reset", call.num("id") ?: 0L, call.getString("name") ?: "")
         ok(call)
     }

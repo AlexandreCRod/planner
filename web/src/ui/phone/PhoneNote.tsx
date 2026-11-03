@@ -218,7 +218,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
               <FilterChip selected={style.categoryId === null} onClick={() => setStyle({ ...style, categoryId: null })}>None</FilterChip>
               {s.categories.map((c) => <FilterChip key={c.id} selected={style.categoryId === c.id} onClick={() => setStyle({ ...style, categoryId: c.id })}>{c.name}</FilterChip>)}
             </div>
-            <div className="p-sheet-title small">Accent colour (graph and lists)</div>
+            <div className="p-sheet-title small">Colour in lists and the graph</div>
             <ColorGrid colors={PALETTE} selected={style.color} onPick={(c) => setStyle({ ...style, color: c })} />
           </div>
         )}</BottomSheet>

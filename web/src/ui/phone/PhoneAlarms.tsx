@@ -849,7 +849,7 @@ function SkipDaysSheet({ all, group, scope0, quick0, now, onClose, onApply }: {
             </div>
           ))}
           {paused.map((a) => (
-            <div key={a.id} className="pa-sd-quiet">{a.label.trim() || formatTime(a.hour * 60 + a.minute)} is paused until {shortDay(a.pausedUntil!)}: its rings show as already off.</div>
+            <div key={a.id} className="pa-sd-quiet">{a.label.trim() || formatTime(a.hour * 60 + a.minute)} skips its rings until {shortDay(a.pausedUntil!)}, when it rings again: they show as already off.</div>
           ))}
         </div>
         <div className="p-sheet-buttons pa-sd-buttons">
@@ -1127,7 +1127,9 @@ function StopwatchPane({ active }: { active: boolean }) {
     const commit = () => { if (done) return; done = true; offFlush(); void act(native.stopwatch("remove", { id })).then(() => stay(id)); };
     const offFlush = onFlush(commit);
     setLeaving((l) => new Set([...l, id]));
-    showSnackbar(`${label} deleted`, "Undo", () => { if (done) return; done = true; offFlush(); stay(id); }, { onGone: commit });
+    // Its notification goes at once too, and comes back on Undo (review of 2.10.1, finding 6).
+    void act(native.stopwatch("hide", { id }));
+    showSnackbar(`${label} deleted`, "Undo", () => { if (done) return; done = true; offFlush(); stay(id); void act(native.stopwatch("show", { id })); }, { onGone: commit });
   };
   return (
     <div className="pa-scroll pa-sw">

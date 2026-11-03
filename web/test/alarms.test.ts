@@ -158,7 +158,12 @@ test("specific dates, skipped days and a pause decide when an alarm rings", asyn
   assert.deepEqual(hm(nextRing({ ...clock(9, 30), skip: [thu] }, thuMorning)), [10, 15, 9, 30]);
   // The calm notes on the card.
   const d = (x: number) => `day ${x}`;
-  assert.equal(pauseText(paused, thu, d), `Paused until day ${tue}`);
+  // An older build's pause reads as the days it keeps quiet (review of 2.10.1, finding 6): Thu, Fri and Mon.
+  assert.equal(pauseText(paused, thu, d), "Skips 3 days");
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), pausedUntil: fri }, thu, d), "Skips today");
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), pausedUntil: tue, skip: [mon, tue] }, thu, d), "Skips 4 days");
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), skip: [mon] }, thu, d), `Skips day ${mon}`);
+  assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), skip: [fri] }, thu, d), "Skips tomorrow");
   assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), skip: [fri, mon, thu + 2] }, thu, d), "Skips 2 days"); // Saturday wouldn't ring anyway
   assert.equal(pauseText({ ...clock(7, 0, WEEKDAYS), pausedUntil: thu }, thu, d), "");
   assert.equal(pauseText(clock(7, 0), thu, d), "");

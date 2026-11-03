@@ -59,4 +59,25 @@ class StopwatchNoticeTest {
         assertEquals(null, nm.getNotification(ClockTools.SW_NOTIFICATION))
         assertEquals("Missed alarm: Wake up", title(Missed.clockNoticeId(alarmId)))
     }
+
+    /** Review of 2.10.1, finding 6: a stopwatch deleted on the page stops showing at once; Undo brings it back. */
+    @Test fun aDeletedStopwatchsLineGoesAtOnceAndComesBackOnUndo() {
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        ClockTools.stopwatch(ctx, "add", 11, "Rest")
+        val lines = { (0 until ClockTools.MAX_STOPWATCHES).mapNotNull { title(ClockTools.SW_NOTIFICATION + it) } }
+        assertEquals(listOf("Stopwatch", "Rest"), lines())
+        ClockTools.stopwatch(ctx, "hide", 11, "")
+        assertEquals(listOf("Stopwatch"), lines())
+        // Still kept (and counting) until the delete is committed, but not shown, even after a reboot's redraw.
+        assertEquals(2, ClockTools.stopwatches(ClockTools.current(ctx)).size)
+        ClockTools.rescheduleAll(ctx)
+        assertEquals(listOf("Stopwatch"), lines())
+        ClockTools.stopwatch(ctx, "show", 11, "")
+        assertEquals(listOf("Stopwatch", "Rest"), lines())
+        // Deleted for good.
+        ClockTools.stopwatch(ctx, "hide", 11, "")
+        ClockTools.stopwatch(ctx, "remove", 11, "")
+        assertEquals(listOf("Stopwatch"), lines())
+        assertEquals(1, ClockTools.stopwatches(ClockTools.current(ctx)).size)
+    }
 }

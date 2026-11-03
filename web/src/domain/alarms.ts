@@ -188,12 +188,20 @@ export function nextRing(a: Clockish, now: Date): Date | null {
   return null;
 }
 
-/** The quiet note under a paused or skipping alarm: "Paused until Mon 20", "Skips 3 days", or "". */
+/**
+ * The quiet note under a skipping alarm: "Skips tomorrow", "Skips Fri 30", "Skips 3 days", or "". An older
+ * build's pause reads in the same words, as the days it keeps quiet (review of 2.10.1, finding 6, as 317 C):
+ * that's what it becomes when the Skip days sheet saves the alarm.
+ */
 export function pauseText(a: Clockish, today: number, date: (day: number) => string): string {
   if (!isRepeating(a)) return "";
-  if (a.pausedUntil != null && a.pausedUntil > today) return `Paused until ${date(a.pausedUntil)}`;
-  const n = (a.skip ?? []).filter((d) => d >= today && ringsOnDay({ ...a, skip: [], pausedUntil: null }, d)).length;
-  return n ? `Skips ${n === 1 ? "1 day" : `${n} days`}` : "";
+  const rings = (d: number) => ringsOnDay({ ...a, skip: [], pausedUntil: null }, d);
+  const days = new Set((a.skip ?? []).filter((d) => d >= today && rings(d)));
+  if (a.pausedUntil != null) for (let d = today; d < a.pausedUntil && d < today + 366; d++) if (rings(d)) days.add(d);
+  if (days.size > 1) return `Skips ${days.size} days`;
+  if (!days.size) return "";
+  const [d] = days;
+  return d === today ? "Skips today" : d === today + 1 ? "Skips tomorrow" : `Skips ${date(d)}`;
 }
 
 /** [a] with days already past dropped from its dates and skips, and a pause that has ended cleared. */
