@@ -264,3 +264,24 @@ export function breachSummary(breaches: readonly Breach[]): string {
   if (avoid) return `breaks ${count(avoid, "rule")}`;
   return ideally ? `breaks ${count(ideally, "rule")} it ideally shouldn't` : "";
 }
+
+/**
+ * While a session is dragged over a day (351): the rules it would break there, worst first, for the red day and
+ * its reason; nothing over its own day ([from]) or over To place ([over] null), where no rule is at stake.
+ */
+export function dragBreaches(plan: Plan, entries: ReadonlyMap<string, Entry>, session: string, from: number | null, over: number | null): Breach[] {
+  if (over === null || over === from) return [];
+  const rank = (b: Breach) => (b.rule.level === "avoid" ? 0 : 1);
+  return breachesOnly(brokenRules(plan, entries, { session }, over)).sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * The "Place anyway?" sheet's ending (359): its placement is taken back unless the user keeps it. Cancel, a tap
+ * outside the sheet and Back all take it back; "Place anyway" (or a move) keeps it. Each ending counts once, so
+ * the sheet's own closing after a button doesn't undo again. [undo]: null when the sheet only explains a marker.
+ */
+export function placementEnding(undo: (() => void) | null) {
+  let done = false;
+  const end = (back: boolean) => { if (done) return; done = true; if (back) undo?.(); };
+  return { keep: () => end(false), cancel: () => end(true), dismissed: () => end(true) };
+}

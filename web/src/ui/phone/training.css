@@ -94,6 +94,11 @@ html.phone[data-theme="dark"] { --k-run: #4ed4bd; --k-gym: #f6b84d; --k-fut-now:
 .phone .tr-day { margin: 4px 8px 0; padding: 4px 0 6px; border-radius: 16px; transition: background-color .15s, box-shadow .15s; }
 .phone .tr-day.target { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-primary) 45%, transparent); cursor: pointer; }
 .phone .tr-day.over, .phone .tr-day.target:active { background: var(--p-sec-container); }
+/* 351: the day under a dragged session where it would break a rule: a red wash and the reason under its date. */
+.phone .tr-day.over.against { background: color-mix(in srgb, var(--danger) 16%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
+.phone .tr-dragwhy { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--danger); }
+.phone .tr-dragwhy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone .tr-dragwhy svg { flex: none; }
 .phone .tr-day.outside { opacity: .7; }
 .phone .tr-dayhead { display: flex; align-items: center; gap: 8px; padding: 8px 8px 2px; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--muted); }
 .phone .tr-day.today .tr-dayhead { color: var(--p-primary); }

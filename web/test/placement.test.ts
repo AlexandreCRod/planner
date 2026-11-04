@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { weekday } from "../src/domain/dates.ts";
-import { type Breach, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords, worstLevel } from "../src/domain/placement.ts";
+import { type Breach, breachSummary, dragBreaches, placementEnding, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords, worstLevel } from "../src/domain/placement.ts";
 import { type Entry, dayOf, entryId, newEntry, readPlan } from "../src/domain/training.ts";
 
 // A made-up plan: two weeks, Mon 1 – Sun 14 Mar 2027 (the real one stays out of this public repo).
@@ -325,4 +325,31 @@ test("the sheet's subtitle counts avoid and ideally rules; notes are left out", 
   assert.equal(breachSummary([b("ideally"), b("ideally")]), "breaks 2 rules it ideally shouldn't");
   assert.equal(breachSummary([b("note")]), "");
   assert.deepEqual(breachesOnly([b("note"), b("ideally")]).map((x) => x.rule.level), ["ideally"]);
+});
+
+test("dragging over a day that breaks a rule names it, worst first; its own day and To place say nothing (351)", () => {
+  const p = planWith([
+    rule("gap", "ideally", { type: "gap", a: { kind: "gym" }, min_days: 2, max_days: 3 }),
+    rule("gym-before-long", "avoid", { type: "not_day_before", a: { kind: "gym" }, b: { day_type: "long" } }),
+  ]);
+  const es = map(at("l1", SUN), at("g1", FRI));
+  assert.deepEqual(ids(dragBreaches(p, es, "g1", FRI, SAT)), ["gym-before-long"]);
+  assert.deepEqual(dragBreaches(p, es, "g1", FRI, FRI), []);
+  assert.deepEqual(dragBreaches(p, es, "g1", FRI, null), []);
+  assert.deepEqual(dragBreaches(p, es, "g1", FRI, MON), []);
+});
+
+test("\"Place anyway?\": a tap outside or Back takes the placement back; Place anyway keeps it; never undone twice (359)", () => {
+  let undone = 0;
+  const outside = placementEnding(() => undone++);
+  outside.dismissed();
+  assert.equal(undone, 1);
+  const kept = placementEnding(() => undone++);
+  kept.keep(); kept.dismissed();   // the sheet closes itself after the button
+  assert.equal(undone, 1);
+  const cancelled = placementEnding(() => undone++);
+  cancelled.cancel(); cancelled.dismissed();
+  assert.equal(undone, 2);
+  placementEnding(null).dismissed();   // a marker's sheet has nothing to take back
+  assert.equal(undone, 2);
 });

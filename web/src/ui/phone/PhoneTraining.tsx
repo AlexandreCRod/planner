@@ -14,7 +14,7 @@
 import { flushSync } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { dayShort, formatDate, formatTime, today as todayEpoch, weekday } from "../../domain/dates.ts";
-import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, ruleWords } from "../../domain/placement.ts";
+import { type Breach, type ItemRef, breachSummary, breachesOnly, brokenNow, brokenRules, dayFit, dragBreaches, placementEnding, ruleWords } from "../../domain/placement.ts";
 import { count } from "../../domain/plural.ts";
 import { freeDayLine } from "../../domain/todayPlan.ts";
 import {
@@ -243,6 +243,10 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   useWatchRunTicks(readOnly);
   const watchAsks = useWatchRunAsks(tr, lp, t, readOnly);
 
+  // 351: a session dragged over a day where it would break a rule: that day shows red, with the reason.
+  const dragged = drag.lifted ? sessionByEntry.get(drag.lifted) : undefined;
+  const overDay = drag.over && drag.over !== "none" ? Number(drag.over) : null;
+  const dragWarn = dragged ? dragBreaches(plan, tr.entries, dragged.id, dayOfSession(dragged, tr.entries.get(drag.lifted!)), overDay) : [];
   if (!plan.phases.length) return <Scaffold title="Training"><EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" /></Scaffold>;
   const ph = plan.phases[phase];
   const v = phaseView(plan, phase, tr.entries, tr.entries.values(), tr.orders);
@@ -325,9 +329,13 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
       {v.days.map(({ day, items }) => (
         <div key={day} data-drop={day}
-          className={`tr-day ${day === t ? "today" : ""} ${day < ph.start || day > ph.end ? "outside" : ""} ${picked ? "target" : ""} ${drag.over === String(day) ? "over" : ""}`}
+          className={`tr-day ${day === t ? "today" : ""} ${day < ph.start || day > ph.end ? "outside" : ""} ${picked ? "target" : ""} ${drag.over === String(day) ? "over" : ""} ${overDay === day && dragWarn.length ? "against" : ""}`}
           onClickCapture={picked ? (ev) => { ev.stopPropagation(); ev.preventDefault(); place(picked, day); } : undefined}>
           <div className="tr-dayhead"><span>{formatDate(day)}</span>{day === t && <span className="tr-todaytag">Today</span>}
+            {/* On the date's line, so the dragged card under the finger never hides it. */}
+            {overDay === day && dragWarn.length > 0 && (
+              <span className="tr-dragwhy" role="status"><MIcon name="oWarningAmber" size={14} /><span>{ruleWords(dragWarn[0]).text}{dragWarn.length > 1 ? ` · +${dragWarn.length - 1}` : ""}</span></span>
+            )}
             {day <= t && restingHrFlag(tr.sleep, day) && <span className="tr-hrflag" role="img" aria-label="Resting heart rate up 7 or more on your 7-day average, two mornings running"
               title="Resting heart rate up 7 or more on your 7-day average, two mornings running"><MIcon name="fFavorite" size={12} /></span>}</div>
           <WatchRunChips lp={lp} asks={watchAsks.get(day)} />
@@ -600,8 +608,8 @@ function FutsalSheet({ plan, ph, entry, t, watch, onPlaced, onClose }: {
 /**
  * Placing or moving a session or futsal onto a day that breaks one of the phase's rules (it's done all the
  * same, never blocked), or a tap on a row's marker: the rules it breaks, worst first, and the plan's tips;
- * then the week's days, each with a dot for how it would fit there, so a better day is one tap away. Cancel
- * takes the placement back; moving re-checks the new day, and the sheet stays only if that breaks one too.
+ * then the week's days, each with a dot for how it would fit there, so a better day is one tap away. Cancel,
+ * a tap outside and Back take the placement back (359); "Place anyway" keeps it; moving re-checks the new day, and the sheet stays only if that breaks one too.
  */
 function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
   tr: Training; lp: LoadedPlan; warn: Warn; onMoved: (w: Warn) => void; onClose: () => void;
@@ -617,6 +625,15 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
   const ph = plan.phases.find((p) => day >= p.start && day <= p.end);
   const days = ph ? Array.from({ length: ph.end - ph.start + 1 }, (_, k) => ph.start + k) : [day];
   const fit = useMemo(() => dayFit(plan, tr.entries, item, days), [plan, tr.entries, item, day]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 359: a tap outside or Back takes the placement back, as Cancel does; only "Place anyway" or a move keeps it.
+  const ending = useMemo(() => placementEnding(warn.undo), [warn]);
+  // Gone without an answer (the page left under it, the browser's back on the PC): taken back too. Checked a
+  // moment later, so a remount (React's dev double run) isn't an ending.
+  const alive = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; window.setTimeout(() => { if (!alive.current) ending.dismissed(); }, 0); };
+  }, [ending]);
   const move = (close: () => void) => {
     if (to === null) return;
     // Taking it back goes to where it was before the first placement, or before this move from a marker.
@@ -638,11 +655,12 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
     }
     feel("settle");
     setTo(null);
-    if (breachesOnly(brokenRules(plan, training().entries, moved, to)).length) onMoved({ item: moved, day: to, undo });
-    else { close(); showSnackbar(`${title} on ${formatDate(to)}`, "Undo", undo); }
+    // Still against a rule there: the sheet asks again about the new day, its undo taking both moves back.
+    if (breachesOnly(brokenRules(plan, training().entries, moved, to)).length) { ending.keep(); onMoved({ item: moved, day: to, undo }); }
+    else { ending.keep(); close(); showSnackbar(`${title} on ${formatDate(to)}`, "Undo", undo); }
   };
   return (
-    <BottomSheet onClose={onClose}>{(close) => (
+    <BottomSheet onClose={() => { ending.dismissed(); onClose(); }}>{(close) => (
       <div className="tr-place">
         <div className="tr-place-title">{title} on {formatDate(day)}</div>
         <div className="tr-place-sub">{breachSummary(rules) || "breaks no rule now"}</div>
@@ -665,9 +683,9 @@ function PlacementSheet({ tr, lp, warn, onMoved, onClose }: {
           ))}
         </div>
         <div className="p-sheet-buttons">
-          <TextButton className="tr-place-cancel" onClick={() => { warn.undo?.(); close(); }}>{warn.undo ? "Cancel" : "Close"}</TextButton>
+          <TextButton className="tr-place-cancel" onClick={() => { ending.cancel(); close(); }}>{warn.undo ? "Cancel" : "Close"}</TextButton>
           {(warn.undo || to !== null) && (
-            <TextButton onClick={() => (to === null ? close() : move(close))}>{to === null ? "Place anyway" : `Move to ${dayShort(weekday(to))}`}</TextButton>
+            <TextButton onClick={() => { if (to === null) { ending.keep(); close(); } else move(close); }}>{to === null ? "Place anyway" : `Move to ${dayShort(weekday(to))}`}</TextButton>
           )}
         </div>
       </div>
