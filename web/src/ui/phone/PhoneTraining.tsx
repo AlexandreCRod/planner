@@ -1,7 +1,7 @@
 // The Training page (#/training) opens on the overview (TrainingOverview.tsx, 301); the week plan is one tap
 // deeper (?view=week, and the routes a session or a day opens): the active plan a phase at a time, as the plan
-// session wrote it. The phase strip at the top; the phase's summary, notes and placement rules; To place (sessions without a
-// day: tap one, then tap a day); then each day with its sessions and futsal. A placed session can be held
+// session wrote it. The phase strip at the top; the phase's summary and placement rules; To place (sessions without a
+// day: tap one, then tap a day); then each day with its sessions and futsal; the phase's notes last (342). A placed session can be held
 // and dragged to another day (or back to To place). The ring on a row ticks it done, and a small "how it
 // went" row opens under it and closes by itself. A tap on a row opens the session (TrainingSession.tsx):
 // over the week on the phone, beside it in a wide window. Progress (TrainingProgress.tsx) and the documents are
@@ -292,7 +292,6 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
         <div className="tr-phase-name">{long || short}</div>
         <div className="tr-phase-sub">{formatDate(ph.start)} – {formatDate(ph.end)}{ph.summary && !totalKm ? ` · ${ph.summary}` : ""}</div>
         {bar.segments.length > 0 && <WeekBarView bar={bar} totalKm={totalKm} />}
-        {ph.notes.map((n, i) => <div key={i} className="tr-phase-note">{n}</div>)}
         {ph.rules.length > 0 && <>
           <button className="tr-rules-head" aria-expanded={rulesOpen}
             onClick={() => { const o = !rulesOpen; setRulesOpen(o); localStorage.setItem("trainingRulesOpen", o ? "1" : "0"); }}>
@@ -360,6 +359,11 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
           <button className="p-assist" onClick={() => setFutsal("new")}><MIcon name={kindIcon("futsal")} size={18} /><span>Futsal</span></button>
         </div>
       )}
+      {/* The plan's notes for the phase come after the days (342, approved): the days are what's looked at most. */}
+      {ph.notes.length > 0 && <>
+        <SectionHeader>Phase notes</SectionHeader>
+        <div className="tr-phase tr-notes">{ph.notes.map((n, i) => <div key={i} className="tr-phase-note">{n}</div>)}</div>
+      </>}
       <div className="p-endspace" />
     </div>
   );
