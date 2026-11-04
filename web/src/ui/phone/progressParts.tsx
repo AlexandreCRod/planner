@@ -34,7 +34,7 @@ export function ChartCard({ title, side, head, read, children, foot, pan, tall }
     <div className="pg-card">
       <div className={`pg-ct ${pan ? "pans" : ""}`}><span>{title}</span>{pan && <BackToNow pan={pan} />}{side}</div>
       {pan && <PanBar pan={pan} />}
-      <div className={`pg-head ${tall ? "tall" : ""}`}>{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
+      <div className={`pg-cardhead ${tall ? "tall" : ""}`}>{read ? <div className="pg-ro"><div className="a">{read[0]}</div><div className="b">{read[1]}</div></div> : head}</div>
       {children}
       {foot}
     </div>
