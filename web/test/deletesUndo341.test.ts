@@ -47,10 +47,14 @@ test("Problem log Clear: Undo puts the cleared ones back after any logged since,
   assert.equal(back[0].message, "latest");
 });
 
-test("Stopwatch Reset: shown at zero without laps while it can be undone; started again, it's the engine's", () => {
+test("Stopwatch Reset: shown at zero without laps while it can be undone", () => {
   const paused = { id: 3, startedAt: null, accumulatedMs: 65_000, laps: [20_000, 40_000] };
   assert.deepEqual(shownAfterReset(paused, new Set([3])), { ...paused, accumulatedMs: 0, laps: [] });
   assert.equal(shownAfterReset(paused, new Set([4])), paused, "another one's reset leaves it as it is");
-  const running = { ...paused, startedAt: 5 };
-  assert.equal(shownAfterReset(running, new Set([3])), running);
+});
+
+test("Stopwatch Reset on a running one (a long press, 350): shown stopped at zero while it can be undone", () => {
+  const running = { id: 3, startedAt: 5, accumulatedMs: 65_000, laps: [20_000, 40_000] };
+  assert.deepEqual(shownAfterReset(running, new Set([3])), { ...running, startedAt: null, accumulatedMs: 0, laps: [] });
+  assert.equal(shownAfterReset(running, new Set([4])), running, "another one's reset leaves it running");
 });

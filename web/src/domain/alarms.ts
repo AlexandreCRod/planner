@@ -303,10 +303,11 @@ export function stopwatchesOf<S extends SwLike>(tools: { stopwatch: S; moreStopw
 
 /**
  * A stopwatch as shown while its Reset still has Undo (341): the engine is only told once the Undo has gone
- * unused, so until then the page shows it at zero, without laps. Started again meanwhile, it's the engine's.
+ * unused, so until then the page shows it stopped at zero, without laps, even if it was running (350: a long
+ * press resets a running one; review of 2.10.2, finding 1). A Start meanwhile commits the reset first (the pane's run).
  */
 export function shownAfterReset<S extends SwLike & { id: number }>(sw: S, resetting: ReadonlySet<number>): S {
-  return resetting.has(sw.id) && sw.startedAt == null ? { ...sw, accumulatedMs: 0, laps: [] } : sw;
+  return resetting.has(sw.id) ? { ...sw, startedAt: null, accumulatedMs: 0, laps: [] } : sw;
 }
 
 /** Its own name, else "Stopwatch", "Stopwatch 2"... by its place (the notification says the same, ClockTools.stopwatchLabel). */
