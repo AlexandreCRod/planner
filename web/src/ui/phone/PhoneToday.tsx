@@ -3,7 +3,7 @@ import { memo, useDeferredValue, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { dayShort, formatDate, formatDateShort, formatTime, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { type Occurrence, type TaskEntry, completionDay, occurrencesIn, tasksForDay, tasksOnDay, tickedDuring } from "../../domain/schedule.ts";
-import { type GlanceRow, dayGlance, eventOver, foldDone, foldEvents, overdueCount, taskOver, tasksProgressText, weekAhead } from "../../domain/todayPlan.ts";
+import { type GlanceRow, dayGlance, eventOver, eventPill, foldDone, foldEvents, overdueCount, taskOver, tasksProgressText, weekAhead } from "../../domain/todayPlan.ts";
 import { carryOver } from "../../store/prefs.ts";
 import { type NoteLine, noteLines } from "../../domain/text.ts";
 import { isRoutineItem, routineList, routineProgress, routineSeriesOf, routineStreak, routinesOnDay, withoutRoutines as skipRoutines } from "../../domain/routines.ts";
@@ -118,7 +118,7 @@ function DaySections({ day, t, s, now, hold, wide }: { day: number; t: number; s
     <TaskRow key={`${listId}_${rowKey(e)}`} entry={e} s={s} now={now} showDay={showDay} underOverdue={underOverdue} heldTime={taskTime}
       past={isToday && taskOver(e, now)} onToggle={(done) => hold.onToggle(listId, rowKey(e), e, index, done)} actions={quick(e, listId, index)} />
   ));
-  const eventRow = (o: Occurrence) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={eventTime} past={isToday && eventOver(o, now)} />;
+  const eventRow = (o: Occurrence) => <EventRow key={`e${o.item.id}-${o.day}`} o={o} s={s} heldTime={eventTime} past={isToday && eventOver(o, now)} pill={isToday ? eventPill(o, now) : null} />;
   // The phone keeps Today to about one screen: sections only when they have something, one line when
   // the day is empty, a folded line for what's behind us, no week ahead; a glance at tomorrow instead.
   const nothing = shownOverdue.length === 0 && dayTasks.length === 0 && dayEvents.length === 0 && doneFold.length === 0;

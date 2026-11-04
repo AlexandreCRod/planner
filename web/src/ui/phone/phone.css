@@ -205,7 +205,7 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone :is(.today-list, .p-rows) .task .rem-emoji, .phone :is(.today-list, .p-rows) .fire-emoji { display: none; }
 .phone :is(.today-list, .p-rows) .task .sub .sub-icon { display: inline-flex; flex: none; }
 /* One task row everywhere (226): one status pill on the right, 24 px tall; the flag before the title. */
-.phone :is(.today-list, .p-rows) .task .pills { flex: none; display: flex; align-items: center; gap: 4px; margin: 0 8px 0 6px; }
+.phone :is(.today-list, .p-rows) :is(.task, .event) .pills { flex: none; display: flex; align-items: center; gap: 4px; margin: 0 8px 0 6px; }
 .phone :is(.today-list, .p-rows) .pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .1px; white-space: nowrap; }
 .phone :is(.today-list, .p-rows) .task .bar.none { visibility: hidden; }
 .phone :is(.today-list, .p-rows) .task .title .flag { display: inline-flex; vertical-align: -1px; margin-right: 6px; }
@@ -214,12 +214,13 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone :is(.today-list, .p-rows) .rep { width: 17px; height: 17px; margin-right: 4px; vertical-align: -3px; }
 
 .phone :is(.today-list, .p-rows) .event { padding: 7px 16px; gap: 0; border-radius: 0; align-items: center; }
+.phone :is(.today-list, .p-rows) .event .pills { margin-right: 0; }   /* the row's own 16 px padding ends it, as a task's pill */
 .phone :is(.today-list, .p-rows) .event .time { width: 60px; flex: none; display: flex; flex-direction: column; }
 .phone :is(.today-list, .p-rows) .event .time br { display: none; }
 .phone :is(.today-list, .p-rows) .event .time .t1 { font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--text); }
 .phone :is(.today-list, .p-rows) .event .time .t2 { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--muted); }
 .phone :is(.today-list, .p-rows) .event .time .t0 { font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: .5px; color: var(--text); }
-.phone :is(.today-list, .p-rows) .event > span:not(.p-ripple) { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
+.phone :is(.today-list, .p-rows) .event > span:not(.p-ripple):not(.pills) { width: 4px !important; height: 40px; align-self: center !important; flex: none; margin-right: 10px; }
 .phone :is(.today-list, .p-rows) .event .grow > .ellipsis:first-child { font-size: 16px; line-height: 24px; letter-spacing: .5px; color: var(--text); }
 .phone :is(.today-list, .p-rows) .event .grow .hint { font-size: 12px !important; line-height: 16px; letter-spacing: .4px; color: var(--muted); }
 .phone :is(.today-list, .p-rows) .event .grow .hint:empty { display: none; }

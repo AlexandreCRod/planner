@@ -203,7 +203,7 @@ export function TaskRow({ entry, s, now, streakInfo, showDay = false, onToggle, 
 }
 
 /** [heldTime]: the start and end times, which can be held to change them (Today; other lists pass none). */
-export function EventRow({ o, s, showDay, heldTime, past }: { o: Occurrence; s: Snapshot; showDay?: boolean; heldTime?: (o: Occurrence, which: "start" | "end") => ReactNode; past?: boolean }) {
+export function EventRow({ o, s, showDay, heldTime, past, pill }: { o: Occurrence; s: Snapshot; showDay?: boolean; heldTime?: (o: Occurrence, which: "start" | "end") => ReactNode; past?: boolean; pill?: string | null }) {
   const t1 = (o.timed && heldTime?.(o, "start")) || (o.startMin !== null ? formatTime(o.startMin) : "");
   const t2 = (o.timed && o.endMin !== null && heldTime?.(o, "end")) || (o.endMin !== null ? formatTime(o.endMin) : "");
   return (
@@ -217,6 +217,8 @@ export function EventRow({ o, s, showDay, heldTime, past }: { o: Occurrence; s: 
           {!past && <ReminderIcon kind={reminderKind(s.reminders.get(o.item.id))} />}
         </div>
       </div>
+      {/* Starting within the hour (342): the same grey countdown pill as a timed task's. */}
+      {pill && <span className="pills"><Pill color="var(--muted)">{pill}</Pill></span>}
     </div>
   );
 }

@@ -114,3 +114,17 @@ test("a list keeps its open rows and folds the ticked ones at its end, except on
   assert.deepEqual(later.open.map((r) => r.id), [1, 4]);
   assert.deepEqual(later.done.map((r) => r.id), [2, 3]);
 });
+
+test("an event starting within the hour gets the tasks' countdown pill on Today; not before, not once started, not all-day (342)", async () => {
+  const { eventPill } = await import("../src/domain/todayPlan.ts");
+  const { toTimestamp } = await import("../src/domain/dates.ts");
+  const day = 20400;
+  const occ = (startMin: number | null, timed = true) => ({ item: {} as never, day, endDay: day, startMin, endMin: startMin === null ? null : startMin + 30, timed } as never);
+  const at = (min: number) => toTimestamp(day, min);
+  assert.equal(eventPill(occ(9 * 60), at(9 * 60 - 20)), "in 20m");
+  assert.equal(eventPill(occ(9 * 60), at(8 * 60)), "in 1h 0m");
+  assert.equal(eventPill(occ(9 * 60), at(8 * 60 - 1)), null);
+  assert.equal(eventPill(occ(9 * 60), at(9 * 60) - 20_000), "now");
+  assert.equal(eventPill(occ(9 * 60), at(9 * 60 + 5)), null);
+  assert.equal(eventPill(occ(null, false), at(0)), null);
+});

@@ -1,7 +1,7 @@
 // What Today shows beyond the day's own lists: a glance at a day ahead (the phone's Tomorrow, the wide
 // window's Next 7 days), and on the phone what folds away (ticked tasks, events already over) so the
 // page stays about one screen.
-import { toTimestamp } from "./dates.ts";
+import { dueCountdown, toTimestamp } from "./dates.ts";
 import { type CompletionIndex, type Occurrence, type TaskEntry, occurrencesIn, tasksForDay, tasksOnDay } from "./schedule.ts";
 import { withoutRoutines } from "./routines.ts";
 import type { Item } from "./types.ts";
@@ -27,6 +27,20 @@ export function weekAhead(items: Item[], done: CompletionIndex, day: number, tod
 
 /** On today's page, what's behind us: an event that has ended, a timed task ticked once its time came. */
 export const eventOver = (o: Occurrence, now: number) => o.timed && toTimestamp(o.endDay, o.endMin ?? o.startMin ?? 0) <= now;
+/** How soon an event gets a countdown pill on today's page (342: "in 20 min", like a timed task's). */
+export const EVENT_PILL_MIN = 60;
+/**
+ * The countdown pill on an upcoming event on today's page (342, approved): "in 20m" (the tasks' words, from
+ * dueCountdown) from an hour before it starts, "now" in its last minute; nothing further ahead, once it has
+ * started, or for an all-day event.
+ */
+export function eventPill(o: Occurrence, now: number): string | null {
+  if (!o.timed || o.startMin === null) return null;
+  const mins = (toTimestamp(o.day, o.startMin) - now) / 60000;
+  if (mins <= 0 || mins > EVENT_PILL_MIN) return null;
+  return mins < 1 ? "now" : dueCountdown(toTimestamp(o.day, o.startMin), now);
+}
+
 /**
  * How many tasks wait on [t] from before it: the days ahead say so in one line. Tasks not done on their day
  * carry on until they're ticked; routines are never overdue.
