@@ -168,6 +168,12 @@ export function skipNext<T extends Skippable>(group: T[], now: Date): T[] {
   return day === null ? [] : skipGroupOn(group, day, now);
 }
 
+/**
+ * "Skip next" for alarms picked together (348; review of 2.10.2, finding 3): each one's own next ring, whatever
+ * day it's on. A bundle rings all on one day, so it keeps skipNext's one day; picks can be on different days.
+ */
+export const skipEachNext = <T extends Skippable>(picks: T[], now: Date): T[] => picks.flatMap((a) => skipNext([a], now));
+
 /** "Skip tomorrow": none of [group] rings tomorrow. */
 export const skipTomorrow = <T extends Skippable>(group: T[], now: Date): T[] => skipGroupOn(group, epochOfDate(now) + 1, now);
 

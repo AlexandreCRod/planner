@@ -263,3 +263,15 @@ test("selecting several alarms: a card's tap adds its alarms, a bundle all of th
   assert.equal(selectionSwitch([alarm(6, 30, 0, false)]), "on");
   assert.deepEqual(switchAlarms(picked, "on").map((a) => [a.id, a.enabled]), [[390, true]]);
 });
+
+// Review of 2.10.2, finding 3: alarms picked together (not a bundle) skip each one's own next ring.
+test("Skip next for picked alarms: each one's next ring, even on different days", async () => {
+  const { skipEachNext, skipNext } = await import("../src/domain/clockList.ts");
+  const today = 20756; // Fri 30 Oct 2026, seen at 09:00
+  const wk = alarm(7, 0, WEEKDAYS), sat = { ...alarm(9, 0, WEEKEND), id: 2 }, tonight = { ...alarm(22, 0), id: 3 };
+  // Weekday 07:00 next rings Monday; the weekend 09:00 tomorrow (Saturday); a one-off 22:00 tonight.
+  const picked = skipEachNext([wk, sat, tonight], fri);
+  assert.deepEqual(picked.map((a) => [a.hour, a.skip ?? [], a.enabled]), [[7, [today + 3], true], [9, [today + 1], true], [22, [], false]]);
+  // A bundle's Skip next keeps its one day: only the soonest ring's alarms.
+  assert.deepEqual(skipNext([wk, sat, tonight], fri).map((a) => a.hour), [22]);
+});

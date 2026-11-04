@@ -17,7 +17,7 @@ import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weathe
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import {
   CLOCK_FILTERS, type ClockFilter, type SeriesPlan, SKIP_WINDOW_DAYS, applyWindow, buildSeries, bundleAlarms, nextRingDay, quickWindows, ringsBetween, seriesPlan, seriesProblem, seriesTimes,
-  selectedAlarms, selectionSwitch, shiftBundle, shownBy, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, switchAlarms, toggleAlarms, toggleFilter, unskip,
+  selectedAlarms, selectionSwitch, shiftBundle, shownBy, skipEachNext, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, switchAlarms, toggleAlarms, toggleFilter, unskip,
   unskipDay, windowCount, windowKeys,
 } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
@@ -284,9 +284,12 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
   const cal = useCalendarAlarms(now.getTime(), hasAlarms && rings.rings);
   const [calOpen, setCalOpen] = useState(false);
   const [skipping, setSkipping] = useState<ClockAlarm[] | null>(null);
+  /** The skip sheet is for alarms picked together (the selection's Skip…), not a card's bundle. */
+  const [skipPicks, setSkipPicks] = useState(false);
+  const skipCard = (g: ClockAlarm[]) => { setSkipPicks(false); setSkipping(g); };
   /** The Skip days sheet (317): for a bundle or an alarm, or every alarm, starting on one of its quick windows. */
   const [skipDays, setSkipDays] = useState<{ group: ClockAlarm[]; scope: SkipScope; quick: string } | null>(null);
-  api.current = { skip: (g) => setSkipping(g) };
+  api.current = { skip: (g) => { setSkipPicks(true); setSkipping(g); } };
   const selecting = sel.size > 0;
   /** While selecting, a tap or hold on a card picks it (a bundle: all its alarms) or unpicks it (348). */
   const pick = (g: ClockAlarm[]) => setSel((s) => toggleAlarms(s, g.map((a) => a.id)));
@@ -316,11 +319,11 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
         onIcon={onNew} iconLabel="New alarm" />}
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} picked={selecting ? picked(g) : undefined}
-          onClick={() => (selecting ? pick(g) : onEdit(g[0]))} onHold={() => (selecting ? pick(g) : setSkipping(g))} />
+          onClick={() => (selecting ? pick(g) : onEdit(g[0]))} onHold={() => (selecting ? pick(g) : skipCard(g))} />
         : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} picked={selecting ? picked(g) : undefined}
-          onOpen={() => (selecting ? pick(g) : setOpen((o) => toggleOpen(o, g)))} onEdit={(a) => (selecting ? pick([a]) : onEdit(a))} onHold={() => (selecting ? pick(g) : setSkipping(g))} />)}
+          onOpen={() => (selecting ? pick(g) : setOpen((o) => toggleOpen(o, g)))} onEdit={(a) => (selecting ? pick([a]) : onEdit(a))} onHold={() => (selecting ? pick(g) : skipCard(g))} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
-      {skipping && <Layer><SkipSheet group={skipping} now={now} onClose={() => setSkipping(null)} onSelect={selecting ? undefined : () => setSel(() => new Set(skipping.map((a) => a.id)))}
+      {skipping && <Layer><SkipSheet group={skipping} picks={skipPicks} now={now} onClose={() => setSkipping(null)} onSelect={selecting ? undefined : () => setSel(() => new Set(skipping.map((a) => a.id)))}
         onDays={() => setSkipDays({ group: skipping, scope: "group", quick: "Rest of week" })} /></Layer>}
       {skipDays && <Layer><SkipDaysSheet all={alarms} group={skipDays.group} scope0={skipDays.scope} quick0={skipDays.quick} now={now} onClose={() => setSkipDays(null)} /></Layer>}
     </div>
@@ -652,14 +655,17 @@ function useHold(onHold: () => void, onTap: () => void) {
  * Skipping (75), from a long press on an alarm or a bundle, or "Skip…" by the next alarm: the next ring,
  * tomorrow's, or ringing as usual again; each with Undo. The engine already rings by the skip days.
  */
-function SkipSheet({ group, now, onClose, onDays, onSelect }: { group: ClockAlarm[]; now: Date; onClose: () => void; onDays: () => void; onSelect?: () => void }) {
+function SkipSheet({ group, picks, now, onClose, onDays, onSelect }: { group: ClockAlarm[]; picks?: boolean; now: Date; onClose: () => void; onDays: () => void; onSelect?: () => void }) {
   const today = todayNow();
   const nextDay = nextRingDay(group, now);
-  const next = skipNext(group, now), tomorrow = skipTomorrow(group, now);
+  // Alarms picked together skip each one's own next ring; a bundle (or one alarm) the day it next rings.
+  const next = picks ? skipEachNext(group, now) : skipNext(group, now), tomorrow = skipTomorrow(group, now);
+  const nextDays = new Set(group.map((a) => nextRingDay([a], now)).filter((d) => d !== null));
+  const eachOwn = picks && nextDays.size > 1;
   const back = group.map((a) => unskip(a, today)).filter((a): a is ClockAlarm => a !== null);
   const first = group[0], last = group[group.length - 1];
   const many = group.length > 1;
-  const title = many ? `${formatTime(first.hour * 60 + first.minute)} – ${formatTime(last.hour * 60 + last.minute)} · ${group.length} alarms`
+  const title = picks && many ? `${group.length} selected alarms` : many ? `${formatTime(first.hour * 60 + first.minute)} – ${formatTime(last.hour * 60 + last.minute)} · ${group.length} alarms`
     : `${formatTime(first.hour * 60 + first.minute)}${first.label.trim() ? ` · ${first.label.trim()}` : ""}`;
   const dayWord = (d: number) => (d === today ? "today" : d === today + 1 ? "tomorrow" : shortDay(d));
   /** Saves [changed], with Undo putting back how they were. */
@@ -677,8 +683,8 @@ function SkipSheet({ group, now, onClose, onDays, onSelect }: { group: ClockAlar
       <div className="pa-skip">
         <div className="p-sheet-title">{title}</div>
         {next.length > 0 && nextDay !== null && nextAt && (
-          <ListItem leading={<MIcon name="oAlarmOff" />} headline="Skip next" supporting={`${relative(nextAt)} at ${formatTime(nextAt.getHours() * 60 + nextAt.getMinutes())}`}
-            onClick={() => { close(); apply(next, `${what} won't ring ${dayWord(nextDay)}`); }} />
+          <ListItem leading={<MIcon name="oAlarmOff" />} headline="Skip next" supporting={eachOwn ? "Each one's next ring" : `${relative(nextAt)} at ${formatTime(nextAt.getHours() * 60 + nextAt.getMinutes())}`}
+            onClick={() => { close(); apply(next, eachOwn ? "These alarms skip their next ring" : `${what} won't ring ${dayWord(nextDay)}`); }} />
         )}
         {tomorrow.length > 0 && nextDay !== today + 1 && (
           <ListItem leading={<MIcon name="oEventBusy" />} headline="Skip tomorrow" supporting={many ? `None of them rings ${shortDay(today + 1)}` : `It won't ring ${shortDay(today + 1)}`}
