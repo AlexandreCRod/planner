@@ -128,6 +128,9 @@ export function OverviewTiles({ tr, t, onOpen }: { tr: Training; t: number; onOp
   const slept = d.sleep && d.sleep.day >= t - 1 ? `slept ${fmtSleep(d.sleep.totalMin!)}` : "";
   return (
     <div className="pg-tiles">
+      {/* Progress's tab order (355): Body, then Cardio (runs, futsal), then Lifts. */}
+      <Tile icon="fAccessibility" cls="k-body" name="Body" value={kg ? kg.trend.toFixed(1) : "–"} unit={kg ? "kg" : ""} sub={slept || (kg ? shortWhen(kg.day, t) : "No weigh-ins yet")}
+        onOpen={() => onOpen("tab=body")} chart={shape(d.trend.map((p) => ({ day: p.day, v: p.trend })), WEIGHT, 14)} />
       <Tile icon={kindIcon("run")} cls="k-run" name="Cardio · Runs" value={week.toFixed(1)} unit="km" sub={join("this week", d.usual !== null && `avg ${Math.round(d.usual)}`)}
         onOpen={() => { showCardio("runs"); onOpen("tab=runs"); }}
         chart={<MiniChart kind="bars" pts={d.weeks.map((v, i) => ({ day: i, v }))} domain={[0, d.weeks.length - 1]} color={RUN} height={TILE_H} dimLast />} />
@@ -135,8 +138,6 @@ export function OverviewTiles({ tr, t, onOpen }: { tr: Training; t: number; onOp
         sub={game ? join(shortWhen(game.day, t), d.usualHr !== null && `usual ${Math.round(d.usualHr)}`) : "No games yet"}
         onOpen={() => { showCardio("futsal"); onOpen("tab=runs"); }}
         chart={shape(d.beat.map((g) => ({ day: g.day, v: g.session!.avgHr! })), FUTSAL)} />
-      <Tile icon="fAccessibility" cls="k-body" name="Body" value={kg ? kg.trend.toFixed(1) : "–"} unit={kg ? "kg" : ""} sub={slept || (kg ? shortWhen(kg.day, t) : "No weigh-ins yet")}
-        onOpen={() => onOpen("tab=body")} chart={shape(d.trend.map((p) => ({ day: p.day, v: p.trend })), WEIGHT, 14)} />
       <Tile icon={kindIcon("gym")} cls="k-gym" name="Lifts" value={top ? String(Math.round(top.v * 10) / 10) : "–"} unit={top ? "kg" : ""}
         sub={d.lift && top ? join(d.lift.name.toLowerCase(), earlier && earlier !== top ? `${signed1(top.v - earlier.v)} in 1M` : shortWhen(top.day, t)) : "No lifts yet"}
         onOpen={() => onOpen("tab=lifts")} chart={shape(d.liftPts, GYM)} />

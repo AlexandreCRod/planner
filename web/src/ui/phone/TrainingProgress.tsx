@@ -1,5 +1,5 @@
 // Progress (#/training?view=progress), in place of the old Bests page: how the lifts, runs and body weight
-// are moving. Tabs Lifts · Cardio (TrainingCardio.tsx) · Body · Nutrition (greyed: it comes later, from the meal photos). Each tab
+// are moving. Tabs Body · Cardio (TrainingCardio.tsx) · Lifts · Nutrition (355; greyed: it comes later, from the meal photos). Each tab
 // is a list of rows, each with its latest number and a 3-month sparkline; a tap opens the row's card: its
 // headline number, a chart with the range switch, and what goes with it (hard sets, rep bests, the recent
 // weigh-ins). A swipe on a chart moves one window through time (302), and the headline and what's under it follow;
@@ -15,7 +15,7 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { formatDate, today as todayEpoch } from "../../domain/dates.ts";
 import { dayOf, repBests } from "../../domain/training.ts";
-import { type BodyKind, type BodyPoint, type ProgressTab, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../../domain/body.ts";
+import { type BodyKind, type BodyPoint, type ProgressTab, PROGRESS_TABS, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../../domain/body.ts";
 import {
   type BodyWeight, type LiftPoint, bodyWeights, healthWeighIns, hiddenId, liftPoints, targetRpeOf, weeklyChange,
   weeklyHardSets, weightTrend,
@@ -38,7 +38,8 @@ import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./tr
 import "./progress.css";
 
 type Tab = ProgressTab;
-const TABS: [Tab, string][] = [["lifts", "Lifts"], ["runs", "Cardio"], ["body", "Body"], ["nutrition", "Nutrition"]];
+const TAB_NAMES: Record<Tab, string> = { body: "Body", runs: "Cardio", lifts: "Lifts", nutrition: "Nutrition" };
+const TABS: [Tab, string][] = PROGRESS_TABS.map((k) => [k, TAB_NAMES[k]]);
 const tabOf = progressTabOf;
 /** The lifts before this day are the "before the break" peak, shown only as quiet text (keep it quiet before the race). */
 const PEAK_BEFORE = dayOf("2025-04-01")!;

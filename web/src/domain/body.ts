@@ -11,10 +11,12 @@ import type { Night } from "./trends.ts";
 
 /** Progress's tabs (251: the Weight and Sleep tabs became Body). */
 export type ProgressTab = "lifts" | "runs" | "body" | "nutrition";
-/** The tab a route's "tab" names: Lifts when none; the old "weight" and "sleep" open Body (their cards' ids are unchanged). */
+/** Progress's tabs in their order (355, the user's priority): Body · Cardio · Lifts · Nutrition. The overview's tiles follow it. */
+export const PROGRESS_TABS: readonly ProgressTab[] = ["body", "runs", "lifts", "nutrition"];
+/** The tab a route's "tab" names: the first (Body) when none; the old "weight" and "sleep" open Body (their cards' ids are unchanged). */
 export function progressTabOf(q: string | null): ProgressTab {
   if (q === "weight" || q === "sleep") return "body";
-  return q === "runs" || q === "body" || q === "nutrition" ? q : "lifts";
+  return (PROGRESS_TABS as readonly string[]).includes(q ?? "") ? q as ProgressTab : PROGRESS_TABS[0];
 }
 
 /** The Body tab's own kinds (Weight, Sleep, resting HR and HRV come from trends.ts and sleep.ts). */

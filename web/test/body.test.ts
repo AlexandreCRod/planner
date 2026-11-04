@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dayOf } from "../src/domain/training.ts";
 import type { HealthDay } from "../src/domain/health.ts";
-import { progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, isStale, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../src/domain/body.ts";
+import { PROGRESS_TABS, progressTabOf, avg7LineOf, avg7Of, avgNow, bodySeries, fmtSteps, isStale, lastWeighInLine, settled, shortWhen, signedTenths, splitStale, tileDays } from "../src/domain/body.ts";
 
 const d = (iso: string) => dayOf(iso)!;
 
@@ -68,8 +68,9 @@ test("progressTabOf: the old Weight and Sleep tabs open Body (251)", () => {
   assert.equal(progressTabOf("sleep"), "body");
   assert.equal(progressTabOf("body"), "body");
   assert.equal(progressTabOf("runs"), "runs");
-  assert.equal(progressTabOf(null), "lifts");
-  assert.equal(progressTabOf("nonsense"), "lifts");
+  assert.equal(progressTabOf("lifts"), "lifts");
+  assert.equal(progressTabOf(null), "body");
+  assert.equal(progressTabOf("nonsense"), "body");
 });
 
 test("steps' average leaves out today's count, still growing; other kinds count today (266)", () => {
@@ -104,4 +105,9 @@ test("a stale tile's chart reaches back from its last reading, so the line shows
   const t = d("2026-10-29");
   assert.deepEqual(tileDays(t, t, 30), [t - 30, t]);
   assert.deepEqual(tileDays(t - 60, t, 30), [t - 90, t]);
+});
+
+test("Progress's tabs read Body · Cardio · Lifts · Nutrition, and Progress opens on Body (355)", () => {
+  assert.deepEqual([...PROGRESS_TABS], ["body", "runs", "lifts", "nutrition"]);
+  assert.equal(progressTabOf(null), PROGRESS_TABS[0]);
 });
