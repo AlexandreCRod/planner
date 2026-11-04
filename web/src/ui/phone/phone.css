@@ -133,6 +133,8 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
 .phone .p-navprobe { position: fixed; left: 0; bottom: 0; width: 0; height: var(--sab); visibility: hidden; pointer-events: none; }
 .phone .p-navstrip { display: none; }
 .phone.navbuttons .p-navstrip { display: block; position: fixed; left: 0; right: 0; bottom: 0; height: var(--sab); z-index: 54; background: var(--bg); pointer-events: auto; }
+/* The page being replaced, held still under its successor while that one slides in (PhoneApp leaveGhost). */
+.phone .p-overlay.p-ghost { z-index: 29; animation: none; pointer-events: none; }
 @keyframes p-in { from { transform: translate3d(14%, 0, 0); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---------- Page chrome ---------- */

@@ -564,7 +564,34 @@ function Overlay({ route, path, query }: { route: string; path: string[]; query:
   } else if (route === "tasks") {
     body = <PhoneTasks back />;
   }
-  return <div className={`p-overlay ${route === "graph" ? route : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
+  const el = useRef<HTMLDivElement>(null);
+  // Leaving: a still copy of this page stays under the next one while it slides in (Settings → a folder, an
+  // item → its editor), so the tab page behind doesn't flash through (2.10.1). Runs before React removes it.
+  useLayoutEffect(() => () => { if (el.current) leaveGhost(el.current); }, []);
+  return <div ref={el} className={`p-overlay ${route === "graph" ? route : ""}`}><ErrorBoundary where={route}>{body}</ErrorBoundary><div className="p-navstrip" aria-hidden="true" /></div>;
+}
+
+/**
+ * The page being replaced, as a still, inert copy just under the overlays, kept until the new page's slide-in
+ * is over; gone at once when no page follows (closing to a tab stays instant). Scroll positions are kept.
+ */
+export function leaveGhost(page: HTMLElement) {
+  const parent = page.parentElement;
+  if (!parent) return;
+  const ghost = page.cloneNode(true) as HTMLElement;
+  ghost.classList.add("p-ghost");
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.inert = true;
+  const from = [page, ...page.querySelectorAll<HTMLElement>("*")];
+  const to = [ghost, ...ghost.querySelectorAll<HTMLElement>("*")];
+  const scrolled = from.map((n, i) => [i, n.scrollTop, n.scrollLeft] as const).filter(([, t, l]) => t || l);
+  parent.appendChild(ghost);
+  for (const [i, t, l] of scrolled) { to[i].scrollTop = t; to[i].scrollLeft = l; }
+  queueMicrotask(() => {
+    // Still in the page: not really leaving (React's dev-mode double mount).
+    const next = !page.isConnected && [...parent.children].some((c) => c !== ghost && c.classList.contains("p-overlay") && !c.classList.contains("p-ghost") && !c.classList.contains("p-notelayer"));
+    if (next) setTimeout(() => ghost.remove(), 260); else ghost.remove();
+  });
 }
 
 /**
