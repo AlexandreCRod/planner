@@ -11,7 +11,9 @@ import { showStreaks } from "../../store/routines.ts";
 import { noteCardText, preview } from "../../domain/text.ts";
 import { type Item, type ItemType, NO_DAY, cssColor, displayTitle, isRecurring, priorityColor } from "../../domain/types.ts";
 import { saveItem, type Snapshot, useSnapshot } from "../../store/store.ts";
-import { KINDS, searchEmpty, subtitle, typeLabel } from "../shared/kinds.ts";
+import { KINDS, TRAINING_KIND, searchEmpty, searchParts, startKinds, subtitle, typeLabel } from "../shared/kinds.ts";
+import { activeOf, useTraining } from "../../store/training.ts";
+import { TrainingResults, hitCount, useTrainingHits } from "./TrainingFind.tsx";
 import { TaskRow, go, openItem, replaceRoute, useCheckedHold, useNow } from "../shared/common.tsx";
 import { isWide } from "../../platform.ts";
 import { type P, buildGraph, useGraphSim } from "../shared/graph.ts";
@@ -686,12 +688,6 @@ export const PhoneGraph = memo(function PhoneGraph({ focusId = 0 }: { focusId?: 
 const SORTS: [string, string][] = [["updated", "Recently edited"], ["date", "Date"], ["title", "Title"], ["links", "Most connected"]];
 const TYPE_ICON: Record<ItemType, string> = { TASK: "oTaskAlt", EVENT: "fEvent", NOTE: "oDescription" };
 
-/** The kinds Search starts with when opened from a page: that page's own (none: All). */
-const PAGE_KINDS: Record<string, string[]> = {
-  notes: ["NOTES"],
-  tasks: ["TASKS", "ROUTINES", "RECURRING_TASKS"],
-  calendar: ["EVENTS", "RECURRING_EVENTS", "ROUTINES"],
-};
 
 export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; from?: string }) {
   const s = useSnapshot();
@@ -699,8 +695,12 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
   const keep = useKeep();
   const [q, setQ] = useKeptState(keep, "q", "");
   // The kinds shown (several can be picked; none is All). Opened from a page, that page's kinds.
-  const [kinds, setKinds] = useKeptState<ReadonlySet<string>>(keep, "kinds", () => new Set(
-    (initialKind ? initialKind.split(",") : PAGE_KINDS[from] ?? []).filter((k) => KINDS.some(([x]) => x === k && x !== "ALL"))));
+  const [kinds, setKinds] = useKeptState<ReadonlySet<string>>(keep, "kinds", () => startKinds(initialKind, from));
+  // The training plan is a kind of its own (343: Training's search folded in here).
+  const tr = useTraining();
+  const lp = activeOf(tr);
+  const trHits = useTrainingHits(lp, q);
+  const parts = searchParts(kinds);
   const toggleKind = (k: string) => setKinds((ks) => {
     if (k === "ALL") return new Set();
     const n = new Set(ks);
@@ -718,6 +718,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
   useEffect(() => { if (!initialKind && !keep.back) { const t = window.setTimeout(() => input.current?.focus(), 250); return () => clearTimeout(t); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const counts = useMemo(() => new Map(KINDS.map(([k, , t]) => [k, s.items.filter(t).length])), [s]);
   const results = useMemo(() => {
+    if (!parts.items) return [];
     const tests = KINDS.filter(([k]) => kinds.has(k)).map(([, , t]) => t);
     const test = (i: Item) => !tests.length || tests.some((t) => t(i));
     const ql = q.toLowerCase();
@@ -729,7 +730,9 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
       .filter((i) => !ql.trim() || i.title.toLowerCase().includes(ql) || preview(i.content, 10000).toLowerCase().includes(ql) || (s.tagsByItem.get(i.id) ?? []).some((t) => t.name.toLowerCase().includes(qt)))
       .sort((a, b) => sort === "title" ? a.title.toLowerCase().localeCompare(b.title.toLowerCase()) : sort === "date" ? (a.startDay ?? a.noteDay ?? 1e9) - (b.startDay ?? b.noteDay ?? 1e9)
         : sort === "links" ? s.neighbours(b.id).size - s.neighbours(a.id).size : b.updatedAt - a.updatedAt);
-  }, [s, q, kinds, cat, tag, sort]);
+  }, [s, q, kinds, cat, tag, sort, parts.items]);
+  const trShown = parts.training && cat === null && tag === null ? trHits : null;
+  const trCount = hitCount(trShown);
   const shownIds = useMemo(() => results.map((i) => i.id), [results]);
   const sel = useSelection(shownIds);
 
@@ -751,12 +754,16 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
         {/* One row (232): the kinds, a thin line, then the categories and tags. */}
         <ChipRow className="search">
           {/* A kind with nothing in it shows no chip (341: with Routines their own kind, Recurring tasks is often empty). */}
-          {KINDS.filter(([k]) => k === "ALL" || kinds.has(k) || (counts.get(k) ?? 0) > 0).map(([k, l]) => <FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>)}
+          {KINDS.filter(([k]) => k === "ALL" || kinds.has(k) || (counts.get(k) ?? 0) > 0).flatMap(([k, l]) => [<FilterChip key={k} selected={k === "ALL" ? kinds.size === 0 : kinds.has(k)} onClick={() => toggleKind(k)}>{l} {counts.get(k) ?? 0}</FilterChip>,
+            // Training right after All (343), so opened from Training its picked chip is in sight.
+            k === "ALL" && lp && <FilterChip key={TRAINING_KIND} selected={kinds.has(TRAINING_KIND)} onClick={() => toggleKind(TRAINING_KIND)}>Training{q.trim() ? ` ${hitCount(trHits)}` : ""}</FilterChip>])}
           {(s.categories.length > 0 || s.tags.length > 0) && <ChipDivider />}
           {s.categories.map((c) => <FilterChip key={c.id} selected={cat === c.id} onClick={() => setCat(cat === c.id ? null : c.id)}>{c.name}</FilterChip>)}
           {s.tags.map((t) => <FilterChip key={t.id} selected={tag === t.id} onClick={() => setTag(tag === t.id ? null : t.id)}>#{t.name}</FilterChip>)}
         </ChipRow>
         {results.length > 0 ? <div className="p-section p-count">Results<HeadCount n={results.length} /></div>
+          : trCount > 0 ? null
+          : !parts.items && !q.trim() ? <EmptyState icon="oFindInPage" title="Search training" hint="Find a session, an exercise or words in the guides" />
           : <EmptyState icon="oSearch" {...searchEmpty(q, kinds.size > 0 || cat !== null || tag !== null)} />}
         <div className="p-list">
           {results.map((i) => {
@@ -774,6 +781,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
               </div>
             );
           })}
+          {trShown && lp && trCount > 0 && <TrainingResults tr={tr} lp={lp} hits={trShown} q={q} />}
           <div className="p-endspace" />
         </div>
       </div>

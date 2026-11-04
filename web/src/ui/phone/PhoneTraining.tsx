@@ -40,7 +40,6 @@ import { TOUCH_SLOP, swallowClick } from "./press.ts";
 import { type Animation, GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
-import { TrainingFind } from "./TrainingFind.tsx";
 import { OverviewTiles, TodayRow, WeekBarView } from "./TrainingOverview.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
@@ -109,7 +108,7 @@ export function PhoneTraining({ query }: { query: URLSearchParams }) {
         {over === "docs" ? <TrainingDocs lp={lp} file={query.get("doc")} anchor={query.get("a")} planId={planId} />
           : over === "progress" || over === "bests" ? <TrainingProgress tr={tr} lp={lp} query={query} planId={planId} />
           : over === "ex" ? <ExerciseHistory tr={tr} lp={lp} id={query.get("x") ?? ""} planId={planId} />
-          : over === "find" ? <TrainingFind tr={tr} lp={lp} planId={planId} />
+          : over === "find" ? <ToSearch />
           : null}
       </div>
     )}
@@ -125,11 +124,9 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   const [asked, setAsked] = useState<string | null>(null);
   useWatchRunTicks(false);
   const scaffold = (children: ReactNode) => (
-    // The page's own icons, then search and settings in their usual last two spots (285). Training's own search
-    // stays until the one search (292) takes it in, as a page with a magnifier (341), so it never looks like the
-    // main search's magnifier beside it.
+    // The page's own icons, then search and settings in their usual last two spots (285). One search (343): the
+    // main search, which opened from here starts on its Training chip.
     <Scaffold title={<span className="tr-title">Training<span className="sub">{plan.name}</span></span>} flush actions={<>
-      <IconButton icon="oFindInPage" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
       <AppBarActions />
@@ -370,7 +367,6 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
 
   return (
     <Scaffold title={<span className="tr-title">{long || short}<span className="sub">{plan.name}</span></span>} back flush actions={readOnly ? <>
-      <IconButton icon="oFindInPage" label="Search training" onClick={() => go(`training?view=find${planQ(planId)}`)} />
       <IconButton icon="fShowChart" label="Progress" onClick={() => go(`training?view=progress${planQ(planId)}`)} />
       <IconButton icon="oMenuBook" label="Documents" onClick={() => go(`training?view=docs${planQ(planId)}`)} />
     </> : undefined}>
@@ -1013,3 +1009,8 @@ export function useTrainingDays(): Map<number, string> {
   }, [tr, looks]);
 }
 
+/** Training's old search page (343: one search): an old link or Back to it lands on the main search, on its Training chip. */
+function ToSearch() {
+  useEffect(() => { replaceRoute("browse?from=training"); }, []);
+  return null;
+}

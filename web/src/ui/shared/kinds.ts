@@ -23,6 +23,29 @@ export const KINDS: [string, string, (i: Item) => boolean][] = [
   ["DAILY_NOTES", "Daily notes", (i) => i.type === "NOTE" && i.noteDay !== null],
 ];
 
+/**
+ * Training's kind in Search (343, one search button): the plan's sessions, exercises and the words in its
+ * documents. Not an item kind (they aren't items), so it's apart from KINDS.
+ */
+export const TRAINING_KIND = "TRAINING";
+/** The kinds Search starts with when opened from a page: that page's own (none: All). */
+export const PAGE_KINDS: Record<string, string[]> = {
+  notes: ["NOTES"],
+  tasks: ["TASKS", "ROUTINES", "RECURRING_TASKS"],
+  calendar: ["EVENTS", "RECURRING_EVENTS", "ROUTINES"],
+  training: [TRAINING_KIND],
+};
+/** The kinds a route asks for ([initial], "a,b"), else the page's ([from]): only real kinds, never All. */
+export function startKinds(initial: string, from: string): Set<string> {
+  const known = (k: string) => k === TRAINING_KIND || KINDS.some(([x]) => x === k && x !== "ALL");
+  return new Set((initial ? initial.split(",") : PAGE_KINDS[from] ?? []).filter(known));
+}
+/** What Search lists for the picked kinds (none picked: All, both): the items, the training plan's hits, or both. */
+export function searchParts(kinds: ReadonlySet<string>): { items: boolean; training: boolean } {
+  if (kinds.size === 0) return { items: true, training: true };
+  return { items: [...kinds].some((k) => k !== TRAINING_KIND), training: kinds.has(TRAINING_KIND) };
+}
+
 export function subtitle(i: Item, s: Snapshot) {
   const parts = [typeLabel(i)];
   if (i.noteDay !== null) parts.push(formatDate(i.noteDay));
