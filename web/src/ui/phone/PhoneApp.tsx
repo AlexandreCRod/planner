@@ -23,7 +23,7 @@ import { LONG_PRESS, TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendarImport } from "./CalendarImport.tsx";
-import { PhoneCalendar, calendarGoToday, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
+import { PhoneCalendar, calendarGoToday, calendarResetLive, calendarSelectedDay, resetCalendar } from "./PhoneCalendar.tsx";
 import { PhoneGraph, PhoneNotes, PhoneSearch, PhoneTasks, useTodoTabShown, useTodosSheetOpen } from "./PhoneLists.tsx";
 import { ErrorBoundary } from "../shared/ErrorBoundary.tsx";
 import "./phone.css";
@@ -314,6 +314,9 @@ export function PhoneApp() {
    */
   const resetPage = (i: number) => {
     const key = TABS[i].key;
+    // Calendar (353): straight to today in place, with a short fade, without rebuilding it (the slide and the
+    // rebuild read as a long scroll and lagged); rebuilt only when a pinch zoom must be undone as well.
+    if (key === "calendar" && calendarResetLive()) return;
     const t = todayEpoch();
     const from = key === "today" ? todayViewedDay() : key === "calendar" ? calendarSelectedDay() : t;
     const page = pageEls.current[i];
