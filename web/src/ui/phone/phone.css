@@ -495,6 +495,8 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone .p-menu button svg { color: var(--muted); }
 .phone .p-menu-tick { width: 24px; margin: 0 6px 0 12px; text-align: center; font-size: 16px; font-weight: 400; }
 .phone .p-menu-divider { height: 1px; background: var(--line); }
+/* The option under a finger sliding through the menu (361): M3's pressed state layer. */
+.phone .p-menu button.slide-on { background: color-mix(in srgb, var(--text) 12%, transparent); }
 /* Basic dialog: surfaceContainerHigh, 28 dp corners, 24 dp padding, headlineSmall title. */
 .phone .p-dialog-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / .32); animation: p-fade .15s linear; }
 @keyframes p-fade { from { opacity: 0; } }

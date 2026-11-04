@@ -65,7 +65,7 @@ function ChoiceRow<T extends string>({ title, value, options, onPick, supporting
   const [open, setOpen] = useState(false);
   return (
     <div className="p-menu-anchor start wide">
-      <ListItem headline={title} supporting={supporting ?? options.find(([k]) => k === value)?.[1] ?? ""} onClick={() => setOpen(true)} />
+      <ListItem headline={title} supporting={supporting ?? options.find(([k]) => k === value)?.[1] ?? ""} menu onClick={() => setOpen(true)} />
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={options.map(([k, l]) => ({ label: l, checked: k === value, onClick: () => onPick(k) }))} />
     </div>
   );

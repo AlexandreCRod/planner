@@ -30,9 +30,9 @@ function useFormatState() {
 }
 
 /** One of the bar's buttons: it never takes the focus from the text. */
-export function RichBarButton({ icon, label, on, onClick, color }: { icon: string; label: string; on?: boolean; onClick: () => void; color?: string }) {
+export function RichBarButton({ icon, label, on, onClick, color, menu }: { icon: string; label: string; on?: boolean; onClick: () => void; color?: string; menu?: boolean }) {
   return (
-    <button className={`p-rb-btn ${on ? "on" : ""}`} aria-label={label} aria-pressed={on}
+    <button className={`p-rb-btn ${on ? "on" : ""}`} aria-label={label} aria-pressed={on} aria-haspopup={menu ? "menu" : undefined}
       onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
       <MIcon name={icon} color={color} />
     </button>
@@ -75,7 +75,7 @@ export function RichBar({ editor, compact, className = "", extra, onHold }: {
           <B icon="fFormatColorText" label="Text colour" onClick={() => open("color")} />
           <B icon="fFormatColorFill" label="Highlight" onClick={() => open("highlight")} />
           <span className="p-menu-anchor">
-            <B icon="fFormatSize" label="Text size" onClick={() => { keep(); setSizeMenu(true); }} />
+            <B icon="fFormatSize" label="Text size" menu onClick={() => { keep(); setSizeMenu(true); }} />
             <DropdownMenu open={sizeMenu} onClose={() => setSizeMenu(false)}
               items={SIZES.map(([l, px]) => ({ label: l, onClick: () => back()?.setSize(px) }))} />
           </span>

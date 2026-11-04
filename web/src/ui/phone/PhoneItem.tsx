@@ -119,8 +119,8 @@ function FieldRow({ icon, onClick, children, top }: { icon?: string | null; onCl
 }
 
 /** Tappable text in a row (a date, a time, a choice); placeholders are greyed. */
-function FieldText({ children, onClick, placeholder, grow, label }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean; label?: string }) {
-  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} aria-label={label} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
+function FieldText({ children, onClick, placeholder, grow, label, menu }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean; label?: string; menu?: boolean }) {
+  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} aria-label={label} aria-haspopup={menu ? "menu" : undefined} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
 }
 
 /** A row with a menu under its text. */
@@ -128,7 +128,7 @@ function MenuText({ text, items, placeholder, label }: { text: ReactNode; items:
   const [open, setOpen] = useState(false);
   return (
     <span className="p-menu-anchor start">
-      <FieldText placeholder={placeholder} label={label} onClick={() => setOpen(true)}>{text}</FieldText>
+      <FieldText placeholder={placeholder} label={label} menu onClick={() => setOpen(true)}>{text}</FieldText>
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={items} />
     </span>
   );
@@ -782,14 +782,14 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <div className="grow">
             <button className="pe-title" onClick={() => setEditing("title")}>{item.title.trim() || "Untitled"}</button>
             <span className="p-menu-anchor start">
-              <button className="pe-cat" onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
+              <button className="pe-cat" aria-haspopup="menu" onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
               <DropdownMenu open={catMenu} onClose={() => setCatMenu(false)} items={categoryItems(s, (c) => commit({ ...item, categoryId: c }))} />
             </span>
           </div>
           {/* Priority is its flag alone (hold it for its name); a tap changes it. */}
           {!isEvent && item.priority > 0 && (
             <span className="p-menu-anchor">
-              <IconButton label={priorityLabel(item.priority)} onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
+              <IconButton label={priorityLabel(item.priority)} menu onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
               <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
             </span>
           )}
@@ -835,7 +835,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         })()}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
-            <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
+            <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} menu onClick={() => setOverdueMenu(true)} />
             <DropdownMenu open={overdueMenu} onClose={() => setOverdueMenu(false)} items={overdueItems((p) => commit({ ...item, overduePolicy: p }))} />
           </span>
         )}
@@ -858,7 +858,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           {tags.length === 0 && <AssistChip icon="oLabel" label="Tags" onClick={() => setEditing("tags")} />}
           {!isEvent && item.priority === 0 && (
             <span className="p-menu-anchor start">
-              <AssistChip icon="oFlag" label="Priority" onClick={() => setPrioMenu(true)} />
+              <AssistChip icon="oFlag" label="Priority" menu onClick={() => setPrioMenu(true)} />
               <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
             </span>
           )}
@@ -903,12 +903,14 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   );
 }
 
-function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, trailing, link }: {
+function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, trailing, link, menu }: {
   icon: string | null; text: string; sub?: string; tint?: string; placeholder?: boolean; onClick?: () => void; onLongPress?: () => void; trailing?: ReactNode; link?: boolean;
+  /** It opens a menu: a hold opens it at once, to slide to an option (361). */
+  menu?: boolean;
 }) {
   const { fired, ...hold } = useHold(onLongPress);
   return (
-    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} {...hold}
+    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} aria-haspopup={menu ? "menu" : undefined} {...hold}
       onClick={() => { if (!fired()) onClick?.(); }}>
       {icon ? <MIcon name={icon} size={22} color={tint} /> : <span style={{ width: 22, flex: "none" }} />}
       <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""} ${sub ? "two" : ""}`}>

@@ -81,7 +81,8 @@ function iconButton(t: Element): HTMLElement | null {
   const sym = t.closest<HTMLElement>("[data-tip][aria-label]");
   if (sym && !(sym.textContent ?? "").trim()) return sym;
   const b = t.closest<HTMLElement>("button, [role=button]");
-  if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar")) return null;
+  // A button with a menu opens it on a hold instead (361, menuSlide.ts).
+  if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar") || b.hasAttribute("aria-haspopup")) return null;
   const label = b.getAttribute("aria-label")?.trim();
   return label && !(b.textContent ?? "").trim() ? b : null;
 }

@@ -168,7 +168,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
             same last two spots as on every tab (285). */}
         {away && <IconButton className="p-today-btn" icon="oToday" label="Today" onClick={jumpToday} />}
         <div className="p-menu-anchor">
-          <IconButton icon="oViewAgenda" label="View" onClick={() => setMenu(true)} />
+          <IconButton icon="oViewAgenda" label="View" menu onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={menuItems} />
         </div>
         <AppBarActions />

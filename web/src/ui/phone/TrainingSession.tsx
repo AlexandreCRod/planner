@@ -385,7 +385,7 @@ function SetsBlock({ tr, lp, s, x, lift, liftDay, readOnly }: {
         </button>
         {x.swaps.length > 0 && !readOnly && (
           <div className="p-menu-anchor">
-            <TextButton onClick={() => setSwapOpen(true)}><MIcon name="fSwapHoriz" size={18} />Swap</TextButton>
+            <TextButton menu onClick={() => setSwapOpen(true)}><MIcon name="fSwapHoriz" size={18} />Swap</TextButton>
             <DropdownMenu open={swapOpen} onClose={() => setSwapOpen(false)} items={[
               { label: `${exs.get(x.exercise)?.name ?? x.exercise} (planned)`, checked: doing === x.exercise, onClick: () => swapTo(x.exercise) },
               ...x.swaps.map((w) => ({ label: `${exs.get(w.exercise)?.name ?? w.exercise}: ${w.when}`, checked: doing === w.exercise, onClick: () => swapTo(w.exercise) })),
