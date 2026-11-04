@@ -104,10 +104,10 @@ export const LOOKS = {
   ] },
   /**
    * The ringing screen (246). Kotlin draws it (alarm/RingLayouts.kt); alarms/mirror.ts hands it these four.
-   * A: a big thin clock, the bundle as dots, a Snooze pill. B: two big buttons, the bundle card, Stop the rest.
+   * A: a big thin clock, the bundle as dots, a Snooze pill, Stop the rest (312). B: two big buttons, the bundle card, Stop the rest.
    */
   ringLayout: { page: "Ringing screen", title: "Layout", pick: "A", choices: [
-    ["A", "A", "A big, thin clock, and a Snooze pill"],
+    ["A", "A", "A big, thin clock, a Snooze pill, Stop the rest"],
     ["B", "B", "Two big buttons, the alarms of a bundle, Stop the rest"],
   ] },
   /** The "Today" card on the morning's first alarm, and B's "Next" line. */
