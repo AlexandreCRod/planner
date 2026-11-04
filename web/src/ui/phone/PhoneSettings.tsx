@@ -21,6 +21,8 @@ import { typeLabel } from "../shared/kinds.ts";
 import { checkedLinger, go } from "../shared/common.tsx";
 import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyState, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
+import { TOUCH_FEEL_KEY, touchFeelOn } from "./hapticGate.ts";
+import { canFeel } from "./device.ts";
 import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
@@ -260,6 +262,7 @@ export function PhoneSettings({ part }: { part?: string }) {
   const [swipesTabs, setSwipesTabs] = useState(swipeTabs());
   const [barChangesDays, setBarChangesDays] = useState(barDays());
   const keepTasks = useKeepTasksTab();
+  const [touchFeel, setTouchFeel] = useState(touchFeelOn());
   const [monday, setMonday] = useState(localStorage.getItem("weekStartsMonday") !== "false");
   const [clock, setClock] = useState<ClockFormat>(clockFormat());
   const [dates, setDates] = useState<DateStyle>(dateStyle());
@@ -304,19 +307,24 @@ export function PhoneSettings({ part }: { part?: string }) {
         </HScroll>
       </div>
       <SwitchRow title="Pure black dark mode" supporting="Saves battery on OLED screens" checked={pureBlack} onChange={setPureBlack} />
+      <ListItem headline="Looks to try" supporting="Other looks for some pages, side by side" onClick={() => go("settings/looks")} />
+      <ListItem headline="Display check" supporting="The app's colours, fades and blacks, to judge your screen" onClick={() => go("settings/display")} />
+    </> },
+    // Touch and gestures (342, review finding 15): how swipes, the bottom bar and the touch feel behave.
+    { key: "gestures", title: "Touch and gestures", icon: "fTouchApp", summary: [swipesTabs ? "Swipes change tab" : "Swipes stay in the page", ...(canFeel ? [`vibration ${touchFeel ? "on" : "off"}`] : [])].join(" · "), body: <>
       <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Off: swipes stay in the page"}
         checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
       {!wide && swipesTabs && <SwitchRow title="Bottom bar changes the day" supporting="Slide along it to change the day"
         checked={barChangesDays} onChange={(v) => { setBarChangesDays(v); store(BAR_DAYS_KEY, String(v)); }} />}
-      <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
-        supporting={keepTasks ? "Tasks sits beside Training" : "Off: to-dos open from Today"} checked={keepTasks}
-        onChange={setKeepTasksTab} />
-      <ListItem headline="Looks to try" supporting="Other looks for some pages, side by side" onClick={() => go("settings/looks")} />
-      <ListItem headline="Display check" supporting="The app's colours, fades and blacks, to judge your screen" onClick={() => go("settings/display")} />
-      {/* The review's order (229): the bar's direction, rarely changed, last. */}
       {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right goes to the page on the left"
         : "The indicator follows your finger"} checked={barReversed}
         onChange={(v) => { setBarReversed(v); store(BAR_REVERSED_KEY, String(v)); }} />}
+      <SwitchRow title={wide ? "Keep Tasks in the side bar" : "Keep Tasks in the bottom bar"}
+        supporting={keepTasks ? "Tasks sits beside Training" : "Off: to-dos open from Today"} checked={keepTasks}
+        onChange={setKeepTasksTab} />
+      {/* The touch feel (haptics.ts): the soft pulses on pick-up, drop, ticks and done. Phone only. */}
+      {canFeel && <SwitchRow title="Vibrate on touch" supporting={touchFeel ? "A soft pulse as you pick up, drop or turn things" : "Off: no pulses"}
+        checked={touchFeel} onChange={(v) => { setTouchFeel(v); store(TOUCH_FEEL_KEY, String(v)); }} />}
     </> },
     { key: "calendar", title: "Calendar & tasks", icon: "oCalendarToday", summary: `Week starts ${monday ? "Monday" : "Sunday"} · done tasks`, body: <>
       <SwitchRow title="Week starts on Monday" checked={monday} onChange={(v) => { setMonday(v); redraw("weekStartsMonday", String(v)); }} />

@@ -33,3 +33,9 @@ export class HapticGate {
     return true;
   }
 }
+
+/** Settings → Touch and gestures: the touch feel can be turned off (on unless turned off). Kept on this phone. */
+export const TOUCH_FEEL_KEY = "touchFeel";
+export function touchFeelOn(): boolean {
+  try { return localStorage.getItem(TOUCH_FEEL_KEY) !== "false"; } catch { return true; }
+}
