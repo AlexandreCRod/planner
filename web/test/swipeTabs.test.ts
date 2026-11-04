@@ -52,3 +52,11 @@ test("a swipe settles one tab on, or stays, and stops at the ends", () => {
 test("charts, steppers and fields keep their own drags", () => {
   for (const s of [".pg-chart", ".p-slide", "input", "textarea", ".p-switch", ".p-sheet-root"]) assert.ok(NO_SWIPE.includes(s), s);
 });
+
+test("a slide along the bar with a note open puts the note away first (352)", async () => {
+  const { barSlidePutsNoteAway } = await import("../src/ui/phone/pager.ts");
+  assert.equal(barSlidePutsNoteAway("note", true, false), true);
+  assert.equal(barSlidePutsNoteAway("today", true, false), false); // the note already in its chip
+  assert.equal(barSlidePutsNoteAway("note", true, true), false); // wide: the rail is only tapped
+  assert.equal(barSlidePutsNoteAway("note", false, false), false);
+});

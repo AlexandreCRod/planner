@@ -34,7 +34,7 @@ import { isNative, useWide } from "../../platform.ts";
 import { deskWheel, scrollsSideways, setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
-import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
+import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSlidePutsNoteAway, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
 import { VelocityTracker, frameWriter, rubberBand } from "./motion.ts";
 import { ShellPos, afterFrame, clamp } from "./shellPos.ts";
 import { InviteHost } from "./InviteHost.tsx";
@@ -341,6 +341,18 @@ export function PhoneApp() {
       .finished.then(() => ghost.remove(), () => ghost.remove());
   };
 
+  /** The open note shrinks into its chip (kept as it is, saved as on leaving) and the tab [i] shows. */
+  const putNoteAway = (i: number) => {
+    minimizing.current = true;
+    history.replaceState(null, "", tabHash(TABS[i].key));
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  };
+  /**
+   * A slide along the bar while a note is open (352): the note goes into its chip as the slide starts, as a
+   * tap on its tab would put it away, and the pages under it follow the finger as usual.
+   */
+  const onBarSlide = () => { if (barSlidePutsNoteAway(route, !!dock, wide)) putNoteAway(tabRef.current); };
+
   /**
    * A tap on a tab (taken as the finger lifts) goes there; a tap on the tab already shown puts it back to
    * its base view.
@@ -351,9 +363,7 @@ export function PhoneApp() {
     if (route === "note" && dock) {
       // Wide, the note sits beside the Notes list: Notes again leaves it there.
       if (wide && key === "notes" && tabRef.current === i) return;
-      minimizing.current = true;
-      history.replaceState(null, "", tabHash(TABS[i].key));
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      putNoteAway(i);
       if (i === tabRef.current) popBar.current?.();
       return;
     }
@@ -487,7 +497,7 @@ export function PhoneApp() {
           ))}
         </div>
       </div>
-      <BottomBar tabs={TABS} pos={pos} start={shown} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} />
+      <BottomBar tabs={TABS} pos={pos} start={shown} listeners={selectListeners.current} pop={popBar} onTap={onTabTap} onSettle={settle} onSlide={onBarSlide} />
       {/* One + button for every page, fixed in place while the pages slide under it; on Alarms it asks what
           to add. Wide, it heads the rail, which stays beside full-screen pages. On the phone it fades away over
           Training, which adds nothing with it (phone.css, on-training). */}
@@ -606,9 +616,9 @@ export function leaveGhost(page: HTMLElement) {
  * and their colour follows the selection, like the native bar. The slide is watched before the
  * buttons see it, and a tap that wobbles less than the slop stays a tap.
  */
-function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
+function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide }: {
   tabs: Tab[]; pos: ShellPos; start: number; listeners: Set<(i: number) => void>; pop: MutableRefObject<(() => void) | undefined>;
-  onTap: (i: number) => void; onSettle: (i: number, velocity?: number, jump?: boolean) => void;
+  onTap: (i: number) => void; onSettle: (i: number, velocity?: number, jump?: boolean) => void; onSlide: () => void;
 }) {
   const [selected, setSelected] = useState(start);
   useEffect(() => { listeners.add(setSelected); return () => { listeners.delete(setSelected); }; }, [listeners]);
@@ -620,6 +630,8 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
   tabsRef.current = tabs;
   const tapRef = useRef(onTap);
   tapRef.current = onTap;
+  const slideRef = useRef(onSlide);
+  slideRef.current = onSlide;
   const day = ymd(todayEpoch()).d;
   // M3's indicator: on a jump it grows from the middle of the new tab and fades in.
   const pillTrack = useCallback((el: HTMLElement | null) => { pos.pill = el; if (el) pos.paint(); }, [pos]);
@@ -655,6 +667,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle }: {
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
       if (!g.sliding) {
         g.x0 += Math.sign(dx) * TOUCH_SLOP;
+        slideRef.current();
         dropHint();
         if (g.turner) g.turner.start(); else popping.current?.cancel();
       }

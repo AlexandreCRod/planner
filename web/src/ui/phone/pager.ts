@@ -283,3 +283,11 @@ export function barTarget(from: number, pos: number, vx: number, last: number): 
   } else i = Math.round(pos);
   return Math.min(last, Math.max(0, i));
 }
+
+/**
+ * A slide along the bottom bar puts the open note into its chip first (352), so the slide changes tabs as
+ * it does with no note open. Wide, the rail is only tapped, and the note sits beside the Notes list.
+ */
+export function barSlidePutsNoteAway(route: string, noteDocked: boolean, wide: boolean): boolean {
+  return route === "note" && noteDocked && !wide;
+}
