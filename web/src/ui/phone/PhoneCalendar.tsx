@@ -20,7 +20,7 @@ import { ScopeDialog } from "./PhoneItem.tsx";
 import type { SlotPreview } from "./AddPanel.tsx";
 import { AppBarActions, Checkbox, Dialog, DoneFold, DropdownMenu, EmptyState, FitLine, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { splitDone } from "../../domain/todayPlan.ts";
-import { type CalFilter, filterOn, filterShows, noFilter } from "./calFilter.ts";
+import { type CalFilter, filterOn, filterShows, noFilter, onlyCategory } from "./calFilter.ts";
 import { useTrainingDays } from "./PhoneTraining.tsx";
 import { RoutinesDayLine } from "./PhoneToday.tsx";
 import { feel } from "./haptics.ts";
@@ -178,9 +178,13 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
 
 /** "Show on calendar": events, tasks, and each category (CalendarScreen.kt's filter dialog). */
 function FilterDialog({ s, value, onChange, onClose }: { s: Snapshot; value: CalFilter; onChange: (v: CalFilter) => void; onClose: () => void }) {
-  const row = (label: string, checked: boolean, set: (v: boolean) => void) => (
-    <label className="p-check-row" key={label}><Checkbox checked={checked} onChange={set} /><span>{label}</span></label>
+  const row = (label: string, checked: boolean, set: (v: boolean) => void, only?: () => void) => (
+    <label className="p-check-row" key={label}><Checkbox checked={checked} onChange={set} /><span className="grow">{label}</span>
+      {/* "Only this": just this category shows (the Agenda's old one-tap pick, inside the box now). */}
+      {only && <button type="button" className="p-only" onClick={(e) => { e.preventDefault(); feel("tick"); only(); }}>Only this</button>}
+    </label>
   );
+  const ids = s.categories.map((c) => c.id);
   return (
     <Dialog title="Show on calendar" onClose={onClose} actions={<button className="p-text-btn" onClick={onClose}>Done</button>}>
       {row("Events", value.events, (v) => onChange({ ...value, events: v }))}
@@ -190,7 +194,8 @@ function FilterDialog({ s, value, onChange, onClose }: { s: Snapshot; value: Cal
         const hidden = new Set(value.hidden);
         if (show) hidden.delete(c.id); else hidden.add(c.id);
         onChange({ ...value, hidden });
-      }))}
+      }, () => onChange(onlyCategory(value, c.id, ids))))}
+      {s.categories.length > 0 && row("No category", !value.hideUncategorised, (show) => onChange({ ...value, hideUncategorised: !show }))}
     </Dialog>
   );
 }

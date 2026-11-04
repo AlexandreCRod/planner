@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newItem } from "../src/domain/types.ts";
-import { filterOn, filterShows, noFilter } from "../src/ui/phone/calFilter.ts";
+import { filterOn, filterShows, noFilter, onlyCategory } from "../src/ui/phone/calFilter.ts";
 
 const ev = (categoryId: number | null) => newItem({ type: "EVENT", title: "E", categoryId });
 const task = (categoryId: number | null) => newItem({ type: "TASK", title: "T", categoryId });
@@ -39,4 +39,26 @@ test("the calendar's routines line counts only the routines the filter shows", a
   assert.equal(count(noFilter()), 3);
   assert.equal(count({ ...noFilter(), tasks: false }), 1);
   assert.equal(count({ ...noFilter(), hidden: new Set([5]) }), 2);
+});
+
+test("\"Only this\" shows just that category: the others and things with no category hide, and the chip shows", () => {
+  const f = onlyCategory(noFilter(), 2, [1, 2, 3]);
+  assert.equal(filterShows(f, ev(2)), true);
+  assert.equal(filterShows(f, task(2)), true);
+  assert.equal(filterShows(f, ev(1)), false);
+  assert.equal(filterShows(f, task(3)), false);
+  assert.equal(filterShows(f, ev(null)), false);
+  assert.equal(filterOn(f, [1, 2, 3]), true);
+  // Picking another one moves the pick; Events/Tasks unticked earlier stay as they were.
+  const g = onlyCategory({ ...f, events: false }, 1, [1, 2, 3]);
+  assert.equal(filterShows(g, task(1)), true);
+  assert.equal(filterShows(g, task(2)), false);
+  assert.equal(filterShows(g, ev(1)), false);
+});
+
+test("the \"No category\" row alone hides only things without a category", () => {
+  const f = { ...noFilter(), hideUncategorised: true };
+  assert.equal(filterShows(f, ev(null)), false);
+  assert.equal(filterShows(f, ev(1)), true);
+  assert.equal(filterOn(f, [1]), true);
 });

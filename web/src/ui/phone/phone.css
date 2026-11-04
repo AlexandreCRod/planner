@@ -503,7 +503,13 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone .p-dialog-body { flex: 1; min-height: 0; overflow-y: auto; font-size: 14px; line-height: 20px; letter-spacing: .25px; color: var(--muted); }
 .phone .p-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; margin-right: -12px; }
 .phone .p-check-row { display: flex; align-items: center; min-height: 48px; color: var(--text); font-size: 16px; line-height: 24px; letter-spacing: .5px; }
-.phone .p-check-row .p-checkbox { margin-left: -10px; }
+.phone .p-check-row .p-checkbox { margin-left: 0; }   /* was -10px: the dialog body clipped the box's left side */
+.phone .p-check-row .grow { flex: 1; min-width: 0; }
+/* The filter box's "Only this" at a category row's end: a quiet text button with a full-height target. */
+.phone .p-check-row .p-only {
+  flex: none; height: 40px; margin-right: -12px; padding: 0 12px; border: 0; border-radius: 20px; background: none; cursor: pointer;
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .1px; color: var(--p-primary);
+}
 .phone .p-dialog .p-divider { margin: 4px 0; }
 /* Checkbox: a 20 dp box with a 2 dp border in a 40 dp target, filled when ticked. */
 .phone .p-checkbox {
