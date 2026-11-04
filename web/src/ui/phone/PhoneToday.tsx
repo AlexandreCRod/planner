@@ -30,6 +30,7 @@ import { BottomSheet, showSnackbar } from "./m3.tsx";
 import { DayPickerSheet } from "./pickers.tsx";
 import { count } from "../../domain/plural.ts";
 import { TrainingLine } from "./PhoneTraining.tsx";
+import { todayBarButtons } from "./todayBar.ts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -520,7 +521,7 @@ export function PhoneToday() {
 
   return (
     <div className="p-scaffold">
-      <header className="p-appbar tall" ref={head}>
+      <header className={`p-appbar tall${tasksB === "B" ? " has-tasks" : ""}`} ref={head}>
         {/* The arrows keep their place whatever the day (341): the title has a slot of its own width, and a long
             weekday fits itself in it. */}
         <div className="p-dayrow">
@@ -533,10 +534,12 @@ export function PhoneToday() {
         </div>
         <span className="grow" />
         <TestChip />
-        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341). */}
-        {!isToday && <IconButton className="p-today-btn" icon="oToday" label="Today" onClick={() => show(t)} />}
-        {tasksB === "B" && <IconButton icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />}
-        <TodosButton s={s} onClick={() => setTodosOpen(true)} />
+        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341); the Tasks
+            button (a look) shows on today only, so the bar fits (todayBar.ts). */}
+        {todayBarButtons(isToday, tasksB === "B").map((b) =>
+          b === "today" ? <IconButton key={b} className="p-today-btn" icon="oToday" label="Today" onClick={() => show(t)} />
+          : b === "tasks" ? <IconButton key={b} icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />
+          : <TodosButton key={b} s={s} onClick={() => setTodosOpen(true)} />)}
         <AppBarActions />
       </header>
       {todosOpen && createPortal(<TodosSheet back={todosBack} onClose={() => { setTodosOpen(false); setTodosBack(null); }} />, document.body)}

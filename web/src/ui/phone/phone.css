@@ -159,6 +159,9 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
    A long title fits itself in (FitLine). Planner Test's TEST chip sits small in the bar's top corner there,
    taking no room from the row. */
 html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
+/* With the Tasks button look, today holds Tasks, the to-dos, Search and Settings (four icons, no Today button),
+   288 px with the arrows and edges; away from today Today takes the Tasks button's spot (todayBar.ts). */
+.phone .p-appbar.has-tasks { --day-slot: clamp(64px, calc(100vw - 288px), 150px); }
 .phone .p-appbar.tall { position: relative; }
 .phone .p-appbar.tall > .p-testchip { position: absolute; left: 12px; top: calc(var(--sat) + 2px); margin: 0; padding: 0 5px; font-size: 9px; line-height: 13px; }
 .phone .p-dayrow { flex: none; display: flex; align-items: center; min-width: 0; }
