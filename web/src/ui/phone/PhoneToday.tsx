@@ -231,7 +231,7 @@ function TomorrowGlance({ rows, s, day }: { rows: GlanceRow[]; s: Snapshot; day:
 }
 
 /**
- * Today's routines on their own line (225): "Routines 1/3", then a row of small chips: a ring (a tick once
+ * Today's routines on their own line (225): "1/3" (354; "Routines" only when none are due today), then a row of small chips: a ring (a tick once
  * done) and the name. A tap on a chip ticks it (the chip fades and is struck through), a long press opens
  * the routine. The row scrolls sideways when it doesn't fit (it wins over the day swipe then) and fades at
  * its end. "Routines 1/3" and the list button at the end open the list of every routine. A routine missed
@@ -244,7 +244,8 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
   return (
     <div className="p-routines">
       <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
-        Routines{total > 0 && <span className="n">{done}/{total}</span>}
+        {/* Just "0/6" (354, user: space): the routine chips beside it say what it counts; the word only when none are due. */}
+        {total > 0 ? <span className="n">{done}/{total}</span> : "Routines"}
       </button>
       <HScroll className="p-rchips" role="list">
         {list.map((e) => {
