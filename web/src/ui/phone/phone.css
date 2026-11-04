@@ -1305,6 +1305,12 @@ html.phone :is(input, textarea, [contenteditable]:not([contenteditable=false]), 
 /* Several alarms picked (348): the same outline and tick, the tick in the card's top right corner, over the switch's corner. */
 .phone .pa-card.sel { outline: 2px solid var(--p-primary); outline-offset: -2px; }
 .phone .pa-card .p-selmark { position: absolute; top: 4px; right: 4px; z-index: 1; }
+/* A row of an open bundle picked on its own (review of 2.10.2, finding 4). */
+.phone .pa-bundle-row.sel { outline: 2px solid var(--p-primary); outline-offset: -2px; border-radius: 12px; }
+.phone .pa-bundle-row .p-selmark { position: absolute; top: 4px; right: 4px; z-index: 1; }
+/* While selecting, what acts on its own on a card (switches, Skip, the bundle's start time and Delete all, the
+   held digits) is inert: the tap or hold falls to the card or row under it, which picks it. */
+.phone .pa-scroll.selecting .pa-card :is(.p-switch, .pa-skipbtn, .pa-rowskip, .pa-bundle-start, .tw-part, .pa-bundle-foot) { pointer-events: none; }
 .phone .pa-selbar .p-appbar-title { flex: 1; min-width: 0; white-space: nowrap; }
 
 /* Today's "2 tasks without a date — see Tasks": a quiet link to the To-do tab. */

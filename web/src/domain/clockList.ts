@@ -353,6 +353,13 @@ export function toggleAlarms(sel: ReadonlySet<number>, ids: readonly number[]): 
   return next;
 }
 
+/**
+ * What a tap on a row of an open bundle picks while selecting (review of 2.10.2, finding 4): that alarm; but a
+ * series (244) is turned on, off or deleted only as a whole, so a row of one picks the whole series.
+ */
+export const rowPick = <T extends Clockish & { id: number }>(a: T, group: readonly T[]): T[] =>
+  a.series != null ? group.filter((x) => x.series === a.series) : [a];
+
 /** The selected alarms, in time order (as a skip sheet lists them); ids no longer there drop out. */
 export const selectedAlarms = <T extends Clockish & { id: number }>(all: T[], sel: ReadonlySet<number>): T[] =>
   all.filter((a) => sel.has(a.id)).sort((x, y) => x.hour * 60 + x.minute - (y.hour * 60 + y.minute));

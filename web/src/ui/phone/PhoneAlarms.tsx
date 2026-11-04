@@ -17,7 +17,7 @@ import { type Hourly, forecastView, useForecast, useWeather, weatherPage, weathe
 import { cityLabel, searchCities, zoneOf } from "../../domain/cities.ts";
 import {
   CLOCK_FILTERS, type ClockFilter, type SeriesPlan, SKIP_WINDOW_DAYS, applyWindow, buildSeries, bundleAlarms, nextRingDay, quickWindows, ringsBetween, seriesPlan, seriesProblem, seriesTimes,
-  selectedAlarms, selectionSwitch, shiftBundle, shownBy, skipEachNext, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, switchAlarms, toggleAlarms, toggleFilter, unskip,
+  selectedAlarms, selectionSwitch, shiftBundle, rowPick, shownBy, skipEachNext, skipNext, skipText, skipTomorrow, skippedNext, skipsOn, switchAlarms, toggleAlarms, toggleFilter, unskip,
   unskipDay, windowCount, windowKeys,
 } from "../../domain/clockList.ts";
 import { clockPrefs, useClockPrefs } from "../../alarms/clockPrefs.ts";
@@ -296,7 +296,8 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
   const picked = (g: ClockAlarm[]) => g.every((a) => sel.has(a.id));
   const groupOf = (a: ClockAlarm) => bundleAlarms(alarms, now, clockPrefs().bundleWindow).find((g) => g.some((x) => x.id === a.id)) ?? [a];
   return (
-    <div className="pa-scroll">
+    // While selecting, a card's switch, Skip, start time and digits are inert: a tap there picks the card (phone.css).
+    <div className={`pa-scroll ${selecting ? "selecting" : ""}`}>
       <PermissionCards />
       {!rings.rings && (
         <div className="pa-note"><MIcon name="oInfo" size={20} /><span>Event and task alarms are off on this phone. Turn them on in Settings.</span></div>
@@ -320,8 +321,8 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
       {groups.map((g) => g.length === 1
         ? <AlarmCard key={g[0].id} a={g[0]} now={now} fc={fc} picked={selecting ? picked(g) : undefined}
           onClick={() => (selecting ? pick(g) : onEdit(g[0]))} onHold={() => (selecting ? pick(g) : skipCard(g))} />
-        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} picked={selecting ? picked(g) : undefined}
-          onOpen={() => (selecting ? pick(g) : setOpen((o) => toggleOpen(o, g)))} onEdit={(a) => (selecting ? pick([a]) : onEdit(a))} onHold={() => (selecting ? pick(g) : skipCard(g))} />)}
+        : <BundleCard key={g[0].id} group={g} now={now} fc={fc} open={g.some((a) => open[a.id])} picked={selecting ? picked(g) : undefined} sel={selecting ? sel : undefined}
+          onOpen={() => (selecting ? pick(g) : setOpen((o) => toggleOpen(o, g)))} onEdit={(a) => (selecting ? pick(rowPick(a, g)) : onEdit(a))} onHold={() => (selecting ? pick(g) : skipCard(g))} />)}
       {calOpen && <CalendarAlarmsDialog list={cal} onClose={() => setCalOpen(false)} />}
       {skipping && <Layer><SkipSheet group={skipping} picks={skipPicks} now={now} onClose={() => setSkipping(null)} onSelect={selecting ? undefined : () => setSel(() => new Set(skipping.map((a) => a.id)))}
         onDays={() => setSkipDays({ group: skipping, scope: "group", quick: "Rest of week" })} /></Layer>}
@@ -541,8 +542,8 @@ function AlarmSelectionBar({ picked, onClear, onSkip }: { picked: ClockAlarm[]; 
   );
 }
 
-function BundleCard({ group, now, fc, open, picked, onOpen, onEdit, onHold }: {
-  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; picked?: boolean; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
+function BundleCard({ group, now, fc, open, picked, sel, onOpen, onEdit, onHold }: {
+  group: ClockAlarm[]; now: Date; fc: Hourly | null; open: boolean; picked?: boolean; sel?: ReadonlySet<number>; onOpen: () => void; onEdit: (a: ClockAlarm) => void; onHold: () => void;
 }) {
   const hold = useHold(onHold, onOpen);
   const on = group.filter((a) => a.enabled).length;
@@ -589,8 +590,12 @@ function BundleCard({ group, now, fc, open, picked, onOpen, onEdit, onHold }: {
       </div>
       <div className={`pa-bundle-body ${open ? "open" : ""}`}>
         <div>
-          {group.map((a) => (
-            <div key={a.id} className={`pa-bundle-row ${a.enabled ? "" : "off"}`} role="button" onClick={() => onEdit(a)}>
+          {group.map((a) => {
+            // While selecting, a row picked on its own has the card's outline and tick (a whole bundle: the card's).
+            const rowSel = !!sel && !picked && sel.has(a.id);
+            return (
+            <div key={a.id} className={`pa-bundle-row ${a.enabled ? "" : "off"} ${rowSel ? "sel" : ""}`} role="button" aria-pressed={sel ? sel.has(a.id) : undefined} onClick={() => onEdit(a)}>
+              {rowSel && <SelectedMark />}
               <div className="grow">
                 <div className="pa-time24">{formatTime(a.hour * 60 + a.minute)}</div>
                 <div className="t-body-small muted pa-line">{[a.label.trim(), scheduleLine(a, now)].filter(Boolean).join(" · ")}</div>
@@ -598,7 +603,8 @@ function BundleCard({ group, now, fc, open, picked, onOpen, onEdit, onHold }: {
               <RowSkip a={a} now={now} />
               {!series && <Switch checked={a.enabled} label="On" onChange={(v) => void save({ ...a, enabled: v })} />}
             </div>
-          ))}
+            );
+          })}
           <div className="pa-bundle-foot"><TextButton className="icon" onClick={() => deleteAlarms(group)}><MIcon name="oDelete" size={18} /> Delete all</TextButton></div>
         </div>
       </div>
