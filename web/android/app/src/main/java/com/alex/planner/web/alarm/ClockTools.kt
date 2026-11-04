@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.alex.planner.web.R
@@ -75,13 +77,14 @@ object ClockTools {
     private const val PREFS = "clock-tools"
     private const val KEY = "state"
     const val EXTRA_TIMER = "timerId"
+    const val EXTRA_STOPWATCH = "stopwatchId"
     private val lock = Any()
     @Volatile private var state: ClockToolsState? = null
 
     fun current(context: Context): ClockToolsState = state ?: load(context).also { state = it }
 
     /** Forgets what was read (after AlarmStore moved the data). */
-    fun reload() { state = null }
+    fun reload() { state = null; synchronized(lock) { pausedLines.clear() } }
 
     private fun load(context: Context): ClockToolsState {
         val raw = AlarmStore.prefs(context, PREFS).getString(KEY, null) ?: return ClockToolsState()
@@ -233,6 +236,21 @@ object ClockTools {
      */
     private val hiddenLines = mutableSetOf<Long>()
 
+    /**
+     * Stopwatches paused while this process ran (358): their line stays, paused, so a tap on its time goes on.
+     * Only in memory, so a paused line isn't brought back days later after a restart.
+     */
+    private val pausedLines = mutableSetOf<Long>()
+
+    /** A tap on the time in a stopwatch's notification (358): it pauses, or goes on. */
+    fun toggleStopwatch(context: Context, id: Long) {
+        val sw = stopwatches(current(context)).firstOrNull { it.id == id } ?: return
+        stopwatch(context, if (sw.running) "pause" else "start", id, "")
+    }
+
+    /** A paused stopwatch's line was swiped away (358): it stays away until the stopwatch goes on (or is paused again). */
+    fun lineDismissed(id: Long) = synchronized(lock) { pausedLines -= id }
+
     fun stopwatch(context: Context, action: String, id: Long, name: String) {
         when (action) {
             "hide" -> synchronized(lock) { hiddenLines += id }
@@ -240,6 +258,7 @@ object ClockTools {
             else -> {
                 // A reset or a delete for good ends the hiding its Undo needed.
                 if (action == "remove" || action == "reset") synchronized(lock) { hiddenLines -= id }
+                synchronized(lock) { if (action == "pause") pausedLines += id else if (action != "lap" && action != "rename") pausedLines -= id }
                 val now = System.currentTimeMillis()
                 change(context) { stopwatchAction(it, action, id, name, now) }
             }
@@ -254,6 +273,16 @@ object ClockTools {
     fun runningStopwatches(s: ClockToolsState, now: Long, hidden: Set<Long> = emptySet()): List<Pair<String, Long>> =
         stopwatches(s).mapIndexedNotNull { i, sw -> if (sw.running && sw.id !in hidden) stopwatchLabel(sw, i) to (now - sw.elapsed(now)) else null }
 
+    /** A stopwatch's notification line: its name, whether it runs, and how long it has counted at [StopwatchLine.at]. */
+    data class StopwatchLine(val id: Long, val label: String, val running: Boolean, val elapsed: Long)
+
+    /** The lines to show (358): the running ones, and those paused here since ([paused]) with a time; none [hidden]. */
+    fun stopwatchLines(s: ClockToolsState, now: Long, hidden: Set<Long> = emptySet(), paused: Set<Long> = emptySet()): List<StopwatchLine> =
+        stopwatches(s).mapIndexedNotNull { i, sw ->
+            val e = sw.elapsed(now)
+            if (sw.id !in hidden && (sw.running || (sw.id in paused && e > 0))) StopwatchLine(sw.id, stopwatchLabel(sw, i), sw.running, e) else null
+        }
+
     /**
      * The running stopwatches' lines: 780000-780004. The other fixed ranges: the card 776000-776001, the ringing
      * service 777000-777001, timers 778000-778999 and clock alarms' "Missed alarm" 779000-779999 (review of 2.10.1,
@@ -262,7 +291,7 @@ object ClockTools {
     const val SW_NOTIFICATION = 780_000
 
     /**
-     * One line per running stopwatch, counting by itself (the system's chronometer). Not in the card's group
+     * One line per running stopwatch (and one paused here since, 358), counting by itself (the system's chronometer). Not in the card's group
      * (350): on the user's Xiaomi the lines didn't show; a child of the group is drawn under the card's summary
      * (which is redrawn, or taken down, right as the line is posted), so a stopwatch now stands on its own, on its
      * own channel (silent by the channel: NotificationCompat's setSilent would put it in a "silent" group of its
@@ -270,25 +299,55 @@ object ClockTools {
      */
     private fun showStopwatches(context: Context) {
         val now = System.currentTimeMillis()
-        val hidden = synchronized(lock) { hiddenLines.toSet() }
-        val running = runningStopwatches(current(context), now, hidden)
+        val (hidden, paused) = synchronized(lock) { hiddenLines.toSet() to pausedLines.toSet() }
+        val lines = stopwatchLines(current(context), now, hidden, paused)
         val nm = NotificationManagerCompat.from(context)
-        running.forEachIndexed { i, (label, from) ->
-            val b = NotificationCompat.Builder(context, Notifications.CH_STOPWATCH)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(label)
-                .setContentText("Running")
-                .setContentIntent(Notifications.openSectionIntent(context, "stopwatch", 3))
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-                .setUsesChronometer(true).setWhen(from).setShowWhen(true)
-            if (nm.areNotificationsEnabled()) runCatching { nm.notify(SW_NOTIFICATION + i, b.build()) }
+        lines.forEachIndexed { i, line ->
+            if (nm.areNotificationsEnabled()) runCatching { nm.notify(SW_NOTIFICATION + i, stopwatchNotice(context, line)) }
         }
-        for (i in running.size until MAX_STOPWATCHES) nm.cancel(SW_NOTIFICATION + i)
+        for (i in lines.size until MAX_STOPWATCHES) nm.cancel(SW_NOTIFICATION + i)
         // Lines of an older build were in the card's group: its summary is drawn again without them.
         Card.refresh(context)
+    }
+
+    /**
+     * A stopwatch's line (358): no buttons. Its own layout puts the count at the right as a tap target of its own,
+     * which pauses it (or goes on); a tap anywhere else opens the stopwatch. Where a phone doesn't draw custom
+     * layouts, the plain title and "Running" / "Paused · 4:20" still show (a tap then opens the stopwatch).
+     */
+    fun stopwatchNotice(context: Context, line: StopwatchLine): android.app.Notification {
+        val state = if (line.running) "Tap the time to pause" else "Paused · tap the time to go on"
+        val view = RemoteViews(context.packageName, R.layout.notification_stopwatch).apply {
+            setTextViewText(R.id.sw_label, line.label)
+            setTextViewText(R.id.sw_state, state)
+            setChronometer(R.id.sw_time, SystemClock.elapsedRealtime() - line.elapsed, null, line.running)
+            setOnClickPendingIntent(R.id.sw_time, toggleIntent(context, line.id))
+            setContentDescription(R.id.sw_time, if (line.running) "Pause ${line.label}" else "Go on with ${line.label}")
+        }
+        val b = NotificationCompat.Builder(context, Notifications.CH_STOPWATCH)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(line.label)
+            .setContentText(if (line.running) "Running" else "Paused · ${formatDuration(line.elapsed)}")
+            .setContentIntent(Notifications.openSectionIntent(context, "stopwatch", 3))
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(view)
+            // A paused one can be swiped away; a running one stays while it counts.
+            .setOngoing(line.running)
+            .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
+        if (!line.running) b.setDeleteIntent(lineIntent(context, line.id, AlarmReceiver.ACTION_STOPWATCH_DISMISS, "dismiss"))
+        // The count is in the layout: no second one in the header ("Planner · 04:00").
+        b.setShowWhen(false)
+        return b.build()
+    }
+
+    private fun toggleIntent(context: Context, id: Long) = lineIntent(context, id, AlarmReceiver.ACTION_STOPWATCH_TOGGLE, "toggle")
+
+    private fun lineIntent(context: Context, id: Long, action: String, path: String): PendingIntent {
+        val i = Intent(context, AlarmReceiver::class.java).setAction(action)
+            .setData(Uri.parse("planner-alarm://stopwatch/$id/$path")).putExtra(EXTRA_STOPWATCH, id)
+        return PendingIntent.getBroadcast(context, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     // ---- World clock ----

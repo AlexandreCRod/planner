@@ -44,6 +44,10 @@ class AlarmReceiver : BroadcastReceiver() {
         const val ACTION_TIMER_RESUME = "com.alex.planner.web.TIMER_RESUME"
         const val ACTION_TIMER_CANCEL = "com.alex.planner.web.TIMER_CANCEL"
         const val ACTION_TIMER_PLUS = "com.alex.planner.web.TIMER_PLUS"
+        /** A tap on the time in a stopwatch's notification (358): pause, or go on. */
+        const val ACTION_STOPWATCH_TOGGLE = "com.alex.planner.web.STOPWATCH_TOGGLE"
+        /** A paused stopwatch's line swiped away (358): it isn't drawn again until the stopwatch goes on. */
+        const val ACTION_STOPWATCH_DISMISS = "com.alex.planner.web.STOPWATCH_DISMISS"
         const val EXTRA_ITEM = "itemId"
         const val EXTRA_REMINDER = "reminderId"
         const val EXTRA_DAY = "day"
@@ -89,6 +93,8 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         when (intent.action) {
             ACTION_CARD_TICK -> { Card.refresh(context); return }
+            ACTION_STOPWATCH_TOGGLE -> { ClockTools.toggleStopwatch(context, intent.getLongExtra(ClockTools.EXTRA_STOPWATCH, -1)); return }
+            ACTION_STOPWATCH_DISMISS -> { ClockTools.lineDismissed(intent.getLongExtra(ClockTools.EXTRA_STOPWATCH, -1)); return }
             ACTION_CARD_DISMISS -> { Card.dismissed(context, intent.getStringExtra(EXTRA_KEYS).orEmpty()); return }
             ACTION_CLOCK_SKIP_ALL -> {
                 val keys = intent.getStringExtra(EXTRA_KEYS).orEmpty().split(',')

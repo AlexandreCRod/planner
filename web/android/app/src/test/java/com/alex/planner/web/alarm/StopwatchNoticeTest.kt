@@ -54,8 +54,8 @@ class StopwatchNoticeTest {
         assertEquals("Stopwatch", title(ClockTools.SW_NOTIFICATION))
         assertEquals("Intervals", title(ClockTools.SW_NOTIFICATION + 1))
         assertNotNull(nm.getNotification(ClockTools.SW_NOTIFICATION + 3))
-        // Stopped: their lines go, the notice stays.
-        for (id in listOf(0L, 11L, 12L, 13L)) ClockTools.stopwatch(ctx, "pause", id, "")
+        // Reset: their lines go, the notice stays.
+        for (id in listOf(0L, 11L, 12L, 13L)) ClockTools.stopwatch(ctx, "reset", id, "")
         assertEquals(null, nm.getNotification(ClockTools.SW_NOTIFICATION))
         assertEquals("Missed alarm: Wake up", title(Missed.clockNoticeId(alarmId)))
     }
@@ -107,5 +107,81 @@ class StopwatchNoticeTest {
         ClockTools.stopwatch(ctx, "reset", 0, "")
         ClockTools.stopwatch(ctx, "start", 0, "")
         assertEquals("Stopwatch", title(ClockTools.SW_NOTIFICATION))
+    }
+
+    /**
+     * 358: no buttons; the time is its own tap target (pause, go on) in a layout of the app's, and the rest opens the
+     * stopwatch. Paused, the line stays (not ongoing, so it can be swiped away) until it goes on or is reset.
+     */
+    @Test fun theTimePausesAndGoesOnAndThePausedLineStays() {
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        val n = nm.getNotification(ClockTools.SW_NOTIFICATION)!!
+        assertEquals(0, n.actions?.size ?: 0)
+        assertEquals("android.app.Notification\$DecoratedCustomViewStyle", n.extras.getString("android.template"))
+        assertNotNull(n.contentIntent)
+        assertEquals(true, n.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
+        Thread.sleep(15)
+        ClockTools.toggleStopwatch(ctx, 0)
+        val sw = ClockTools.stopwatches(ClockTools.current(ctx)).first()
+        assertEquals(false, sw.running)
+        val paused = nm.getNotification(ClockTools.SW_NOTIFICATION)
+        assertNotNull(paused)
+        assertEquals(false, paused.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
+        assertEquals(true, paused.extras.getCharSequence("android.text").toString().startsWith("Paused"))
+        ClockTools.toggleStopwatch(ctx, 0)
+        assertEquals(true, ClockTools.stopwatches(ClockTools.current(ctx)).first().running)
+        assertEquals("Running", nm.getNotification(ClockTools.SW_NOTIFICATION).extras.getCharSequence("android.text").toString())
+        // Reset: the line goes.
+        ClockTools.stopwatch(ctx, "reset", 0, "")
+        assertEquals(null, nm.getNotification(ClockTools.SW_NOTIFICATION))
+    }
+
+    /** 358: after a restart nothing remembers a pause, so an old paused stopwatch doesn't come back as a line. */
+    @Test fun aPausedStopwatchIsntShownByTheEnginesFirstDraw() {
+        val s = ClockToolsState(stopwatch = Stopwatch(accumulatedMs = 65_000))
+        assertEquals(emptyList<ClockTools.StopwatchLine>(), ClockTools.stopwatchLines(s, 1_000_000))
+        assertEquals(listOf(ClockTools.StopwatchLine(0, "Stopwatch", false, 65_000)), ClockTools.stopwatchLines(s, 1_000_000, paused = setOf(0L)))
+        assertEquals(emptyList<ClockTools.StopwatchLine>(), ClockTools.stopwatchLines(s, 1_000_000, hidden = setOf(0L), paused = setOf(0L)))
+    }
+
+    /**
+     * 358: in the line's own layout, a tap on the count pauses the stopwatch (a second one goes on); the rest of
+     * the line opens the stopwatch section without touching it. A paused line swiped away isn't drawn again.
+     */
+    @Test fun aTapOnTheCountPausesAndTheRestOpensTheStopwatch() {
+        ClockTools.stopwatch(ctx, "start", 0, "")
+        fun running() = ClockTools.stopwatches(ClockTools.current(ctx)).first().running
+        fun tapTheCount() {
+            val n = nm.getNotification(ClockTools.SW_NOTIFICATION)!!
+            val root = n.contentView.apply(ctx, android.widget.FrameLayout(ctx))
+            val time = root.findViewById<android.view.View>(com.alex.planner.web.R.id.sw_time)
+            assertEquals(true, time.performClick())
+            // The broadcast the tap sent, delivered to the app's receiver as Android does (it works off the main thread).
+            val sent = shadowOf(ctx as android.app.Application).broadcastIntents.last()
+            assertEquals(AlarmReceiver.ACTION_STOPWATCH_TOGGLE, sent.action)
+            val was = running()
+            AlarmReceiver().onReceive(ctx, sent)
+            val until = System.currentTimeMillis() + 3_000
+            while (running() == was && System.currentTimeMillis() < until) Thread.sleep(20)
+            Thread.sleep(50)
+        }
+        tapTheCount()
+        assertEquals(false, ClockTools.stopwatches(ClockTools.current(ctx)).first().running)
+        tapTheCount()
+        assertEquals(true, ClockTools.stopwatches(ClockTools.current(ctx)).first().running)
+        // The rest of the line opens the stopwatch section, and the label isn't a target of its own.
+        val n = nm.getNotification(ClockTools.SW_NOTIFICATION)!!
+        val open = shadowOf(n.contentIntent).savedIntent
+        assertEquals("stopwatch", open.getStringExtra(Notifications.EXTRA_OPEN_SECTION))
+        val root = n.contentView.apply(ctx, android.widget.FrameLayout(ctx))
+        assertEquals(false, root.findViewById<android.view.View>(com.alex.planner.web.R.id.sw_label).hasOnClickListeners())
+        // Paused, then swiped away: another stopwatch's change doesn't bring the line back.
+        tapTheCount()
+        val swiped = shadowOf(nm.getNotification(ClockTools.SW_NOTIFICATION)!!.deleteIntent).savedIntent
+        ClockTools.lineDismissed(swiped.getLongExtra(ClockTools.EXTRA_STOPWATCH, -1).also { assertEquals(0L, it) })
+        assertEquals(AlarmReceiver.ACTION_STOPWATCH_DISMISS, swiped.action)
+        ClockTools.stopwatch(ctx, "add", 11, "Intervals")
+        assertEquals("Intervals", title(ClockTools.SW_NOTIFICATION))
+        assertEquals(null, nm.getNotification(ClockTools.SW_NOTIFICATION + 1))
     }
 }

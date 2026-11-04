@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The stopwatch notification's count (358): a soft rounded box, and a ripple when it's tapped. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#40808080">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#1F808080" />
+        </shape>
+    </item>
+</ripple>
