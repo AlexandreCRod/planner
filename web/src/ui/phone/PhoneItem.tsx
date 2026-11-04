@@ -718,6 +718,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const [catMenu, setCatMenu] = useState(false);
   const [prioMenu, setPrioMenu] = useState(false);
   const [overdueMenu, setOverdueMenu] = useState(false);
+  const [placeMenu, setPlaceMenu] = useState(false);
   const { defaultTaskTime } = useAlarmSettings();
   const [pendingScope, setPendingScope] = useState<Item | null>(null);
   if (!item) return null;
@@ -803,13 +804,20 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         ))}
 
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
-        {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a long press changes it. */}
+        {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a hold opens its menu
+            (342: a hold that lifts opens a menu): Change place, Copy address. */}
         {(item.location ?? "").trim() && (
-          <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => { const l = locationLink(item); if (l) openExternal(l); else openInGoogleMaps(mapsQuery(item)); }}
-            onLongPress={() => setEditing("location")} trailing={locationLink(item) ? undefined :
-              <IconButton icon="oDirections" label="Directions" className="primary"
-                onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
-            } />
+          <span className="p-menu-anchor start wide">
+            <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => { const l = locationLink(item); if (l) openExternal(l); else openInGoogleMaps(mapsQuery(item)); }}
+              onLongPress={() => setPlaceMenu(true)} trailing={locationLink(item) ? undefined :
+                <IconButton icon="oDirections" label="Directions" className="primary"
+                  onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
+              } />
+            <DropdownMenu open={placeMenu} onClose={() => setPlaceMenu(false)} items={[
+              { label: "Change place", icon: "oEdit", onClick: () => setEditing("location") },
+              { label: "Copy address", icon: "oContentCopy", onClick: () => void navigator.clipboard.writeText(item.address || item.location || "").then(() => showSnackbar("Copied"), () => showSnackbar("Couldn't copy")) },
+            ]} />
+          </span>
         )}
         {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}

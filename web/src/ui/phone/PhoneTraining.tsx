@@ -36,7 +36,7 @@ import { AppBarActions, ChipRow, EmptyState, FilterChip, HeadCount, IconButton, 
 import { feel } from "./haptics.ts";
 import { BottomSheet, OutlinedTextField, TextButton, showSnackbar } from "./m3.tsx";
 import { TimePickerDialog } from "./pickers.tsx";
-import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { type Animation, GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
@@ -52,7 +52,6 @@ import { type Estimate, estimateLine, runEstimate } from "../../domain/estimate.
 import "./training.css";
 
 /** Held this long, a placed session lifts to be dragged to another day (as a note card does). */
-const LONG_PRESS = 450;
 /** The "how it went" row after a tick closes by itself after this long untouched. */
 const ASK_MS = 8000;
 

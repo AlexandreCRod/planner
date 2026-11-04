@@ -3,7 +3,8 @@
 // - A tap on a button with a menu opens it as before (its own onClick).
 // - Holding that button (one hold time, LONG_PRESS, the finger kept within the touch slop) opens the menu at
 //   once, with the pick-up pulse; the button marks itself with aria-haspopup="menu" (IconButton's [menu] and
-//   the like), and nothing else is needed.
+//   the like), and nothing else is needed. Something with a hold of its own that opens a menu (useHold) must not
+//   carry the mark: the hold would click it as well.
 // - Whenever a menu opens while a finger (or the mouse button) is still down, as after any hold that opens
 //   one (that button, a city, a picture, the to-dos button), that finger can slide over the options: the one
 //   under it is lit, with a tick, and lifting on it picks it. Lifting anywhere else, or without having moved,

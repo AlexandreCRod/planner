@@ -29,7 +29,7 @@ import { claimSwipe, useHorizontalSwipe } from "./gesture.ts";
 import { EdgeHold, dropColumn, edgeOf, edgeZone, holdTouch } from "./edgeTurn.ts";
 import { VelocityTracker, frameWriter } from "./motion.ts";
 import { useLook } from "./looks.ts";
-import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { END_ROOM, MAX_HOUR_HEIGHT, openingHourHeight, openingScrollTop, pinchHourHeight, zoomScrollTop } from "./zoom.ts";
 import { deskPager, isMouse, mouseMenu } from "./desk.ts";
 import { setEventEnd } from "./eventTime.ts";
@@ -43,7 +43,6 @@ const NARROW = ["M", "T", "W", "T", "F", "S", "S"];
 const WEEKDAYS_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const DAY_MIN = 1440;
-const LONG_PRESS_MS = 400;
 const ZOOM_KEY = "calHourHeight";
 
 // Kept while moving around the app, like the native CalendarState.
@@ -386,7 +385,7 @@ function MonthView({ s, items, routinesLine, anchor, noteDays, trainDays, onStep
       d = {
         id: e.pointerId, chip, item, from: Number(chip.dataset.day), x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, raf: 0, mouse: isMouse(e),
         lifted: false, float: null, cells: [], over: null, sliding: false, drop: false, left: 0, right: 0, edge: new EdgeHold(), target: e.target as Element, release: () => {}, dimmed: [],
-        timer: window.setTimeout(() => { claimSwipe(e.pointerId); lift(); }, LONG_PRESS_MS),
+        timer: window.setTimeout(() => { claimSwipe(e.pointerId); lift(); }, LONG_PRESS),
       };
       el.addEventListener("touchmove", noScroll, { passive: false });
       window.addEventListener("pointermove", onMove, { passive: true });
@@ -505,7 +504,7 @@ function useLongPress(onLong: (d: number) => void, onTap: (d: number) => void) {
       // A held chip is picked up (MonthView); only the day around it adds an event.
       if ((e.target as Element).closest(".p-mchip[data-id]")) { st.current = null; return; }
       const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
-      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onLong(d); }, 500);
+      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onLong(d); }, LONG_PRESS);
       st.current = p;
     },
     onPointerMove: (e: React.PointerEvent) => {
@@ -974,7 +973,7 @@ function TimeGrid({ s, items, routinesLine, first, count, onStep, turn, onNewAt,
         info: null, carrier: null, edge: new EdgeHold(), left: 0, right: 0, target: e.target as Element, release: () => {}, top0: 0, shift: 0,
       };
       g.vt.add(e.timeStamp, e.clientX);
-      if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS_MS);
+      if (block && !g.resize) g.timer = window.setTimeout(lift, LONG_PRESS);
     };
 
     const onMove = (e: PointerEvent) => {

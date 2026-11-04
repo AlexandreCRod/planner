@@ -68,6 +68,10 @@ function cancel(p: Press) {
 // for a second and a half; the button itself then does nothing. One handler for the whole phone layout.
 // A mouse resting on one shows the same tooltip, until it moves away.
 
+/**
+ * The one hold time (342, 196): every press-and-hold in the app (a menu, picking up, selecting, a quick
+ * change, a new event) waits this long. test/oneHold.test.ts keeps others from creeping back.
+ */
 export const LONG_PRESS = 450;
 const TIP_SHOWN = 1500;
 interface Hold { host: HTMLElement; x0: number; y0: number; id: number; timer: number }
