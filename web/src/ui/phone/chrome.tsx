@@ -8,6 +8,7 @@ import { isTestApp } from "../../platform.ts";
 import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
 import { menuOpened } from "./menuSlide.ts";
+import { menuShiftX } from "./menuFit.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 import { trainingTabIcon } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
@@ -331,7 +332,10 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     if (!el || !open) return;
     // A finger still down from the hold that opened it can slide over the options (361).
     menuOpened(el);
-    el.style.top = el.style.bottom = el.style.transformOrigin = "";
+    el.style.top = el.style.bottom = el.style.transformOrigin = el.style.marginLeft = "";
+    // Whole across the screen too (review C2): measured from its anchor, unscaled.
+    const host = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+    if (host) { const dx = menuShiftX(host.left + el.offsetLeft, el.offsetWidth, window.innerWidth); if (dx) el.style.marginLeft = `${dx}px`; }
     // Measured unscaled (it grows in from 80%), within what shows of the page scrolling it.
     let lo = 8, hi = window.innerHeight - 8;
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
