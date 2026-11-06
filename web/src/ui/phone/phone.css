@@ -978,11 +978,13 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pn-text { padding: 8px 20px 0; }
 .phone .pn-text .rich { font-size: 16px; line-height: 24px; color: inherit; outline: none; user-select: text; -webkit-user-select: text; }
 .phone .rich { font-family: "Planner Boxes", Roboto, "Google Sans", system-ui, sans-serif; }
-/* The boxes' colours (an open one in the text's colour, a ticked one grey like its line, 331) and a ticked
-   line faded and struck through: highlights over the text (RichEditor's paintBoxes), so the note itself is
-   untouched. */
+/* The boxes' colours (an open one in the text's colour; a ticked one in the accent the other ticked
+   checkboxes use, --p-strong, so it follows the coming colour pick; on a coloured note the note's own text
+   colour) and a ticked line faded and struck through: highlights over the text (RichEditor's paintBoxes),
+   so the note itself is untouched. */
 .phone .rich::highlight(pn-box) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 85%, transparent); }
-.phone .rich::highlight(pn-tick) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 55%, transparent); }
+.phone .rich::highlight(pn-tick) { color: var(--p-strong); }
+.phone .pn.paper .rich::highlight(pn-tick) { color: var(--pn-fg); }
 .phone .rich::highlight(pn-done) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 55%, transparent); text-decoration: line-through; }
 .phone .pn-text .rich hr { height: 0; margin: 14px 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--pn-fg) 22%, transparent); }
 .phone .pn-find { display: flex; align-items: center; gap: 0; min-height: 48px; margin: 0 8px 4px; padding-left: 12px; border-radius: 24px; background: color-mix(in srgb, var(--pn-fg) 8%, transparent); color: inherit; }
