@@ -1,8 +1,8 @@
-/* A note's checklist boxes (227): "☐" and "☑" drawn as a rounded square, filled with the tick cut out
-   once ticked (tools/checkbox-font.py makes it); only those two characters, the rest is the note's font. */
+/* A note's checklist boxes (227, 331): "☐" and "☑" drawn as a thin outlined square, with a tick inside
+   once ticked (Keep's look, the user's pick C; tools/checkbox-font.py makes it); only those two characters, the rest is the note's font. */
 @font-face {
   font-family: "Planner Boxes"; font-display: block; unicode-range: U+2610-2611;
-  src: url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMqu3ayoAAAEoAAAAYGNtYXAADCZkAAABlAAAADRnbHlm9JvANgAAAdAAAACMaGVhZDEbQJ4AAACsAAAANmhoZWEHjANLAAAA5AAAACRobXR4BkoAbgAAAYgAAAAKbG9jYQAkAEYAAAHIAAAACG1heHAABgAaAAABCAAAACBuYW1lFyT2UQAAAlwAAABycG9zdHZDPd4AAALQAAAAMwABAAAAAQAAy9MF5l8PPPUAAwPoAAAAAOcN/pUAAAAA5w3+lQBu/8QDegLQAAAAAwACAAAAAAAAAAEAAAOi/vIAAAPoAG4AbgN6AAEAAAAAAAAAAAAAAAAAAAACAAEAAAADABgAAgAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwNBAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAPz8/PwAAJhAmEQOi/vIAAAOiAQ4AAAAAAAAAAAAAAAAAAAAgAAAB9AAAA+gAbgBuAAAAAAACAAAAAwAAABQAAwABAAAAFAAEACAAAAAEAAQAAQAAJhH//wAAJhD//9nxAAEAAAAAAAAAAAAkAEYAAgBu/8QDegLQAAsAFwAAFyI1ETQzITIVERQjNTI1ETQjISIVERQz5nh4Ahx4eBQU/eQUFDx4Ahx4eP3keGQUAhwUFP3kFAAAAgBu/8QDegLQAAsAEQAAFyI1ETQzITIVERQjARcBJwEn5nh4Ahx4eP3bzQFmRP7chzx4Ahx4eP3keAFuzAFyQv7UiAAAAAQANgABAAAAAAABAA0AAAABAAAAAAACAAcADQADAAEECQABABoAFAADAAEECQACAA4ALlBsYW5uZXIgQm94ZXNSZWd1bGFyAFAAbABhAG4AbgBlAHIAIABCAG8AeABlAHMAUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAQIBAwNib3gGdGlja2VkAA==) format("truetype");
+  src: url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMqu3ayoAAAEoAAAAYGNtYXAADCZkAAABlAAAADRnbHlm9qOV2QAAAdAAAACqaGVhZDEm+foAAACsAAAANmhoZWEHjANLAAAA5AAAACRobXR4BkoAbgAAAYgAAAAKbG9jYQAkAFUAAAHIAAAACG1heHAABwAgAAABCAAAACBuYW1lFyT2UQAAAnwAAABycG9zdHZDPd4AAALwAAAAMwABAAAAAQAAx6nnYF8PPPUAAwPoAAAAAOcT20MAAAAA5xPbQwBu/8QDegLQAAAAAwACAAAAAAAAAAEAAAOi/vIAAAPoAG4AbgN6AAEAAAAAAAAAAAAAAAAAAAACAAEAAAADAB4AAwAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwNBAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAPz8/PwAAJhAmEQOi/vIAAAOiAQ4AAAAAAAAAAAAAAAAAAAAgAAAB9AAAA+gAbgBuAAAAAAACAAAAAwAAABQAAwABAAAAFAAEACAAAAAEAAQAAQAAJhH//wAAJhD//9nxAAEAAAAAAAAAAAAkAFUAAgBu/8QDegLQAAsAFwAAFyI1ETQzITIVERQjJzI1ETQjISIVERQztEZGAoBGRgIKCv2ECgo8RgKARkb9gEY+CgJ8Cgr9hAoAAwBu/8QDegLQAAsAFwAdAAAXIjURNDMhMhURFCMnMjURNCMhIhURFDMTFwEXASe0RkYCgEZGAgoK/YQKCoB8AQQ0/sqwPEYCgEZG/YBGPgoCfAoK/YQKAWt7AREy/rmxAAAAAAAABAA2AAEAAAAAAAEADQAAAAEAAAAAAAIABwANAAMAAQQJAAEAGgAUAAMAAQQJAAIADgAuUGxhbm5lciBCb3hlc1JlZ3VsYXIAUABsAGEAbgBuAGUAcgAgAEIAbwB4AGUAcwBSAGUAZwB1AGwAYQByAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAAABAgEDA2JveAZ0aWNrZWQA) format("truetype");
 }
 
 /* Phone layout. Every rule hangs off html.phone, which only the phone shell (PhoneApp) sets, so the
@@ -961,11 +961,11 @@ html:not(.wide) .p-root.on-todo > .p-fab { opacity: 0; transform: scale(.6); poi
 .phone .pn-text { padding: 8px 20px 0; }
 .phone .pn-text .rich { font-size: 16px; line-height: 24px; color: inherit; outline: none; user-select: text; -webkit-user-select: text; }
 .phone .rich { font-family: "Planner Boxes", Roboto, "Google Sans", system-ui, sans-serif; }
-/* The boxes' colours (an open one muted, a ticked one in the accent) and a ticked line faded and struck
-   through: highlights over the text (RichEditor's paintBoxes), so the note itself is untouched. */
-.phone .rich::highlight(pn-box) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 70%, transparent); }
-.phone .rich::highlight(pn-tick) { color: var(--p-primary); }
-.phone .pn.paper .rich::highlight(pn-tick) { color: var(--pn-fg); }
+/* The boxes' colours (an open one in the text's colour, a ticked one grey like its line, 331) and a ticked
+   line faded and struck through: highlights over the text (RichEditor's paintBoxes), so the note itself is
+   untouched. */
+.phone .rich::highlight(pn-box) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 85%, transparent); }
+.phone .rich::highlight(pn-tick) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 55%, transparent); }
 .phone .rich::highlight(pn-done) { color: color-mix(in srgb, var(--pn-fg, var(--text)) 55%, transparent); text-decoration: line-through; }
 .phone .pn-text .rich hr { height: 0; margin: 14px 0; border: 0; border-top: 1px solid color-mix(in srgb, var(--pn-fg) 22%, transparent); }
 .phone .pn-find { display: flex; align-items: center; gap: 0; min-height: 48px; margin: 0 8px 4px; padding-left: 12px; border-radius: 24px; background: color-mix(in srgb, var(--pn-fg) 8%, transparent); color: inherit; }
@@ -1548,6 +1548,9 @@ html.phone[data-theme="dark"] {
   background: color-mix(in srgb, var(--pn-fg) 9%, var(--pn-bg, var(--bg))); box-shadow: 0 6px 16px rgb(0 0 0 / .22);
 }
 .phone .pn-text .rich > p.pn-check-end:not(:last-child) { margin-bottom: 10px; }
+/* Over the text while a line is held and dragged (331, ChecklistHandles): the browser's long press lands on
+   this, not on the words, so it neither selects one nor takes the finger. */
+.phone .pn-shield { position: absolute; inset: 0; z-index: 3; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .phone .pn-text .rich > p.pn-sliding { transition: transform .18s cubic-bezier(.2, 0, 0, 1); will-change: transform; }
 
 /* ---------- Room for the system's navigation bar (3-button or gesture) ----------

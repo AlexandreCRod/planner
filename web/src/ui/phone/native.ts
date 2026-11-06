@@ -107,6 +107,8 @@ export function onKeyboardHide(fn: () => void): () => void {
 let kbUp = true;
 const upListeners = new Set<() => void>();
 const setKbUp = (v: boolean) => { if (v !== kbUp) { kbUp = v; upListeners.forEach((l) => l()); } };
+/** Whether the soft keyboard is up now (see useKeyboardUp). */
+export const keyboardUp = () => kbUp;
 export function useKeyboardUp(): boolean {
   return useSyncExternalStore((l) => { upListeners.add(l); return () => { upListeners.delete(l); }; }, () => kbUp);
 }

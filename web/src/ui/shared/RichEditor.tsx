@@ -203,7 +203,7 @@ function placeCaretAtEnd(el: HTMLElement) {
 
 // ---------- Checklist boxes drawn as boxes (227) ----------
 // The boxes stay characters in the text ("☐", "☑"). The "Planner Boxes" font (phone.css) draws them as a
-// rounded square, filled with the tick cut out once ticked; their colours, and a ticked line's faded,
+// thin outlined square, with a tick inside once ticked (331); their colours, and a ticked line's faded,
 // struck-through text, come from CSS highlights laid over the text as it is. The note's HTML, the caret,
 // selection and every checklist key work exactly as before.
 const boxRanges = new Map<HTMLElement, { box: Range[]; tick: Range[]; done: Range[] }>();

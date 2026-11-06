@@ -1,5 +1,6 @@
 // Reordering a note's checklist like Google Keep: each checklist line gets a drag handle in the margin
-// beside it (outside the text, so typing and selecting text are untouched). The handles always show
+// beside it (outside the text, so typing and selecting text are untouched), and a short hold on a line
+// itself lifts it too, on a touch screen (331; lineHold.ts). The handles always show
 // (331; 227 hid them until pressed); a pressed (or, with a mouse, pointed-at) line's is stronger, and stays so
 // while it's dragged. Drag a handle: the line
 // (with the lines indented under it) lifts and follows the finger, the others in its list slide out of
@@ -12,6 +13,11 @@ import { MIcon } from "./chrome.tsx";
 import { GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { feel } from "./haptics.ts";
 import { edgeSpeed } from "./selectScroll.ts";
+import { suspendOverscroll } from "./overscroll.ts";
+import { swallowClick } from "./press.ts";
+import { LINE_HOLD, holdsLine, lineHoldMove, slotFor } from "./lineHold.ts";
+import { claimSwipe } from "./gesture.ts";
+import { keyboardUp } from "./native.ts";
 
 interface Handle { i: number; top: number; h: number }
 
@@ -134,15 +140,23 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = (e: React.PointerEvent<HTMLButtonElement>, from: number) => {
+    if (e.button !== 0) return;
+    if (!lift(e.pointerId, e.clientY, from)) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  /**
+   * Lifts line [from] (and the lines under it) for pointer [pointerId], which is at [y0]: from its handle at
+   * once, or from the line itself after a hold (331). [onEnd] runs once it has settled. False: it can't move.
+   */
+  const lift = (pointerId: number, y0: number, from: number, onEnd?: () => void): boolean => {
     const root = editor();
-    if (!root || e.button !== 0 || dragging.current) return;
+    if (!root || dragging.current) return false;
     const lines = linesOf(root);
     const texts = lines.map((l) => l.textContent ?? "");
     const run = checklistRun(texts, from);
-    if (!run) return;
-    e.preventDefault();
-    const handleEl = e.currentTarget;
-    handleEl.setPointerCapture(e.pointerId);
+    if (!run) return false;
     const [s, last] = checklistBlock(texts, from);
     const dragged = lines.slice(s, last + 1);
     const d = checklistDepth(texts[from]);
@@ -167,10 +181,10 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const k0 = units.filter((u) => u.above).length;
     const minDy = (units.length ? Math.min(top0, ...restTop) : top0) - top0 - 6;
     const maxDy = (units.length ? Math.max(top0 + h, ...units.map((u, i) => restTop[i] + u.h + h)) : top0 + h) - top0 - h + 6;
-    const y0 = e.clientY;
-    // The finger's point in the lifted lines (on the first line, where the handle is) decides where they
-    // go: a tall block (a long line) can then reach the top as easily as the bottom.
-    const grab = y0 - top0;
+    // The lifted lines' top decides where they go: a line passes another once it's over that line's middle,
+    // so a hold that doesn't move leaves it where it was (331: the finger's own point used to decide, and a
+    // finger below a line's middle moved it down a place without moving at all). A tall block (a long line)
+    // reaches the top and the bottom alike.
     // Near the top or bottom of the note the page scrolls along, either way; [dy] counts that scrolling too.
     const scroller = scrollParent(root);
     const s0 = scroller?.scrollTop ?? 0;
@@ -185,9 +199,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const draw = () => {
       raf = 0;
       for (const el of dragged) el.style.transform = `translate3d(0,${dy}px,0)`;
-      const c = top0 + grab + dy;
-      let nk = 0;
-      while (nk < units.length && restTop[nk] + units[nk].h / 2 < c) nk++;
+      let nk = slotFor(units.map((u, i) => ({ top: restTop[i], h: u.h })), top0 + dy);
       // Only where the line may go (never between another line and its sub-items).
       while (nk > 0 && !allowed.has(slotOf(nk))) nk--;
       if (nk !== k) { k = nk; feel("tick"); }
@@ -212,16 +224,23 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     };
     scrollRaf = requestAnimationFrame((n) => autoScroll(n, n));
     const move = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
+      if (ev.pointerId !== pointerId) return;
       fingerY = ev.clientY;
       dy = clampDy();
       if (!raf) raf = requestAnimationFrame(draw);
     };
+    // The finger is the line's now: the page doesn't scroll or stretch under it (a held line's finger would
+    // otherwise go on to scroll the note).
+    const noScroll = (ev: TouchEvent) => { if (ev.cancelable) ev.preventDefault(); };
+    document.addEventListener("touchmove", noScroll, { passive: false });
+    suspendOverscroll(true);
     const up = (ev: PointerEvent) => {
-      if (ev.pointerId !== e.pointerId) return;
-      handleEl.removeEventListener("pointermove", move);
-      handleEl.removeEventListener("pointerup", up);
-      handleEl.removeEventListener("pointercancel", up);
+      if (ev.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      document.removeEventListener("touchmove", noScroll);
+      suspendOverscroll(false);
       cancelAnimationFrame(raf);
       cancelAnimationFrame(scrollRaf);
       draw();
@@ -245,12 +264,120 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
         key.current = "";
         remeasure.current();
         if (moved) cb.current.onChange();
+        onEnd?.();
       }, GLIDE_SPRING);
     };
-    handleEl.addEventListener("pointermove", move);
-    handleEl.addEventListener("pointerup", up);
-    handleEl.addEventListener("pointercancel", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return true;
   };
+  const liftRef = useRef(lift);
+  liftRef.current = lift;
+
+  // A short hold on a checkbox line itself lifts it too (331): the one hold time, then the finger drags it as
+  // the handle would. Until then nothing changes, so a tap places the cursor and a double or triple tap selects
+  // a word or the line, as anywhere in the note. The browser's own long press (select a word, its menu) is
+  // kept off these lines: the press menu is dropped, and a selection it makes anyway is put back as it was.
+  useEffect(() => {
+    let root: HTMLElement | null = null, t = 0;
+    let h: { id: number; x: number; y: number; line: HTMLElement; i: number; timer: number; saved: Range | null; held: boolean } | null = null;
+    // The browser's own long press comes a moment after the hold time (Chrome: about 100 ms later). On the
+    // note's text it would select a word or, in a note being typed in, take the finger for its cursor handle
+    // and cancel the drag. So once the line is lifted, a clear cover lies over the text: the long press lands
+    // on that (nothing to select), and the finger stays the line's. If the long press takes the focus from
+    // the note while the keyboard is up, it's given straight back (the keyboard stays up).
+    let shield: HTMLElement | null = null, typing = false;
+    const keep = () => {
+      if (!shield || !typing || !root) return;
+      root.focus({ preventScroll: true });
+      restore();
+    };
+    const cover = () => {
+      const box = host();
+      if (!box || !root) return;
+      typing = document.activeElement === root && keyboardUp();
+      shield = document.createElement("div");
+      shield.className = "pn-shield";
+      shield.addEventListener("contextmenu", (e) => e.preventDefault());
+      box.appendChild(shield);
+      root.addEventListener("blur", keep);
+    };
+    const uncover = () => {
+      shield?.remove();
+      shield = null;
+      root?.removeEventListener("blur", keep);
+    };
+    const done = () => {
+      if (!h) return;
+      clearTimeout(h.timer);
+      uncover();
+      h = null;
+    };
+    /** Puts the selection (the cursor, or what was selected) back as it was when the finger went down. */
+    const restore = () => {
+      const sel = getSelection();
+      if (!h || !sel) return;
+      const now = sel.rangeCount ? sel.getRangeAt(0) : null, was = h.saved;
+      if (!was) { if (now && !now.collapsed) sel.removeAllRanges(); return; }
+      if (now && now.startContainer === was.startContainer && now.startOffset === was.startOffset
+        && now.endContainer === was.endContainer && now.endOffset === was.endOffset) return;
+      sel.removeAllRanges();
+      sel.addRange(was);
+    };
+    const down = (e: PointerEvent) => {
+      done();
+      if (!root) return;
+      let line = e.target instanceof Node ? (e.target instanceof HTMLElement ? e.target : e.target.parentElement) : null;
+      while (line && line.parentElement !== root) line = line.parentElement;
+      const i = line ? linesOf(root).indexOf(line) : -1;
+      if (!line || !holdsLine({
+        pointerType: e.pointerType, primary: e.isPrimary, checkLine: handlesRef.current.some((x) => x.i === i),
+        folded: line.classList.contains("pn-folded"), dragging: dragging.current,
+      })) return;
+      const sel = getSelection();
+      const saved = sel && sel.rangeCount && root.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+      const me = { id: e.pointerId, x: e.clientX, y: e.clientY, line, i, timer: 0, saved, held: false };
+      me.timer = window.setTimeout(() => {
+        if (h !== me) return;
+        me.held = true;
+        restore();
+        cover();
+        claimSwipe(me.id);
+        swallowClick(600);
+        if (!liftRef.current(me.id, me.y, me.i, () => { if (h === me) done(); })) done();
+      }, LINE_HOLD);
+      h = me;
+    };
+    const move = (e: PointerEvent) => {
+      if (h && !h.held && e.pointerId === h.id && lineHoldMove(h.x, h.y, e.clientX, e.clientY) === "off") done();
+    };
+    const up = (e: PointerEvent) => { if (h && !h.held && e.pointerId === h.id) done(); };
+    const menu = (e: Event) => { if (h) e.preventDefault(); };
+    const selChange = () => { if (h?.held) restore(); };
+    const attach = () => {
+      root = editor();
+      if (!root) return false;
+      root.addEventListener("pointerdown", down, { passive: true });
+      root.addEventListener("contextmenu", menu);
+      window.addEventListener("pointermove", move, { passive: true });
+      window.addEventListener("pointerup", up, { passive: true });
+      window.addEventListener("pointercancel", up, { passive: true });
+      document.addEventListener("selectionchange", selChange);
+      return true;
+    };
+    if (!attach()) t = window.setInterval(() => { if (attach()) clearInterval(t); }, 100);
+    return () => {
+      clearInterval(t);
+      done();
+      root?.removeEventListener("pointerdown", down);
+      root?.removeEventListener("contextmenu", menu);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      document.removeEventListener("selectionchange", selChange);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!handles.length) return null;
   return (
