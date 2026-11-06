@@ -15,3 +15,12 @@ test("the display check lists the user's categories, then flags, training and th
 test("true black sits beside #0c0c0f and #17171b", () => {
   assert.deepEqual(BLACKS.map((b) => b.color), ["#000000", "#0c0c0f", "#17171b"]);
 });
+
+// Coherence rule 13 (review of 2.10.2, finding 8): Display check is about the phone's screen, so the PC doesn't list it.
+test("Settings lists Display check on the phone only", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/ui/phone/PhoneSettings.tsx", import.meta.url), "utf8");
+  const row = src.split("\n").find((l) => l.includes('headline="Display check"'));
+  assert.ok(row, "the row is gone");
+  assert.match(row, /^\s*\{isNative && <ListItem headline="Display check"/);
+});

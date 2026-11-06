@@ -312,7 +312,8 @@ export function PhoneSettings({ part }: { part?: string }) {
         supporting={keepTasks ? "Tasks sits beside Training" : "Off: to-dos open from Today"} checked={keepTasks}
         onChange={setKeepTasksTab} />
       <ListItem headline="Looks to try" supporting="Other looks for some pages, side by side" onClick={() => go("settings/looks")} />
-      <ListItem headline="Display check" supporting="The app's colours, fades and blacks, to judge your screen" onClick={() => go("settings/display")} />
+      {/* About the phone's screen and its colour modes: phone only (coherence rule 13; review of 2.10.2, finding 8). */}
+      {isNative && <ListItem headline="Display check" supporting="The app's colours, fades and blacks, to judge your screen" onClick={() => go("settings/display")} />}
       {/* The review's order (229): the bar's direction, rarely changed, last. */}
       {!wide && !(swipesTabs && barChangesDays) && <SwitchRow title="Reverse bottom bar swipe" supporting={barReversed ? "Sliding right goes to the page on the left"
         : "The indicator follows your finger"} checked={barReversed}
