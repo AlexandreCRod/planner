@@ -23,7 +23,7 @@ import { applyTheme, useSyncStatus } from "../shared/settings.ts";
 import { Dialog, DropdownMenu, EmptyState, HScroll, IconButton, MIcon, Scaffold, SectionHeader, Segmented } from "./chrome.tsx";
 import { TOUCH_FEEL_KEY, touchFeelOn } from "./hapticGate.ts";
 import { canFeel } from "./device.ts";
-import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
+import { BAR_DAYS_KEY, BAR_REVERSED_KEY, SWIPE_TABS_KEY, barDays, barSwipeReversed, gesturesSummary, setKeepTasksTab, swipeTabs, useKeepTasksTab } from "./pager.ts";
 import { ColorGrid, ListItem, OutlinedButton, OutlinedTextField, PALETTE, Switch, TextButton, TextFieldDialog, showSnackbar } from "./m3.tsx";
 import { checkForUpdate, installedVersion } from "./update.ts";
 import { applyPureBlack } from "./theme.ts";
@@ -311,7 +311,7 @@ export function PhoneSettings({ part }: { part?: string }) {
       <ListItem headline="Display check" supporting="The app's colours, fades and blacks, to judge your screen" onClick={() => go("settings/display")} />
     </> },
     // Touch and gestures (342, review finding 15): how swipes, the bottom bar and the touch feel behave.
-    { key: "gestures", title: "Touch and gestures", icon: "fTouchApp", summary: [swipesTabs ? "Swipes change tab" : "Swipes stay in the page", ...(canFeel ? [`vibration ${touchFeel ? "on" : "off"}`] : [])].join(" · "), body: <>
+    { key: "gestures", title: "Touch and gestures", icon: "fTouchApp", summary: gesturesSummary(swipesTabs, canFeel ? touchFeel : null), body: <>
       <SwitchRow title="Swipe pages to change tab" supporting={swipesTabs ? "Days and weeks change on the top bar" : "Off: swipes stay in the page"}
         checked={swipesTabs} onChange={(v) => { setSwipesTabs(v); store(SWIPE_TABS_KEY, String(v)); setBarChangesDays(barDays()); }} />
       {!wide && swipesTabs && <SwitchRow title="Bottom bar changes the day" supporting="Slide along it to change the day"

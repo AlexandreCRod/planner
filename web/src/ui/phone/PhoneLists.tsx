@@ -225,7 +225,7 @@ export function TodoAdd() {
         <IconButton label={priority ? priorityLabel(priority) : "Priority"} menu onClick={() => setFlags(true)}>
           <MIcon name={priority ? "fFlag" : "oFlag"} color={priority ? priorityColor(priority) : "var(--muted)"} />
         </IconButton>
-        <DropdownMenu open={flags} onClose={() => setFlags(false)} items={priorityItems(setPriority)} />
+        <DropdownMenu open={flags} onClose={() => setFlags(false)} items={priorityItems(setPriority, priority)} />
       </span>
       {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
     </div>

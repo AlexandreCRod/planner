@@ -39,3 +39,11 @@ export const TOUCH_FEEL_KEY = "touchFeel";
 export function touchFeelOn(): boolean {
   try { return localStorage.getItem(TOUCH_FEEL_KEY) !== "false"; } catch { return true; }
 }
+
+/**
+ * One pulse of [kind] through [play], if the phone can ([can]), the switch is on and [gate] lets it through at
+ * [now]: what haptics.ts feel() does, here so the switch can be tested (review C7).
+ */
+export function feelVia(gate: HapticGate, can: boolean, kind: Feel, now: number, play: (kind: Feel) => void) {
+  if (can && touchFeelOn() && gate.allow(kind, now)) play(kind);
+}

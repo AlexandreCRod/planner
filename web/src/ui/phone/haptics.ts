@@ -4,7 +4,7 @@
 // row, a dragged block or node), "settle" when it lands, "confirm" for a done. Pulses are spaced by
 // hapticGate.ts, so fast ticks thin out instead of buzzing. In a browser there's no feel at all.
 import { canFeel, playFeel } from "./device.ts";
-import { type Feel, HapticGate, touchFeelOn } from "./hapticGate.ts";
+import { type Feel, HapticGate, feelVia } from "./hapticGate.ts";
 
 export type { Feel };
 
@@ -12,5 +12,5 @@ const gate = new HapticGate();
 
 /** Plays [kind] unless it would come too close to the last pulse. */
 export function feel(kind: Feel) {
-  if (canFeel && touchFeelOn() && gate.allow(kind, performance.now())) playFeel(kind);
+  feelVia(gate, canFeel, kind, performance.now(), playFeel);
 }

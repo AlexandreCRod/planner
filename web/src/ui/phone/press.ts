@@ -81,14 +81,20 @@ let hold: Hold | null = null;
 let tip: HTMLElement | null = null;
 let tipTimer = 0;
 
-/** A button showing only an icon, with a name to show. */
-function iconButton(t: Element): HTMLElement | null {
+/**
+ * Whether a button's name tooltip is skipped: on a hold ([forHold]) a button with a menu opens the menu instead
+ * (361); the mouse resting on it still shows its name (review C7).
+ */
+export const tipSkipped = (forHold: boolean, hasMenu: boolean) => forHold && hasMenu;
+
+/** A button showing only an icon, with a name to show ([forHold]: for a hold, not the mouse's hover). */
+function iconButton(t: Element, forHold: boolean): HTMLElement | null {
   // A labelled symbol with nothing written ([data-tip]: a priority flag) is named the same way.
   const sym = t.closest<HTMLElement>("[data-tip][aria-label]");
   if (sym && !(sym.textContent ?? "").trim()) return sym;
   const b = t.closest<HTMLElement>("button, [role=button]");
   // A button with a menu opens it on a hold instead (361, menuSlide.ts).
-  if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar") || b.hasAttribute("aria-haspopup")) return null;
+  if (!b || (b as HTMLButtonElement).disabled || b.closest(".p-bar") || tipSkipped(forHold, b.hasAttribute("aria-haspopup"))) return null;
   const label = b.getAttribute("aria-label")?.trim();
   return label && !(b.textContent ?? "").trim() ? b : null;
 }
@@ -101,7 +107,7 @@ let hoverTimer = 0;
 /** The mouse moved onto something: an icon-only button gets its name shown after a moment. */
 function hover(e: PointerEvent) {
   if (e.pointerType !== "mouse" || !document.documentElement.classList.contains("phone")) return;
-  const host = e.target instanceof Element ? iconButton(e.target) : null;
+  const host = e.target instanceof Element ? iconButton(e.target, false) : null;
   if (host === hoverHost) return;
   clearTimeout(hoverTimer);
   if (hoverHost && tip) hideTip();
@@ -155,7 +161,7 @@ export function swallowClick(ms = 800) {
 
 function startHold(e: PointerEvent, t: Element) {
   if (hold) { clearTimeout(hold.timer); hold = null; }
-  const host = iconButton(t);
+  const host = iconButton(t, true);
   // [data-no-tip]: a button with a long press of its own.
   if (!host || host.hasAttribute("data-no-tip")) return;
   const h: Hold = { host, x0: e.clientX, y0: e.clientY, id: e.pointerId, timer: 0 };

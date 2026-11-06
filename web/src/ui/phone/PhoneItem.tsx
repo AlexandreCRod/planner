@@ -30,6 +30,7 @@ import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { fetchPlaceOfLink } from "../../store/preview.ts";
 import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { priorityItems } from "./priorityMenu.ts";
 import { HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
@@ -148,8 +149,7 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
 
 /** A priority's name, for its flag's label (held, it shows as a tooltip): "High priority". */
 export const priorityLabel = (p: number) => `${PRIORITIES[p]} priority`;
-export const priorityItems = (pick: (p: number) => void): MenuItem[] =>
-  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? priorityColor(i) : undefined, onClick: () => pick(i) }));
+export { priorityItems };
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));
 const categoryItems = (s: Snapshot, pick: (id: number | null) => void, leave?: () => void): MenuItem[] => [
@@ -787,11 +787,11 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
               <DropdownMenu open={catMenu} onClose={() => setCatMenu(false)} items={categoryItems(s, (c) => commit({ ...item, categoryId: c }))} />
             </span>
           </div>
-          {/* Priority is its flag alone (hold it for its name); a tap changes it. */}
+          {/* Priority is its flag alone (its name on the mouse's hover, ticked in its menu); a tap or a hold opens the menu. */}
           {!isEvent && item.priority > 0 && (
             <span className="p-menu-anchor">
               <IconButton label={priorityLabel(item.priority)} menu onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
-              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
+              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }), item.priority)} />
             </span>
           )}
         </div>
@@ -867,7 +867,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           {!isEvent && item.priority === 0 && (
             <span className="p-menu-anchor start">
               <AssistChip icon="oFlag" label="Priority" menu onClick={() => setPrioMenu(true)} />
-              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
+              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }), item.priority)} />
             </span>
           )}
         </div>
@@ -1237,7 +1237,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           <FieldRow icon="oFlag">
             {/* The flag and the word: "⚑ Urgent" (234). */}
             <MenuText text={d.priority === 0 ? "No priority" : <span className="pe-prio"><MIcon name="fFlag" size={18} color={priorityColor(d.priority)} />{PRIORITIES[d.priority]}</span>}
-              label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
+              label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }), d.priority)} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
           {d.startDay !== null && !(routinable && routine) && (
