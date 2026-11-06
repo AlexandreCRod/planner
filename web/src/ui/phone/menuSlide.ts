@@ -13,6 +13,7 @@ import { feel } from "./haptics.ts";
 import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { SlideSession } from "./slideSession.ts";
 import { suspendOverscroll } from "./overscroll.ts";
+import { claimSwipe } from "./gesture.ts";
 
 /** The finger (or mouse button) down now, where it is. */
 let down: { id: number; x: number; y: number } | null = null;
@@ -48,6 +49,7 @@ export function menuOpened(menu: HTMLElement) {
   endSlide();
   slide = { id: down.id, s: new SlideSession<HTMLElement>(down.x, down.y), menu };
   suspendOverscroll(true); // the page's rubber-band edge stays still under the sliding finger
+  claimSwipe(down.id); // and the swipes under the menu (the month, the day, the tabs) leave this finger alone
   swallowing = true;
 }
 

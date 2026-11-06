@@ -17,6 +17,16 @@ export const swipeClaimed = (id: number) => claimed === id;
 /** A new finger: nothing is taken yet. (A mouse keeps the same id all the time.) */
 export const clearSwipeClaim = () => { claimed = null; };
 
+/**
+ * A sideways drag's first moves: "wait" within the slop, "start" once past it sideways, "off" for a scroll or
+ * a finger already taken by something else (a menu being slid through, 361; an inner pager).
+ */
+export function swipeStep(dx: number, dy: number, claimedByOther: boolean): "wait" | "start" | "off" {
+  if (claimedByOther) return "off";
+  if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) return "off"; // a scroll
+  return Math.abs(dx) <= TOUCH_SLOP ? "wait" : "start";
+}
+
 export interface SwipeHandlers {
   /** The drag has started (past the slop). */
   onStart?: () => void;
@@ -62,8 +72,9 @@ export function useHorizontalSwipe<T extends HTMLElement>(handlers: SwipeHandler
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       if (!g.dragging) {
-        if (Math.abs(dy) > TOUCH_SLOP && Math.abs(dy) >= Math.abs(dx)) { g.done = true; return; } // a scroll
-        if (Math.abs(dx) <= TOUCH_SLOP) return;
+        const step = swipeStep(dx, dy, swipeClaimed(e.pointerId));
+        if (step === "off") { g.done = true; return; }
+        if (step === "wait") return;
         if (h.current.accept && !h.current.accept(dx)) { g.done = true; return; }
         g.dragging = true;
         claimSwipe(e.pointerId);

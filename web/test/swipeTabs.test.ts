@@ -60,3 +60,11 @@ test("a slide along the bar with a note open puts the note away first (352)", as
   assert.equal(barSlidePutsNoteAway("note", true, true), false); // wide: the rail is only tapped
   assert.equal(barSlidePutsNoteAway("note", false, false), false);
 });
+
+test("a finger sliding through a menu (claimed) never starts a sideways swipe under it (review C1)", async () => {
+  const { swipeStep } = await import("../src/ui/phone/gesture.ts");
+  assert.equal(swipeStep(20, 2, true), "off");
+  assert.equal(swipeStep(20, 2, false), "start");
+  assert.equal(swipeStep(3, 2, false), "wait");
+  assert.equal(swipeStep(5, 30, false), "off"); // a scroll
+});
