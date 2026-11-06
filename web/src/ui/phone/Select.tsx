@@ -11,13 +11,12 @@ import { IconButton } from "./chrome.tsx";
 import { TextButton } from "./m3.tsx";
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
-import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { keepShown, rangeIds, selectAll, toggleId } from "./selection.ts";
 import { trashManyWithUndo } from "./PhoneItem.tsx";
 import { mouseMenu } from "./desk.ts";
 import { typingTarget } from "./keys.ts";
 
-const LONG_PRESS = 450;
 
 export interface Selection {
   ids: ReadonlySet<number>;

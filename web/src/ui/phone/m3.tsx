@@ -25,8 +25,10 @@ export function Switch({ checked, onChange, label }: { checked: boolean; onChang
  * Material 3 list item: headline in bodyLarge, supporting text in bodyMedium (onSurfaceVariant), an
  * optional leading icon and trailing content; 56 dp tall with one line, 72 with two.
  */
-export function ListItem({ headline, supporting, leading, trailing, onClick, className = "" }: {
+export function ListItem({ headline, supporting, leading, trailing, onClick, className = "", menu }: {
   headline: ReactNode; supporting?: ReactNode; leading?: ReactNode; trailing?: ReactNode; onClick?: () => void; className?: string;
+  /** It opens a menu: a hold opens it at once, to slide to an option (361). */
+  menu?: boolean;
 }) {
   const body = <>
     {leading && <span className="lead">{leading}</span>}
@@ -37,21 +39,21 @@ export function ListItem({ headline, supporting, leading, trailing, onClick, cla
     {trailing && <span className="trail">{trailing}</span>}
   </>;
   const cls = `p-li ${supporting ? "two" : ""} ${className}`;
-  return onClick ? <div className={cls} role="button" onClick={onClick}>{body}</div> : <div className={cls}>{body}</div>;
+  return onClick ? <div className={cls} role="button" aria-haspopup={menu ? "menu" : undefined} onClick={onClick}>{body}</div> : <div className={cls}>{body}</div>;
 }
 
 /** Material 3 assist chip: 32 dp, 8 dp corners, outlined, an 18 dp leading icon in primary. */
-export function AssistChip({ icon, label, onClick, iconColor }: { icon: string; label: ReactNode; onClick: () => void; iconColor?: string }) {
+export function AssistChip({ icon, label, onClick, iconColor, menu }: { icon: string; label: ReactNode; onClick: () => void; iconColor?: string; menu?: boolean }) {
   return (
-    <button className="p-assist" onClick={onClick}>
+    <button className="p-assist" aria-haspopup={menu ? "menu" : undefined} onClick={onClick}>
       <MIcon name={icon} size={18} color={iconColor} />
       <span>{label}</span>
     </button>
   );
 }
 
-export function TextButton({ children, onClick, disabled, className = "" }: { children: ReactNode; onClick: () => void; disabled?: boolean; className?: string }) {
-  return <button className={`p-text-btn ${className}`} disabled={disabled} onClick={onClick}>{children}</button>;
+export function TextButton({ children, onClick, disabled, className = "", menu }: { children: ReactNode; onClick: () => void; disabled?: boolean; className?: string; menu?: boolean }) {
+  return <button className={`p-text-btn ${className}`} aria-haspopup={menu ? "menu" : undefined} disabled={disabled} onClick={onClick}>{children}</button>;
 }
 
 export function OutlinedButton({ children, onClick, disabled, danger }: { children: ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }) {

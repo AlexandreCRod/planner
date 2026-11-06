@@ -45,7 +45,7 @@ function BadgesRow() {
   const value = streakStyle();
   return (
     <div className="p-menu-anchor start wide p-streak-badges">
-      <ListItem headline="Streak badges" supporting={`On Today and the lists: ${STREAK_STYLES.find(([k]) => k === value)?.[1] ?? ""}`} onClick={() => setOpen(true)} />
+      <ListItem headline="Streak badges" supporting={`On Today and the lists: ${STREAK_STYLES.find(([k]) => k === value)?.[1] ?? ""}`} menu onClick={() => setOpen(true)} />
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={STREAK_STYLES.map(([k, l]) => ({ label: l, checked: k === value, onClick: () => setStreakStyle(k) }))} />
     </div>
   );

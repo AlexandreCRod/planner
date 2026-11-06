@@ -30,6 +30,7 @@ import { openDirections, openInGoogleMaps, searchPlaces } from "./device.ts";
 import { fetchPlaceOfLink } from "../../store/preview.ts";
 import { NO_PLACE, type Place, locationLink, mapsQuery, mapsShortLink, placeFields, placeKey, placeLines, stableMerge, usualArea } from "../../domain/places.ts";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { priorityItems } from "./priorityMenu.ts";
 import { HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { type Control, hasAlarms, native, onNative, useAlarmState } from "../../alarms/native.ts";
@@ -119,8 +120,8 @@ function FieldRow({ icon, onClick, children, top }: { icon?: string | null; onCl
 }
 
 /** Tappable text in a row (a date, a time, a choice); placeholders are greyed. */
-function FieldText({ children, onClick, placeholder, grow, label }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean; label?: string }) {
-  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} aria-label={label} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
+function FieldText({ children, onClick, placeholder, grow, label, menu }: { children: ReactNode; onClick: () => void; placeholder?: boolean; grow?: boolean; label?: string; menu?: boolean }) {
+  return <button className={`pe-text ${placeholder ? "ph" : ""} ${grow ? "grow" : ""}`} aria-label={label} aria-haspopup={menu ? "menu" : undefined} onClick={(e) => { e.stopPropagation(); onClick(); }}>{children}</button>;
 }
 
 /** A row with a menu under its text. */
@@ -128,7 +129,7 @@ function MenuText({ text, items, placeholder, label }: { text: ReactNode; items:
   const [open, setOpen] = useState(false);
   return (
     <span className="p-menu-anchor start">
-      <FieldText placeholder={placeholder} label={label} onClick={() => setOpen(true)}>{text}</FieldText>
+      <FieldText placeholder={placeholder} label={label} menu onClick={() => setOpen(true)}>{text}</FieldText>
       <DropdownMenu open={open} onClose={() => setOpen(false)} items={items} />
     </span>
   );
@@ -148,8 +149,7 @@ export function ScopeDialog({ title, onPick, onCancel }: { title: string; onPick
 
 /** A priority's name, for its flag's label (held, it shows as a tooltip): "High priority". */
 export const priorityLabel = (p: number) => `${PRIORITIES[p]} priority`;
-export const priorityItems = (pick: (p: number) => void): MenuItem[] =>
-  PRIORITIES.map((p, i) => ({ label: p, icon: "oFlag", iconColor: i ? priorityColor(i) : undefined, onClick: () => pick(i) }));
+export { priorityItems };
 const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));
 const categoryItems = (s: Snapshot, pick: (id: number | null) => void, leave?: () => void): MenuItem[] => [
@@ -718,6 +718,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   const [catMenu, setCatMenu] = useState(false);
   const [prioMenu, setPrioMenu] = useState(false);
   const [overdueMenu, setOverdueMenu] = useState(false);
+  const [placeMenu, setPlaceMenu] = useState(false);
   const { defaultTaskTime } = useAlarmSettings();
   const [pendingScope, setPendingScope] = useState<Item | null>(null);
   if (!item) return null;
@@ -782,15 +783,15 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           <div className="grow">
             <button className="pe-title" onClick={() => setEditing("title")}>{item.title.trim() || "Untitled"}</button>
             <span className="p-menu-anchor start">
-              <button className="pe-cat" onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
+              <button className="pe-cat" aria-haspopup="menu" onClick={() => setCatMenu(true)}>{category?.name ?? "No category"}</button>
               <DropdownMenu open={catMenu} onClose={() => setCatMenu(false)} items={categoryItems(s, (c) => commit({ ...item, categoryId: c }))} />
             </span>
           </div>
-          {/* Priority is its flag alone (hold it for its name); a tap changes it. */}
+          {/* Priority is its flag alone (its name on the mouse's hover, ticked in its menu); a tap or a hold opens the menu. */}
           {!isEvent && item.priority > 0 && (
             <span className="p-menu-anchor">
-              <IconButton label={priorityLabel(item.priority)} onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
-              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
+              <IconButton label={priorityLabel(item.priority)} menu onClick={() => setPrioMenu(true)}><MIcon name="fFlag" color={priorityColor(item.priority)} /></IconButton>
+              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }), item.priority)} />
             </span>
           )}
         </div>
@@ -803,13 +804,20 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         ))}
 
         <InfoRow icon="oSchedule" text={whenText(item, day)} onClick={() => setEditing("when")} />
-        {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a long press changes it. */}
+        {/* The place: a tap shows it in Google Maps, Directions offers the navigation apps, a hold opens its menu
+            (342: a hold that lifts opens a menu): Change place, Copy address. */}
         {(item.location ?? "").trim() && (
-          <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => { const l = locationLink(item); if (l) openExternal(l); else openInGoogleMaps(mapsQuery(item)); }}
-            onLongPress={() => setEditing("location")} trailing={locationLink(item) ? undefined :
-              <IconButton icon="oDirections" label="Directions" className="primary"
-                onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
-            } />
+          <span className="p-menu-anchor start wide">
+            <InfoRow icon="oLocationOn" text={placeLines(item).main} sub={placeLines(item).sub} link onClick={() => { const l = locationLink(item); if (l) openExternal(l); else openInGoogleMaps(mapsQuery(item)); }}
+              onLongPress={() => setPlaceMenu(true)} trailing={locationLink(item) ? undefined :
+                <IconButton icon="oDirections" label="Directions" className="primary"
+                  onClick={() => openDirections({ name: placeLines(item).main, address: item.address ?? item.location ?? "", lat: item.lat, lng: item.lng })} />
+              } />
+            <DropdownMenu open={placeMenu} onClose={() => setPlaceMenu(false)} items={[
+              { label: "Change place", icon: "oEdit", onClick: () => setEditing("location") },
+              { label: "Copy address", icon: "oContentCopy", onClick: () => void navigator.clipboard.writeText(item.address || item.location || "").then(() => showSnackbar("Copied"), () => showSnackbar("Couldn't copy")) },
+            ]} />
+          </span>
         )}
         {alerts && alarms.length > 0 && <EarlyAlarmControls itemId={id} reminders={alarms} />}
         {isRecurring(item) && <InfoRow icon="oRepeat" tint={color} text={describe(item)} onClick={() => setEditing("repeat")} />}
@@ -835,7 +843,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
         })()}
         {!isEvent && !routine && item.startDay !== null && item.overduePolicy !== "SHOW_OVERDUE" && (
           <span className="p-menu-anchor start wide">
-            <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} onClick={() => setOverdueMenu(true)} />
+            <InfoRow icon="oSkipNext" text={item.overduePolicy === "CARRY_OVER" ? "If missed, it carries over to the next day" : "If missed, it's skipped"} menu onClick={() => setOverdueMenu(true)} />
             <DropdownMenu open={overdueMenu} onClose={() => setOverdueMenu(false)} items={overdueItems((p) => commit({ ...item, overduePolicy: p }))} />
           </span>
         )}
@@ -858,8 +866,8 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
           {tags.length === 0 && <AssistChip icon="oLabel" label="Tags" onClick={() => setEditing("tags")} />}
           {!isEvent && item.priority === 0 && (
             <span className="p-menu-anchor start">
-              <AssistChip icon="oFlag" label="Priority" onClick={() => setPrioMenu(true)} />
-              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }))} />
+              <AssistChip icon="oFlag" label="Priority" menu onClick={() => setPrioMenu(true)} />
+              <DropdownMenu open={prioMenu} onClose={() => setPrioMenu(false)} items={priorityItems((p) => commit({ ...item, priority: p }), item.priority)} />
             </span>
           )}
         </div>
@@ -903,12 +911,14 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
   );
 }
 
-function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, trailing, link }: {
+function InfoRow({ icon, text, sub, tint, placeholder, onClick, onLongPress, trailing, link, menu }: {
   icon: string | null; text: string; sub?: string; tint?: string; placeholder?: boolean; onClick?: () => void; onLongPress?: () => void; trailing?: ReactNode; link?: boolean;
+  /** It opens a menu: a hold opens it at once, to slide to an option (361). */
+  menu?: boolean;
 }) {
   const { fired, ...hold } = useHold(onLongPress);
   return (
-    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} {...hold}
+    <div className={`pe-info ${trailing ? "trailing" : ""}`} role={onClick ? "button" : undefined} aria-haspopup={menu ? "menu" : undefined} {...hold}
       onClick={() => { if (!fired()) onClick?.(); }}>
       {icon ? <MIcon name={icon} size={22} color={tint} /> : <span style={{ width: 22, flex: "none" }} />}
       <span className={`grow ${placeholder ? "ph" : ""} ${link ? "link" : ""} ${sub ? "two" : ""}`}>
@@ -1227,7 +1237,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
           <FieldRow icon="oFlag">
             {/* The flag and the word: "⚑ Urgent" (234). */}
             <MenuText text={d.priority === 0 ? "No priority" : <span className="pe-prio"><MIcon name="fFlag" size={18} color={priorityColor(d.priority)} />{PRIORITIES[d.priority]}</span>}
-              label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }))} />
+              label={d.priority === 0 ? undefined : priorityLabel(d.priority)} items={priorityItems((p) => set({ priority: p }), d.priority)} />
           </FieldRow>
           {/* A routine is never overdue (a missed day ends its streak), so it has no "if missed" choice. */}
           {d.startDay !== null && !(routinable && routine) && (

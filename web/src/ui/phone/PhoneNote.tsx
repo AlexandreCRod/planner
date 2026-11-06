@@ -152,7 +152,7 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
         <IconButton icon={style.pinned ? "fPushPin" : "oPushPin"} label={style.pinned ? "Unpin" : "Pin"} onClick={() => setStyle({ ...style, pinned: !style.pinned })} />
         <IconButton icon="oPalette" label="Style" onClick={() => setOpen("style")} />
         <span className="p-menu-anchor">
-          <IconButton icon="oMoreVert" label="More" onClick={() => setMenu(true)} />
+          <IconButton icon="oMoreVert" label="More" menu onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={[
             { label: "Find in note", icon: "oFindInPage", onClick: () => setFinding({ q: finding?.q ?? "", focus: true }) },
             { label: "Add picture or video", icon: "oAddPhotoAlternate", onClick: pickPictures },

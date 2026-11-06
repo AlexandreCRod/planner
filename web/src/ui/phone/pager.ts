@@ -283,3 +283,16 @@ export function barTarget(from: number, pos: number, vx: number, last: number): 
   } else i = Math.round(pos);
   return Math.min(last, Math.max(0, i));
 }
+
+/**
+ * A slide along the bottom bar puts the open note into its chip first (352), so the slide changes tabs as
+ * it does with no note open. Wide, the rail is only tapped, and the note sits beside the Notes list.
+ */
+/** Settings → Touch and gestures' line in the folder list; [vibrate] null where there's no touch feel (the PC). */
+export function gesturesSummary(swipesTabs: boolean, vibrate: boolean | null): string {
+  return [swipesTabs ? "Swipes change tab" : "Swipes stay in the page", ...(vibrate === null ? [] : [`Vibrate on touch: ${vibrate ? "on" : "off"}`])].join(" · ");
+}
+
+export function barSlidePutsNoteAway(route: string, noteDocked: boolean, wide: boolean): boolean {
+  return route === "note" && noteDocked && !wide;
+}

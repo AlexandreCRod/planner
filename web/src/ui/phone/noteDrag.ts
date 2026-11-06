@@ -13,10 +13,9 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { type Slot, inSlot, moveId, noteSlots } from "../../domain/noteOrder.ts";
 import { feel } from "./haptics.ts";
 import { GLIDE_SPRING, type Animation, animateSpring } from "./motion.ts";
-import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 
-const LONG_PRESS = 450; // the same as starting a selection (Select.tsx)
 const GAP = 8;
 const LIFT = 1.04;
 /** How far the finger must go before the order may flip straight back (cards of different heights). */

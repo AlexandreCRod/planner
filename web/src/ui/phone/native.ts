@@ -6,6 +6,7 @@ import { startSelectionBar } from "./selectionBar.ts";
 import { useSyncExternalStore } from "react";
 import { isNative } from "../../platform.ts";
 import { startPressFeedback } from "./press.ts";
+import { startMenuSlide } from "./menuSlide.ts";
 import { startPhoneTheme } from "./theme.ts";
 import { startDeviceClock } from "./device.ts";
 import { startOverscroll } from "./overscroll.ts";
@@ -38,6 +39,7 @@ export function startPhonePlumbing() {
   started = true;
   startPhoneTheme();
   startPressFeedback();
+  startMenuSlide();
   startOverscroll();
   startSelectScroll();
   startSelectionBar();

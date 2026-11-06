@@ -19,7 +19,6 @@ import { AppBarActions, EmptyState, FitLine, HScroll, DropdownMenu, FoldLine, He
 import { feel } from "./haptics.ts";
 import { swipeTabs, turnerSwipe, turners, useSwipePager } from "./pager.ts";
 import { useHorizontalSwipe } from "./gesture.ts";
-import { mouseMenu } from "./desk.ts";
 import { TodosSheet, openTodos } from "./PhoneLists.tsx";
 import { sheetBack } from "./todoSheetReturn.ts";
 import { StreaksSheet } from "./StreaksSheet.tsx";
@@ -242,8 +241,20 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
   const streaks = showStreaks() && day >= t;
   const [all, setAll] = useState(false);
   const { done, total } = routineProgress(list);
+  // The held chip's menu (342), under the chip: outside the scrolling chips, which would clip it.
+  const line = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ e: TaskEntry; left: number } | null>(null);
+  const menuFor = (e: TaskEntry, chip: HTMLElement) => {
+    const box = line.current?.getBoundingClientRect(), r = chip.getBoundingClientRect();
+    setMenu({ e, left: box ? Math.max(0, r.left - box.left) : 0 });
+  };
+  const toggle = (e: TaskEntry) => { const ticked = e.status === "DONE"; if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); };
+  const menuItems: MenuItem[] = menu ? [
+    { label: "Open", icon: "oOpenInNew", onClick: () => openItem(menu.e.item, menu.e.day) },
+    { label: menu.e.status === "DONE" ? "Not done" : "Done", icon: menu.e.status === "DONE" ? "fUndo" : "fCheck", onClick: () => toggle(menu.e) },
+  ] : [];
   return (
-    <div className="p-routines">
+    <div className="p-routines" ref={line}>
       <button className="p-routines-head" aria-label={total ? `Routines, ${done} of ${total} done. All routines` : "All routines"} onClick={() => setAll(true)}>
         {/* Just "0/6" (354, user: space): the routine chips beside it say what it counts; the word only when none are due. */}
         {total > 0 ? <span className="n">{done}/{total}</span> : "Routines"}
@@ -255,7 +266,7 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
           return (
             <RoutineChip key={e.item.id} title={e.item.title || "Untitled"} ticked={ticked} missed={e.status === "MISSED"}
               streak={st && st.current > 1 ? st.current : 0}
-              onToggle={() => { if (!ticked) feel("confirm"); toggleCompletion(e.item.id, day, !ticked); }} onOpen={() => openItem(e.item, e.day)} />
+              onToggle={() => toggle(e)} onMenu={(chip) => menuFor(e, chip)} />
           );
         })}
       </HScroll>
@@ -264,6 +275,9 @@ function RoutinesLine({ list, s, day, t }: { list: TaskEntry[]; s: Snapshot; day
       <button className="p-rchip p-rchip-all p-rchip-end" aria-label="All routines" onClick={() => setAll(true)}>
         <MIcon name="fFormatListBulleted" size={18} />
       </button>
+      <div className="p-menu-anchor start p-rchip-menu" style={{ left: menu?.left ?? 0 }}>
+        <DropdownMenu open={!!menu} onClose={() => setMenu(null)} items={menuItems} />
+      </div>
       <RoutineSheets s={s} t={t} open={all} onClose={() => setAll(false)} />
     </div>
   );
@@ -346,23 +360,17 @@ function RoutineListSheet({ s, t, onClose, onStreaks }: { s: Snapshot; t: number
   );
 }
 
-const CHIP_HOLD_MS = 450;
-function RoutineChip({ title, ticked, missed, streak, onToggle, onOpen }: { title: string; ticked: boolean; missed: boolean; streak: number; onToggle: () => void; onOpen: () => void }) {
-  const hold = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
-  const clear = () => { if (hold.current) clearTimeout(hold.current.timer); };
+/**
+ * A routine on Today's line: a tap ticks it (or unticks it); a hold opens its menu (342: a hold that lifts opens
+ * a menu, as everywhere), where Open shows the routine; the finger can slide straight onto it (361).
+ */
+function RoutineChip({ title, ticked, missed, streak, onToggle, onMenu }: { title: string; ticked: boolean; missed: boolean; streak: number; onToggle: () => void; onMenu: (chip: HTMLElement) => void }) {
+  const el = useRef<HTMLButtonElement>(null);
+  const { fired, ...hold } = useHold(() => { if (el.current) onMenu(el.current); });
   return (
-    <button role="listitem" className={`p-rchip ${ticked ? "done" : ""} ${missed ? "missed" : ""}`} aria-pressed={ticked}
-      aria-label={`${title}${ticked ? ", done" : ""}. Hold to open`}
-      onPointerDown={(e) => {
-        clear();
-        const h = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
-        h.timer = window.setTimeout(() => { h.fired = true; feel("pickup"); onOpen(); }, CHIP_HOLD_MS);
-        hold.current = h;
-      }}
-      onPointerMove={(e) => { const h = hold.current; if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > 8) { clear(); hold.current = null; } }}
-      onPointerUp={clear} onPointerCancel={() => { clear(); hold.current = null; }}
-      onContextMenu={(e) => { e.preventDefault(); if (mouseMenu(e)) { clear(); hold.current = null; onOpen(); } }}
-      onClick={() => { const h = hold.current; hold.current = null; if (!h?.fired) onToggle(); }}>
+    <button ref={el} role="listitem" className={`p-rchip ${ticked ? "done" : ""} ${missed ? "missed" : ""}`} aria-pressed={ticked}
+      aria-label={`${title}${ticked ? ", done" : ""}`} data-no-tip="" {...hold}
+      onClick={() => { if (!fired()) onToggle(); }}>
       <span className="ring">{ticked && <MIcon name="fCheck" size={14} />}</span>
       <span className="name">{title}</span>
       {streak > 0 && <span className="streak">{streakSymbol() && <MIcon name="fLocalFireDepartment" size={12} />}{streak}{!streakSymbol() && "×"}</span>}

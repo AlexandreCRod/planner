@@ -15,7 +15,7 @@ import { type Animation, type SpringConfig, VelocityTracker, animateCoast, anima
 import { pushBack } from "./native.ts";
 import { feel } from "./haptics.ts";
 import { suspendOverscroll } from "./overscroll.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
 import { durationRows, heldMoved, joinDuration, joinTime, nearestSlot, passesNoon, splitDuration, splitTime, wheelHours, wheelMinutes, wheelRowLook, wrapIndex } from "./wheelMath.ts";
 
@@ -365,12 +365,11 @@ function Drum({ anchor, values, index, wrap, label, pointerId, foldOnLift, onPic
 
 // ---------- Holding a time ----------
 
-const HOLD_MS = 450;
 let hold: { id: number; x0: number; y0: number; timer: number; fired: boolean } | null = null;
 let swallowClick = false;
 
 /**
- * Props for something that opens a drum when held (450 ms, with the soft pick-up feel): [onHold] gets the
+ * Props for something that opens a drum when held (LONG_PRESS, with the soft pick-up feel): [onHold] gets the
  * finger's pointer id, so the same finger can go on to turn it. The click after a hold is swallowed,
  * so the row or button under it doesn't open too. A right-click opens it as well (with no pointer to
  * hand on: the mouse wheel, clicks and the arrow keys turn it then).
@@ -386,7 +385,7 @@ export function holdProps(onHold: (pointerId?: number) => void, onStill?: () => 
         h.fired = true; swallowClick = true; feel("pickup");
         if (onStill) afterHold(h.id, h.x0, h.y0, () => onHold(h.id), onStill);
         else onHold(h.id);
-      }, HOLD_MS);
+      }, LONG_PRESS);
       hold = h;
     },
     onPointerMove: (e) => {

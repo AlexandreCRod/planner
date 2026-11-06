@@ -222,10 +222,10 @@ export function TodoAdd() {
       <input placeholder="Add a to-do" value={text} enterKeyHint="done" onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
       {/* Pressing the flag or its menu leaves the keyboard up (320). */}
       <span className="p-menu-anchor" onMouseDown={(e) => e.preventDefault()}>
-        <IconButton label={priority ? priorityLabel(priority) : "Priority"} onClick={() => setFlags(true)}>
+        <IconButton label={priority ? priorityLabel(priority) : "Priority"} menu onClick={() => setFlags(true)}>
           <MIcon name={priority ? "fFlag" : "oFlag"} color={priority ? priorityColor(priority) : "var(--muted)"} />
         </IconButton>
-        <DropdownMenu open={flags} onClose={() => setFlags(false)} items={priorityItems(setPriority)} />
+        <DropdownMenu open={flags} onClose={() => setFlags(false)} items={priorityItems(setPriority, priority)} />
       </span>
       {text.trim() && <button className="p-text-btn" onClick={add}>Add</button>}
     </div>
@@ -747,7 +747,7 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
         </div>
       } actions={
         <div className="p-menu-anchor">
-          <IconButton icon="fSort" label="Sort" onClick={() => setMenu(true)} />
+          <IconButton icon="fSort" label="Sort" menu onClick={() => setMenu(true)} />
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={SORTS.map(([k, l]) => ({ label: l, checked: sort === k, onClick: () => setSort(k) }))} />
         </div>
       } />}

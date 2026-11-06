@@ -7,6 +7,8 @@ import { go } from "../shared/common.tsx";
 import { isTestApp } from "../../platform.ts";
 import { ICONS, ICON_STROKES } from "./icons.ts";
 import { pushBack } from "./native.ts";
+import { menuOpened } from "./menuSlide.ts";
+import { menuShiftX } from "./menuFit.ts";
 import { type Animation, PAGE_SPRING, animateSpring } from "./motion.ts";
 import { trainingTabIcon } from "./trainingParts.tsx";
 import { useLooks } from "./looks.ts";
@@ -42,10 +44,12 @@ export function MIcon({ name, size = 24, color }: { name: string; size?: number;
 }
 
 /** Material 3 icon button: a 48 dp touch target with a 40 dp circular state layer. */
-export function IconButton({ icon, label, onClick, className = "", children, disabled }: {
+export function IconButton({ icon, label, onClick, className = "", children, disabled, menu }: {
   icon?: string; label: string; onClick: () => void; className?: string; children?: ReactNode; disabled?: boolean;
+  /** It opens a menu: a hold opens it at once, to slide to an option (361; menuSlide.ts). */
+  menu?: boolean;
 }) {
-  return <button className={`p-icon ${className}`} aria-label={label} onClick={onClick} disabled={disabled}>{children ?? <MIcon name={icon!} />}</button>;
+  return <button className={`p-icon ${className}`} aria-label={label} aria-haspopup={menu ? "menu" : undefined} onClick={onClick} disabled={disabled}>{children ?? <MIcon name={icon!} />}</button>;
 }
 
 /**
@@ -326,7 +330,12 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
   useLayoutEffect(() => {
     const el = box.current;
     if (!el || !open) return;
-    el.style.top = el.style.bottom = el.style.transformOrigin = "";
+    // A finger still down from the hold that opened it can slide over the options (361).
+    menuOpened(el, onClose);
+    el.style.top = el.style.bottom = el.style.transformOrigin = el.style.marginLeft = "";
+    // Whole across the screen too (review C2): measured from its anchor, unscaled.
+    const host = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+    if (host) { const dx = menuShiftX(host.left + el.offsetLeft, el.offsetWidth, window.innerWidth); if (dx) el.style.marginLeft = `${dx}px`; }
     // Measured unscaled (it grows in from 80%), within what shows of the page scrolling it.
     let lo = 8, hi = window.innerHeight - 8;
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {

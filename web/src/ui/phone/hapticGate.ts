@@ -33,3 +33,17 @@ export class HapticGate {
     return true;
   }
 }
+
+/** Settings → Touch and gestures: the touch feel can be turned off (on unless turned off). Kept on this phone. */
+export const TOUCH_FEEL_KEY = "touchFeel";
+export function touchFeelOn(): boolean {
+  try { return localStorage.getItem(TOUCH_FEEL_KEY) !== "false"; } catch { return true; }
+}
+
+/**
+ * One pulse of [kind] through [play], if the phone can ([can]), the switch is on and [gate] lets it through at
+ * [now]: what haptics.ts feel() does, here so the switch can be tested (review C7).
+ */
+export function feelVia(gate: HapticGate, can: boolean, kind: Feel, now: number, play: (kind: Feel) => void) {
+  if (can && touchFeelOn() && gate.allow(kind, now)) play(kind);
+}

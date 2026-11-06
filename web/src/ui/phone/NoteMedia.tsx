@@ -16,10 +16,9 @@ import { feel } from "./haptics.ts";
 import { showSnackbar } from "./m3.tsx";
 import { GLIDE_SPRING, type Animation, VelocityTracker, animateSpring } from "./motion.ts";
 import { pushBack } from "./native.ts";
-import { TOUCH_SLOP, swallowClick } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { deskPager, mouseMenu } from "./desk.ts";
 
-const LONG_PRESS = 450;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const aspect = (m: NoteImage) => (m.width > 0 && m.height > 0 ? m.width / m.height : 1);
 

@@ -32,7 +32,7 @@ import { spring, swipeTabs, useSwipePager } from "./pager.ts";
 import { DurationWheels, HeldTime, TimeWheels } from "./TimeWheel.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
 import { feel } from "./haptics.ts";
-import { TOUCH_SLOP } from "./press.ts";
+import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { mouseMenu } from "./desk.ts";
 import { pushBack } from "./native.ts";
 import { SelectedMark } from "./Select.tsx";
@@ -637,7 +637,7 @@ function useHold(onHold: () => void, onTap: () => void) {
       cancel();
       if (theirs(e.target) || (e.pointerType === "mouse" && e.button !== 0)) { st.current = null; return; }
       const p = { timer: 0, x: e.clientX, y: e.clientY, fired: false };
-      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onHold(); }, 500);
+      p.timer = window.setTimeout(() => { p.fired = true; feel("pickup"); cb.current.onHold(); }, LONG_PRESS);
       st.current = p;
     },
     onPointerMove: (e: React.PointerEvent) => {
