@@ -49,3 +49,13 @@ export class SlideSession<T> {
     return t - this.overSince >= SLIDE_DWELL || this.speed < SLIDE_SLOW ? this.over : null;
   }
 }
+
+/** How long (ms) after a hold opened a menu, or after its finger lifted, the browser's own click is dropped. */
+export const CLICK_DROP_MS = 600;
+/**
+ * Whether a real click at [now] is the leftover of a hold that opened a menu (set at [swallowAt], 0: none), to be
+ * dropped. Only for a moment (review C6): a click that never came mustn't eat a later one, such as a key's.
+ */
+export function dropsClick(swallowAt: number, now: number): boolean {
+  return swallowAt > 0 && now - swallowAt <= CLICK_DROP_MS;
+}

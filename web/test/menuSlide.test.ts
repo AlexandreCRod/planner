@@ -41,3 +41,11 @@ test("a slow, deliberate slide onto an option picks it as the finger lifts", () 
   s.move(100, 140, "A", 200); // 0.2 px/ms
   assert.equal(s.up(205), "A");
 });
+
+// Review C6: the click a hold's lift may make is dropped only for a moment.
+test("a hold's leftover click is dropped right after, but never seconds later", async () => {
+  const { dropsClick } = await import("../src/ui/phone/slideSession.ts");
+  assert.equal(dropsClick(1000, 1100), true);
+  assert.equal(dropsClick(1000, 3000), false);
+  assert.equal(dropsClick(0, 100), false);
+});

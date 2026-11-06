@@ -14,7 +14,7 @@
 //   on to scroll scrolls, picks nothing, and the menu closes.
 import { feel } from "./haptics.ts";
 import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
-import { SlideSession } from "./slideSession.ts";
+import { SlideSession, dropsClick } from "./slideSession.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { claimSwipe } from "./gesture.ts";
 
@@ -24,12 +24,16 @@ let down: { id: number; x: number; y: number } | null = null;
 let hold: { id: number; x0: number; y0: number; timer: number } | null = null;
 /** The slide through the open menu, and its menu. */
 let slide: { id: number; s: SlideSession<HTMLElement>; menu: HTMLElement; close: () => void; free: boolean } | null = null;
-/** Real clicks are dropped from a hold that opened a menu until the next touch (the lift's click isn't a tap). */
-let swallowing = false;
+/**
+ * When a hold opened a menu, or its finger lifted (performance.now; 0: none): real clicks are dropped for a
+ * moment after (the lift's click isn't a tap), until the next touch.
+ */
+let swallowAt = 0;
 
 const optionAt = (menu: HTMLElement, x: number, y: number): HTMLElement | null => {
   const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[role=menuitem]") ?? null;
-  return el && menu.contains(el) && !(el as HTMLButtonElement).disabled ? el : null;
+  // A menu fading out (closed by Back mid-slide) offers nothing (review C6).
+  return el && menu.contains(el) && !menu.classList.contains("out") && !(el as HTMLButtonElement).disabled ? el : null;
 };
 
 function light(el: HTMLElement | null, on: boolean) { el?.classList.toggle("slide-on", on); }
@@ -71,7 +75,7 @@ export function menuOpened(menu: HTMLElement, close: () => void) {
   slide = { id: down.id, s: new SlideSession<HTMLElement>(down.x, down.y, performance.now()), menu, close, free };
   if (!free) suspendOverscroll(true); // the page's rubber-band edge stays still under the sliding finger
   claimSwipe(down.id); // and the swipes under the menu (the month, the day, the tabs) leave this finger alone
-  swallowing = true;
+  swallowAt = performance.now();
 }
 
 let started = false;
@@ -80,7 +84,9 @@ export function startMenuSlide() {
   started = true;
   const opt = { capture: true, passive: true } as const;
   document.addEventListener("pointerdown", (e) => {
-    swallowing = false;
+    swallowAt = 0;
+    // A slide whose lift never came (a lost pointerup) ends here, so the page scrolls again (review C6).
+    endSlide();
     if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     down = { id: e.pointerId, x: e.clientX, y: e.clientY };
     cancelHold();
@@ -91,7 +97,7 @@ export function startMenuSlide() {
       if (hold !== h || !btn.isConnected) return;
       hold = null;
       feel("pickup");
-      swallowing = true;
+      swallowAt = performance.now();
       btn.click(); // its own onClick opens the menu; the menu then sees the finger still down (menuOpened)
     }, LONG_PRESS);
     hold = h;
@@ -112,6 +118,7 @@ export function startMenuSlide() {
     if (down && e.pointerId === down.id) down = null;
     if (hold && e.pointerId === hold.id) cancelHold();
     if (!slide || e.pointerId !== slide.id) return;
+    if (swallowAt) swallowAt = performance.now(); // the lift's click, if any, comes now
     const cur = slide;
     const pick = e.type === "pointerup" && cur.menu.isConnected ? cur.s.up(e.timeStamp) : null;
     endSlide();
@@ -124,6 +131,6 @@ export function startMenuSlide() {
   // While sliding through a menu the page under it doesn't scroll, unless it's a page that scrolls (free).
   document.addEventListener("touchmove", (e) => { if (slide && !slide.free && e.cancelable) e.preventDefault(); }, { capture: true, passive: false });
   document.addEventListener("click", (e) => {
-    if (swallowing && e.isTrusted) { e.stopPropagation(); e.preventDefault(); swallowing = false; }
+    if (e.isTrusted && dropsClick(swallowAt, performance.now())) { e.stopPropagation(); e.preventDefault(); swallowAt = 0; }
   }, { capture: true });
 }
