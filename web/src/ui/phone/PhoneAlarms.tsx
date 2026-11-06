@@ -511,7 +511,7 @@ const toggleOpen = (open: Record<number, boolean>, group: ClockAlarm[]) => {
 function deleteAlarms(group: ClockAlarm[]) {
   const gone = Promise.all(group.map((a) => native.deleteClock(a.id)));
   void act(gone);
-  showSnackbar(group.length === 1 ? "Alarm deleted" : `${group.length} alarms deleted`, "Undo",
+  showSnackbar(group.length === 1 ? "Alarm removed" : `${group.length} alarms removed`, "Undo",
     () => void gone.then((taken) => Promise.all(group.map((a, i) => native.saveClock(a, taken[i].snoozeUntil)))).then(refreshAlarmState));
 }
 
@@ -1089,8 +1089,8 @@ function TimersPane({ timers: all, active, onNew }: { timers: ClockTimer[]; acti
     const commit = () => { if (done) return; done = true; offFlush(); void act(native.timer("delete", { id: t.id })).then(() => stay(t.id)); };
     const offFlush = onFlush(commit);
     setLeaving((l) => new Set([...l, t.id]));
-    if (!wait) { commit(); showSnackbar("Timer deleted"); return; }
-    showSnackbar("Timer deleted", "Undo", () => {
+    if (!wait) { commit(); showSnackbar("Timer removed"); return; }
+    showSnackbar("Timer removed", "Undo", () => {
       if (done) { void act(native.timer("restore", { json: JSON.stringify(t) })); return; } // the app was put away meanwhile
       done = true;
       offFlush();
@@ -1215,7 +1215,7 @@ function StopwatchPane({ active }: { active: boolean }) {
     setLeaving((l) => new Set([...l, id]));
     // Its notification goes at once too, and comes back on Undo (review of 2.10.1, finding 6).
     void act(native.stopwatch("hide", { id }));
-    showSnackbar(`${label} deleted`, "Undo", () => { if (done) return; done = true; offFlush(); stay(id); void act(native.stopwatch("show", { id })); }, { onGone: commit });
+    showSnackbar(`${label} removed`, "Undo", () => { if (done) return; done = true; offFlush(); stay(id); void act(native.stopwatch("show", { id })); }, { onGone: commit });
   };
   return (
     <div className="pa-scroll pa-sw">
