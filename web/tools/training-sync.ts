@@ -21,6 +21,7 @@ import type { Category, Completion, Item } from "../src/domain/types.ts";
 import type { HealthDay, HealthNight, HealthSession } from "../src/domain/health.ts";
 import { dailyCsv, mergedRuns, runsCsv, typedRuns, watchLinks, workoutsCsv } from "../src/domain/healthRuns.ts";
 import { sleepCsv } from "../src/domain/sleep.ts";
+import { type ActivityNote, activityNotes } from "../src/domain/cardio.ts";
 import {
   LIFT_HISTORY_FILE, MEALS_FILE, type Night, RUNS_FILE, type Run, SHARED_PLAN, SLEEP_FILE, WEIGHTS_FILE, type WeighIn,
   readLiftHistory, readMeals, readRuns, readSleep, readWeights, weighInsCsv,
@@ -135,9 +136,11 @@ export function healthCsvs(records: Record<string, Rec>, plan: Plan, folderRuns:
   let fileNights: Night[] = [];
   const sleepText = sleepFile?.text ?? folderSleep;
   if (sleepText) { try { fileNights = readSleep(JSON.parse(sleepText.replace(/^﻿/, ""))).nights; } catch { /* unreadable: the watch's nights alone */ } }
+  // The notes on runs and games that have no log entry (367): a "note" column at the end of each.
+  const notes = activityNotes(recordsOfKind<ActivityNote>(records, "trainingNotes"));
   return new Map([
-    [RUNS_CSV, runsCsv(runs)],
-    [WORKOUTS_CSV, workoutsCsv(sessions)],
+    [RUNS_CSV, runsCsv(runs, notes)],
+    [WORKOUTS_CSV, workoutsCsv(sessions, notes)],
     [DAILY_CSV, dailyCsv(days)],
     [SLEEP_CSV, sleepCsv(fileNights, recordsOfKind<HealthNight>(records, "healthNights"), days)],
   ]);

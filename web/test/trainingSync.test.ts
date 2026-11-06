@@ -136,6 +136,30 @@ test("pull's watch CSVs: runs.json as pushed merged with the watch's runs, linke
   assert.match(healthCsvs({}, plan, runsJson("Folder")).get("runs.csv")!, /Folder/);
 });
 
+// 367: the notes Planner alone keeps (on a watch run or game with no log entry) reach the plan session's pull,
+// as a "note" column at the end of runs.csv and workouts.csv, by the run's or session's id.
+test("pull's runs.csv and workouts.csv carry the Planner-only notes in a last \"note\" column", () => {
+  const plan = readPlan({ version: 1, plan: { id: "p", start: "2026-10-26", end: "2026-11-01" },
+    phases: [{ name: "W1", start: "2026-10-26", end: "2026-11-01", sessions: [{ id: "long", kind: "run", title: "Long run" }] }] }).plan!;
+  const session = { id: "hc:a", day: 20754, time: "07:00", endTime: "07:52", startMs: 1, durationS: 3120, movingS: 3000, exerciseType: "running", title: "",
+    source: "x", distanceKm: 8, ascentM: null, steps: null, kcal: null, avgHr: null, maxHr: null, cadenceSpm: null, laps: [], splits: [], hr: [], updatedAt: 1 };
+  const game = { ...session, id: "hc:f", startMs: 9, time: "20:00", exerciseType: "football_american", distanceKm: null };
+  const records = {
+    "healthSessions/hc:a": session, "healthSessions/hc:f": game,
+    "trainingNotes/hc:a": { id: "hc:a", note: "Calf tight, km 6", updatedAt: 1, deletedAt: null },
+    "trainingNotes/hc:f": { id: "hc:f", note: "Knee, after a tackle", updatedAt: 1, deletedAt: null },
+    "trainingNotes/hc:x": { id: "hc:x", note: "cleared", updatedAt: 2, deletedAt: 2 },
+  };
+  const out = healthCsvs(records, plan, null);
+  const runs = out.get("runs.csv")!.trimEnd().split("\r\n");
+  assert.match(runs[0], /,splits_json,note$/);
+  assert.match(runs[1], /^hc:a,.*,"Calf tight, km 6"$/);
+  const workouts = out.get("workouts.csv")!.trimEnd().split("\r\n");
+  assert.match(workouts[0], /,max_hr,note$/);
+  assert.match(workouts[1], /^hc:f,.*,"Knee, after a tackle"$/);
+  assert.doesNotMatch(out.get("runs.csv")! + out.get("workouts.csv")!, /cleared/);
+});
+
 test("pull keeps the categories' sport switch, and the sports follow it (278)", () => {
   const received = [
     { kind: "categories", id: "5", data: { id: 5, name: "Sports", color: 1, defaultAlert: "ALARM", sport: false } },

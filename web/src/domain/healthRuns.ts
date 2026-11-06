@@ -11,6 +11,7 @@
 import type { HealthDay, HealthSession } from "./health.ts";
 import { type Entry, type Plan, type Session, countedDay, csv, isoOf, dayOfSession, entryFor, entryId, phaseIndexAt, sessionsOf } from "./training.ts";
 import { type Hidden, type Run, type RunType, byMoment } from "./trends.ts";
+import { type ActivityNote, noteRecord, runIds } from "./cardio.ts";
 
 // ---------- Merging ----------
 
@@ -172,26 +173,30 @@ export function watchRunSteps(plan: Plan, entries: ReadonlyMap<string, Entry>, r
 
 // ---------- The pull's CSVs for the plan session (columns sent 2026-10-28; new ones only at the end) ----------
 
-/** runs.csv: every run once (mergedRuns), oldest first; session_id is the session it ticked, else runs.json's own. */
-export function runsCsv(runs: Iterable<Run>): string {
+/**
+ * runs.csv: every run once (mergedRuns), oldest first; session_id is the session it ticked, else runs.json's own.
+ * note (367, last): the Planner-only note on a run with no log entry ([notes], records "trainingNotes", found by
+ * any id the run has gone by); a run that ticked a session keeps its note in the training log, as before.
+ */
+export function runsCsv(runs: Iterable<Run>, notes: ReadonlyMap<string, ActivityNote> = new Map()): string {
   const rows: (string | number | null)[][] = [[
     "id", "date", "time", "title", "session_id", "type", "source", "distance_km", "duration_s", "moving_s", "pace_s_per_km",
-    "avg_hr", "max_hr", "cadence_spm", "ascent_m", "splits_json",
+    "avg_hr", "max_hr", "cadence_spm", "ascent_m", "splits_json", "note",
   ]];
   for (const r of [...runs].sort(byMoment)) {
     rows.push([
       r.id, isoOf(r.day), r.time, r.title, r.sessionId, r.type, r.source, r.distanceKm, r.durationS, r.movingS ?? null, r.paceSPerKm,
-      r.avgHr, r.maxHr, r.cadenceSpm, r.ascentM, r.splits?.length ? JSON.stringify(r.splits) : null,
+      r.avgHr, r.maxHr, r.cadenceSpm, r.ascentM, r.splits?.length ? JSON.stringify(r.splits) : null, noteRecord(notes, runIds(r))?.note.trim() ?? null,
     ]);
   }
   return csv(rows);
 }
 
-/** workouts.csv: the watch's other sessions (walks, gym, futsal...), oldest first. */
-export function workoutsCsv(sessions: Iterable<HealthSession>): string {
-  const rows: (string | number | null)[][] = [["id", "date", "time", "type", "title", "duration_s", "distance_km", "kcal", "avg_hr", "max_hr"]];
+/** workouts.csv: the watch's other sessions (walks, gym, futsal...), oldest first; note (367, last): its Planner-only note. */
+export function workoutsCsv(sessions: Iterable<HealthSession>, notes: ReadonlyMap<string, ActivityNote> = new Map()): string {
+  const rows: (string | number | null)[][] = [["id", "date", "time", "type", "title", "duration_s", "distance_km", "kcal", "avg_hr", "max_hr", "note"]];
   for (const s of [...sessions].filter((x) => !isRunSession(x)).sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id))) {
-    rows.push([s.id, isoOf(s.day), s.time, s.exerciseType, s.title, s.durationS, s.distanceKm, s.kcal, s.avgHr, s.maxHr]);
+    rows.push([s.id, isoOf(s.day), s.time, s.exerciseType, s.title, s.durationS, s.distanceKm, s.kcal, s.avgHr, s.maxHr, notes.get(s.id)?.note.trim() ?? null]);
   }
   return csv(rows);
 }

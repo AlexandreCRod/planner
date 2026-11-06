@@ -176,9 +176,9 @@ test("hidden watch runs: by kind, not deleted", () => {
 test("runs.csv: every run once, the tick's session, splits as JSON", () => {
   const runs = mergedRuns([run({ sessionId: "easy" }), run({ id: "g0", day: d("2026-10-25"), time: null, distanceKm: 5, durationS: 1800, paceSPerKm: 360, cadenceSpm: null })], [hc()], new Map([["hc:a", "tempo"]]));
   const lines = runsCsv(runs).trimEnd().split("\r\n");
-  assert.equal(lines[0], "id,date,time,title,session_id,type,source,distance_km,duration_s,moving_s,pace_s_per_km,avg_hr,max_hr,cadence_spm,ascent_m,splits_json");
-  assert.equal(lines[1], "g0,2026-10-25,,Morning Run,,easy,garmin_export,5,1800,,360,151,170,,38,");
-  assert.equal(lines[2], `hc:a,2026-10-28,07:00,Run,tempo,easy,health_connect,8,3120,3000,375,150,171,168,40,"[{""km"":1,""s"":375,""hr"":140}]"`);
+  assert.equal(lines[0], "id,date,time,title,session_id,type,source,distance_km,duration_s,moving_s,pace_s_per_km,avg_hr,max_hr,cadence_spm,ascent_m,splits_json,note");
+  assert.equal(lines[1], "g0,2026-10-25,,Morning Run,,easy,garmin_export,5,1800,,360,151,170,,38,,");
+  assert.equal(lines[2], `hc:a,2026-10-28,07:00,Run,tempo,easy,health_connect,8,3120,3000,375,150,171,168,40,"[{""km"":1,""s"":375,""hr"":140}]",`);
   assert.equal(lines.length, 3);
 });
 
@@ -186,9 +186,9 @@ test("workouts.csv: the watch's sessions that aren't runs", () => {
   const lines = workoutsCsv([hc(), hc({ id: "hc:w", exerciseType: "walking", title: "Walk, park", distanceKm: 3.2, startMs: 5, time: "12:00" }),
     hc({ id: "hc:g", exerciseType: "strength_training", distanceKm: null, avgHr: null, maxHr: null, startMs: 1, time: "06:00" })]).trimEnd().split("\r\n");
   assert.deepEqual(lines, [
-    "id,date,time,type,title,duration_s,distance_km,kcal,avg_hr,max_hr",
-    "hc:g,2026-10-28,06:00,strength_training,,3120,,600,,",
-    `hc:w,2026-10-28,12:00,walking,"Walk, park",3120,3.2,600,150,171`,
+    "id,date,time,type,title,duration_s,distance_km,kcal,avg_hr,max_hr,note",
+    "hc:g,2026-10-28,06:00,strength_training,,3120,,600,,,",
+    `hc:w,2026-10-28,12:00,walking,"Walk, park",3120,3.2,600,150,171,`,
   ]);
 });
 
