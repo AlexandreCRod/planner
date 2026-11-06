@@ -332,7 +332,7 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     if (!el || !open) return;
     // A finger still down from the hold that opened it can slide over the options (361).
     menuOpened(el, onClose);
-    el.style.top = el.style.bottom = el.style.transformOrigin = el.style.marginLeft = "";
+    el.style.top = el.style.bottom = el.style.transformOrigin = el.style.marginLeft = el.style.maxHeight = "";
     // Whole across the screen too (review C2): measured from its anchor, unscaled.
     const host = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
     if (host) { const dx = menuShiftX(host.left + el.offsetLeft, el.offsetWidth, window.innerWidth); if (dx) el.style.marginLeft = `${dx}px`; }
@@ -342,6 +342,8 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
       const oy = getComputedStyle(p).overflowY;
       if (oy === "auto" || oy === "scroll") { const b = p.getBoundingClientRect(); lo = Math.max(lo, b.top + 8); hi = Math.min(hi, b.bottom - 8); break; }
     }
+    // Never taller than what shows: a longer menu scrolls (and scrolls itself under a sliding finger, menuSlide).
+    if (el.offsetHeight > hi - lo) el.style.maxHeight = `${hi - lo}px`;
     const top = el.getBoundingClientRect().top, h = el.offsetHeight;
     if (top + h <= hi) return;
     const anchor = el.parentElement?.getBoundingClientRect();

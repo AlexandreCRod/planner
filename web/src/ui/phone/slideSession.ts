@@ -59,3 +59,22 @@ export const CLICK_DROP_MS = 600;
 export function dropsClick(swallowAt: number, now: number): boolean {
   return swallowAt > 0 && now - swallowAt <= CLICK_DROP_MS;
 }
+
+/** How near (px) a long menu's top or bottom edge a sliding finger makes it scroll, and its top speed (px a frame). */
+export const MENU_EDGE = 40;
+const MENU_SPEED = 10;
+
+/**
+ * A menu too long for the screen scrolls itself while a finger slides through it (2.10.2's leftover): px to
+ * scroll this frame (negative: up) for a finger at [x, y], once the finger has been on its options ([entered];
+ * a menu opening beside the finger mustn't run off on its own). Near the top or bottom edge, or past it while
+ * still over the menu's width; faster the further in; nothing where it can't scroll further that way.
+ */
+export function menuEdgeSpeed(x: number, y: number, box: { left: number; right: number; top: number; bottom: number },
+  scrollTop: number, maxScroll: number, entered: boolean): number {
+  if (!entered || maxScroll <= 0 || x < box.left - 24 || x > box.right + 24) return 0;
+  const d = y < box.top + MENU_EDGE ? -(box.top + MENU_EDGE - y) / MENU_EDGE : y > box.bottom - MENU_EDGE ? (y - (box.bottom - MENU_EDGE)) / MENU_EDGE : 0;
+  if ((d < 0 && scrollTop <= 0) || (d > 0 && scrollTop >= maxScroll)) return 0;
+  const m = Math.min(1, Math.abs(d));
+  return Math.sign(d) * Math.max(1, MENU_SPEED * m * m);
+}

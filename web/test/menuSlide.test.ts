@@ -49,3 +49,27 @@ test("a hold's leftover click is dropped right after, but never seconds later", 
   assert.equal(dropsClick(1000, 3000), false);
   assert.equal(dropsClick(0, 100), false);
 });
+
+// 2.10.2's leftover: a menu too long for the screen scrolls itself while a finger slides near its edges.
+import { MENU_EDGE, menuEdgeSpeed } from "../src/ui/phone/slideSession.ts";
+const box = { left: 200, right: 380, top: 100, bottom: 700 };
+
+test("a finger in the middle of a long menu doesn't scroll it; near its bottom it scrolls down, near its top up", () => {
+  assert.equal(menuEdgeSpeed(300, 400, box, 50, 400, true), 0);
+  assert.ok(menuEdgeSpeed(300, 700 - MENU_EDGE / 4, box, 50, 400, true) > 0);
+  assert.ok(menuEdgeSpeed(300, 100 + MENU_EDGE / 4, box, 50, 400, true) < 0);
+});
+
+test("further into the edge (or past it) scrolls faster", () => {
+  const near = menuEdgeSpeed(300, 700 - MENU_EDGE / 2, box, 0, 400, true);
+  const far = menuEdgeSpeed(300, 720, box, 0, 400, true);
+  assert.ok(far > near && near > 0);
+});
+
+test("no scrolling past the ends, for a menu that fits, before the finger reached the options, or far to the side", () => {
+  assert.equal(menuEdgeSpeed(300, 110, box, 0, 400, true), 0);
+  assert.equal(menuEdgeSpeed(300, 695, box, 400, 400, true), 0);
+  assert.equal(menuEdgeSpeed(300, 695, box, 0, 0, true), 0);
+  assert.equal(menuEdgeSpeed(300, 695, box, 0, 400, false), 0);
+  assert.equal(menuEdgeSpeed(40, 695, box, 0, 400, true), 0);
+});

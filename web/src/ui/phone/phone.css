@@ -505,6 +505,8 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
   position: absolute; right: 0; top: 48px; z-index: 40; min-width: 112px; max-width: 280px; padding: 8px 0; border-radius: 4px; background: var(--p-sc);
   box-shadow: 0 1px 3px rgb(0 0 0 / .3), 0 4px 8px 3px rgb(0 0 0 / .15); transform-origin: top right; animation: p-menu-in .12s cubic-bezier(.2, 0, 0, 1);
 }
+/* A menu longer than the screen scrolls inside itself (DropdownMenu caps its height). */
+.phone .p-menu { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .phone .p-menu.out { animation: p-menu-out .075s linear forwards; }
 @keyframes p-menu-in { from { opacity: 0; transform: scale(.8); } }
 @keyframes p-menu-out { to { opacity: 0; } }
