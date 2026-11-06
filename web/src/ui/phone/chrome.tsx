@@ -331,7 +331,7 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     const el = box.current;
     if (!el || !open) return;
     // A finger still down from the hold that opened it can slide over the options (361).
-    menuOpened(el);
+    menuOpened(el, onClose);
     el.style.top = el.style.bottom = el.style.transformOrigin = el.style.marginLeft = "";
     // Whole across the screen too (review C2): measured from its anchor, unscaled.
     const host = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();

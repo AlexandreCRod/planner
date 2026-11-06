@@ -9,6 +9,9 @@
 //   one (that button, a city, a picture, the to-dos button), that finger can slide over the options: the one
 //   under it is lit, with a tick, and lifting on it picks it. Lifting anywhere else, or without having moved,
 //   leaves the menu open to tap, as a tapped menu is.
+// - A lift picks only on purpose (review C3): after resting on the option a moment, or coming onto it slowly.
+// - In a page that scrolls (Settings, an item's page), the menu doesn't hold the page still: a finger that goes
+//   on to scroll scrolls, picks nothing, and the menu closes.
 import { feel } from "./haptics.ts";
 import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { SlideSession } from "./slideSession.ts";
@@ -20,7 +23,7 @@ let down: { id: number; x: number; y: number } | null = null;
 /** A hold on a menu button, waiting for LONG_PRESS. */
 let hold: { id: number; x0: number; y0: number; timer: number } | null = null;
 /** The slide through the open menu, and its menu. */
-let slide: { id: number; s: SlideSession<HTMLElement>; menu: HTMLElement } | null = null;
+let slide: { id: number; s: SlideSession<HTMLElement>; menu: HTMLElement; close: () => void; free: boolean } | null = null;
 /** Real clicks are dropped from a hold that opened a menu until the next touch (the lift's click isn't a tap). */
 let swallowing = false;
 
@@ -34,8 +37,9 @@ function light(el: HTMLElement | null, on: boolean) { el?.classList.toggle("slid
 function endSlide() {
   if (!slide) return;
   light(slide.s.over, false);
+  const free = slide.free;
   slide = null;
-  suspendOverscroll(false);
+  if (!free) suspendOverscroll(false);
 }
 
 function cancelHold() {
@@ -43,12 +47,29 @@ function cancelHold() {
   hold = null;
 }
 
-/** A DropdownMenu has just opened ([menu] its box): a finger still down may slide into it. */
-export function menuOpened(menu: HTMLElement) {
+/**
+ * Whether [el] sits in a page that scrolls up and down now (Settings, an item's page, a long Today). There a
+ * menu opened by a hold doesn't hold the page still (review C3): a finger that goes on to scroll scrolls, and
+ * the menu closes (the hold wasn't meant for it).
+ */
+function inScrollingPage(el: HTMLElement): boolean {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight + 1) return true;
+  }
+  return false;
+}
+
+/**
+ * A DropdownMenu has just opened ([menu] its box, [close] its own closing): a finger still down may slide into
+ * it.
+ */
+export function menuOpened(menu: HTMLElement, close: () => void) {
   if (!down) return;
   endSlide();
-  slide = { id: down.id, s: new SlideSession<HTMLElement>(down.x, down.y), menu };
-  suspendOverscroll(true); // the page's rubber-band edge stays still under the sliding finger
+  const free = inScrollingPage(menu);
+  slide = { id: down.id, s: new SlideSession<HTMLElement>(down.x, down.y, performance.now()), menu, close, free };
+  if (!free) suspendOverscroll(true); // the page's rubber-band edge stays still under the sliding finger
   claimSwipe(down.id); // and the swipes under the menu (the month, the day, the tabs) leave this finger alone
   swallowing = true;
 }
@@ -81,7 +102,7 @@ export function startMenuSlide() {
     if (!slide || e.pointerId !== slide.id) return;
     if (!slide.menu.isConnected) { endSlide(); return; }
     const was = slide.s.over;
-    if (slide.s.move(e.clientX, e.clientY, optionAt(slide.menu, e.clientX, e.clientY))) {
+    if (slide.s.move(e.clientX, e.clientY, optionAt(slide.menu, e.clientX, e.clientY), e.timeStamp)) {
       light(was, false);
       light(slide.s.over, true);
       if (slide.s.over) feel("tick");
@@ -91,14 +112,17 @@ export function startMenuSlide() {
     if (down && e.pointerId === down.id) down = null;
     if (hold && e.pointerId === hold.id) cancelHold();
     if (!slide || e.pointerId !== slide.id) return;
-    const pick = e.type === "pointerup" && slide.menu.isConnected ? slide.s.up() : null;
+    const cur = slide;
+    const pick = e.type === "pointerup" && cur.menu.isConnected ? cur.s.up(e.timeStamp) : null;
     endSlide();
+    // The browser took the finger for a scroll (only where the page scrolls): the menu wasn't wanted.
+    if (e.type === "pointercancel" && cur.free) { cur.close(); return; }
     pick?.click(); // a made-up click (not dropped): the option does what a tap on it does
   };
   document.addEventListener("pointerup", up, opt);
   document.addEventListener("pointercancel", up, opt);
-  // While sliding through a menu the page under it doesn't scroll.
-  document.addEventListener("touchmove", (e) => { if (slide && e.cancelable) e.preventDefault(); }, { capture: true, passive: false });
+  // While sliding through a menu the page under it doesn't scroll, unless it's a page that scrolls (free).
+  document.addEventListener("touchmove", (e) => { if (slide && !slide.free && e.cancelable) e.preventDefault(); }, { capture: true, passive: false });
   document.addEventListener("click", (e) => {
     if (swallowing && e.isTrusted) { e.stopPropagation(); e.preventDefault(); swallowing = false; }
   }, { capture: true });
