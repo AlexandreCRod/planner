@@ -541,11 +541,14 @@ const NO_SPORTS: ReadonlySet<number> = new Set();
 export type GameKind = "futsal" | "sport";
 
 /**
- * Whether another sport's title plainly says it's gentle, a walk or yoga: it then counts only for the rules
- * about whole days (rest days, days in a row). Any other sport counts as sprinty, so as futsal (323, the plan
- * session's rule). Sports aren't told apart any further: their titles are free text.
+ * Whether another sport's title plainly says it's gentle, a walk, a hike, a bike ride or yoga: it then counts only
+ * for the rules about whole days (rest days, days in a row). Any other sport counts as sprinty, so as futsal (323,
+ * the plan session's rule). Bike rides (e-bike too: the user commutes by e-bike), walks and hikes added in 367.
+ * Sports aren't told apart any further: their titles are free text. The plan's own `kind: bike` sessions aren't
+ * sports, so this doesn't touch them.
  */
-export const isGentleSport = (title: string) => /\b(walks?|walking|stroll|yoga|pilates|stretch(ing)?|mobility|tai chi|caminhada|ioga)\b/i.test(title);
+export const isGentleSport = (title: string) =>
+  /\b(walks?|walking|stroll|yoga|pilates|stretch(ing)?|mobility|tai chi|caminhada|passeio|ioga|hikes?|hiking|trilhos?|e-?bikes?|bikes?|biking|bicycles?|cycling|bicicletas?|bicla|ciclismo)\b/i.test(title);
 
 /**
  * Whether an event is on Training, and as what (267). Only events count:

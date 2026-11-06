@@ -90,8 +90,18 @@ test("323: a sport the day before the long run breaks futsal's rule, in its own 
     assert.equal(brokenNow(plan, g.es).size, 0, title);
     assert.equal(brokenRules(plan, g.es, { futsal: g.id }, MON + 5).length, 0, title);
   }
+  // 367: bike rides (e-bike too), walks and hikes are whole-day only, never sprinty, in English and Portuguese.
+  for (const title of ["E-bike to work", "Bike ride", "Hike Sintra", "ebike home", "Cycling", "Bicicleta", "Caminhada na praia", "Trilho da Arrábida"]) {
+    assert.equal(isGentleSport(title), true, title);
+    const g = on(title);
+    assert.equal(brokenNow(plan, g.es).size, 0, title);
+    assert.equal(brokenRules(plan, g.es, { futsal: g.id }, MON + 5).length, 0, title);
+  }
   // It has to be the word.
   assert.equal(isGentleSport("Sidewalk sprints"), false);
+  assert.equal(isGentleSport("Bikram yoga"), true);   // yoga, not the bike
+  assert.equal(isGentleSport("Spin class"), false);
+  assert.equal(isGentleSport("Futsal"), false);
   assert.equal(isGentleSport("Padel"), false);
   assert.equal(isGentleSport("Sport"), false);
 });
