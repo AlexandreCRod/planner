@@ -4,6 +4,7 @@
 // fingers, moves an event on long-press-and-drag (snapped to 15 minutes), adds one on a tap on an
 // empty slot, and slides sideways like a pager to the days before and after. Month and Year slide the
 // same way.
+import { listsToTop } from "./calendarTop.ts";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
@@ -117,7 +118,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   /** Picked in the menu: remembered, like the native calendarView setting. */
   const pickMode = (m: Mode) => { localStorage.setItem("calModePhone", m); setMode(m); };
   const body = useRef<HTMLDivElement>(null);
-  const jumpToday = () => { setAnchor(todayEpoch()); fadeIn(body.current); };
+  const jumpToday = () => { setAnchor(todayEpoch()); listsToTop(body.current); fadeIn(body.current); };
   useEffect(() => {
     goToday = jumpToday;
     resetLive = () => { resetCalendar(); setF(filters); setMode(baseMode()); jumpToday(); };
