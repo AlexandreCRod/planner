@@ -10,6 +10,13 @@ test("Search opened from Training starts filtered to Training; from other pages 
   assert.deepEqual([...startKinds("TRAINING,NOTES,ALL,bogus", "")], [TRAINING_KIND, "NOTES"]);
 });
 
+// Review of 2.10.2, finding 5: with no plan yet the Training chip doesn't show, so Search mustn't start on it.
+test("Search opened from Training with no plan starts on All", () => {
+  assert.deepEqual([...startKinds("", "training", false)], []);
+  assert.deepEqual([...startKinds("TRAINING,NOTES", "", false)], ["NOTES"]);
+  assert.deepEqual([...startKinds("", "notes", false)], ["NOTES"]);
+});
+
 test("All lists items and training; Training alone lists only training; other kinds only items", () => {
   assert.deepEqual(searchParts(new Set()), { items: true, training: true });
   assert.deepEqual(searchParts(new Set([TRAINING_KIND])), { items: false, training: true });

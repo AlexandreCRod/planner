@@ -35,9 +35,12 @@ export const PAGE_KINDS: Record<string, string[]> = {
   calendar: ["EVENTS", "RECURRING_EVENTS", "ROUTINES"],
   training: [TRAINING_KIND],
 };
-/** The kinds a route asks for ([initial], "a,b"), else the page's ([from]): only real kinds, never All. */
-export function startKinds(initial: string, from: string): Set<string> {
-  const known = (k: string) => k === TRAINING_KIND || KINDS.some(([x]) => x === k && x !== "ALL");
+/**
+ * The kinds a route asks for ([initial], "a,b"), else the page's ([from]): only real kinds, never All. Training
+ * only with a plan ([hasPlan]): without one its chip doesn't show, so a filter on it would find nothing, unseen.
+ */
+export function startKinds(initial: string, from: string, hasPlan = true): Set<string> {
+  const known = (k: string) => (k === TRAINING_KIND ? hasPlan : KINDS.some(([x]) => x === k && x !== "ALL"));
   return new Set((initial ? initial.split(",") : PAGE_KINDS[from] ?? []).filter(known));
 }
 /** What Search lists for the picked kinds (none picked: All, both): the items, the training plan's hits, or both. */

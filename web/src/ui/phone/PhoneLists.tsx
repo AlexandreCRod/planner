@@ -694,11 +694,12 @@ export function PhoneSearch({ initialKind, from = "" }: { initialKind: string; f
   // Back to Search (from a result) finds it as it was: words, filters, sort and scroll.
   const keep = useKeep();
   const [q, setQ] = useKeptState(keep, "q", "");
-  // The kinds shown (several can be picked; none is All). Opened from a page, that page's kinds.
-  const [kinds, setKinds] = useKeptState<ReadonlySet<string>>(keep, "kinds", () => startKinds(initialKind, from));
   // The training plan is a kind of its own (343: Training's search folded in here).
   const tr = useTraining();
   const lp = activeOf(tr);
+  // The kinds shown (several can be picked; none is All). Opened from a page, that page's kinds; Training's
+  // only with a plan, as its chip shows only then (review of 2.10.2, finding 5).
+  const [kinds, setKinds] = useKeptState<ReadonlySet<string>>(keep, "kinds", () => startKinds(initialKind, from, !!lp));
   const trHits = useTrainingHits(lp, q);
   const parts = searchParts(kinds);
   const toggleKind = (k: string) => setKinds((ks) => {
