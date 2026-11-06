@@ -25,3 +25,10 @@ test("no hold keeps a time of its own", () => {
   }
   assert.deepEqual(bad, []);
 });
+
+test("the one hold time is Android's own long press, 400 ms (review C4)", async () => {
+  // Android 12+ ViewConfiguration long-press timeout: Chrome's long press fires then and the lift makes no
+  // click, so a longer app hold leaves presses that do nothing. Change only on purpose.
+  const { LONG_PRESS } = await import("../src/ui/phone/press.ts");
+  assert.equal(LONG_PRESS, 400);
+});

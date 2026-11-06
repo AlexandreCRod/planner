@@ -369,7 +369,7 @@ let hold: { id: number; x0: number; y0: number; timer: number; fired: boolean } 
 let swallowClick = false;
 
 /**
- * Props for something that opens a drum when held (450 ms, with the soft pick-up feel): [onHold] gets the
+ * Props for something that opens a drum when held (LONG_PRESS, with the soft pick-up feel): [onHold] gets the
  * finger's pointer id, so the same finger can go on to turn it. The click after a hold is swallowed,
  * so the row or button under it doesn't open too. A right-click opens it as well (with no pointer to
  * hand on: the mouse wheel, clicks and the arrow keys turn it then).

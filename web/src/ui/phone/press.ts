@@ -70,9 +70,11 @@ function cancel(p: Press) {
 
 /**
  * The one hold time (342, 196): every press-and-hold in the app (a menu, picking up, selecting, a quick
- * change, a new event) waits this long. test/oneHold.test.ts keeps others from creeping back.
+ * change, a new event) waits this long. 400 ms is Android 12+'s own long-press time (and Compose's): Chrome
+ * fires its long press then, after which the lift sends no click, so a longer hold here left a dead gap
+ * where a press was neither a tap nor a hold (review C4). test/oneHold.test.ts keeps it, and others, fixed.
  */
-export const LONG_PRESS = 450;
+export const LONG_PRESS = 400;
 const TIP_SHOWN = 1500;
 interface Hold { host: HTMLElement; x0: number; y0: number; id: number; timer: number }
 let hold: Hold | null = null;
