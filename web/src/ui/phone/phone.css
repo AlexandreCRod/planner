@@ -306,11 +306,15 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 .phone .pg-adcol { flex: 1; min-width: 0; padding: 0 1px; }
 .phone .pg-adcol .more { font-size: 9px; color: var(--muted); }
 .phone .pg-chip { font-size: 10px; line-height: 13px; border-radius: 4px; padding: 1px 3px; margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* An all-day chip's title fades out at its very end instead of "…" (231). */
-.phone .pg-chip > .pg-text {
-  display: block; overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+/* An all-day chip's title fades out at its very end instead of "…" (231). The fade is the text's own paint
+   (its colour as a gradient, clipped to the letters), not a mask: in the Android WebView a masked title in the
+   calendar's sliding strip sometimes drew stray bits of other letters over the chip (a "W…" over "Buy
+   groceries", 2.10.2's checks; gone with the mask off, back with it on). */
+.phone .pg-chip > .pg-text, .phone .pg-block.one .pg-text {
+  background: linear-gradient(to right, currentColor calc(100% - 8px), transparent);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
+.phone .pg-chip > .pg-text { display: block; overflow: hidden; }
 .phone .pg-scroll {
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line);
   touch-action: pan-y; overscroll-behavior: contain;
@@ -339,9 +343,6 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
 /* Not the old PC rows' flex (styles.css .task), which would shrink the text to its width and fade its end even when it fits. */
 .phone :is(.pg-block, .pg-chip).task { display: block; }
 .phone .pg-block b { font-weight: 500; display: block; overflow: hidden; white-space: nowrap; }
-.phone .pg-block.one .pg-text {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-}
 .phone .pg-block .tm { display: block; font-size: 9px; line-height: 11px; opacity: .85; white-space: nowrap; }
 .phone .pg-block.tiny { padding: 0 4px; font-size: 9px; line-height: 10px; }
 .phone .pg-block.lifted { z-index: 10; opacity: .92; box-shadow: 0 8px 18px rgb(0 0 0 / .3), 0 2px 5px rgb(0 0 0 / .2); will-change: transform; }
