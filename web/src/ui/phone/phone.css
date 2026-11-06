@@ -115,6 +115,20 @@ html.phone .task:hover, html.phone .event:hover, html.phone .btn:hover { backgro
 html.phone:not(.wide) .p-tab-icon { transition: none; }
 html.phone:not(.wide) .p-ico.sel { color: var(--p-on-sec-container); }
 html.phone:not(.wide) .p-tab-label { transition: none; }
+/* A running timer or stopwatch on the Clock tab (336, ClockTab.tsx): a thin ring round the icon (a timer's
+   empties as it runs) and its time in the label; a count on the icon when several run. */
+.phone .p-clockring { position: absolute; left: -4px; top: -4px; width: 32px; height: 32px; pointer-events: none; }
+.phone .p-clockring svg { display: block; }
+.phone .p-clockring circle { fill: none; stroke-width: 2; }
+.phone .p-clockring .track { stroke: color-mix(in srgb, var(--p-primary) 22%, transparent); }
+.phone .p-clockring .arc { stroke: var(--p-primary); stroke-linecap: round; }
+.phone .p-clockcount {
+  position: absolute; right: -6px; top: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; box-sizing: border-box;
+  background: var(--p-primary); color: var(--p-on-primary); font-size: 11px; line-height: 16px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums;
+}
+.phone .p-tab.running .p-tab-label { color: var(--p-primary); font-variant-numeric: tabular-nums; }
+/* Its list of running ones opens above the tab, at the bar's right end. */
+.phone .p-menu-anchor.p-clockmenu { position: fixed; right: 0; bottom: calc(var(--bar-h) + var(--sab)); width: 20%; height: 0; z-index: 45; }
 
 .phone .p-fab {
   position: absolute; right: 16px; bottom: calc(var(--bar-h) + var(--sab) + 16px); z-index: 25;

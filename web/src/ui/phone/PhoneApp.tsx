@@ -35,6 +35,8 @@ import { isNative, useWide } from "../../platform.ts";
 import { deskWheel, scrollsSideways, setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
+import { ClockTabMenu, runningNow, useClockTab } from "./ClockTab.tsx";
+import { feel } from "./haptics.ts";
 import { BAR_GAIN, NO_SWIPE, type PageTurner, SWIPE_GAIN, barDays, barSlidePutsNoteAway, barSwipeReversed, barTarget, swipeTabs, turners, useKeepTasksTab } from "./pager.ts";
 import { VelocityTracker, frameWriter, rubberBand } from "./motion.ts";
 import { ShellPos, afterFrame, clamp } from "./shellPos.ts";
@@ -611,6 +613,23 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
   const slideRef = useRef(onSlide);
   slideRef.current = onSlide;
   const day = ymd(todayEpoch()).d;
+  // 336: the Clock tab opens on the running timer or stopwatch it shows, and a hold on it lists them all.
+  const [clockMenu, setClockMenu] = useState(false);
+  const openClock = (section: string) => {
+    const i = tabsRef.current.findIndex((t) => t.key === "alarms");
+    if (i < 0) return;
+    openAlarmSection(section);
+    if (pos.shownTab !== i) tapRef.current(i);
+  };
+  /** A tap on the Clock tab: the soonest running one's section, when the tab shows it (another page shown). */
+  const tapClock = (i: number) => {
+    const first = pos.shownTab !== i ? runningNow()[0] : undefined;
+    if (first) openAlarmSection(first.kind);
+    tapRef.current(i);
+  };
+  const tapTab = (i: number) => (tabsRef.current[i]?.key === "alarms" ? tapClock(i) : tapRef.current(i));
+  const holdClockRef = useRef(() => {});
+  holdClockRef.current = () => { feel("pickup"); setClockMenu(true); };
   // M3's indicator: on a jump it grows from the middle of the new tab and fades in.
   const pillTrack = useCallback((el: HTMLElement | null) => { pos.pill = el; if (el) pos.paint(); }, [pos]);
   const popping = useRef<Animation | null>(null);
@@ -629,21 +648,24 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
     // dir: 1 when the pages follow the finger along the bar (the indicator under it), -1 when reversed
     // in Settings (a slide to the right goes back, as a swipe on the pages does).
     // turner: Settings has the bar change days and weeks (300), on a page that has them.
-    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1; turner: PageTurner | null } | null = null;
+    // held: a hold on the Clock tab opened its list of running timers (336); the finger is the menu's then.
+    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1; turner: PageTurner | null; hold: number; held: boolean } | null = null;
     const tabW = () => g?.w ?? el.clientWidth / tabsRef.current.length;
     const stop = () => {
+      if (g) clearTimeout(g.hold);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       g = null;
     };
     const onMove = (e: PointerEvent) => {
-      if (!g || e.pointerId !== g.id || pos.rail) return; // the side rail is only tapped
+      if (!g || e.pointerId !== g.id || pos.rail || g.held) return; // the side rail is only tapped
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
       if (!g.sliding) {
+        clearTimeout(g.hold);
         g.x0 += Math.sign(dx) * TOUCH_SLOP;
         slideRef.current();
         dropHint();
@@ -661,6 +683,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
     };
     const up = (e: PointerEvent) => {
       if (!g) return;
+      if (g.held) { dropHint(); if (!pos.resting) settleRef.current(pos.target); return; }
       if (e.type !== "pointerup") dropHint();
       if (g.sliding && g.turner) {
         swallowNextClick();
@@ -674,7 +697,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
       } else {
         // A tap, taken as the finger lifts (the tabs' own click is for the keyboard only).
         const tabEl = e.type === "pointerup" ? document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>(".p-tab") : null;
-        if (tabEl && el.contains(tabEl)) tapRef.current(Number(tabEl.dataset.i));
+        if (tabEl && el.contains(tabEl)) tapTab(Number(tabEl.dataset.i));
         dropHint();
         // Pages caught mid-settle by the finger and not sent anywhere by the tap go on where they were going.
         if (!pos.resting) settleRef.current(pos.target);
@@ -695,8 +718,12 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
       if (i !== pos.shownTab) { pos.hint(i); setSelected(i); pop.current?.(); hinted.current = true; }
       const days = barDays();
       const turner = days ? turners[tabsRef.current[Math.round(pos.p)]?.key]?.current ?? null : null;
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner };
+      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner, hold: 0, held: false };
       g.vt.add(e.timeStamp, e.clientX);
+      if (pressed && tabsRef.current[i]?.key === "alarms" && runningNow().length) {
+        const me = g;
+        me.hold = window.setTimeout(() => { if (g === me && !me.sliding) { me.held = true; holdClockRef.current(); } }, LONG_PRESS);
+      }
       window.addEventListener("pointermove", onMove, { passive: true });
       window.addEventListener("pointerup", onUp, { passive: true });
       window.addEventListener("pointercancel", onUp, { passive: true });
@@ -711,7 +738,9 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
       <span className="p-pill-track" style={{ ["--tabs" as string]: tabs.length }} ref={pillTrack}>
         <span className="p-pill" ref={pill} />
       </span>
-      {tabs.map((t, i) => (
+      {tabs.map((t, i) => t.key === "alarms"
+        ? <ClockTabButton key={t.key} i={i} label={t.label} selected={selected === i} day={day} onTap={() => tapClock(i)} />
+        : (
         <button key={t.key} data-i={i} className={`p-tab ${selected === i ? "on" : ""}`} aria-label={t.label} aria-current={selected === i ? "page" : undefined}
           onClick={(e) => { if (e.detail === 0) onTap(i); }}>
           <span className="p-tab-icon">
@@ -721,7 +750,24 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
           <span className="p-tab-label">{t.label}</span>
         </button>
       ))}
+      {hasAlarms && <ClockTabMenu open={clockMenu} onClose={() => setClockMenu(false)} onPick={(r) => openClock(r.kind)} />}
     </nav>
+  );
+}
+
+/** The Clock tab: as the others, and while a timer or stopwatch runs (another page shown), its ring and time (336). */
+function ClockTabButton({ i, label, selected, day, onTap }: { i: number; label: string; selected: boolean; day: number; onTap: () => void }) {
+  const clock = useClockTab(selected);
+  return (
+    <button data-i={i} className={`p-tab ${selected ? "on" : ""} ${clock.ring ? "running" : ""}`} aria-label={clock.aria ?? label} aria-current={selected ? "page" : undefined}
+      onClick={(e) => { if (e.detail === 0) onTap(); }}>
+      <span className="p-tab-icon">
+        <span className="p-ico off"><TabGlyph tab="alarms" selected={false} day={day} /></span>
+        <span className="p-ico sel"><TabGlyph tab="alarms" selected day={day} /></span>
+        {clock.ring}
+      </span>
+      <span className="p-tab-label">{clock.label ?? label}</span>
+    </button>
   );
 }
 
