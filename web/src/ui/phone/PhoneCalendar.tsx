@@ -5,6 +5,7 @@
 // empty slot, and slides sideways like a pager to the days before and after. Month and Year slide the
 // same way.
 import { anchorToShow, listsToTop, setDayShower, takePendingDay } from "./calendarTop.ts";
+import { MonthDropdown } from "./pickers.tsx";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
@@ -101,6 +102,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const [mode, setMode] = useState<Mode>(baseMode);
   const [anchor, setAnchorState] = useState(() => { const p = takePendingDay(); if (p !== null) selected = p; return selected; });
   const [menu, setMenu] = useState(false);
+  const [monthOpen, setMonthOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [f, setF] = useState(filters);
   // Routines (daily habits) would crowd the calendar (224): Month and Year show none, the Week, 3-day and
@@ -160,7 +162,12 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
       <div className="p-statusbar" />
       <header className="p-calhead" ref={head}>
         <IconButton className="title-icon" icon="fKeyboardArrowLeft" label="Previous" onClick={() => turn(-1)} />
-        <h2 className="t-title-medium"><FitLine text={titleOf(false)} alt={titleOf(true)} min={14} /></h2>
+        {/* A tap on the month's name drops down a small month to go to another one (373). */}
+        <h2 className="t-title-medium">
+          <button className="p-calmonth" aria-haspopup="dialog" aria-expanded={monthOpen} aria-label={`${titleOf(false)}, go to a month`} onClick={() => setMonthOpen(!monthOpen)}>
+            <FitLine text={titleOf(false)} alt={titleOf(true)} min={14} />
+          </button>
+        </h2>
         <IconButton className="title-icon" icon="fKeyboardArrowRight" label="Next" onClick={() => turn(1)} />
         <span className="grow" />
         {/* The page's own icons (Today when away from it, the view menu), then search and settings in the
@@ -171,6 +178,7 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
           <DropdownMenu open={menu} onClose={() => setMenu(false)} items={menuItems} />
         </div>
         <AppBarActions />
+        {monthOpen && <MonthDropdown value={anchor} onClose={() => setMonthOpen(false)} onPick={(d) => { setAnchor(d); listsToTop(body.current); }} />}
       </header>
       {/* One filter for every view (287): while it hides something, a chip says so; a tap on it opens the
           box, "Clear" shows everything again. */}

@@ -273,6 +273,51 @@ export function DayPickerSheet({ value, onPick, onClose }: { value: number; onPi
   );
 }
 
+/**
+ * The Calendar's quick month change (373): a tap on the month name drops this small month down under it. It
+ * swipes (or turns with the arrows) to other months; a tap on the month's name shows the years; a tap on a day
+ * goes there and closes it, as does a tap outside, on the name again, back or Esc.
+ */
+export function MonthDropdown({ value, onPick, onClose }: { value: number; onPick: (day: number) => void; onClose: () => void }) {
+  useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const t = todayEpoch();
+  const [month, setMonth] = useState(() => { const { y, m } = ymd(value); return epochOf(y, m, 1); });
+  const [years, setYears] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
+  const pager = useSwipePager<HTMLDivElement>({ layers: () => [strip.current], onStep: (dir) => setMonth((m) => addMonths(m, dir)) });
+  const { y, m } = ymd(month);
+  const pick = (d: number) => { feel("tick"); onPick(d); onClose(); };
+  return <>
+    <div className="p-menu-scrim" onClick={onClose} />
+    <div className="p-monthdrop" role="dialog" aria-label="Go to a month">
+      <div className="p-dp-nav">
+        <button className="p-dp-month" aria-expanded={years} onClick={() => setYears(!years)}>
+          {monthLong(m)} {y}<MIcon name="fArrowDropDown" size={18} />
+        </button>
+        <span className="grow" />
+        {!years && <>
+          <IconButton icon="fKeyboardArrowLeft" label="Previous month" onClick={() => setMonth(addMonths(month, -1))} />
+          <IconButton icon="fKeyboardArrowRight" label="Next month" onClick={() => setMonth(addMonths(month, 1))} />
+        </>}
+      </div>
+      {years ? (
+        <YearList year={y} onPick={(yy) => { setMonth(epochOf(yy, m, 1)); setYears(false); }} />
+      ) : <>
+        <div className="p-dp-week">{weekLabels().map((l, i) => <span key={i}>{l}</span>)}</div>
+        <div className="p-hpager p-dp-pager" ref={pager}>
+          <div className="p-hstrip" ref={strip}>
+            {[addMonths(month, -1), month, addMonths(month, 1)].map((first, i) => (
+              <div key={first} className={`p-hpanel ${i === 1 ? "cur" : ""}`} style={{ left: `${(i - 1) * 100}%` }} aria-hidden={i !== 1}>
+                <MonthDays first={first} sel={value} today={t} onPick={pick} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </>}
+    </div>
+  </>;
+}
+
 function weekLabels() {
   return mondayFirst() ? WD : [WD[6], ...WD.slice(0, 6)];
 }

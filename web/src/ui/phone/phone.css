@@ -1970,3 +1970,15 @@ html.phone[data-theme="dark"] {
 .phone .dc-blacks > div { flex: 1; height: 88px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; }
 .phone .dc-photo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 16px 8px; }
 .phone .dc-photo > span { height: 56px; border-radius: 8px; }
+
+/* The Calendar's quick month change (373): the month's name is a button; a small month drops down under it. */
+.phone .p-calhead h2 > .p-calmonth { display: block; width: 100%; height: 40px; padding: 0 4px; border: 0; border-radius: 20px; background: none; color: inherit; font: inherit; letter-spacing: inherit; position: relative; overflow: hidden; cursor: pointer; }
+.phone .p-monthdrop {
+  position: absolute; top: 50px; left: 8px; right: 8px; margin: 0 auto; max-width: 360px; z-index: 40; padding-bottom: 8px; border-radius: 16px; background: var(--p-sc);
+  box-shadow: 0 1px 3px rgb(0 0 0 / .3), 0 4px 8px 3px rgb(0 0 0 / .15); transform-origin: top center; animation: p-monthdrop-in .14s cubic-bezier(.2, 0, 0, 1);
+}
+@keyframes p-monthdrop-in { from { opacity: 0; transform: translate3d(0, -8px, 0) scale(.97); } }
+.phone .p-monthdrop .p-dp-nav { height: 52px; padding: 0 4px 0 12px; }
+.phone .p-monthdrop .p-dp-month { font-size: 15px; color: var(--text); }
+.phone .p-monthdrop .p-dp-years { height: 288px; }
+.phone.wide .p-monthdrop { left: 8px; right: auto; width: 360px; margin: 0; }
