@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A stopwatch's notification (358): its name and state on the left, the count on the right as its own tap
-     target (pause / go on); a tap anywhere else opens the stopwatch. Drawn inside the system's own frame
-     (DecoratedCustomViewStyle), with the notification text styles, so it follows the shade's light or dark. -->
+<!-- A stopwatch's notification (358, look A of 381): its name and state on the left; on the right the time as plain
+     digits (tabular, the title's own size and weight), a small pause mark before it (a play mark when paused), the
+     two its own tap target (pause / go on) with no box around them; a tap anywhere else opens the stopwatch. Drawn
+     inside the system's own frame (DecoratedCustomViewStyle), with the notification text styles, so it follows the
+     shade's light or dark. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -32,17 +34,33 @@
             android:textAppearance="@style/TextAppearance.Compat.Notification.Info" />
     </LinearLayout>
 
-    <Chronometer
-        android:id="@+id/sw_time"
+    <LinearLayout
+        android:id="@+id/sw_tap"
         android:layout_width="wrap_content"
         android:layout_height="48dp"
         android:layout_marginStart="8dp"
         android:background="@drawable/notification_tap"
-        android:gravity="center"
+        android:gravity="center_vertical"
         android:minWidth="88dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:singleLine="true"
-        android:textAppearance="@style/TextAppearance.Compat.Notification.Title"
-        android:textSize="26sp" />
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp">
+
+        <ImageView
+            android:id="@+id/sw_mark"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_marginEnd="6dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_sw_pause"
+            android:tint="?android:attr/textColorSecondary" />
+
+        <Chronometer
+            android:id="@+id/sw_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
+            android:singleLine="true"
+            android:textAppearance="@style/TextAppearance.Compat.Notification.Title" />
+    </LinearLayout>
 </LinearLayout>

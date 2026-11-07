@@ -127,7 +127,10 @@ class StopwatchNoticeTest {
         val paused = nm.getNotification(ClockTools.SW_NOTIFICATION)
         assertNotNull(paused)
         assertEquals(false, paused.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
-        assertEquals(true, paused.extras.getCharSequence("android.text").toString().startsWith("Paused"))
+        // 381, look A: a paused one says so in its title; the plain text (where the layout isn't drawn) has its time.
+        assertEquals("Stopwatch · paused", paused.extras.getCharSequence("android.title").toString())
+        assertEquals(true, paused.extras.getCharSequence("android.text").toString().endsWith("tap to open"))
+        assertEquals(com.alex.planner.web.R.drawable.ic_stat_stopwatch, paused.smallIcon.resId)
         ClockTools.toggleStopwatch(ctx, 0)
         assertEquals(true, ClockTools.stopwatches(ClockTools.current(ctx)).first().running)
         assertEquals("Running", nm.getNotification(ClockTools.SW_NOTIFICATION).extras.getCharSequence("android.text").toString())
@@ -154,7 +157,8 @@ class StopwatchNoticeTest {
         fun tapTheCount() {
             val n = nm.getNotification(ClockTools.SW_NOTIFICATION)!!
             val root = n.contentView.apply(ctx, android.widget.FrameLayout(ctx))
-            val time = root.findViewById<android.view.View>(com.alex.planner.web.R.id.sw_time)
+            // The time and its pause mark are one tap target (381).
+            val time = root.findViewById<android.view.View>(com.alex.planner.web.R.id.sw_tap)
             assertEquals(true, time.performClick())
             // The broadcast the tap sent, delivered to the app's receiver as Android does (it works off the main thread).
             val sent = shadowOf(ctx as android.app.Application).broadcastIntents.last()

@@ -316,18 +316,22 @@ object ClockTools {
      * layouts, the plain title and "Running" / "Paused · 4:20" still show (a tap then opens the stopwatch).
      */
     fun stopwatchNotice(context: Context, line: StopwatchLine): android.app.Notification {
-        val state = if (line.running) "Tap the time to pause" else "Paused · tap the time to go on"
+        // Look A of 381: a paused one says so in its title, and how to go on under it.
+        val title = if (line.running) line.label else "${line.label} · paused"
+        val state = if (line.running) "Tap the time to pause" else "Tap the time to go on"
         val view = RemoteViews(context.packageName, R.layout.notification_stopwatch).apply {
-            setTextViewText(R.id.sw_label, line.label)
+            setTextViewText(R.id.sw_label, title)
             setTextViewText(R.id.sw_state, state)
+            setImageViewResource(R.id.sw_mark, if (line.running) R.drawable.ic_sw_pause else R.drawable.ic_sw_play)
             setChronometer(R.id.sw_time, SystemClock.elapsedRealtime() - line.elapsed, null, line.running)
-            setOnClickPendingIntent(R.id.sw_time, toggleIntent(context, line.id))
-            setContentDescription(R.id.sw_time, if (line.running) "Pause ${line.label}" else "Go on with ${line.label}")
+            setOnClickPendingIntent(R.id.sw_tap, toggleIntent(context, line.id))
+            setContentDescription(R.id.sw_tap, if (line.running) "Pause ${line.label}" else "Go on with ${line.label}")
         }
         val b = NotificationCompat.Builder(context, Notifications.CH_STOPWATCH)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(line.label)
-            .setContentText(if (line.running) "Running" else "Paused · ${formatDuration(line.elapsed)}")
+            .setSmallIcon(R.drawable.ic_stat_stopwatch)
+            // Where a phone doesn't draw the layout: the same words, the time as plain text.
+            .setContentTitle(title)
+            .setContentText(if (line.running) "Running" else "${formatDuration(line.elapsed)} · tap to open")
             .setContentIntent(Notifications.openSectionIntent(context, "stopwatch", 3))
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomContentView(view)
