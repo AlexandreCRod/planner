@@ -34,7 +34,7 @@ export interface RichEditorHandle {
   /** Puts the caret at the start of the text (Enter in a note's title). */
   focusStart(): void;
   /** The formatting commands, for a toolbar drawn elsewhere (the phone's, above the keyboard). */
-  exec(cmd: string, value?: string): void; toggleChecklist(): void; indent(deeper: boolean): void; setSize(px: number | null): void;
+  exec(cmd: string, value?: string): void; clearFormatting(): void; toggleChecklist(): void; indent(deeper: boolean): void; setSize(px: number | null): void;
   /** The editable element itself (the phone's checklist handles sit beside its lines). */
   root(): HTMLElement | null;
 }
@@ -170,10 +170,14 @@ const isSized = (n: Element) => (n.tagName === "SPAN" && !!(n as HTMLElement).st
  * Takes [span] out of the sized elements around it in [block], splitting them, so only its own size
  * counts: Normal picked inside a Title is really normal again (257).
  */
-function liftOut(span: HTMLElement, block: HTMLElement) {
+/** The inline wrappers that format text (bold, italic, underline, strike, highlight, colour, size); links aren't. */
+const FORMATS = new Set(["B", "STRONG", "I", "EM", "U", "S", "STRIKE", "DEL", "FONT", "MARK", "SPAN", "SUB", "SUP"]);
+export const isFormatting = (n: Element) => FORMATS.has(n.tagName);
+
+function liftOut(span: HTMLElement, block: HTMLElement, split: (n: Element) => boolean = isSized) {
   for (let p = span.parentElement; p && p !== block && block.contains(p);) {
     const up: HTMLElement | null = p.parentElement;
-    if (isSized(p)) {
+    if (split(p)) {
       const r = document.createRange();
       const left = p.cloneNode(false) as HTMLElement, right = p.cloneNode(false) as HTMLElement;
       r.setStart(p, 0); r.setEndBefore(span); left.append(r.extractContents());
@@ -566,6 +570,7 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     },
     insertText: (t: string) => { el.current?.focus(); document.execCommand("insertText", false, t); },
     exec: (cmd: string, value?: string) => exec(cmd, value),
+    clearFormatting: () => clearFormatting(),
     toggleChecklist: () => toggleChecklist(),
     indent: (deeper: boolean) => indent(deeper),
     setSize: (px: number | null) => setSize(px),
@@ -732,6 +737,34 @@ export const RichEditor = forwardRef<RichEditorHandle, {
       if (next?.nodeName === "BR" && !next.nextSibling && !(block.textContent ?? "").replace(SIZE_MARK, "")) next.remove();
     }
     liftOut(span, block);
+    sel.collapse(span.firstChild!, 1);
+    onChange();
+  };
+
+  /**
+   * "Clear formatting" (374). On selected text, the browser's removeFormat. With only a caret, what's typed next
+   * is plain: an invisible mark goes at the caret, outside every bold, italic, underline, strike, highlight, colour
+   * and size around it (they're split there), and the caret waits in it, as a picked size does (257).
+   */
+  const clearFormatting = () => {
+    const root = el.current;
+    if (!root) return;
+    root.focus();
+    const sel = getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed || !root.contains(sel.anchorNode)) { exec("removeFormat"); return; }
+    // Text typed straight into the editor has no line of its own yet: the editor is its line.
+    const block = currentBlock(root) ?? root;
+    let span = markAtCaret();
+    if (span) span.removeAttribute("style");
+    else {
+      span = sizedSpan(null);
+      span.append(document.createTextNode(SIZE_MARK));
+      sel.getRangeAt(0).insertNode(span);
+      marks.current.add(span);
+      const next = span.nextSibling;
+      if (next?.nodeName === "BR" && !next.nextSibling && !(block.textContent ?? "").replace(SIZE_MARK, "")) next.remove();
+    }
+    liftOut(span, block, isFormatting);
     sel.collapse(span.firstChild!, 1);
     onChange();
   };

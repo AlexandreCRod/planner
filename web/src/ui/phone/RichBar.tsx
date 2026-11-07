@@ -82,7 +82,7 @@ export function RichBar({ editor, compact, className = "", extra, onHold }: {
           <B icon="fLink" label="Web link" onClick={() => open("link")} />
           {!compact && <B icon="fHorizontalRule" label="Separator line" onClick={() => ed()?.separator()} />}
           {!compact && <B icon="oSchedule" label="Insert date and time" onClick={() => ed()?.insertText(`${formatDate(today())}, ${formatTime(nowMinutes())}`)} />}
-          <B icon="fFormatClear" label="Clear formatting" onClick={() => ed()?.exec("removeFormat")} />
+          <B icon="fFormatClear" label="Clear formatting" onClick={() => ed()?.clearFormatting()} />
           {extra}
         </div>
       )}
