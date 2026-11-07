@@ -7,6 +7,7 @@ import androidx.activity.EdgeToEdge;
 import com.alex.planner.web.alarm.AlarmPlugin;
 import com.alex.planner.web.calendar.CalendarPlugin;
 import com.alex.planner.web.device.DevicePlugin;
+import com.alex.planner.web.device.TopRefresh;
 import com.alex.planner.web.health.HealthConnectPlugin;
 import com.alex.planner.web.invite.InvitePlugin;
 import com.alex.planner.web.update.UpdatePlugin;
@@ -38,6 +39,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CalendarPlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
+        // The screen's top refresh rate (363b): some phones hold apps at 60 Hz unless they ask.
+        TopRefresh.INSTANCE.apply(this);
         // No stretch or glow at the WebView's edges: the page draws its own rubber band (overscroll.ts).
         if (getBridge() != null && getBridge().getWebView() != null) getBridge().getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
     }
