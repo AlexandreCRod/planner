@@ -1908,7 +1908,8 @@ html.phone[data-theme="dark"] {
 .phone .pa-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; margin: -4px 0 -8px; }
 .phone .pa-skipbtn { height: 28px; padding: 0 10px; border-radius: 14px; font-size: 13px; position: relative; overflow: hidden; cursor: pointer; }
 .phone .pa-skipbtn.none { display: block; visibility: hidden; }
-.phone .pa-skipbtn.undo { background: var(--p-sec-container); color: var(--p-on-sec-container); }
+/* Undo in Skip's place, as quiet as Skip (369): plain text, muted. */
+.phone .pa-skipbtn.undo { color: var(--muted); }
 .phone .pa-skipbtn:focus-visible, .phone .pa-rowskip:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 1px; }
 .phone .pa-card.off .pa-skipbtn { color: var(--muted); }
 .phone .pa-rowskip { width: 36px; height: 36px; margin: -4px -2px; cursor: pointer; }

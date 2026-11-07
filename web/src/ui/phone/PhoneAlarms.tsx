@@ -331,13 +331,30 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
   );
 }
 
+/**
+ * While a card's Skip can still be undone (369), what it skipped ("won't ring tomorrow"): if that was the only alarm
+ * on, the "Alarm in ..." line at the top stays in place saying so, so the card and its Undo don't jump up.
+ */
+let skipHeld: string | null = null;
+const skipHeldListeners = new Set<() => void>();
+const holdSkip = (text: string | null) => { skipHeld = text; skipHeldListeners.forEach((l) => l()); };
+const useSkipHeld = () => useSyncExternalStore((l) => { skipHeldListeners.add(l); return () => { skipHeldListeners.delete(l); }; }, () => skipHeld);
+
 function NextAlarm({ alarms, calendar, now, onSkip }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date; onSkip: (a: ClockAlarm) => void }) {
   const rings: { at: Date; title?: string; alarm?: ClockAlarm }[] = alarms.filter((a) => a.enabled)
     .map((alarm) => ({ at: nextRing(alarm, now), alarm })).filter((r): r is { at: Date; alarm: ClockAlarm } => r.at !== null);
   // The calendar's next one too (the list is soonest first; a skipped one doesn't ring).
   const c = calendar.find((x) => !x.skipped);
   if (c) rings.push({ at: new Date(c.at), title: c.title.trim() || "Untitled" });
-  if (!rings.length) return null;
+  const held = useSkipHeld();
+  if (!rings.length) {
+    return held ? (
+      <div className="pa-next">
+        <div className="pa-next-head"><div className="t-title-large grow">No alarm on</div></div>
+        <div className="t-body-medium muted pa-line">{held}</div>
+      </div>
+    ) : null;
+  }
   const { at, title, alarm } = rings.reduce((x, y) => (y.at < x.at ? y : x));
   return (
     <div className="pa-next">
@@ -458,7 +475,13 @@ const ringWhen = (group: ClockAlarm[], day: number) => {
  */
 function SkipButton({ group, now }: { group: ClockAlarm[]; now: Date }) {
   const today = todayNow();
-  const day = skippedNext(group, now);
+  /**
+   * What a Skip just changed, while its Undo can still put it back (369): a one-off alarm skipped is simply off,
+   * so without this its card would lose the button, and Undo would only be in the message at the bottom.
+   */
+  const [just, setJust] = useState<{ before: ClockAlarm[]; day: number } | null>(null);
+  const skipped = skippedNext(group, now);
+  const day = skipped ?? (just && group.every((a) => !a.enabled || !just.before.some((b) => b.id === a.id)) ? just.day : null);
   const next = day === null ? skipNext(group, now) : [];
   const nextDay = day ?? nextRingDay(group, now);
   if (nextDay === null || (day === null && !next.length)) return <span className="pa-skipbtn none" aria-hidden="true" />;
@@ -466,11 +489,20 @@ function SkipButton({ group, now }: { group: ClockAlarm[]; now: Date }) {
   const when = ringWhen(group, nextDay);
   const tap = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (day !== null) { void saveAll(unskipDay(group, day)); return; }
+    if (day !== null) {
+      setJust(null); holdSkip(null);
+      void saveAll(skipped !== null ? unskipDay(group, day) : just?.before ?? []);
+      return;
+    }
     const before = group.filter((a) => next.some((c) => c.id === a.id));
     void saveAll(next);
-    showSnackbar(`${many ? "These alarms" : "It"} won't ring ${dayWord(nextDay, today)}`, "Undo", () => void saveAll(before));
+    setJust({ before, day: nextDay });
+    const text = `${many ? "These alarms" : "It"} won't ring ${dayWord(nextDay, today)}`;
+    holdSkip(`${many ? "These alarms won't" : "It won't"} ring ${dayWord(nextDay, today)}`);
+    showSnackbar(text, "Undo", () => { setJust(null); holdSkip(null); void saveAll(before); },
+      { onGone: () => { setJust(null); holdSkip(null); } });
   };
+  // Undo takes Skip's place, as quiet as Skip was (369: not a filled button).
   return (
     <button className={`p-text-btn pa-skipbtn ${day !== null ? "undo" : ""}`} onClick={tap}
       title={day !== null ? `Ring ${dayWord(day, today)} after all` : `Skip ${when}`}
