@@ -16,11 +16,14 @@ class TopRefreshTest {
         assertEquals(hd120, TopRefresh.fastest(hd60, listOf(hd60, hd90, fhd144, hd120)))
     }
 
-    @Test fun asksNothingWhenAlreadyFastest() {
-        assertNull(TopRefresh.fastest(hd120, listOf(hd60, hd90, hd120)))
-        // The emulator: one 60 Hz mode.
-        assertNull(TopRefresh.fastest(hd60, listOf(hd60)))
-        // 60.000004 vs 60: the same rate.
-        assertNull(TopRefresh.fastest(hd60, listOf(hd60, Mode(5, 1220, 2712, 60.000004f))))
+    @Test fun asksForTheTopRateEvenWhenTheScreenIsAlreadyAtIt() {
+        // The launcher left the screen at 120 Hz as Planner starts: still asked, or HyperOS drops the app to 60 Hz.
+        assertEquals(hd120, TopRefresh.fastest(hd120, listOf(hd60, hd90, hd120)))
+        // The emulator: one 60 Hz mode, asked for all the same.
+        assertEquals(hd60, TopRefresh.fastest(hd60, listOf(hd60)))
+    }
+
+    @Test fun asksNothingWhenNoModeHasTheResolution() {
+        assertNull(TopRefresh.fastest(hd60, listOf(fhd144)))
     }
 }

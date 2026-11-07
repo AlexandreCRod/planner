@@ -17,13 +17,13 @@ object TopRefresh {
     data class Mode(val id: Int, val width: Int, val height: Int, val fps: Float)
 
     /**
-     * The fastest of [modes] at [current]'s resolution, or null when none is faster than [current]
-     * (then nothing is asked: the system's choice already is the top rate).
+     * The fastest of [modes] at [current]'s resolution (null only when there's none at it). It's asked for
+     * even when the screen already runs at it: the mode at start is whatever the launcher or the opening
+     * animation left (often the top rate), and HyperOS lowers the app to 60 Hz a moment later unless the
+     * app has asked (review of 2.10.3, finding 2).
      */
-    fun fastest(current: Mode, modes: List<Mode>): Mode? {
-        val best = modes.filter { it.width == current.width && it.height == current.height }.maxByOrNull { it.fps } ?: return null
-        return if (best.fps > current.fps + 0.5f) best else null
-    }
+    fun fastest(current: Mode, modes: List<Mode>): Mode? =
+        modes.filter { it.width == current.width && it.height == current.height }.maxByOrNull { it.fps }
 
     private var logged = false
 
@@ -43,9 +43,8 @@ object TopRefresh {
             }
             if (!logged) {
                 logged = true
-                val chosen = pick ?: current
-                Log.i("Planner", "Display mode ${chosen.id}: ${chosen.width}x${chosen.height} at ${"%.0f".format(chosen.fps)} Hz" +
-                    (if (pick == null) " (already the fastest" else " (asked; was ${"%.0f".format(current.fps)} Hz") +
+                Log.i("Planner", (if (pick == null) "Display mode not asked (none at ${current.width}x${current.height}" else
+                    "Display mode ${pick.id} asked: ${pick.width}x${pick.height} at ${"%.0f".format(pick.fps)} Hz (now ${"%.0f".format(current.fps)} Hz") +
                     ", modes: ${all.joinToString { "${it.width}x${it.height}@${"%.0f".format(it.fps)}" }})")
             }
         } catch (e: Throwable) {
