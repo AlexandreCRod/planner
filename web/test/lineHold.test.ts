@@ -32,6 +32,14 @@ test("a finger that moves past the slop before the hold is a scroll; a wobble is
   assert.equal(lineHoldMove(100, 100, 106, 106), "off");
 });
 
+// Review of 2.10.3, finding 8: the Clock tab's hold uses the same rule, so a finger that moves 30 px straight up
+// (the start of a flick, a rolling thumb) without sliding sideways no longer opens its list.
+test("a finger moving straight up or down past the slop drops a hold, with no sideways move at all", () => {
+  assert.equal(lineHoldMove(200, 700, 200, 670), "off");
+  assert.equal(lineHoldMove(200, 700, 200, 730), "off");
+  assert.equal(lineHoldMove(200, 700, 200, 700 - TOUCH_SLOP + 1), "wait");
+});
+
 // Four 24 px lines at 0, 24, 48, 72; the second (24) is lifted: the others rest at 0, 24 (was 48), 48 (was 72).
 const others = [{ top: 0, h: 24 }, { top: 24, h: 24 }, { top: 48, h: 24 }];
 

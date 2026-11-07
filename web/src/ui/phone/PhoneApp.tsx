@@ -22,6 +22,7 @@ import { DrumHost } from "./TimeWheel.tsx";
 import { clearSwipeClaim, swallowNextClick, swipeClaimed } from "./gesture.ts";
 import { rowDragging } from "./rowDrag.ts";
 import { LONG_PRESS, TOUCH_SLOP, selectingText, textTouch } from "./press.ts";
+import { lineHoldMove } from "./lineHold.ts";
 import { minimizeApp, setShellBack, startPhonePlumbing, useKeyboardHeight, useKeyboardUp } from "./native.ts";
 import { NoteChip } from "./NoteDock.tsx";
 import { PhoneCalendarImport } from "./CalendarImport.tsx";
@@ -649,7 +650,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
     // in Settings (a slide to the right goes back, as a swipe on the pages does).
     // turner: Settings has the bar change days and weeks (300), on a page that has them.
     // held: a hold on the Clock tab opened its list of running timers (336); the finger is the menu's then.
-    let g: { id: number; x0: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1; turner: PageTurner | null; hold: number; held: boolean } | null = null;
+    let g: { id: number; x0: number; hx: number; hy: number; from: number; sliding: boolean; vt: VelocityTracker; lastX: number; w: number; dir: 1 | -1; turner: PageTurner | null; hold: number; held: boolean } | null = null;
     const tabW = () => g?.w ?? el.clientWidth / tabsRef.current.length;
     const stop = () => {
       if (g) clearTimeout(g.hold);
@@ -663,6 +664,9 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
       g.vt.addEvent(e, "x");
       g.lastX = e.clientX;
       const dx = e.clientX - g.x0;
+      // The Clock tab's hold is for a still finger: one that moves past the slop any way (up too) drops it
+      // (review of 2.10.3, finding 8), as the other holds do.
+      if (g.hold && lineHoldMove(g.hx, g.hy, e.clientX, e.clientY) === "off") { clearTimeout(g.hold); g.hold = 0; }
       if (!g.sliding && Math.abs(dx) <= TOUCH_SLOP) return;
       if (!g.sliding) {
         clearTimeout(g.hold);
@@ -718,7 +722,7 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
       if (i !== pos.shownTab) { pos.hint(i); setSelected(i); pop.current?.(); hinted.current = true; }
       const days = barDays();
       const turner = days ? turners[tabsRef.current[Math.round(pos.p)]?.key]?.current ?? null : null;
-      g = { id: e.pointerId, x0: e.clientX, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner, hold: 0, held: false };
+      g = { id: e.pointerId, x0: e.clientX, hx: e.clientX, hy: e.clientY, from: pos.p, sliding: false, vt: new VelocityTracker(), lastX: e.clientX, w: el.clientWidth / tabsRef.current.length, dir: !days && barSwipeReversed() ? -1 : 1, turner, hold: 0, held: false };
       g.vt.add(e.timeStamp, e.clientX);
       if (pressed && tabsRef.current[i]?.key === "alarms" && runningNow().length) {
         const me = g;
