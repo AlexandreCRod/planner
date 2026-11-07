@@ -193,6 +193,85 @@ export function sleepAverages(nights: readonly SleepNight[], day: number): { sle
 /** What a sleep average is based on: "5 of 7 nights", so one from few nights shows. */
 export const nightsOf7 = (count: number) => `${count} of 7 nights`;
 
+// ---------- A week of nights (344 option B) ----------
+
+/** A nap (under 3 h, bed to wake): shown beside its morning's night, never counted. */
+export interface Nap { bed: string; wake: string; min: number }
+
+/** One row of the week: the night that ended on the morning of [day] (null: no record), the naps that day, and whether it's still to come. */
+export interface WeekRow { day: number; night: SleepNight | null; naps: Nap[]; future: boolean }
+
+/**
+ * The rows for the mornings [from] to [from + 6], oldest first: "Last 7 nights" ends on the latest night, "This
+ * week" is Monday to Sunday (mornings after [t] still to come). A morning's night counts only with a sleep record
+ * (a morning with just a resting HR is "no record"). Naps come from the watch's sessions under 3 h.
+ */
+export function weekRows(nights: readonly SleepNight[], hc: readonly HealthNight[], from: number, t: number): WeekRow[] {
+  const byDay = new Map(withRecord(nights, "totalMin").map((n) => [n.day, n]));
+  const naps = new Map<number, Nap[]>();
+  for (const n of hc) {
+    if (!isNap(n) || n.totalMin <= 0) continue;
+    const list = naps.get(n.day) ?? [];
+    list.push({ bed: n.bed, wake: n.wake, min: n.totalMin });
+    naps.set(n.day, list.sort((a, b) => a.bed.localeCompare(b.bed)));
+  }
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = from + i;
+    return { day, night: byDay.get(day) ?? null, naps: naps.get(day) ?? [], future: day > t };
+  });
+}
+
+/** Clock minutes of a local moment, counted from noon (so 23:30 is 690 and 07:00 is 1140): a night reads left to right. */
+export const fromNoon = (t: string) => (Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16)) + 720) % 1440;
+
+/** Where a night sits on the week's clock: from bed to wake, in minutes from noon (wake can pass the next noon). */
+export function nightPlace(n: { bed: string | null; wake: string | null }): { bed: number; wake: number } | null {
+  if (!n.bed || !n.wake) return null;
+  const bed = fromNoon(n.bed);
+  return { bed, wake: bed + inBedMin(n.bed, n.wake) };
+}
+
+/** The week's clock: 22:00 to 09:00, wider (to whole hours) when a night starts earlier or ends later. In minutes from noon. */
+export function weekClock(rows: readonly WeekRow[]): [number, number] {
+  let lo = 600, hi = 1260;
+  for (const r of rows) {
+    const p = r.night && nightPlace(r.night);
+    if (!p) continue;
+    lo = Math.min(lo, Math.floor(p.bed / 60) * 60);
+    hi = Math.max(hi, Math.ceil(p.wake / 60) * 60);
+  }
+  return [lo, hi];
+}
+
+/** "23:45" from minutes from noon. */
+export const clockFromNoon = (m: number) => {
+  const c = ((Math.round(m) + 720) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(c / 60)).padStart(2, "0")}:${String(c % 60).padStart(2, "0")}`;
+};
+
+/**
+ * The week's averages over the nights that have a record (naps never count): how many of the nights so far, the
+ * time asleep, the bed and wake times (minutes from noon, over the nights that have them) and each stage (over the
+ * nights that have stage totals, and how many those are). Each night's time asleep is its own record, so the
+ * stage averages add up to the asleep one whenever every night has its stages.
+ */
+export function weekAverages(rows: readonly WeekRow[]): {
+  nights: number; of: number; asleep: number | null; bed: number | null; wake: number | null; stages: Record<NightStage, number> | null; stageNights: number;
+} {
+  const had = rows.flatMap((r) => (r.night ? [r.night] : []));
+  const places = had.flatMap((n) => { const p = nightPlace(n); return p ? [p] : []; });
+  const totals = had.flatMap((n) => { const x = nightTotals(n); return x ? [x] : []; });
+  const avg = (k: NightStage) => mean(totals.map((x) => x[k]));
+  return {
+    nights: had.length, of: rows.filter((r) => !r.future).length,
+    asleep: had.length ? mean(had.map((n) => n.totalMin!)) : null,
+    bed: places.length ? mean(places.map((p) => p.bed)) : null,
+    wake: places.length ? mean(places.map((p) => p.wake)) : null,
+    stages: totals.length ? { awake: avg("awake"), rem: avg("rem"), light: avg("light"), deep: avg("deep") } : null,
+    stageNights: totals.length,
+  };
+}
+
 /** The 7-day average line: one point per morning that has [field], its value the average of the 7 mornings to it. */
 export function avg7Line(nights: readonly SleepNight[], field: SleepField): { day: number; v: number }[] {
   return withRecord(nights, field).map((n) => ({ day: n.day, v: avg7(nights, field, n.day)! }));
