@@ -12,7 +12,7 @@ export interface PhotoInfo {
   lat?: number; lng?: number;
 }
 
-const TAG = { make: 0x010f, model: 0x0110, dateTime: 0x0132, exifIfd: 0x8769, gpsIfd: 0x8825, original: 0x9003, pxW: 0xa002, pxH: 0xa003 };
+const TAG = { make: 0x010f, model: 0x0110, orientation: 0x0112, dateTime: 0x0132, exifIfd: 0x8769, gpsIfd: 0x8825, original: 0x9003, pxW: 0xa002, pxH: 0xa003 };
 
 /** The EXIF details of a JPEG file's bytes; an empty object when it has none (or isn't a JPEG). */
 export function readExif(buf: ArrayBuffer): PhotoInfo {
@@ -74,7 +74,11 @@ function readTiff(v: DataView, base: number, end: number): PhotoInfo {
   const make = text(zero.get(TAG.make)), model = text(zero.get(TAG.model));
   if (model) info.camera = make && !model.toLowerCase().startsWith(make.toLowerCase().split(" ")[0]) ? `${make} ${model}` : model;
   const w = num(exif.get(TAG.pxW)), h = num(exif.get(TAG.pxH));
-  if (w && h) { info.width = w; info.height = h; }
+  // Stored as the sensor saw it: a photo taken upright says 4032 × 3024 with an orientation of 5-8 (turned a
+  // quarter), so the size is given the way the picture shows (review of 2.10.4, finding 6).
+  const orientation = num(zero.get(TAG.orientation)) ?? 1;
+  const turned = orientation >= 5 && orientation <= 8;
+  if (w && h) { info.width = turned ? h : w; info.height = turned ? w : h; }
   const deg = (r: number[] | undefined) => (r && r.length >= 3 ? r[0] + r[1] / 60 + r[2] / 3600 : undefined);
   const lat = deg(rationals(gps.get(2))), lng = deg(rationals(gps.get(4)));
   if (lat !== undefined && lng !== undefined && (lat || lng)) {

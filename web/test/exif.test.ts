@@ -4,7 +4,7 @@ import { photoLines, readExif } from "../src/domain/exif.ts";
 
 // 379: a photo's date taken, camera, size and place, from its EXIF. A small JPEG with an EXIF block, built here.
 type E = { tag: number; type: number; count: number; data: number[] };
-function jpegWithExif(le: boolean): ArrayBuffer {
+function jpegWithExif(le: boolean, orientation?: number): ArrayBuffer {
   const bytes: number[] = [];
   const u16 = (n: number) => (le ? [n & 255, n >> 8] : [n >> 8, n & 255]);
   const u32 = (n: number) => (le ? [n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24] : [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255]);
@@ -14,6 +14,7 @@ function jpegWithExif(le: boolean): ArrayBuffer {
   const ifd0: E[] = [
     { tag: 0x010f, type: 2, count: 7, data: ascii("Google") },
     { tag: 0x0110, type: 2, count: 9, data: ascii("Pixel 6a") },
+    ...(orientation ? [{ tag: 0x0112, type: 3, count: 1, data: u16(orientation) }] : []),
     { tag: 0x8769, type: 4, count: 1, data: [] }, { tag: 0x8825, type: 4, count: 1, data: [] },
   ];
   const exif: E[] = [
@@ -67,3 +68,11 @@ test("with EXIF: taken first, then added, the camera, the original size and the 
   const lines = photoLines(readExif(jpegWithExif(false)), new Date(2026, 10, 7), { width: 1600, height: 1200 }, (d) => `${d.getDate()}/${d.getMonth() + 1}`);
   assert.deepEqual(lines, ["Taken 3/11", "Added 7/11", "Google Pixel 6a", "4032 × 3024 · 12.2 MP", "38.72230, -9.13930"]);
 });
+
+// Review of 2.10.4, finding 6: a phone photo held upright is stored sideways with an orientation saying so.
+for (const le of [false, true]) {
+  test(`a photo taken upright gives its size upright (${le ? "little" : "big"}-endian)`, () => {
+    for (const o of [5, 6, 7, 8]) assert.deepEqual(((i) => [i.width, i.height])(readExif(jpegWithExif(le, o))), [3024, 4032], `orientation ${o}`);
+    for (const o of [1, 3]) assert.deepEqual(((i) => [i.width, i.height])(readExif(jpegWithExif(le, o))), [4032, 3024], `orientation ${o}`);
+  });
+}
