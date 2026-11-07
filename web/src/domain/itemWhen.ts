@@ -20,3 +20,9 @@ export function whenText(item: Item, day: number | null): string {
   if (item.allDay) return span ? `All day, ${formatDate(start)} – ${formatDate(end)}` : `${formatDate(start)} · all day`;
   return span ? `${formatDate(start)} ${t(item.startMin)} – ${formatDate(end)} ${t(item.endMin)}` : `${formatDate(start)} · ${t(item.startMin)} – ${t(item.endMin)}`;
 }
+
+/**
+ * "No time" (376): only the time goes; the date, the repeat and everything else stay. An event without a time
+ * is an all-day one.
+ */
+export const noTimePatch = (d: { type: Item["type"] }): Partial<Item> => (d.type === "EVENT" ? { allDay: true, startMin: null, endMin: null } : { startMin: null, endMin: null });

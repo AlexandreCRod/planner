@@ -482,6 +482,11 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
     if (lineMode) setOv((o) => ({ ...o, startMin: s, endMin: end, allDay: false }));
     else setItem({ endMin: end });
   };
+  /** "No time" (376): the time goes, nothing else; an event becomes all-day. */
+  const clearTime = () => {
+    if (lineMode) setOv((o) => ({ ...o, startMin: null, endMin: null, ...(d.type === "EVENT" ? { allDay: true } : {}) }));
+    else setItem(d.type === "EVENT" ? { allDay: true, startMin: null, endMin: null } : { startMin: null, endMin: null });
+  };
   const setAllDay = (v: boolean) => {
     if (lineMode) setOv((o) => ({ ...o, allDay: v }));
     else setItem(v ? { allDay: true, startMin: null, endMin: null } : { allDay: false, startMin: d.startMin ?? req.min ?? 540, endMin: d.endMin ?? Math.min((d.startMin ?? req.min ?? 540) + 60, DAY_END) });
@@ -744,7 +749,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       </animated.div>
       {pick?.kind === "date" && !isEvent && <DatePickerDialog value={d.startDay ?? req.day} onClose={closePick} onPick={pickDay} />}
       {pick?.kind === "date" && isEvent && <RangeDatePickerDialog start={d.startDay ?? req.day} end={d.endDay ?? d.startDay ?? req.day} onClose={closePick} onPick={pickDays} />}
-      {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} />}
+      {pick?.kind === "start" && <TimePickerDialog value={d.startMin ?? req.min ?? 540} onClose={closePick} onPick={pickStart} onClear={d.startMin === null ? undefined : clearTime} />}
       {pick?.kind === "end" && <TimePickerDialog value={d.endMin ?? Math.min((d.startMin ?? 540) + 60, DAY_END)} onClose={closePick} onPick={pickEnd} />}
       {colorOpen && <CategoryDialog selected={d.categoryId} onClose={closePick} onPick={pickCategory} />}
       {guideOpen && <QuickAddGuide onClose={closePick} />}

@@ -360,13 +360,18 @@ function YearList({ year, onPick }: { year: number; onPick: (y: number) => void 
  * clock), the picked time in a band across the middle, Cancel / OK. Minutes go by [step]: 5 for events
  * and tasks (keeping an odd minute the time already has), 1 for alarms.
  */
-export function TimePickerDialog({ value, onPick, onClose, step = 5 }: { value: number | null; onPick: (min: number) => void; onClose: () => void; step?: number }) {
+export function TimePickerDialog({ value, onPick, onClose, step = 5, onClear }: {
+  value: number | null; onPick: (min: number) => void; onClose: () => void; step?: number;
+  /** "No time": takes the chosen time off (376); only given where a time is set and may go. */
+  onClear?: () => void;
+}) {
   const [min, setMin] = useState(value ?? 9 * 60);
   return (
     <PickerShell onClose={onClose} className="p-timepicker">
       <div className="p-tp-title">Select time</div>
       <TimeWheels value={min} step={step} onChange={setMin} />
       <div className="p-dp-actions">
+        {onClear && <><TextButton onClick={() => { onClear(); onClose(); }}>No time</TextButton><span className="grow" /></>}
         <TextButton onClick={onClose}>Cancel</TextButton>
         <TextButton onClick={() => { onPick(min); onClose(); }}>OK</TextButton>
       </div>

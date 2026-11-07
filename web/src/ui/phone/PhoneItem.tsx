@@ -3,7 +3,7 @@
 // tap (a picker, a menu or a small sheet, saved at once), and an Edit button for the full editor. The
 // full editor is the same one the add panel grows into.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { whenText } from "../../domain/itemWhen.ts";
+import { noTimePatch, whenText } from "../../domain/itemWhen.ts";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
 import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, parseIntList, untilPickerDay } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
@@ -213,7 +213,8 @@ function WhenFields({ d, set }: { d: Item; set: (patch: Partial<Item>) => void }
       }} />
     )}
     {pick?.kind === "time" && (
-      <TimePickerDialog value={(pick.which === "end" ? d.endMin : d.startMin) ?? 9 * 60} onClose={() => setPick(null)} onPick={(m) => (pick.which === "end" ? setEnd(m) : setStart(m))} />
+      <TimePickerDialog value={(pick.which === "end" ? d.endMin : d.startMin) ?? 9 * 60} onClose={() => setPick(null)} onPick={(m) => (pick.which === "end" ? setEnd(m) : setStart(m))}
+        onClear={d.startMin === null ? undefined : () => set(noTimePatch(d))} />
     )}
   </>;
 }

@@ -1593,7 +1593,7 @@ html.phone[data-theme="dark"] {
 .phone .p-mdp-days button.sel:not(.joinl) span { margin-left: 4px; }
 .phone .p-mdp-days button.sel:not(.joinr) span { margin-right: 4px; }
 .phone .p-mdp-days button.sel:not(.joinl):not(.joinr) span { width: 40px; justify-self: center; margin: 0; }
-.phone .p-mdp .p-dp-actions .grow { flex: 1; }
+.phone :is(.p-mdp, .p-timepicker) .p-dp-actions .grow { flex: 1; }
 /* The range picker: the start and end days filled, a band across the days between. */
 .phone .p-rdp-head { display: flex; align-items: baseline; gap: 10px; }
 .phone .p-rdp-head > span:not(.sep) { color: var(--muted); }
