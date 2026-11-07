@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SLIDE_DWELL, SlideSession } from "../src/ui/phone/slideSession.ts";
+import { SLIDE_DWELL, SlideSession, lostLiftOutside } from "../src/ui/phone/slideSession.ts";
 import { TOUCH_SLOP } from "../src/ui/phone/press.ts";
 
 // 361: hold a menu button, slide over an option, lift to pick it. Times in ms.
@@ -72,4 +72,16 @@ test("no scrolling past the ends, for a menu that fits, before the finger reache
   assert.equal(menuEdgeSpeed(300, 695, box, 0, 0, true), 0);
   assert.equal(menuEdgeSpeed(300, 695, box, 0, 400, false), 0);
   assert.equal(menuEdgeSpeed(40, 695, box, 0, 400, true), 0);
+});
+
+// Review of 2.10.3, finding 7: a slide whose lift was lost leaves the menu's scrim letting touches through; the
+// next tap outside the menu closes it and doesn't reach the page under it.
+test("after a lost lift, a tap outside the open menu is taken as closing it, not as a tap on the page", () => {
+  const p = { sliding: true, scrimOff: true, menuOpen: true, primary: true, onMenu: false };
+  assert.equal(lostLiftOutside(p), true);
+  assert.equal(lostLiftOutside({ ...p, onMenu: true }), false); // a tap on an option picks it
+  assert.equal(lostLiftOutside({ ...p, primary: false }), false); // a second finger during a real slide
+  assert.equal(lostLiftOutside({ ...p, menuOpen: false }), false); // the menu already went
+  assert.equal(lostLiftOutside({ ...p, sliding: false }), false); // no slide: the scrim takes the tap itself
+  assert.equal(lostLiftOutside({ ...p, scrimOff: false }), false);
 });

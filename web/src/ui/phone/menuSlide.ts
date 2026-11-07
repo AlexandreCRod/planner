@@ -16,7 +16,7 @@
 //   scrolls by itself near its top and bottom edges.
 import { feel } from "./haptics.ts";
 import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
-import { SlideSession, dropsClick, menuEdgeSpeed } from "./slideSession.ts";
+import { SlideSession, dropsClick, lostLiftOutside, menuEdgeSpeed } from "./slideSession.ts";
 import { suspendOverscroll } from "./overscroll.ts";
 import { claimSwipe } from "./gesture.ts";
 
@@ -99,7 +99,21 @@ export function startMenuSlide() {
   const opt = { capture: true, passive: true } as const;
   document.addEventListener("pointerdown", (e) => {
     swallowAt = 0;
-    // A slide whose lift never came (a lost pointerup) ends here, so the page scrolls again (review C6).
+    // A slide whose lift never came (a lost pointerup): its scrim still lets touches through, so this press was
+    // aimed at the page under the open menu. It's a tap outside the menu: the menu closes, and the page (a
+    // Settings row, a tab) gets neither the press nor its click (review of 2.10.3, finding 7).
+    const cur = slide;
+    if (cur && lostLiftOutside({
+      sliding: true, scrimOff: !!cur.scrim, menuOpen: cur.menu.isConnected && !cur.menu.classList.contains("out"), primary: e.isPrimary,
+      onMenu: e.target instanceof Node && cur.menu.contains(e.target),
+    })) {
+      endSlide();
+      cur.close();
+      e.stopPropagation();
+      swallowAt = performance.now();
+      return;
+    }
+    // Otherwise the slide ends here, so the page scrolls again (review C6).
     endSlide();
     if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     down = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -162,6 +176,9 @@ export function startMenuSlide() {
     pick?.click(); // a made-up click (not dropped): the option does what a tap on it does
   };
   document.addEventListener("pointerup", up, opt);
+  // The app went behind the ringing screen or a system sheet mid-slide: the scrim takes taps again at once.
+  document.addEventListener("visibilitychange", () => { if (document.hidden) endSlide(); });
+  window.addEventListener("blur", () => endSlide());
   document.addEventListener("pointercancel", up, opt);
   // While sliding through a menu the page under it doesn't scroll, unless it's a page that scrolls (free).
   document.addEventListener("touchmove", (e) => { if (slide && !slide.free && e.cancelable) e.preventDefault(); }, { capture: true, passive: false });

@@ -60,6 +60,16 @@ export function dropsClick(swallowAt: number, now: number): boolean {
   return swallowAt > 0 && now - swallowAt <= CLICK_DROP_MS;
 }
 
+/**
+ * A new press while a slide through a menu is still on (its lift was lost: the ringing screen or a system sheet
+ * swallowed it), and the menu's scrim still lets touches through to the page: whether it's a tap outside the
+ * open menu, to be taken as one (the menu closes, the page under it gets nothing). A second finger during a real
+ * slide isn't (never primary), nor a press on the menu itself (review of 2.10.3, finding 7).
+ */
+export function lostLiftOutside(p: { sliding: boolean; scrimOff: boolean; menuOpen: boolean; primary: boolean; onMenu: boolean }): boolean {
+  return p.sliding && p.scrimOff && p.menuOpen && p.primary && !p.onMenu;
+}
+
 /** How near (px) a long menu's top or bottom edge a sliding finger makes it scroll, and its top speed (px a frame). */
 export const MENU_EDGE = 40;
 const MENU_SPEED = 10;
