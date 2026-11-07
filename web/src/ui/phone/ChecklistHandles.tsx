@@ -18,6 +18,7 @@ import { swallowClick } from "./press.ts";
 import { LINE_HOLD, holdsLine, lineHoldMove, slotFor } from "./lineHold.ts";
 import { claimSwipe } from "./gesture.ts";
 import { keyboardUp } from "./native.ts";
+import { browserUndid, canRedoLineMove, canUndoLineMove, forgetLineMoves, moveLines, redoLineMove, undoLineMove } from "./lineMoves.ts";
 
 interface Handle { i: number; top: number; h: number }
 
@@ -32,9 +33,11 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-export function ChecklistHandles({ editor, host, onChange, onHas }: {
+export function ChecklistHandles({ editor, host, onChange, onHas, onLink }: {
   /** The editable element; [host] is the box the handles are placed in (positioned). */
   editor: () => HTMLElement | null; host: () => HTMLElement | null; onChange: () => void; onHas: (has: boolean) => void;
+  /** Whether a web link is under the point: a hold there is the link's (its card), never the line's (finding 3). */
+  onLink?: (x: number, y: number) => boolean;
 }) {
   const [handles, setHandles] = useState<Handle[]>([]);
   /** The line whose handle shows (pressed, pointed at, or being dragged). */
@@ -44,8 +47,8 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
   const key = useRef("");
   const dragging = useRef(false);
   const remeasure = useRef<() => void>(() => {});
-  const cb = useRef({ onChange, onHas });
-  cb.current = { onChange, onHas };
+  const cb = useRef({ onChange, onHas, onLink });
+  cb.current = { onChange, onHas, onLink };
 
   // Where the checklist lines are: measured (once a frame at most) after any change to the text or its size.
   useEffect(() => {
@@ -148,9 +151,10 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
 
   /**
    * Lifts line [from] (and the lines under it) for pointer [pointerId], which is at [y0]: from its handle at
-   * once, or from the line itself after a hold (331). [onEnd] runs once it has settled. False: it can't move.
+   * once, or from the line itself after a hold (331). [onEnd] runs once it has settled, [onMoved] right
+   * after the lines move in the text (the cursor kept in its line). False: it can't move.
    */
-  const lift = (pointerId: number, y0: number, from: number, onEnd?: () => void): boolean => {
+  const lift = (pointerId: number, y0: number, from: number, onEnd?: () => void, onMoved?: () => void): boolean => {
     const root = editor();
     if (!root || dragging.current) return false;
     const lines = linesOf(root);
@@ -249,9 +253,12 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       // The paragraphs move in the text; the others are then exactly where they were drawn.
       for (const u of units) for (const el of u.els) { el.classList.remove("pn-sliding"); el.style.transform = ""; }
       for (const el of dragged) el.style.transform = "";
+      // The cursor stays where it was in the moved line (finding 1), and the note's Undo can take the move back
+      // (finding 10): lineMoves.ts.
       if (moved) {
-        if (k < units.length) units[k].els[0].before(...dragged);
-        else { const lu = units[units.length - 1]; lu.els[lu.els.length - 1].after(...dragged); }
+        const lu = units[units.length - 1];
+        moveLines(root, dragged, k < units.length ? units[k].els[0] : lu.els[lu.els.length - 1].nextSibling);
+        onMoved?.();
       }
       // The lifted line glides the rest of the way into its place.
       const off = shownTop - dragged[0].getBoundingClientRect().top;
@@ -334,6 +341,7 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       if (!line || !holdsLine({
         pointerType: e.pointerType, primary: e.isPrimary, checkLine: handlesRef.current.some((x) => x.i === i),
         folded: line.classList.contains("pn-folded"), dragging: dragging.current,
+        onLink: !!cb.current.onLink?.(e.clientX, e.clientY),
       })) return;
       const sel = getSelection();
       const saved = sel && sel.rangeCount && root.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
@@ -345,7 +353,10 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
         cover();
         claimSwipe(me.id);
         swallowClick(600);
-        if (!liftRef.current(me.id, me.y, me.i, () => { if (h === me) done(); })) done();
+        // Once the lines have moved, the cursor to keep is where it now is (in the moved line): the copy taken as
+        // the finger went down fell out of the line with it.
+        const moved = () => { const s = getSelection(); if (me.saved && s?.rangeCount && root?.contains(s.anchorNode)) me.saved = s.getRangeAt(0).cloneRange(); };
+        if (!liftRef.current(me.id, me.y, me.i, () => { if (h === me) done(); }, moved)) done();
       }, LINE_HOLD);
       h = me;
     };
@@ -355,6 +366,22 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
     const up = (e: PointerEvent) => { if (h && !h.held && e.pointerId === h.id) done(); };
     const menu = (e: Event) => { if (h) e.preventDefault(); };
     const selChange = () => { if (h?.held) restore(); };
+    // Ctrl+Z / Ctrl+Y on a keyboard take a line move back (or put it again) as the Undo button does (finding 10);
+    // typing forgets the moves (they can't be undone in the right order after it).
+    const beforeInput = (e: InputEvent) => {
+      if (!root) return;
+      if (e.inputType === "historyUndo") {
+        if (canUndoLineMove(root)) { e.preventDefault(); if (undoLineMove(root)) { key.current = ""; remeasure.current(); cb.current.onChange(); } }
+        else browserUndid(root);
+      } else if (e.inputType === "historyRedo" && canRedoLineMove(root)) {
+        e.preventDefault();
+        if (redoLineMove(root)) { key.current = ""; remeasure.current(); cb.current.onChange(); }
+      }
+    };
+    const input = (e: Event) => {
+      const t = (e as InputEvent).inputType;
+      if (root && t !== "historyUndo" && t !== "historyRedo") forgetLineMoves(root);
+    };
     const attach = () => {
       root = editor();
       if (!root) return false;
@@ -364,6 +391,8 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       window.addEventListener("pointerup", up, { passive: true });
       window.addEventListener("pointercancel", up, { passive: true });
       document.addEventListener("selectionchange", selChange);
+      root.addEventListener("beforeinput", beforeInput);
+      root.addEventListener("input", input);
       return true;
     };
     if (!attach()) t = window.setInterval(() => { if (attach()) clearInterval(t); }, 100);
@@ -376,6 +405,8 @@ export function ChecklistHandles({ editor, host, onChange, onHas }: {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       document.removeEventListener("selectionchange", selChange);
+      root?.removeEventListener("beforeinput", beforeInput);
+      root?.removeEventListener("input", input);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

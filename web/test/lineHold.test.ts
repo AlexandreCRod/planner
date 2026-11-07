@@ -59,3 +59,10 @@ test("a two-line item lifted over a short line doesn't move until it's dragged",
   // A 48 px item at 0 lifted; the 24 px lines under it rest at 0 and 24.
   assert.equal(slotFor([{ top: 0, h: 24 }, { top: 24, h: 24 }], 0), 0);
 });
+
+// Review of 2.10.3, finding 3: a hold on a web link inside a checkbox line opens the link's card only; the line
+// doesn't lift under it as well (one hold meaning on one spot).
+test("a finger resting on a web link in a checkbox line never lifts the line", () => {
+  assert.equal(holdsLine({ ...press, onLink: true }), false);
+  assert.equal(holdsLine({ ...press, onLink: false }), true);
+});

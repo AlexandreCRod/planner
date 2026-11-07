@@ -18,6 +18,8 @@ import { FONT_NAMES, FONTS, PAGE_COLORS, TEMPLATES, isoOf } from "../shared/note
 import { RichEditor } from "../shared/RichEditor.tsx";
 import { useNoteSession } from "../shared/noteSession.ts";
 import { ChecklistHandles } from "./ChecklistHandles.tsx";
+import { browserUndid, canRedoLineMove, canUndoLineMove, onLineMoves, redoLineMove, undoLineMove } from "./lineMoves.ts";
+import { linkInEditable } from "../shared/linkHit.ts";
 import { CaretMarker } from "./CaretMarker.tsx";
 import { NoteFind, takePendingFind } from "./NoteFind.tsx";
 import { NotePeek, PeekPicker, peekInNextNote, takePendingPeek } from "./NotePeek.tsx";
@@ -139,6 +141,21 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
   const dayOcc = isDaily ? occurrencesIn(s.items, s.done, base.noteDay!, base.noteDay!) : [];
   const versions = s.versions.get(noteId) ?? [];
   const undoState = useUndoState();
+  // A checkbox line's move is the app's, not the browser's: Undo takes it back first (review of 2.10.3, finding 10).
+  const [, movesChanged] = useState(0);
+  useEffect(() => onLineMoves(() => movesChanged((n) => n + 1)), []);
+  const editorRoot = () => rich.current?.root() ?? null;
+  const undo = () => {
+    const r = editorRoot();
+    if (r && undoLineMove(r)) { note.changed(); return; }
+    if (r) browserUndid(r);
+    rich.current?.exec("undo");
+  };
+  const redo = () => {
+    const r = editorRoot();
+    if (r && redoLineMove(r)) { note.changed(); return; }
+    rich.current?.exec("redo");
+  };
   const keepFocus = { onPointerDown: (e: React.PointerEvent) => e.preventDefault(), onMouseDown: (e: React.MouseEvent) => e.preventDefault() };
 
   const webLinks = useWebLinks();
@@ -146,8 +163,8 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
     <div ref={pageEl} className={`p-scaffold pn ${page ? "paper" : ""}`} style={page ? { background: page, color: fg!, ["--pn-fg" as string]: fg!, ["--pn-bg" as string]: page } : undefined}>
       <TopAppBar back title={isDaily ? formatDate(base.noteDay!) : ""} className="pn-appbar" actions={<>
         {writing && <span className="pn-undo" {...keepFocus}>
-          <IconButton icon="fUndo" label="Undo" disabled={!undoState.undo} onClick={() => rich.current?.exec("undo")} />
-          <IconButton icon="fRedo" label="Redo" disabled={!undoState.redo} onClick={() => rich.current?.exec("redo")} />
+          <IconButton icon="fUndo" label="Undo" disabled={!undoState.undo && !canUndoLineMove(editorRoot())} onClick={undo} />
+          <IconButton icon="fRedo" label="Redo" disabled={!undoState.redo && !canRedoLineMove(editorRoot())} onClick={redo} />
         </span>}
         <IconButton icon={style.pinned ? "fPushPin" : "oPushPin"} label={style.pinned ? "Unpin" : "Pin"} onClick={() => setStyle({ ...style, pinned: !style.pinned })} />
         <IconButton icon="oPalette" label="Style" onClick={() => setOpen("style")} />
@@ -199,7 +216,8 @@ export function PhoneNote({ id, day, shown = true, onSaved }: { id: number | nul
           <RichEditor ref={rich} initialHtml={note.content} revision={note.revision} onChange={note.changed} fontFamily={FONTS[style.fontFamily]} minHeight={320}
             placeholder="Start writing…" onFocusChange={setFocused} links={webLinks.act} />
           <CaretMarker editor={() => rich.current?.root() ?? null} host={() => textBox.current} show={focused && !kbUp} />
-          <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks} />
+          <ChecklistHandles editor={() => rich.current?.root() ?? null} host={() => textBox.current} onChange={note.changed} onHas={setHasChecks}
+            onLink={(x, y) => { const r = editorRoot(); return !!r && !!webLinks.act && !!linkInEditable(r, x, y); }} />
         </div>
         <div className="pn-links">
           <PhoneLinks id={noteId} s={s} ensureSaved={() => note.save()} />

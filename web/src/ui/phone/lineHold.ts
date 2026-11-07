@@ -7,9 +7,12 @@ import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 /** How long a finger rests on a checkbox line before the line lifts: the one hold time (342). */
 export const LINE_HOLD = LONG_PRESS;
 
-/** Whether a press may become a hold on the line: a finger (not a mouse), on a checkbox line that shows. */
-export function holdsLine(p: { pointerType: string; primary: boolean; checkLine: boolean; folded: boolean; dragging: boolean }): boolean {
-  return p.pointerType !== "mouse" && p.primary && p.checkLine && !p.folded && !p.dragging;
+/**
+ * Whether a press may become a hold on the line: a finger (not a mouse), on a checkbox line that shows, and not
+ * on a web link in it: a hold on a link shows the link's card, one meaning only (review of 2.10.3, finding 3).
+ */
+export function holdsLine(p: { pointerType: string; primary: boolean; checkLine: boolean; folded: boolean; dragging: boolean; onLink?: boolean }): boolean {
+  return p.pointerType !== "mouse" && p.primary && p.checkLine && !p.folded && !p.dragging && !p.onLink;
 }
 
 /** A finger still waiting for its hold: "off" once it has moved past the touch slop (a scroll), else "wait". */
