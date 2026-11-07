@@ -450,7 +450,7 @@ export function PhoneApp() {
     if (key === "notes") { go("note/new"); return; }
     const type: ItemType = key === "calendar" ? "EVENT" : "TASK";
     const day = key === "calendar" ? calendarSelectedDay() : key === "today" ? todayViewedDay() : todayEpoch();
-    setAdding({ mode: "quick", type, day, min: null });
+    setAdding({ mode: "quick", type, day, min: null, fromCalendar: key === "calendar" });
   };
 
   // The app icon's "New task" shortcut (375): the add panel opens on Today, as the + does there.
@@ -547,7 +547,7 @@ function onNewAt(setAdding: (r: AddRequest) => void, setPreview: (p: SlotPreview
   let f = newAtCache.get(setAdding);
   if (!f) {
     // The slot's outline shows in the same frame as the panel starts up (in the new event's default colour).
-    f = (day: number, min: number) => { setPreview({ day, min, end: Math.min(min + 60, 24 * 60 - 1), color: TYPE_COLORS.EVENT }); setAdding({ mode: "slot", type: "EVENT", day, min }); };
+    f = (day: number, min: number) => { setPreview({ day, min, end: Math.min(min + 60, 24 * 60 - 1), color: TYPE_COLORS.EVENT }); setAdding({ mode: "slot", type: "EVENT", day, min, fromCalendar: true }); };
     newAtCache.set(setAdding, f);
   }
   return f;

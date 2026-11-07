@@ -23,7 +23,7 @@ import { act, hasAlarms, native } from "../../alarms/native.ts";
 import { ensureNotifications } from "./PhoneAlarms.tsx";
 import { type Item, type ItemType, type Reminder, PRIORITIES, cssColor, newItem, priorityColor } from "../../domain/types.ts";
 import { saveItem, snapshot } from "../../store/store.ts";
-import { calendarShowDay } from "./calendarTop.ts";
+import { calendarShowItem } from "./calendarTop.ts";
 import { go } from "../shared/common.tsx";
 import { Dialog, FilterChip, MIcon, Segmented } from "./chrome.tsx";
 import { SWIPE_GAIN, pageTarget } from "./pager.ts";
@@ -68,7 +68,8 @@ async function runClock(c: ClockCommand) {
 /** Whole device pixels: the panel is its own GPU layer, and one left at a fractional offset is drawn soft. */
 const snapPx = (v: number) => Math.round(v * devicePixelRatio) / devicePixelRatio;
 
-export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null }
+/** [fromCalendar]: opened by the Calendar's + or a tap on its grid (then a new item moves the Calendar to it, 372). */
+export interface AddRequest { mode: "quick" | "slot"; type: ItemType; day: number; min: number | null; fromCalendar?: boolean }
 /**
  * Where the new event will be, outlined on the calendar while the panel is open (Google Calendar's box).
  * [edge]: the handle being dragged (its time shows beside the hours).
@@ -218,8 +219,8 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
       ? { ...d, endDay: d.startDay !== null ? Math.max(d.endDay ?? d.startDay, d.startDay) : null, title: d.title.trim() }
       : { ...d, endDay: null, endMin: null, title: d.title.trim() };
     saveItem(it, { reminders: draft.reminders, tags: draft.tags.split(/\s+/).filter(Boolean) });
-    // A task or event on a day the calendar doesn't show: it moves there (372).
-    if (it.startDay !== null) calendarShowDay(it.startDay);
+    // Added from the Calendar on a day it doesn't show: it moves there (372).
+    if (req.fromCalendar) calendarShowItem(it);
     onClose();
   };
 
@@ -678,7 +679,7 @@ export function AddPanel({ req, onClose, onPreview }: { req: AddRequest; onClose
         )}
         {editorReady && canGrow && (
           <animated.div className={`gp-full ${grown ? "live" : ""}`} style={{ height: availH, opacity: sp.p.to((p) => clamp01(p * 12 - 0.6)) }}>
-            <PhoneItemEditor id={0} occ={null} draft={draft} onDraft={setDraft} saveRef={saveRef} onClose={dismiss}
+            <PhoneItemEditor id={0} occ={null} draft={draft} onDraft={setDraft} saveRef={saveRef} onClose={dismiss} onAdded={req.fromCalendar ? calendarShowItem : undefined}
               header={<div className="gp-drag" aria-label="Drag down for the small panel"><span className="gp-handle" /></div>} />
           </animated.div>
         )}

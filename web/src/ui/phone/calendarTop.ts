@@ -1,4 +1,7 @@
 import { type CalendarRange, rangeShows } from "../../domain/dates.ts";
+import { calendarShows } from "../../domain/routines.ts";
+import type { Item } from "../../domain/types.ts";
+import { type CalFilter, filterShows } from "./calFilter.ts";
 
 /** The calendar's own scrolling lists: the Agenda, and the day's list under Month. */
 export const CALENDAR_LISTS = ".p-agenda, .p-dayagenda";
@@ -22,18 +25,25 @@ export function anchorToShow(range: CalendarRange, anchor: number, day: number, 
   return rangeShows(range, anchor, day, mondayFirst) ? null : day;
 }
 
-// The calendar's mover for 372, set while it's built; a day asked for before that waits for it.
-let shower: ((day: number) => void) | null = null;
-let pendingDay: number | null = null;
-export const setDayShower = (fn: ((day: number) => void) | null) => { shower = fn; };
-/** Something was just added on [day] (372): the calendar moves to show it, now or when it's next built. */
-export function calendarShowDay(day: number) {
-  if (shower) shower(day);
-  else pendingDay = day;
+/**
+ * Would [item], just added, show in the calendar's [range] as it is now? Not when the filter hides it, nor a
+ * routine that Month and Year leave out (or, in the other views, one whose "Show in calendar" is off). Then
+ * the calendar doesn't move for it (review of 2.10.4, finding 4).
+ */
+export function addedShows(range: CalendarRange, item: Item, filter: CalFilter, allRoutines: boolean, byId?: ReadonlyMap<number, Item>): boolean {
+  if (!filterShows(filter, item)) return false;
+  const month = range === "month" || range === "year";
+  return calendarShows(item, allRoutines ? "all" : month ? "none" : "chosen", byId);
 }
-/** The day asked for while the calendar wasn't built, once. */
-export function takePendingDay(): number | null {
-  const d = pendingDay;
-  pendingDay = null;
-  return d;
+
+// The calendar's mover for 372, set while it's built.
+let shower: ((item: Item) => void) | null = null;
+export const setItemShower = (fn: ((item: Item) => void) | null) => { shower = fn; };
+/**
+ * Something was just added from the Calendar itself (its + or a tap on its grid) (372): the calendar moves to
+ * show it when its day isn't on screen. Adding from Today, Tasks or elsewhere leaves the Calendar where it was
+ * (review of 2.10.4, finding 4), so this isn't called then.
+ */
+export function calendarShowItem(item: Item) {
+  shower?.(item);
 }
