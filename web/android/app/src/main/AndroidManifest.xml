@@ -10,9 +10,13 @@
         android:theme="@style/AppTheme"
         android:networkSecurityConfig="@xml/network_security_config">
 
+        <!-- Wide colour (363a): the window is drawn in Display P3 where the screen can show it, so colours the page
+             gives beyond sRGB (CSS color(display-p3 …), coming with the colour work) reach the OLED's richer range.
+             Colours given in sRGB (all of them today) look the same. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
+            android:colorMode="wideColorGamut"
             android:resizeableActivity="true"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
