@@ -339,8 +339,8 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-md .tr-flash { background: var(--p-sec-container); transition: none; }
 
 /* An exercise's guide: a sheet that stops halfway, swiped up for the whole card (TrainingGuide.tsx). */
-.phone:not(.wide) .p-sheet.tr-guide { height: max(50%, 380px); transition: height .32s cubic-bezier(.2, 0, 0, 1); }
-.phone:not(.wide) .p-sheet.tr-guide.full { height: calc(100% - var(--sat) - 48px); }
+/* Always its full height; when half it rests lower (BottomSheet's [half]), so half and full only slide (380). */
+.phone:not(.wide) .p-sheet.tr-guide { height: calc(100% - var(--sat) - 48px); }
 .phone:not(.wide) .tr-guide .p-sheet-top { height: 28px; }
 .phone .tr-guide .p-sheet-body { position: relative; display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
 .phone .tr-guide-body { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 20px; overscroll-behavior: contain; }
@@ -371,7 +371,7 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
 .phone .tr-guide-open { display: flex; align-items: center; gap: 12px; width: calc(100% - 32px); margin: 14px 16px 0; padding: 12px 8px; border: 0; border-top: 1px solid var(--line);
   background: none; color: var(--p-primary); font: inherit; font-size: 14px; font-weight: 500; text-align: left; }
 .phone .tr-guide-open span { flex: 1; }
-.phone .tr-guide-more { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; align-items: flex-end; justify-content: center; gap: 4px;
+.phone .tr-guide-more { position: absolute; left: 0; right: 0; bottom: var(--rest, 0px); height: 52px; display: flex; align-items: flex-end; justify-content: center; gap: 4px;
   padding: 0 0 10px; border: 0; background: linear-gradient(transparent, var(--p-sc-low) 55%); color: var(--muted); font: inherit; font-size: 12.5px; touch-action: none; }
 
 /* Bests. */

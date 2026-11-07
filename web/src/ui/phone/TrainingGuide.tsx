@@ -48,7 +48,12 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose, s
   const [more, setMore] = useState(true);
   useEffect(() => {
     const el = body.current;
-    if (el && !full) setMore(el.scrollHeight > el.clientHeight + 4);
+    // The sheet keeps its full height and rests lower when half (380): what shows is its height less that.
+    const hidden = parseFloat(el?.closest<HTMLElement>(".p-sheet")?.style.getPropertyValue("--rest") ?? "") || 0;
+    if (!el || full) return;
+    const top = el.getBoundingClientRect().top;
+    const content = Math.max(0, ...[...el.children].map((c) => c.getBoundingClientRect().bottom - top));
+    setMore(content > el.clientHeight - hidden + 4);
   }, [id, full, parts]);
   /** The other ways to do this one: back to the plan's after a swap, else the plan's swaps. */
   const options = planned === undefined ? [] : [
@@ -58,7 +63,7 @@ export function GuideSheet({ tr, lp, id, planned, swaps = [], onSwap, onClose, s
   const later = (close: () => void, route: string) => { close(); window.setTimeout(() => go(route), 210); };
 
   return (
-    <BottomSheet className={`tr-guide ${full ? "full" : "half"}`} onClose={onClose}
+    <BottomSheet className={`tr-guide ${full ? "full" : "half"}`} half={!full} onClose={onClose}
       onPullUp={full ? undefined : () => setFull(true)}
       onPullDown={() => { if (!full || isWide()) return false; setFull(false); return true; }}>{(close) => (
       <>
