@@ -40,7 +40,7 @@ import { LONG_PRESS, TOUCH_SLOP, swallowClick } from "./press.ts";
 import { type Animation, GLIDE_SPRING, animateSpring } from "./motion.ts";
 import { edgeSpeed } from "./selectScroll.ts";
 import { ExerciseHistory, TrainingDocs } from "./TrainingDocs.tsx";
-import { OverviewTiles, TodayRow, WeekBarView } from "./TrainingOverview.tsx";
+import { OverviewTiles, TodayRow, WeekBarView, WeekCard } from "./TrainingOverview.tsx";
 import { TrainingProgress } from "./TrainingProgress.tsx";
 import { HowItWent, SessionView, patchEntry, setSessionStatus } from "./TrainingSession.tsx";
 import { Scale, gameIcon, kindIcon, phaseNames, planQ, sessionIcon, trainingLookClass } from "./trainingParts.tsx";
@@ -133,9 +133,12 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
   );
   if (!plan.phases.length) return scaffold(<EmptyState icon="tRunner" title="No weeks yet" hint="This plan has no phases yet" />);
   const phase = phaseIndexAt(plan, t), ph = plan.phases[phase];
-  const bar = weekBar(phaseView(plan, phase, tr.entries, tr.entries.values()).days, tr.runs);
+  const view = phaseView(plan, phase, tr.entries, tr.entries.values(), tr.orders);
+  const bar = weekBar(view.days, tr.runs);
+  const [short, long] = phaseNames(ph.name), now = t >= ph.start && t <= ph.end;
   const card = todayCard(plan, tr.entries, t, tr.orders);
-  const openWeek = () => { feel("tick"); go(`training?view=week${planQ(planId)}`); };
+  // [day]: the week page opens at that day.
+  const openWeek = (day: number | null = null) => { feel("tick"); go(day === null ? `training?view=week${planQ(planId)}` : `training?d=${day}${planQ(planId)}`); };
   const openToday = (c: TodayCard) => {
     feel("tick");
     if (c.kind === "session" || (c.kind === "done" && c.session)) go(`training?s=${encodeURIComponent((c.kind === "session" ? c.session : c.session!).id)}${planQ(planId)}`);
@@ -163,10 +166,10 @@ function TrainingHome({ tr, lp, t, planId }: { tr: Training; lp: LoadedPlan; t: 
         {askedS ? <AskRow lp={lp} s={askedS.session} e={askedS.entry} onDone={() => setAsked(null)} />
           : askedGame ? <GameAskRow plan={plan} e={askedGame} onDone={() => setAsked(null)} /> : null}
         {row && todayRow(row)}
-        <button className="tr-wk" onClick={openWeek}>
-          <span className="top"><span>{t >= ph.start && t <= ph.end ? "This week" : phaseNames(ph.name)[0]}</span><MIcon name="fKeyboardArrowRight" size={20} /></span>
-          {bar.segments.length > 0 ? <WeekBarView bar={bar} totalKm={summaryKm(ph.summary)} /> : <span className="tr-bar-text"><span>Nothing placed yet</span></span>}
-        </button>
+        <WeekCard plan={plan} view={view} entries={tr.entries} title={now ? "This week" : short} sub={now ? [short, long].filter(Boolean).join(" · ") : long}
+          bar={bar} totalKm={summaryKm(ph.summary)} t={t} onOpenWeek={openWeek}
+          onOpenSession={(sid) => { feel("tick"); go(`training?s=${encodeURIComponent(sid)}${planQ(planId)}`); }} />
+        <SectionHeader>Progress</SectionHeader>
         <OverviewTiles tr={tr} t={t} onOpen={(q) => { feel("tick"); go(`training?view=progress&${q}${planQ(planId)}`); }} />
       </div>
       <div className="p-endspace" />
@@ -194,6 +197,12 @@ function TrainingWeek({ tr, lp, t, wide, sessionId, readOnly, planId, focusDay }
   const setPhase = (i: number) => { setPhaseState(i); setPicked(null); if (scroller.current) scroller.current.scrollTop = 0; };
   useLayoutEffect(() => {
     if (kept?.plan === plan.id && focusDay === null && scroller.current) scroller.current.scrollTop = kept.scroll;
+    // Opened at a day (a day on the overview, the calendar's training mark): that day in view.
+    const sc = scroller.current, el = focusDay !== null ? sc?.querySelector(`[data-drop="${focusDay}"]`) : null;
+    if (sc && el) {
+      const below = el.getBoundingClientRect().bottom - sc.getBoundingClientRect().bottom;
+      if (below > 0) sc.scrollTop += Math.min(below + 16, el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 8);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { kept = { plan: plan.id, phase, scroll: scroller.current?.scrollTop ?? 0 }; });
 

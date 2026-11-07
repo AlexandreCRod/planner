@@ -1,12 +1,15 @@
-// What Training opens on (301, mockup 2.8.6 section 2, option C): a compact row for today, the week's bar that
-// leads to the week plan, and small chart tiles for Runs, Futsal, Body and Lifts that lead to Progress. The tiles
-// are the shape only, as Body's: a tap opens, a swipe turns the tab. The numbers come from domain/trainingToday.ts.
-import { type ReactNode, useMemo } from "react";
+// What Training opens on (301, mockup 2.8.6 section 2, option C; 325 B): a compact row for today, the week itself
+// (its bar, then every day with its sessions; it folds to the bar alone, remembered on the device) that leads to
+// the week plan, and small chart tiles for Runs, Futsal, Body and Lifts under "Progress" that lead to Progress.
+// The tiles are the shape only, as Body's: a tap opens, a swipe turns the tab. The numbers come from
+// domain/trainingToday.ts.
+import { type ReactNode, useMemo, useState } from "react";
 import { shortWhen } from "../../domain/body.ts";
 import { gameStats, playedGames } from "../../domain/cardio.ts";
-import { formatDate, formatTime } from "../../domain/dates.ts";
+import { dayShort, formatDate, formatTime, monthShort, weekday, ymd } from "../../domain/dates.ts";
 import { type TodayCard, dayWord, leadLift, usualWeekKm, weeklyKm } from "../../domain/trainingToday.ts";
-import { type WeekBar, colourKind, fmtKm, runLine, runOf } from "../../domain/trainingWeek.ts";
+import { type PreviewLine, type WeekBar, colourKind, fmtKm, runLine, runOf, weekPreview } from "../../domain/trainingWeek.ts";
+import type { Entry, PhaseView, Plan } from "../../domain/training.ts";
 import { fmtSleep, hasRecord } from "../../domain/sleep.ts";
 import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts";
 import { estimateLine, runEstimate } from "../../domain/estimate.ts";
@@ -87,6 +90,55 @@ export function TodayRow({ tr, card, t, onOpen, onStart, onLog }: { tr: Training
   }
   const next = card.next ? `Next: ${card.next.title}, ${dayWord(card.next.day, t, formatDate)}` : "";
   return row(<Bub cls="tr-mu" icon="fDarkMode" />, "Today", "Rest day", next, `Rest day. ${next}. Open the week plan`);
+}
+
+/** Where the week's fold is kept (this device only): "1" while folded to its bar. */
+const FOLD_KEY = "trainingWeekFolded";
+
+/**
+ * The week on the overview (325 B): its name (a tap folds it to the bar alone, or opens it out again), the bar,
+ * then every day with what's on it, today marked, and what's still to place. A session opens its own page, a
+ * day (or the bar) the week page at that day: ticking and moving stay there.
+ */
+export function WeekCard({ plan, view, entries, title, sub, bar, totalKm, t, onOpenWeek, onOpenSession }: {
+  plan: Plan; view: PhaseView; entries: ReadonlyMap<string, Entry>; title: string; sub: string; bar: WeekBar; totalKm: string | null; t: number;
+  onOpenWeek: (day: number | null) => void; onOpenSession: (sessionId: string) => void;
+}) {
+  const [folded, setFolded] = useState(() => localStorage.getItem(FOLD_KEY) === "1");
+  const w = useMemo(() => weekPreview(plan, view, entries), [plan, view, entries]);
+  const fold = () => { const f = !folded; setFolded(f); localStorage.setItem(FOLD_KEY, f ? "1" : "0"); };
+  const line = (l: PreviewLine, sessionId: string | null) => (
+    <span key={l.id} className={`tr-wl ${l.status} ${l.kind ? `k-${l.kind}` : ""}`}
+      {...(sessionId ? { ...tapProps(() => onOpenSession(sessionId)), onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); onOpenSession(sessionId); } } : {})}>
+      <i className="o" aria-hidden="true">{l.status === "done" && <MIcon name="fCheck" size={10} />}</i>
+      <span className="n">{l.title}</span>{l.detail && <span className="d">{l.detail}</span>}
+    </span>
+  );
+  return (
+    <div className={`tr-wk ${folded ? "folded" : ""}`}>
+      <button className="tr-wk-head" aria-expanded={!folded} aria-label={`${title}${folded ? ": show the days" : ": hide the days"}`} onClick={fold}>
+        <span className="name">{title}</span>{sub && <span className="sub">{sub}</span>}
+        <MIcon name={folded ? "fExpandMore" : "fExpandLess"} size={20} />
+      </button>
+      <div className="tr-wk-bar" {...tapProps(() => onOpenWeek(null))} aria-label="Open the week plan">
+        {bar.segments.length > 0 ? <WeekBarView bar={bar} totalKm={totalKm} /> : <span className="tr-bar-text"><span>Nothing placed yet</span></span>}
+      </div>
+      {!folded && <div className="tr-wk-days">
+        {w.days.map(({ day, lines }) => {
+          const { d, m } = ymd(day), items = view.days.find((x) => x.day === day)?.items ?? [];
+          return (
+            <div key={day} className={`tr-wd ${day === t ? "today" : ""}`} {...tapProps(() => onOpenWeek(day))} aria-label={`${formatDate(day)}. Open the week plan`}>
+              <span className="dl"><b>{dayShort(weekday(day))}</b><small>{d} {monthShort(m)}</small></span>
+              <span className="ls">{lines.length ? lines.map((l, i) => line(l, items[i]?.session?.id ?? null)) : <span className="rest">Rest</span>}</span>
+            </div>
+          );
+        })}
+        {w.toPlace.length > 0 && <div className="tr-wk-place" {...tapProps(() => onOpenWeek(null))}>
+          To place: <b>{w.toPlace.join(", ")}</b> · tap to choose a day
+        </div>}
+      </div>}
+    </div>
+  );
 }
 
 const TILE_H = 52;

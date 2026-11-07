@@ -20,17 +20,42 @@
 .phone .tr-today .k, .phone .tr-today .s { font-size: 12px; line-height: 16px; color: color-mix(in srgb, currentColor 80%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .tr-today .t { font-size: 16px; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phone .tr-today > svg { flex: none; opacity: .8; }
-.phone .tr-today :is([role="button"], button):focus-visible, .phone .tr-today[role="button"]:focus-visible, .phone .tr-wk:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 1px; }
+.phone .tr-today :is([role="button"], button):focus-visible, .phone .tr-today[role="button"]:focus-visible { outline: 2px solid var(--p-primary); outline-offset: 1px; }
 .phone .tr-tbtn { flex: none; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: none; font: inherit; font-size: 13px; font-weight: 500; color: inherit; cursor: pointer; }
 .phone .tr-tbtn.fill { background: var(--p-primary); color: var(--p-on-primary); }
 .phone .tr-tbtn.line { border: 1px solid color-mix(in srgb, currentColor 50%, transparent); }
 .phone .tr-today + .tr-ask { margin: -2px 0 10px; }
-.phone .tr-wk { display: block; width: 100%; margin-bottom: 12px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--p-sc-low, var(--surface-2)); text-align: left; font: inherit; color: var(--text); cursor: pointer; }
-.phone .tr-wk:active { background: var(--p-sec-container); }
-.phone .tr-wk .top { display: flex; align-items: center; justify-content: space-between; font-size: 15px; line-height: 20px; }
-.phone .tr-wk .top svg { color: var(--muted); }
-.phone .tr-wk .tr-bar-text { margin-bottom: 0; }
-.phone .tr-wk .tr-bar { margin-top: 8px; }
+/* The week (325 B): its name folds it to the bar alone; the bar and the days open the week page. */
+.phone .tr-wk { margin-bottom: 4px; padding: 0 14px 4px; border-radius: 14px; background: var(--p-sc-low, var(--surface-2)); color: var(--text); }
+.phone .tr-wk.folded { padding-bottom: 6px; }
+.phone .tr-wk-head { display: flex; align-items: baseline; gap: 8px; width: calc(100% + 28px); min-height: 44px; margin: 0 -14px; padding: 12px 14px 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.phone .tr-wk-head .name { font-size: 15px; line-height: 20px; font-weight: 500; }
+.phone .tr-wk-head .sub { flex: 1; min-width: 0; font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-wk-head svg { flex: none; align-self: center; margin-left: auto; color: var(--muted); }
+.phone .tr-wk-bar { margin: 0 -14px; padding: 0 14px 2px; cursor: pointer; }
+.phone .tr-wk-bar .tr-bar { margin-top: 4px; }
+.phone .tr-wk-bar .tr-bar-text { margin-bottom: 4px; }
+.phone .tr-wk :is(.tr-wk-bar, .tr-wd, .tr-wk-place, .tr-wl[role="button"]):active { background-color: var(--p-ripple, rgb(255 255 255 / .08)); }
+.phone .tr-wk :is(.tr-wk-head, .tr-wk-bar, .tr-wd, .tr-wk-place, .tr-wl[role="button"]):focus-visible { outline: 2px solid var(--p-primary); outline-offset: -2px; }
+/* A hairline over each day and over To place, inset to the card's text. */
+.phone :is(.tr-wd, .tr-wk-place) { background: linear-gradient(var(--line), var(--line)) 14px 0 / calc(100% - 28px) 1px no-repeat; }
+.phone .tr-wd { display: flex; gap: 12px; min-height: 48px; margin: 0 -14px; padding: 7px 14px; cursor: pointer; }
+.phone .tr-wd .dl { flex: none; display: flex; flex-direction: column; width: 46px; }
+.phone .tr-wd .dl b { font-size: 15px; line-height: 20px; font-weight: 500; }
+.phone .tr-wd .dl small { font-size: 12px; line-height: 16px; color: var(--muted); }
+.phone .tr-wd.today .dl b, .phone .tr-wd.today .dl small { color: var(--p-primary); }
+.phone .tr-wd .ls { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.phone .tr-wd .rest { font-size: 14px; line-height: 20px; color: var(--muted); }
+.phone .tr-wl { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 26px; margin: 0 -6px; padding: 0 6px; border-radius: 8px; font-size: 14px; line-height: 20px; }
+.phone .tr-wl .o { flex: none; display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--k, var(--p-outline)); color: var(--k-on, var(--p-on-primary)); }
+.phone .tr-wl.done .o { background: var(--k, var(--p-outline)); box-shadow: none; }
+.phone .tr-wl .n { flex: none; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-wl .d { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone .tr-wl.done .n, .phone .tr-wl.skipped .n { color: var(--muted); }
+.phone .tr-wl.skipped .n { text-decoration: line-through; }
+.phone .tr-wk-place { margin: 0 -14px; padding: 10px 14px 8px; font-size: 13px; line-height: 18px; color: var(--muted); cursor: pointer; }
+.phone .tr-wk-place b { font-weight: 500; color: var(--text); }
+.phone .tr-home-in > .p-section { width: calc(100% + 32px); margin: 8px -16px 0; padding-bottom: 8px; }
 .phone .tr-tile .a { display: flex; align-items: center; gap: 6px; }
 .phone .tr-tile .ic { display: inline-flex; color: var(--k); }
 .phone .tr-tile .ic.k-body { --k: #6a8ed4; }

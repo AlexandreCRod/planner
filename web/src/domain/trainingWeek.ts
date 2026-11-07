@@ -2,7 +2,7 @@
 // when done, with how many are done and the km run so far. A done run counts the distance of the run
 // matched to it in runs.json, else the km its plan text starts with ("10 km easy"); intervals ("3×2 km")
 // and times ("40'") count nothing.
-import type { WeekItem } from "./training.ts";
+import { type Entry, type PhaseView, type Plan, type WeekItem, entryFor } from "./training.ts";
 import type { Run } from "./trends.ts";
 
 /** The kinds with a colour of their own; anything else looks as before. */
@@ -73,4 +73,36 @@ export function runLine(run: Run): string {
     s !== null ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km` : "",
     run.avgHr ? `${Math.round(run.avgHr)} bpm` : "",
   ].filter(Boolean).join(" · ");
+}
+
+/** A line of the week on Training's overview (325 B): what it is, and how it stands. */
+export interface PreviewLine {
+  /** The entry's id (a session's or a futsal game's). */
+  id: string;
+  title: string;
+  /** The plan's text ("40 min easy + 6 strides", "optional"); a game's duration and note. */
+  detail: string;
+  kind: ColourKind | null;
+  status: Entry["status"];
+  /** A futsal or other game, not one of the plan's sessions. */
+  game: boolean;
+}
+
+/**
+ * The week as Training's overview shows it (325 B): every day of the phase, rest days too (no lines), with its
+ * sessions and games in the week page's order; and the titles of what's still to place (skipped ones aren't
+ * waiting for a day, so they're left out).
+ */
+export function weekPreview(plan: Plan, view: PhaseView, entries: ReadonlyMap<string, Entry>): { days: { day: number; lines: PreviewLine[] }[]; toPlace: string[] } {
+  const days = view.days.map(({ day, items }) => ({
+    day,
+    lines: items.map((it): PreviewLine => {
+      const e = it.entry, s = it.session;
+      const detail = s
+        ? [s.detail, s.optional ? "optional" : "", e.status === "skipped" ? "skipped" : ""].filter(Boolean).join(" · ")
+        : [e.durationMin ? `${e.durationMin} min` : "", e.note].filter(Boolean).join(" · ");
+      return { id: e.id, title: s ? s.title : e.title, detail, kind: colourKind(it), status: e.status, game: !s };
+    }),
+  }));
+  return { days, toPlace: view.toPlace.filter((s) => entryFor(plan, s, entries).status === "planned").map((s) => s.title) };
 }

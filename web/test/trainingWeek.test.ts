@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Entry, entryId, newEntry, phaseView, readPlan } from "../src/domain/training.ts";
 import type { Run } from "../src/domain/trends.ts";
-import { fmtKm, plannedKm, runLine, runOf, summaryKm, weekBar } from "../src/domain/trainingWeek.ts";
+import { fmtKm, plannedKm, runLine, runOf, summaryKm, weekBar, weekPreview } from "../src/domain/trainingWeek.ts";
 
 // A made-up week, Mon 1 – Sun 7 Mar 2027.
 const plan = readPlan({
@@ -76,4 +76,24 @@ test("a done run's line: distance, pace and heart rate, leaving out what's missi
   assert.equal(runLine(r({ paceSPerKm: 359.6, avgHr: 141.4 })), "6:00 /km · 141 bpm");
   assert.equal(runLine(r({ avgHr: 150 })), "150 bpm");
   assert.equal(runLine(r({})), "");
+});
+
+test("the overview's week (325 B): every day, rest days empty, each line's kind and state, and only what's still to place", () => {
+  const futsal = newEntry({ id: "f1", planId: "p", kind: "futsal", title: "Futsal", day: MON + 3, durationMin: 60, note: "indoor" });
+  // e1 done; q1 skipped off its day; x1 (no day) skipped; g1 moved to Thursday, before the bike.
+  const es = [done("e1", MON), s("q1", { day: null, status: "skipped" }), s("x1", { status: "skipped" }), s("g1", { day: MON + 3 }), futsal];
+  const m = new Map(es.map((e) => [e.id, e]));
+  const w = weekPreview(plan, phaseView(plan, 0, m, m.values()), m);
+  assert.deepEqual(w.days.map((d) => d.day), [MON, MON + 1, MON + 2, MON + 3, MON + 4, MON + 5, MON + 6]);
+  const lines = (i: number) => w.days[i].lines.map((l) => `${l.title}|${l.kind}|${l.status}|${l.detail}`);
+  assert.deepEqual(lines(0), ["Easy run|run|done|40'"]);
+  assert.deepEqual([lines(1), lines(2), lines(4), lines(5)], [[], [], [], []]);
+  assert.deepEqual(lines(3), ["Gym A|gym|planned|Legs + pull", "Easy bike|null|planned|20–30'", "Futsal|futsal|planned|60 min · indoor"]);
+  assert.equal(w.days[3].lines[2].game, true);
+  assert.deepEqual(lines(6), ["Long run|run|planned|11 km: 9 easy + last 2 @ HMP"]);
+  // q1 and x1 were skipped: nothing waits for a day.
+  assert.deepEqual(w.toPlace, []);
+  // Untouched, the spare run waits to be placed.
+  const none = new Map<string, Entry>();
+  assert.deepEqual(weekPreview(plan, phaseView(plan, 0, none, none.values()), none).toPlace, ["Spare run"]);
 });
