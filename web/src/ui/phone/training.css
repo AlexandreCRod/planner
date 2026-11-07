@@ -58,7 +58,7 @@
 .phone .tr-home-in > .p-section { width: calc(100% + 32px); margin: 8px -16px 0; padding-bottom: 8px; }
 .phone .tr-tile .a { display: flex; align-items: center; gap: 6px; }
 .phone .tr-tile .ic { display: inline-flex; color: var(--k); }
-.phone .tr-tile .ic.k-body { --k: #6a8ed4; }
+.phone .tr-tile .ic.k-body { --k: var(--k-body, #6a8ed4); }
 .wide .tr-home-in { max-width: 720px; margin: 0 auto; padding-top: 12px; }
 .phone .tr-page { padding-bottom: calc(var(--sab) + 24px); }
 .phone .tr-hint { padding: 4px 16px 8px; font-size: 14px; line-height: 20px; color: var(--muted); }
@@ -438,3 +438,8 @@ html.phone[data-theme="dark"] { --fit-ok: #86c79a; --fit-ideally: #8e9095; }
    so the page itself has no side padding (phone.css's .p-content gave them 16 more, 32 in all). Filled cards, as
    everywhere: the sessions to place are on the surface colour, not outlined. */
 .phone .p-content:is(.tr-home, .tr-week, .tr-session) { padding-left: 0; padding-right: 0; }
+
+/* 2.10.5 (332b B): the training kinds tuned for black, all at one lightness (OKLab 0.76). Futsal's "Grey-blue"
+   stays a quiet grey-blue; its "Blue" is B's futsal blue; "Violet" is brought to the same lightness. */
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) { --k-run: #3acab7; --k-gym: #e9a033; --k-fut-blue: #39c1f3; --k-fut-violet: #b49bf5; --k-body: #8bb1f7; } }
+html.phone[data-theme="dark"] { --k-run: #3acab7; --k-gym: #e9a033; --k-fut-blue: #39c1f3; --k-fut-violet: #b49bf5; --k-body: #8bb1f7; }

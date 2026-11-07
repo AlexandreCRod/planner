@@ -42,6 +42,7 @@ import { watchStatus } from "../../domain/healthRead.ts";
 import { LOOKS, type LookKey, look, setLook, useLook, useLooks } from "./looks.ts";
 import { canImportCalendars } from "../../store/phoneCalendar.ts";
 import { isSportsCategory } from "../../domain/training.ts";
+import { shownColor } from "../../domain/shownColor.ts";
 
 /** The native accents (Theme.kt `accents`), in the native order, by their light colour. */
 const ACCENTS: [string, string][] = [
@@ -107,7 +108,7 @@ function SportsSection() {
     {s.categories.map((c) => {
       const on = isSportsCategory(c);
       const set = (v: boolean) => saveCategory({ ...c, sport: v });
-      return <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: cssColor(c.color) }} />}
+      return <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: shownColor(cssColor(c.color)) }} />}
         trailing={<Switch checked={on} onChange={set} label={`${c.name}: counts as sport on Training`} />} onClick={() => set(!on)} />;
     })}
   </>;
@@ -586,7 +587,7 @@ export function PhoneCategories() {
       <div className="p-content ps">
         {s.categories.length === 0 && <EmptyState icon="oCategory" title="No categories" hint="Tap + to add one" />}
         {s.categories.map((c) => (
-          <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: cssColor(c.color) }} />}
+          <ListItem key={c.id} headline={c.name} leading={<span className="ps-dot" style={{ background: shownColor(cssColor(c.color)) }} />}
             supporting={`Default reminder: ${c.defaultAlert.toLowerCase()} · ${count(s.items.filter((i) => i.categoryId === c.id).length, "item")}`}
             onClick={() => setEditing(c)} />
         ))}
@@ -610,7 +611,7 @@ function CategoryDialog({ c, onClose }: { c: Category; onClose: () => void }) {
     </>}>
       <div className="ps-catdialog">
         <OutlinedTextField label="Name" value={name} onChange={setName} autoFocus={c.id === 0} onEnter={save} />
-        <ColorGrid colors={PALETTE} selected={color} allowNone={false} onPick={(v) => { if (v !== null) setColor(v); }} />
+        <ColorGrid tune colors={PALETTE} selected={color} allowNone={false} onPick={(v) => { if (v !== null) setColor(v); }} />
         <div className="ps-label">Default reminder type</div>
         <Segmented value={alert} options={[["NOTIFICATION", "Notification"], ["REMINDER", "Reminder"], ["ALARM", "Alarm"]]} onChange={setAlert} />
       </div>

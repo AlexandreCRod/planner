@@ -38,6 +38,7 @@ import { count } from "../../domain/plural.ts";
 import { type TaskFilter, TaskChips, inCategory } from "./taskChips.tsx";
 import { keepValue, keptValue, useKeep, useKeptScroll, useKeptState } from "./keep.ts";
 import { BottomSheet } from "./m3.tsx";
+import { shownColor } from "../../domain/shownColor.ts";
 
 // ---------- Tasks ----------
 
@@ -412,7 +413,7 @@ function NoteCard({ n, s, sel, onDragDown }: { n: Item; s: Snapshot; sel: Select
   return (
     <div className={`p-notecard ${picked ? "sel" : ""}`} role="button" aria-pressed={sel.active ? picked : undefined} data-note={n.id} {...press}
       onClick={(e) => sel.tap(n.id, () => openNote(n), e)} style={{ background: bg, color: fg, fontFamily: NOTE_FONTS[n.fontFamily] || undefined }}>
-      {accentArgb !== null && <div className="accent" style={{ background: cssColor(accentArgb) }} />}
+      {accentArgb !== null && <div className="accent" style={{ background: shownColor(cssColor(accentArgb)) }} />}
       {picked ? <SelectedMark /> : <SelectBox onPick={() => sel.toggle(n.id)} />}
       <div className="in">
         <div className="head">

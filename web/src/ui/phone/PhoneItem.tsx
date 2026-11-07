@@ -44,6 +44,7 @@ import { sessionStats, statLine, venueOf } from "../../domain/watchActivities.ts
 import { estimateLine } from "../../domain/estimate.ts";
 import { training } from "../../store/training.ts";
 import { watchHead } from "./WatchRuns.tsx";
+import { shownColor } from "../../domain/shownColor.ts";
 
 // ---------- Shared bits ----------
 
@@ -154,7 +155,7 @@ const overdueItems = (pick: (p: OverduePolicy) => void): MenuItem[] =>
   (["SHOW_OVERDUE", "CARRY_OVER", "SKIP"] as OverduePolicy[]).map((p) => ({ label: overdueText(p), onClick: () => pick(p) }));
 const categoryItems = (s: Snapshot, pick: (id: number | null) => void, leave?: () => void): MenuItem[] => [
   { label: "No category", onClick: () => pick(null) },
-  ...s.categories.map((c) => ({ label: c.name, dot: cssColor(c.color), onClick: () => pick(c.id) })),
+  ...s.categories.map((c) => ({ label: c.name, dot: shownColor(cssColor(c.color)), onClick: () => pick(c.id) })),
   { label: "Edit categories…", icon: "oPalette", divider: true, onClick: () => { leave?.(); go("settings/categories"); } },
 ];
 
@@ -883,7 +884,7 @@ export function PhoneItemView({ id, occ }: { id: number; occ: number | null }) {
       {editing === "title" && <TextFieldDialog title="Title" label="Title" initial={item.title} onClose={() => setEditing(null)} onSave={(v) => commit({ ...item, title: v.trim() || item.title })} />}
       {editing === "tags" && <TextFieldDialog title="Add tags" label="Tags" initial={tags.map((x) => x.name).join(" ")} onClose={() => setEditing(null)}
         onSave={(v) => saveItem(item, { tags: v.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean) })} />}
-      {editing === "color" && <ColorPickerDialog title="Colour" selected={item.color} onClose={() => setEditing(null)} onPick={(c) => commit({ ...item, color: c })} />}
+      {editing === "color" && <ColorPickerDialog tune title="Colour" selected={item.color} onClose={() => setEditing(null)} onPick={(c) => commit({ ...item, color: c })} />}
       {editing === "when" && <WhenSheet item={item} shownStart={shownStart} onClose={() => setEditing(null)} onSave={(edited) => {
         if (isRecurring(item) && occ !== null) setPendingScope(edited); else commit(toSeries(edited));
       }} />}
@@ -1138,7 +1139,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
   const setRoutineDraft = (on: boolean) => set({ routine: on });
   const routinable = canBeRoutine(d);
   const category = d.categoryId !== null ? s.categoryById.get(d.categoryId) : undefined;
-  const color = d.color !== null ? cssColor(d.color) : category ? cssColor(category.color) : s.colorOf({ ...d, categoryId: null, color: null });
+  const color = d.color !== null ? shownColor(cssColor(d.color)) : category ? shownColor(cssColor(category.color)) : s.colorOf({ ...d, categoryId: null, color: null });
   const tagList = () => cur.tags.split(/[\s,]+/).map((x) => x.replace(/^#/, "")).filter(Boolean);
   const timed = !(d.allDay || d.startMin === null);
   // A to-do without a date: its reminders' rows offer to pick one (they can't ring before).
@@ -1234,7 +1235,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
 
         <FieldRow icon="oPalette">
           {/* The category with its colour; the item's own colour is the square by the title (234). */}
-          <span className="grow"><MenuText text={category ? <span className="pe-catname"><span className="pe-dot" style={{ background: cssColor(category.color) }} />{category.name}</span> : "No category"}
+          <span className="grow"><MenuText text={category ? <span className="pe-catname"><span className="pe-dot" style={{ background: shownColor(cssColor(category.color)) }} />{category.name}</span> : "No category"}
             items={categoryItems(s, (c) => set({ categoryId: c }), leaveTo)} /></span>
         </FieldRow>
         {!isEvent && <>
@@ -1268,7 +1269,7 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
         <div style={{ height: 48 }} />
       </div>
 
-      {colorDialog && <ColorPickerDialog title="Colour" selected={d.color} onClose={() => setColorDialog(false)} onPick={(c) => set({ color: c })}
+      {colorDialog && <ColorPickerDialog tune title="Colour" selected={d.color} onClose={() => setColorDialog(false)} onPick={(c) => set({ color: c })}
         noneLabel="Category colour" hint={category ? `Crossed out: ${category.name}'s colour` : "Crossed out: the category's colour"} />}
       {deleteMenu && original && deleteDay !== null && <ScopeDialog title="Delete repeating item" onCancel={() => setDeleteMenu(false)} onPick={(sc) => { setDeleteMenu(false); deleteSeriesWithUndo(sc, original, deleteDay); leaveAll(); }} />}
       {scopeOpen && <ScopeDialog title="Save changes to" onCancel={() => setScopeOpen(false)} onPick={(sc) => { setScopeOpen(false); save(sc); }} />}

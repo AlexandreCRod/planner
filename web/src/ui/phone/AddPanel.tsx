@@ -41,6 +41,7 @@ import { hideKeyboard, pushBack, showKeyboard, useKeyboardHeight } from "./nativ
 const TYPES: [ItemType, string][] = [["TASK", "Task"], ["EVENT", "Event"]];
 import { type Draft, PhoneItemEditor, firstAlerts, switchType } from "./PhoneItem.tsx";
 import { DatePickerDialog, RangeDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
+import { shownColor } from "../../domain/shownColor.ts";
 
 /** What a timer or alarm typed on the add line will be: "Timer · 10:00 · pasta", "Alarm · 7:00 AM · Weekdays". */
 function clockText(c: ClockCommand): string {
@@ -830,7 +831,7 @@ function CategoryDialog({ selected, onPick, onClose }: { selected: number | null
     <Dialog title="Category" onClose={onClose} actions={<TextButton onClick={onClose}>Close</TextButton>}>
       <div className="gp-catlist" role="menu">
         {row(null, "No category", null)}
-        {cats.map((c) => row(c.id, c.name, cssColor(c.color)))}
+        {cats.map((c) => row(c.id, c.name, shownColor(cssColor(c.color))))}
         {cats.length === 0 && <div className="gp-tip">Categories are made in Settings › Categories.</div>}
       </div>
     </Dialog>

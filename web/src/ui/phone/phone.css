@@ -1292,13 +1292,13 @@ html.phone[data-theme="dark"] {
 /* Section headers in plain text colours, not the accent. */
 .phone .p-section, .phone .today-list .section, .phone .p-agenda-day { color: var(--muted); }
 /* Calendar: a tinted neutral block with a thin stripe in the item's colour; tasks lighter still. */
-.phone .pg-block { background: color-mix(in srgb, var(--c) 16%, var(--p-sc-low)); color: var(--text); padding-left: 7px; }
+.phone .pg-block { background: color-mix(in srgb, var(--c) var(--cal-wash), var(--p-sc-low)); color: var(--text); padding-left: 7px; }
 .phone .pg-block.task { background: color-mix(in srgb, var(--c) 8%, var(--p-sc-low)); }
 .phone .pg-block::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
 .phone .pg-block.tiny { padding-left: 6px; }
-.phone .pg-chip, .phone .p-mchip { background: color-mix(in srgb, var(--c) 14%, var(--p-sc-low)); color: var(--text); box-shadow: inset 2px 0 0 var(--c); padding-left: 4px; }
+.phone .pg-chip, .phone .p-mchip { background: color-mix(in srgb, var(--c) var(--cal-chip), var(--p-sc-low)); color: var(--text); box-shadow: inset 2px 0 0 var(--c); padding-left: 4px; }
 .phone .pg-chip.task, .phone .p-mchip.task { background: color-mix(in srgb, var(--c) 7%, var(--p-sc-low)); }
-.phone .pg-ghost { border-color: var(--p-outline); color: var(--text); background: color-mix(in srgb, var(--c) 14%, var(--p-sc-low)); box-shadow: inset 3px 0 0 var(--c); }
+.phone .pg-ghost { border-color: var(--p-outline); color: var(--text); background: color-mix(in srgb, var(--c) var(--cal-chip), var(--p-sc-low)); box-shadow: inset 3px 0 0 var(--c); }
 /* Rows: tags in neutral grey (late and missed stay red), the repeat badge and streak in grey, ticks in the accent. */
 .phone :is(.today-list, .p-rows) .pill { color: var(--muted) !important; background: var(--p-sc-high) !important; }
 .phone :is(.today-list, .p-rows) .pill[style*="--danger"] { color: var(--danger) !important; background: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
@@ -1985,3 +1985,20 @@ html.phone[data-theme="dark"] {
 /* A photo's details (379): a small block at the bottom of the viewer, white on the dark band. */
 .phone .pn-picture-info { position: absolute; left: 0; right: 0; bottom: 0; padding: 32px 24px calc(var(--sab) + 20px); background: linear-gradient(transparent, #000c 40%); color: #fff; font-size: 13px; line-height: 19px; opacity: .9; }
 .phone .pn-picture-info .first { font-size: 15px; line-height: 22px; font-weight: 500; opacity: 1; }
+
+/* ---------- 2.10.5: the user's colours tuned for black (332b B) ----------
+   Categories and an item's own colour are tuned in script (domain/shownColor.ts: one lightness, capped
+   chroma, Display P3 where it reaches past sRGB). The flags and the training kinds take B's values here.
+   The calendar's washes of an event's colour: Soft (about 18 %) or Rich (B's 26 %), a "Looks to try"
+   switch (looks.ts calendarColour, the class cal-rich on the page); the light theme keeps its 16 %. */
+html.phone { --cal-wash: 16%; --cal-chip: 14%; }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) {
+  --prio-1: #57aafa; --prio-2: #e9c02b; --prio-3: #fb9335; --prio-4: #fb6863;
+  --cal-wash: 18%; --cal-chip: 16%;
+} }
+html.phone[data-theme="dark"] {
+  --prio-1: #57aafa; --prio-2: #e9c02b; --prio-3: #fb9335; --prio-4: #fb6863;
+  --cal-wash: 18%; --cal-chip: 16%;
+}
+@media (prefers-color-scheme: dark) { html.phone.cal-rich:not([data-theme="light"]) { --cal-wash: 26%; --cal-chip: 22%; } }
+html.phone.cal-rich[data-theme="dark"] { --cal-wash: 26%; --cal-chip: 22%; }

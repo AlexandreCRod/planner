@@ -10,6 +10,7 @@ import { CompletionIndex } from "../domain/schedule.ts";
 import { stripHtml } from "../domain/text.ts";
 import { type Entry, futsalLogDay, futsalLogId } from "../domain/training.ts";
 import { logProblem } from "../problems.ts";
+import { shownColor } from "../domain/shownColor.ts";
 import {
   type Category, type Completion, type Item, type ItemTag, type Link, type NoteImage, type NoteVersion, type Reminder, type Tag,
   NO_DAY, TYPE_COLORS, cssColor, isRecurring, newItem,
@@ -220,10 +221,16 @@ export class Snapshot {
     for (const is of this.images.values()) is.sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  colorOf(item: Item): string {
+  /** The item's colour as stored ("#rrggbb"): its own, its category's, or its type's (the widgets get this one). */
+  rawColorOf(item: Item): string {
     if (item.color !== null) return cssColor(item.color);
     const c = item.categoryId !== null ? this.categoryById.get(item.categoryId) : undefined;
     return c ? cssColor(c.color) : TYPE_COLORS[item.type];
+  }
+
+  /** The item's colour as the page draws it: tuned for black on the dark theme (shownColor, 332b B). */
+  colorOf(item: Item): string {
+    return shownColor(this.rawColorOf(item));
   }
 
   neighbours(id: number): Set<number> {

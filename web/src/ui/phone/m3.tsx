@@ -3,6 +3,7 @@
 // small dialogs the editors open (a line of text, a colour). Styles are in phone.css under "M3 pieces".
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cssColor } from "../../domain/types.ts";
+import { shownColor } from "../../domain/shownColor.ts";
 import { Dialog, MIcon } from "./chrome.tsx";
 import { pushBack } from "./native.ts";
 import { spring } from "./pager.ts";
@@ -114,7 +115,11 @@ export const PALETTE = [
 ].map((c) => c | 0);
 
 /** Colour circles (36 dp, 8 apart), "none" first when allowed, a tick on the chosen one (ColorGrid). */
-export function ColorGrid({ colors, selected, allowNone = true, onPick, noneLabel = "None" }: { colors: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; noneLabel?: string }) {
+export function ColorGrid({ colors, selected, allowNone = true, onPick, noneLabel = "None", tune = false }: {
+  colors: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; noneLabel?: string;
+  /** Item and category colours: each drawn as the page will draw it (tuned for black on the dark theme, shownColor). */
+  tune?: boolean;
+}) {
   return (
     <div className="p-colorgrid">
       {allowNone && <button className="none" aria-label={noneLabel} onClick={() => onPick(null)}><MIcon name="fFormatColorReset" size={18} /></button>}
@@ -122,8 +127,8 @@ export function ColorGrid({ colors, selected, allowNone = true, onPick, noneLabe
       {(selected !== null && !colors.includes(selected) ? [selected, ...colors] : colors).map((c) => {
         const css = cssColor(c);
         return (
-          <button key={c} aria-label={css} className={c === selected ? "on" : ""} style={{ background: css }} onClick={() => onPick(c)}>
-            {c === selected && <MIcon name="fCheck" size={18} color={contentColor(css)} />}
+          <button key={c} aria-label={css} className={c === selected ? "on" : ""} style={{ background: tune ? shownColor(css) : css }} onClick={() => onPick(c)}>
+            {c === selected && <MIcon name="fCheck" size={18} color={tune ? `light-dark(${contentColor(css)}, #0d0f14)` : contentColor(css)} />}
           </button>
         );
       })}
@@ -131,14 +136,14 @@ export function ColorGrid({ colors, selected, allowNone = true, onPick, noneLabe
   );
 }
 
-export function ColorPickerDialog({ title, colors = PALETTE, selected, allowNone = true, onPick, onClose, noneLabel, hint }: {
-  title: string; colors?: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; onClose: () => void;
+export function ColorPickerDialog({ title, colors = PALETTE, selected, allowNone = true, onPick, onClose, noneLabel, hint, tune }: {
+  title: string; colors?: number[]; selected: number | null; allowNone?: boolean; onPick: (c: number | null) => void; onClose: () => void; tune?: boolean;
   /** What the crossed-out choice means here, said under the colours. */
   noneLabel?: string; hint?: string;
 }) {
   return (
     <Dialog title={title} onClose={onClose} actions={<TextButton onClick={onClose}>Close</TextButton>}>
-      <ColorGrid colors={colors} selected={selected} allowNone={allowNone} noneLabel={noneLabel} onPick={(c) => { onPick(c); onClose(); }} />
+      <ColorGrid colors={colors} selected={selected} allowNone={allowNone} noneLabel={noneLabel} tune={tune} onPick={(c) => { onPick(c); onClose(); }} />
       {hint && <div className="pe-small p-colorhint">{hint}</div>}
     </Dialog>
   );

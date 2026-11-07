@@ -8,6 +8,7 @@ import { useSnapshot } from "../../store/store.ts";
 import { Scaffold, SectionHeader } from "./chrome.tsx";
 import { BLACKS, displaySwatches } from "./displayColours.ts";
 import { GYM, PAIN, RUN, WEIGHT } from "./ProgressChart.tsx";
+import { shownColor } from "../../domain/shownColor.ts";
 
 /** Photo-like tones: skin from light to deep, leaves, and reds (each a soft fade, as in a photo). */
 const PHOTO: [string, string][] = [
@@ -17,7 +18,7 @@ const PHOTO: [string, string][] = [
 
 export function PhoneDisplayCheck() {
   const s = useSnapshot();
-  const groups = displaySwatches(s.categories.map((c) => ({ name: c.name, color: cssColor(c.color) })),
+  const groups = displaySwatches(s.categories.map((c) => ({ name: c.name, color: shownColor(cssColor(c.color)) })),
     [{ name: "Run chart", color: RUN }, { name: "Gym chart", color: GYM }, { name: "Weight", color: WEIGHT }, { name: "Pain", color: PAIN }]);
   return (
     <Scaffold title="Display check" back flush>

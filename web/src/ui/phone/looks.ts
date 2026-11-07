@@ -36,6 +36,14 @@ export const LOOKS = {
     ["B", "B", "A thin line, with a tab mid-top and mid-bottom to drag"],
   ] },
   /**
+   * How strongly the calendar's events are washed in their colour on the dark theme (332b B, 2.10.5): Soft, about
+   * 18 %; Rich, B's 26 %. The class cal-rich on the page (theme.ts, phone.css "2.10.5").
+   */
+  calendarColour: { page: "Calendar", title: "Calendar colour", pick: "soft", choices: [
+    ["soft", "Soft", "Events lightly washed in their colour"],
+    ["rich", "Rich", "Events in a richer wash of their colour"],
+  ] },
+  /**
    * Tasks B (241): a Tasks button in Today's top bar that opens the whole Tasks page full-screen (both
    * lists, as before 241), beside the to-dos button (271) and the Agenda chips. PhoneToday.
    */

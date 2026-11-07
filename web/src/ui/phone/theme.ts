@@ -1,6 +1,8 @@
 // The native app's accent palettes (app/.../ui/theme/Theme.kt, `accents`), keyed by the light colour the
 // PC settings store as --accent. The phone theme in phone.css builds its Material 3 roles from these,
 // so primary, containers and tertiary are the very colours the native app draws with.
+import { look, onLooks } from "./looks.ts";
+
 const PALETTES: Record<string, [lightContainer: string, dark: string, darkContainer: string, tertiary: string]> = {
   "#1a73e8": ["#d3e3fd", "#a8c7fa", "#0842a0", "#5f6368"], // Blue
   "#00796b": ["#b2f1e6", "#80d5c8", "#005048", "#4a6363"], // Teal
@@ -51,6 +53,11 @@ export function applyPureBlack() {
   document.documentElement.classList.toggle("pure-black", on);
 }
 
+/** The looks drawn by CSS alone, as classes on the page (looks.ts): the calendar's richer washes. */
+export function applyLookClasses() {
+  document.documentElement.classList.toggle("cal-rich", look("calendarColour") === "rich");
+}
+
 let started = false;
 /** Keeps the phone palette in step with the accent chosen in Settings. */
 export function startPhoneTheme() {
@@ -58,5 +65,7 @@ export function startPhoneTheme() {
   started = true;
   apply();
   applyPureBlack();
+  applyLookClasses();
+  onLooks(applyLookClasses);
   new MutationObserver(apply).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
 }
