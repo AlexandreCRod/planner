@@ -9,6 +9,7 @@ import { feel } from "./haptics.ts";
 import { useSwipePager } from "./pager.ts";
 import { TimeWheels } from "./TimeWheel.tsx";
 import { type RangePick, rangeRole, slideRange, slideTicks, tapRange } from "./range.ts";
+import { onCalendarLeft } from "./calendarTop.ts";
 
 const mondayFirst = () => localStorage.getItem("weekStartsMonday") !== "false";
 const WD = ["M", "T", "W", "T", "F", "S", "S"];
@@ -280,6 +281,8 @@ export function DayPickerSheet({ value, onPick, onClose }: { value: number; onPi
  */
 export function MonthDropdown({ value, onPick, onClose }: { value: number; onPick: (day: number) => void; onClose: () => void }) {
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Another page shown (a tap on the bottom bar): it closes, so it doesn't hold the next back press there.
+  useEffect(() => onCalendarLeft(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
   const t = todayEpoch();
   const [month, setMonth] = useState(() => { const { y, m } = ymd(value); return epochOf(y, m, 1); });
   const [years, setYears] = useState(false);

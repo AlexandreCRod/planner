@@ -36,6 +36,12 @@ export function addedShows(range: CalendarRange, item: Item, filter: CalFilter, 
   return calendarShows(item, allRoutines ? "all" : month ? "none" : "chosen", byId);
 }
 
+// Leaving the Calendar for another page (the bottom bar, a swipe, back): what's open over it closes, as the
+// month drop-down (review of 2.10.4, finding 5: it stayed open while another page showed, holding the next back).
+const leaveListeners = new Set<() => void>();
+export function onCalendarLeft(fn: () => void) { leaveListeners.add(fn); return () => { leaveListeners.delete(fn); }; }
+export const calendarLeft = () => leaveListeners.forEach((l) => l());
+
 // The calendar's mover for 372, set while it's built.
 let shower: ((item: Item) => void) | null = null;
 export const setItemShower = (fn: ((item: Item) => void) | null) => { shower = fn; };

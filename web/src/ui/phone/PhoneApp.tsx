@@ -46,6 +46,7 @@ import { InviteHost } from "./InviteHost.tsx";
 import { PhoneTraining } from "./PhoneTraining.tsx";
 import { UpdateHost } from "./UpdateHost.tsx";
 import { afterDayWeek, trainingBase, trainingSub } from "./trainingBack.ts";
+import { calendarLeft } from "./calendarTop.ts";
 
 // The bottom bar's tabs. Links (the graph) isn't one: it opens from the Notes bar and from any item's
 // Links section. Clock (the route "alarms") is the last where the alarm engine is (the phone build), not in a browser.
@@ -301,6 +302,7 @@ export function PhoneApp() {
   const settle = (i: number, velocity = 0, jump = false) => {
     i = clamp(i, 0, LAST);
     const moved = i !== tabRef.current;
+    if (moved && TABS[tabRef.current]?.key === "calendar") calendarLeft();
     tabRef.current = i;
     if (jump) {
       pos.jump(i);
