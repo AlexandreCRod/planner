@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { whenText } from "../../domain/itemWhen.ts";
 import { formatDate, formatTime, monthShort, offsetLabel, offsetText, relativeDay, today as todayEpoch, weekday, ymd } from "../../domain/dates.ts";
-import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, parseIntList } from "../../domain/recurrence.ts";
+import { LAST_DAY_OF_MONTH, dayBit, describe, hasMonth, hasWeekDay, movedRule, occurrenceDay, occurrences, parseIntList, untilPickerDay } from "../../domain/recurrence.ts";
 import { currentEntry, streak } from "../../domain/schedule.ts";
 import { descriptionText, plainToHtml, preview } from "../../domain/text.ts";
 import {
@@ -310,7 +310,7 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
         {d.untilDay !== null && <TextButton onClick={() => onChange({ ...d, untilDay: null })}>Clear</TextButton>}
       </div>
       {upcoming.length > 0 && <div className="pe-small">Next: {upcoming.map(formatDate).join(", ")}</div>}
-      {untilPick && <DatePickerDialog value={d.untilDay ?? start + 91} onClose={() => setUntilPick(false)} onPick={(e) => onChange({ ...d, untilDay: e })} />}
+      {untilPick && <DatePickerDialog value={untilPickerDay(d.untilDay, start, todayEpoch())} onClose={() => setUntilPick(false)} onPick={(e) => onChange({ ...d, untilDay: e })} />}
     </div>
   );
 }

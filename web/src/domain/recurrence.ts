@@ -145,3 +145,12 @@ export function movedRule(item: Item, from: number, to: number): Pick<Item, "wee
     excludedDays: delta ? parseIntList(item.excludedDays).map((d) => d + delta).join(",") : item.excludedDays,
   };
 }
+
+/**
+ * The day a repeat's end-date picker opens on (377): the chosen end date if there is one; otherwise today, or the
+ * repeat's start when that's later (an end before the start means nothing). It used to open three months after the
+ * start, so a repeat set up in November opened on February.
+ */
+export function untilPickerDay(untilDay: number | null, startDay: number, today: number): number {
+  return untilDay ?? Math.max(today, startDay);
+}
