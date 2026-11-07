@@ -109,7 +109,7 @@ export function WeekCard({ plan, view, entries, title, sub, bar, totalKm, t, onO
   const fold = () => { const f = !folded; setFolded(f); localStorage.setItem(FOLD_KEY, f ? "1" : "0"); };
   const line = (l: PreviewLine, sessionId: string | null) => (
     <span key={l.id} className={`tr-wl ${l.status} ${l.kind ? `k-${l.kind}` : ""}`}
-      {...(sessionId ? { ...tapProps(() => onOpenSession(sessionId)), onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); onOpenSession(sessionId); } } : {})}>
+      {...(sessionId ? tapProps(() => onOpenSession(sessionId), { stop: true }) : {})}>
       <i className="o" aria-hidden="true">{l.status === "done" && <MIcon name="fCheck" size={10} />}</i>
       <span className="n">{l.title}</span>{l.detail && <span className="d">{l.detail}</span>}
     </span>

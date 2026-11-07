@@ -15,11 +15,7 @@ export const signed1 = (v: number) => { const r = Math.round(v * 10) / 10; retur
 export const from = (source: string | null) => { const n = sourceName(source); return n ? `from ${n}` : ""; };
 export const join = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(" · ");
 
-/** Opens on a tap, a click, Enter or Space: for a row or tile that isn't a real button. */
-export const tapProps = (open: () => void) => ({
-  role: "button", tabIndex: 0, onClick: open,
-  onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } },
-});
+export { tapProps } from "./tapProps.ts";
 
 /**
  * A chart card: its title (and [side], beside it), the headline (its number, or the day a finger read on the
