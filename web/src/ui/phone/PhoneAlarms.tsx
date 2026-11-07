@@ -26,6 +26,7 @@ import { AppBarActions, Dialog, DropdownMenu, EmptyState, FilterChip, HScroll, I
 import { useHorizontalSwipe } from "./gesture.ts";
 import { useHold as useLongPress } from "./hold.ts";
 import { BottomSheet, ListItem, Switch, TextButton, showSnackbar } from "./m3.tsx";
+import { type SkipNote, announceSkip, endSkip, useSkipHeld } from "./skipHold.ts";
 import { MultiDatePickerDialog, TimePickerDialog } from "./pickers.tsx";
 import { type RangePick, rangeRole, slideRange, tapRange } from "./range.ts";
 import { spring, swipeTabs, useSwipePager } from "./pager.ts";
@@ -331,15 +332,6 @@ function AlarmList({ alarms, zone, rings, active, onEdit, onNew, sel, setSel, ap
   );
 }
 
-/**
- * While a card's Skip can still be undone (369), what it skipped ("won't ring tomorrow"): if that was the only alarm
- * on, the "Alarm in ..." line at the top stays in place saying so, so the card and its Undo don't jump up.
- */
-let skipHeld: string | null = null;
-const skipHeldListeners = new Set<() => void>();
-const holdSkip = (text: string | null) => { skipHeld = text; skipHeldListeners.forEach((l) => l()); };
-const useSkipHeld = () => useSyncExternalStore((l) => { skipHeldListeners.add(l); return () => { skipHeldListeners.delete(l); }; }, () => skipHeld);
-
 function NextAlarm({ alarms, calendar, now, onSkip }: { alarms: ClockAlarm[]; calendar: CalendarAlarm[]; now: Date; onSkip: (a: ClockAlarm) => void }) {
   const rings: { at: Date; title?: string; alarm?: ClockAlarm }[] = alarms.filter((a) => a.enabled)
     .map((alarm) => ({ at: nextRing(alarm, now), alarm })).filter((r): r is { at: Date; alarm: ClockAlarm } => r.at !== null);
@@ -479,7 +471,7 @@ function SkipButton({ group, now }: { group: ClockAlarm[]; now: Date }) {
    * What a Skip just changed, while its Undo can still put it back (369): a one-off alarm skipped is simply off,
    * so without this its card would lose the button, and Undo would only be in the message at the bottom.
    */
-  const [just, setJust] = useState<{ before: ClockAlarm[]; day: number } | null>(null);
+  const [just, setJust] = useState<{ before: ClockAlarm[]; day: number; note: SkipNote } | null>(null);
   const skipped = skippedNext(group, now);
   const day = skipped ?? (just && group.every((a) => !a.enabled || !just.before.some((b) => b.id === a.id)) ? just.day : null);
   const next = day === null ? skipNext(group, now) : [];
@@ -490,17 +482,18 @@ function SkipButton({ group, now }: { group: ClockAlarm[]; now: Date }) {
   const tap = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (day !== null) {
-      setJust(null); holdSkip(null);
+      // The message with its own Undo goes too (review of 2.10.4, finding 3).
+      if (just) endSkip(just.note);
+      setJust(null);
       void saveAll(skipped !== null ? unskipDay(group, day) : just?.before ?? []);
       return;
     }
     const before = group.filter((a) => next.some((c) => c.id === a.id));
     void saveAll(next);
-    setJust({ before, day: nextDay });
-    const text = `${many ? "These alarms" : "It"} won't ring ${dayWord(nextDay, today)}`;
-    holdSkip(`${many ? "These alarms won't" : "It won't"} ring ${dayWord(nextDay, today)}`);
-    showSnackbar(text, "Undo", () => { setJust(null); holdSkip(null); void saveAll(before); },
-      { onGone: () => { setJust(null); holdSkip(null); } });
+    const note = announceSkip(`${many ? "These alarms" : "It"} won't ring ${dayWord(nextDay, today)}`,
+      `${many ? "These alarms won't" : "It won't"} ring ${dayWord(nextDay, today)}`,
+      () => { setJust(null); void saveAll(before); }, () => setJust(null));
+    setJust({ before, day: nextDay, note });
   };
   // Undo takes Skip's place, as quiet as Skip was (369: not a filled button).
   return (

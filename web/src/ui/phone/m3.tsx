@@ -10,6 +10,7 @@ import { SHEET_DISTANCE, SHEET_FLING, bodyDragStart, sheetCloses } from "./sheet
 import { LONG_PRESS, TOUCH_SLOP } from "./press.ts";
 import { frameWriter } from "./motion.ts";
 import { isWide } from "../../platform.ts";
+import { currentSnack, onSnack, setSnack } from "./snackbar.ts";
 
 /** The least a half sheet shows (px). */
 const HALF_SHEET_MIN = 380;
@@ -382,35 +383,17 @@ export function SheetButtons({ onCancel, onSave, enabled = true }: { onCancel: (
 
 // ---------- Snackbar ----------
 
-interface Snack { id: number; text: string; action?: string; onAction?: () => void; onGone?: () => void; ms: number }
-let snack: Snack | null = null;
-let snackId = 0;
-const snackListeners = new Set<() => void>();
-/** Replacing or hiding a snackbar whose action wasn't taken tells it (onGone): a held-back delete then happens. */
-const setSnack = (s: Snack | null, acted = false) => {
-  const prev = snack;
-  snack = s;
-  snackListeners.forEach((l) => l());
-  if (prev && prev !== s && !acted) prev.onGone?.();
-};
-
-/**
- * Shows a message at the bottom, with an optional action (Undo). Like the native one: 4 s on its own,
- * 10 s (SnackbarDuration.Long) with an action, which also gets a close button.
- */
-export function showSnackbar(text: string, action?: string, onAction?: () => void, opts: { ms?: number; onGone?: () => void } = {}) {
-  setSnack({ id: ++snackId, text, action, onAction, onGone: opts.onGone, ms: opts.ms ?? (action ? 10000 : 4000) });
-}
+export { showSnackbar, hideSnackbar } from "./snackbar.ts";
 
 /** Where snackbars appear: above the bottom bar, or near the bottom edge over a full-screen page. */
 export function SnackbarHost({ raised }: { raised: boolean }) {
-  const s = useSyncExternalStore((l) => { snackListeners.add(l); return () => { snackListeners.delete(l); }; }, () => snack);
+  const s = useSyncExternalStore(onSnack, currentSnack);
   const [leaving, setLeaving] = useState(false);
   useEffect(() => {
     if (!s) return;
     setLeaving(false);
     const t1 = window.setTimeout(() => setLeaving(true), s.ms);
-    const t2 = window.setTimeout(() => { if (snack?.id === s.id) setSnack(null); }, s.ms + 150);
+    const t2 = window.setTimeout(() => { if (currentSnack()?.id === s.id) setSnack(null); }, s.ms + 150);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [s]);
   if (!s) return null;
