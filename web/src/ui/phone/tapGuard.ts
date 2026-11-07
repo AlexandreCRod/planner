@@ -56,6 +56,15 @@ export function toggleOf(target: Element | null): Element | null {
   return null;
 }
 
+/**
+ * Sends the held-back click again, to what the finger was on. That may be an icon's <svg> or <path> inside the
+ * toggle, which has no click() of its own (review of 2.10.4, finding 1: the toggle never flipped), so it's a
+ * click event that bubbles up to the toggle and its row, as the real one would have.
+ */
+export function replayClick(target: EventTarget) {
+  target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+}
+
 const guard = new TapGuard();
 /** The back press (the Android button or edge gesture) reaches the page here. */
 export const noteBack = () => guard.back(performance.now());
@@ -82,11 +91,11 @@ export function startTapGuard() {
     e.stopPropagation();
     if (touched === "no") return;
     // Touched at the edge: flip it a moment later, unless the system turned the touch into a back press.
-    const target = e.target as HTMLElement;
+    const target = e.target as Element;
     window.setTimeout(() => {
       if (guard.backSince() || !target.isConnected) return;
       replaying = true;
-      try { target.click(); } finally { replaying = false; }
+      try { replayClick(target); } finally { replaying = false; }
     }, EDGE_WAIT);
   }, { capture: true });
 }
