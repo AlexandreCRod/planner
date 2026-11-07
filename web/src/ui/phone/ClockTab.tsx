@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { alarmState, useAlarmState } from "../../alarms/native.ts";
-import { type Running, clockTab, runningClocks } from "../../domain/clockRunning.ts";
+import { type Running, clockTab, runningClocks, runningKey } from "../../domain/clockRunning.ts";
 import { DropdownMenu } from "./chrome.tsx";
 
 /** What runs now, read fresh (for a tap or a hold on the tab). */
@@ -53,10 +53,15 @@ export function ClockTabMenu({ open, onClose, onPick }: { open: boolean; onClose
   const st = useAlarmState();
   const now = useNowWhile(open);
   const list = open ? runningClocks(st.tools, now) : [];
+  // The last one ended (or was paused from its notification) while the list was open: it's closed for good, so
+  // it doesn't pop open by itself when the next one starts (review of 2.10.3, finding 4).
+  const empty = open && list.length === 0;
+  useEffect(() => { if (empty) onClose(); }, [empty]); // eslint-disable-line react-hooks/exhaustive-deps
   return createPortal(
     <div className="p-menu-anchor p-clockmenu">
+      {/* Keyed by the timer or stopwatch, so a lit row keeps its item when the list re-sorts under the finger. */}
       <DropdownMenu open={open && list.length > 0} onClose={onClose} items={list.map((r) => ({
-        label: `${r.name} · ${r.time}`, icon: r.kind === "timer" ? "oTimer" : "oAvTimer", onClick: () => onPick(r),
+        key: runningKey(r), label: `${r.name} · ${r.time}`, icon: r.kind === "timer" ? "oTimer" : "oAvTimer", onClick: () => onPick(r),
       }))} />
     </div>,
     document.body,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clockTab, runningClocks } from "../src/domain/clockRunning.ts";
+import { clockTab, runningClocks, runningKey } from "../src/domain/clockRunning.ts";
 
 // 336: the Clock tab shows the soonest running timer or stopwatch, with a count when several run.
 const NOW = 1_000_000_000;
@@ -45,4 +45,16 @@ test("a stopwatch shows its time so far, after any running timer, and its ring g
   const only = clockTab(runningClocks({ ...tools, timers: [] }, NOW))!;
   assert.equal(only.first.kind, "stopwatch");
   assert.equal(only.time, "1:15");
+});
+
+// Review of 2.10.3, finding 4: the list's rows are keyed by their timer or stopwatch, so a row lit under a resting
+// finger keeps its item when a sooner timer starts and the list re-sorts.
+test("a running one keeps its key in the Clock tab's list when another comes before it; no two share one", () => {
+  const before = runningClocks({ timers: [timer(1, 20 * 60_000, { label: "Pasta" })], stopwatch: sw({ id: 1, startedAt: NOW - 5000 }) }, NOW);
+  const after = runningClocks({ timers: [timer(1, 20 * 60_000, { label: "Pasta" }), timer(2, 60_000, { label: "Tea" })], stopwatch: sw({ id: 1, startedAt: NOW - 5000 }) }, NOW);
+  const pasta = (l: typeof before) => l.findIndex((r) => r.name === "Pasta");
+  assert.notEqual(pasta(before), pasta(after)); // it moved down a row
+  assert.equal(runningKey(before[pasta(before)]), runningKey(after[pasta(after)]));
+  const keys = after.map(runningKey);
+  assert.equal(new Set(keys).size, keys.length); // timer 1 and stopwatch 1 too
 });

@@ -41,6 +41,12 @@ export function runningClocks(tools: { timers: TimerLike[]; stopwatch: SwLike; m
   return [...timers, ...sws];
 }
 
+/**
+ * A running one's key in the Clock tab's list: the same while it runs, whatever comes before it, and never
+ * another's (a timer and a stopwatch may share a number). A lit row keeps its item when the list re-sorts.
+ */
+export const runningKey = (r: Running): string => `${r.kind}-${r.id}`;
+
 /** What the Clock tab shows: the soonest one's time and ring, and how many run (a count from 2); null when none. */
 export function clockTab(list: Running[]): { time: string; ring: number; count: number; first: Running } | null {
   if (!list.length) return null;

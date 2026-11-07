@@ -311,7 +311,10 @@ export function EmptyState({ icon, title, hint, action, onIcon, iconLabel, class
   );
 }
 
-export interface MenuItem { label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean; disabled?: boolean }
+export interface MenuItem {
+  /** Keeps a row with its item when the list changes while open (default: its place). */
+  key?: string;
+  label: string; onClick: () => void; icon?: string; iconColor?: string; dot?: string; checked?: boolean; divider?: boolean; disabled?: boolean }
 
 /**
  * Material 3 dropdown menu anchored under the top-right corner of its parent (which must be
@@ -358,7 +361,7 @@ export function DropdownMenu({ open, onClose, items }: { open: boolean; onClose:
     <div className="p-menu-scrim" onPointerDown={onClose} />
     <div ref={box} className={`p-menu ${leaving ? "out" : ""}`} role="menu">
       {items.map((it, i) => (
-        <div key={i}>
+        <div key={it.key ?? i}>
           {it.divider && <div className="p-menu-divider" />}
           <button role="menuitem" className={it.icon || it.dot ? "lead" : ""} disabled={it.disabled} onClick={() => { onClose(); it.onClick(); }}>
             {it.icon && <MIcon name={it.icon} color={it.iconColor} />}
