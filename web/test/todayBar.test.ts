@@ -30,8 +30,38 @@ test("Today's bar fits at 360 and 390 px, with and without the Tasks button, on 
     assert.ok(barWidth(vw, isToday, tasks) <= vw, `${vw} px, Tasks button ${tasks ? "on" : "off"}, ${isToday ? "today" : "another day"}: ${barWidth(vw, isToday, tasks)} px`);
 });
 
-test("the arrows stay still from day to day: the title's slot doesn't depend on the day", () => {
-  assert.equal(barWidth(390, true, true), barWidth(390, false, true) - 40);
+// The arrows stay still from day to day (341) only if nothing that places them depends on the day. The bar's
+// one difference between today and another day is the Today button (.p-today-btn): a rule that reaches the
+// arrows, the title's slot or the row through it (":has(.p-today-btn)", or ".p-today-btn ~ ..." / "+ ...") and
+// changes a size or place would move them. (Review of 2.10.3, finding 9: the old check compared barWidth with
+// itself, which can't differ by day, so it passed whatever the CSS did.)
+const LAYOUT = /(^|;)\s*(--day-slot|width|min-width|max-width|flex[\w-]*|margin[\w-]*|padding[\w-]*|order|justify-content|gap|position|left|right|inset|transform)\s*:/;
+/** The rules whose selector depends on the day and which change a size or a place. */
+const dayDependent = (sheet: string) => [...sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+  .filter(([, sel, body]) => /:has\([^)]*p-today-btn|\.p-today-btn[^,{]*[~+]/.test(sel) && LAYOUT.test(body.trim()))
+  .map(([, sel]) => sel.trim());
+/** Where the arrows sit from the bar's start (px): the ‹'s left, the ›'s left, given the sheet's slot and arrows. */
+const arrows = (vw: number, tasks: boolean) => {
+  const arrow = tasks && tight ? 40 : 44, slot = (tasks ? withTasks : plain)(vw);
+  return [4, 4 + arrow + slot];
+};
+
+test("the arrows stay still from day to day: nothing that places them depends on the day", () => {
+  assert.deepEqual(dayDependent(css), []);
+  // The row of arrows and title comes first in the bar, so it starts at the edge whatever follows it.
+  assert.match(css, /\.phone \.p-dayrow \{ flex: none;/);
+  for (const vw of [360, 390, 412]) for (const tasks of [false, true]) {
+    const [l, r] = arrows(vw, tasks);
+    assert.ok(l >= 0 && r > l + 40, `${vw} px: the arrows at ${l} and ${r}`);
+  }
+});
+
+test("the day check sees a rule that would move the arrows on days away from today", () => {
+  assert.deepEqual(dayDependent(".phone .p-appbar:has(.p-today-btn) { --day-slot: 60px; }"), [".phone .p-appbar:has(.p-today-btn)"]);
+  assert.deepEqual(dayDependent(".phone .p-today-btn ~ .p-dayrow > .p-icon { width: 40px; }"), [".phone .p-today-btn ~ .p-dayrow > .p-icon"]);
+  // The Today button's own size is the same on every day it shows: not a move.
+  assert.deepEqual(dayDependent(".phone .p-icon.p-today-btn { width: 40px; }"), []);
+  assert.deepEqual(dayDependent(".phone .p-appbar:has(.p-today-btn) { color: red; }"), []);
 });
 
 test("the Tasks button (when on) shows on every day; Today shows away from today; the to-dos always", () => {
