@@ -33,7 +33,8 @@ import { type Pan, type Pt, type Series, Chart, GREY, GYM, GYM_DIM, MiniChart, P
 import { ChartCard, Head, from, join, tapProps } from "./progressParts.tsx";
 import { CardioCards, CardioList, cardioTitle, useCardio } from "./TrainingCardio.tsx";
 import { SlideStepper } from "./SlideStepper.tsx";
-import { NightCards, NightStrip, nightWord } from "./TrainingNight.tsx";
+import { NightCards } from "./TrainingNight.tsx";
+import { SleepWeek } from "./TrainingSleepWeek.tsx";
 import { allExercises, bestWord, fmtKg, planQ, randomId, shownBests } from "./trainingParts.tsx";
 import "./progress.css";
 
@@ -504,16 +505,16 @@ function SleepCards({ tr, id, t, onNight }: { tr: Training; id: string; t: numbe
     const bars = shown.length <= 120;
     const each: Series = bars ? { kind: "bars", span: 1, color: SLEEP_DIM, pts } : { kind: "dots", r: 2.5, color: SLEEP_DIM, pts };
     const bed = n && n.bed && n.wake ? `bed ${clockOfMoment(n.bed)} → ${clockOfMoment(n.wake)}` : "";
-    return <>{switcher}<ChartCard title="Sleep per night" pan={span.pan} tall
+    // Last night's headline and the week of nights go first (344 option B); the long chart's own headline is the
+    // average of the nights it shows, so it says something the top doesn't.
+    const latest = list[list.length - 1];
+    const latestAvg = avg7(tr.sleep, field, latest.day);
+    const top = <Head value={fmtSleep(latest.totalMin!)} unit={whenOf(latest.day, t, "last night")} chip={latestAvg !== null ? `7-day avg ${fmtSleep(latestAvg)} · ${nightsOf7(sleepAverages(tr.sleep, latest.day).nights)}` : null} />;
+    const windowAvg = shown.length ? shown.reduce((s, x) => s + x.totalMin!, 0) / shown.length : null;
+    return <><SleepWeek tr={tr} t={t} head={top} onNight={onNight} />{switcher}<ChartCard title="Sleep per night" pan={span.pan}
       read={n ? [join(`Night to ${formatDate(n.day)}`, bed, fromSleep(n.source)), <>{fmtSleep(n.totalMin!)} <small>{stagesOf(n)}</small></>] : null}
-      head={last ? <Head value={fmtSleep(last.totalMin!)} unit={whenOf(last.day, t, "last night")} chip={lastAvg !== null ? `7-day avg ${fmtSleep(lastAvg)} · ${nightsOf7(sleepAverages(tr.sleep, last.day).nights)}` : null} /> : none}
+      head={windowAvg !== null ? <Head value={fmtSleep(windowAvg)} unit={`average · ${shown.length} ${shown.length === 1 ? "night" : "nights"}`} /> : none}
       foot={<>{legend("Each night")}<div className="pg-foot">Tap a bar to open that night. Under 6 h before a quality or long run puts a moon on that session.</div></>}>
-      {!span.back && (
-        <div className="pg-lrow" {...tapProps(() => onNight(list[list.length - 1].day))}>
-          <div className="x">{nightWord(list[list.length - 1].day, t)}{list[list.length - 1].bed && list[list.length - 1].wake && <small>{clockOfMoment(list[list.length - 1].bed)}–{clockOfMoment(list[list.length - 1].wake)}</small>}</div>
-          <NightStrip n={list[list.length - 1]} /><MIcon name="fKeyboardArrowRight" size={18} />
-        </div>
-      )}
       {chart([each, { kind: "line", dots: false, color: SLEEP, gap: AVG_GAP, pts: avgPts.map((p) => ({ day: p.day + (bars ? 0.5 : 0), v: p.v / 60 })) }], { fmt: (v) => `${v} h`, zero: true, bars, top: Math.max(...list.map((x) => x.totalMin!)) / 60, onTap: (i) => onNight(shown[i].day) })}
     </ChartCard></>;
   }
