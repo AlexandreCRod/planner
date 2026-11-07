@@ -234,7 +234,7 @@ export function PhoneAlarms({ active }: { active: boolean }) {
     <div className="p-scaffold pa-page">
       {selecting
         ? <AlarmSelectionBar picked={selectedAlarms(st.alarms, sel)} onClear={() => setSel(new Set())} onSkip={(g) => listApi.current?.skip(g)} />
-        : <TopAppBar title="Clock" actions={<AppBarActions />} />}
+        : <TopAppBar title="Clocks" actions={<AppBarActions />} />}
       {/* The pill switch, as for every choice of 2–4 sections (287); a swipe between sections moves its thumb. */}
       <div className="pa-tabs">
         <Segmented value={SECTIONS[index][0]} options={SECTIONS} track={track} onChange={(k) => show(SECTIONS.findIndex(([x]) => x === k))} />

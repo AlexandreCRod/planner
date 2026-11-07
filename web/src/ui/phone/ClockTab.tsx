@@ -29,11 +29,12 @@ function useNowWhile(on: boolean): number {
 const R = 14, C = 2 * Math.PI * R;
 
 /** The ring and the count over the Clock tab's icon, and the time for its label; null shows the tab as usual. */
-export function useClockTab(shown: boolean): { ring: React.ReactNode; label: string | null; aria: string | null } {
+export function useClockTab(): { ring: React.ReactNode; label: string | null; aria: string | null } {
   const st = useAlarmState();
-  const any = !shown && runningClocks(st.tools, Date.now()).length > 0;
+  // On every page, the Clocks page too (383): the tab keeps its ring and time while one runs.
+  const any = runningClocks(st.tools, Date.now()).length > 0;
   const now = useNowWhile(any);
-  const tab = shown ? null : clockTab(runningClocks(st.tools, now));
+  const tab = clockTab(runningClocks(st.tools, now));
   if (!tab) return { ring: null, label: null, aria: null };
   const ring = (
     <span className="p-clockring" aria-hidden="true">
@@ -44,7 +45,7 @@ export function useClockTab(shown: boolean): { ring: React.ReactNode; label: str
       {tab.count > 1 && <span className="p-clockcount">{tab.count}</span>}
     </span>
   );
-  const aria = `Clock, ${tab.first.name} ${tab.first.kind === "timer" ? `${tab.time} left` : tab.time}${tab.count > 1 ? `, ${tab.count} running` : ""}`;
+  const aria = `Clocks, ${tab.first.name} ${tab.first.kind === "timer" ? `${tab.time} left` : tab.time}${tab.count > 1 ? `, ${tab.count} running` : ""}`;
   return { ring, label: tab.time, aria };
 }
 

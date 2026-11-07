@@ -58,7 +58,7 @@ const tabsFor = (keepTasks: boolean): Tab[] => [
   { key: "training", label: "Training" },
   ...(keepTasks ? [{ key: "tasks", label: "Tasks" }] : []),
   { key: "notes", label: "Notes" },
-  ...(hasAlarms ? [{ key: "alarms", label: "Clock" }] : []),
+  ...(hasAlarms ? [{ key: "alarms", label: "Clocks" }] : []),
 ];
 /** The Training page's route ("#/training?s=…"), kept while another tab shows, so coming back finds it as it was. */
 let trainingHash = "#/training";
@@ -767,9 +767,9 @@ function BottomBar({ tabs, pos, start, listeners, pop, onTap, onSettle, onSlide 
   );
 }
 
-/** The Clock tab: as the others, and while a timer or stopwatch runs (another page shown), its ring and time (336). */
+/** The Clocks tab: as the others, and while a timer or stopwatch runs, its ring and time (336), on its own page too (383). */
 function ClockTabButton({ i, label, selected, day, onTap }: { i: number; label: string; selected: boolean; day: number; onTap: () => void }) {
-  const clock = useClockTab(selected);
+  const clock = useClockTab();
   return (
     <button data-i={i} className={`p-tab ${selected ? "on" : ""} ${clock.ring ? "running" : ""}`} aria-label={clock.aria ?? label} aria-current={selected ? "page" : undefined}
       onClick={(e) => { if (e.detail === 0) onTap(); }}>
