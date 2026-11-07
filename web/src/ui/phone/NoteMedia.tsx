@@ -8,7 +8,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { downloadName, isVideo, lensPlace, lensPosFor, lensStep, miniScale, previewHash } from "../../domain/media.ts";
 import type { NoteImage } from "../../domain/types.ts";
-import { getBlob, useImageUrl } from "../../store/images.ts";
+import { getBlob, getPhotoInfo, useImageUrl } from "../../store/images.ts";
+import { photoLines } from "../../domain/exif.ts";
+import { epochOf, formatDate, formatTime } from "../../domain/dates.ts";
 import { DropdownMenu, IconButton, MIcon, type MenuItem } from "./chrome.tsx";
 import { isNative } from "../../platform.ts";
 import { saveToPhone } from "./device.ts";
@@ -324,11 +326,27 @@ function LensVideo({ m, active }: { m: NoteImage; active: boolean }) {
 }
 
 /** One full screen: a picture, or a video with its controls; copy it (a button, Ctrl+C; on the PC), save it, and remove it (asked first). */
+function PhotoDetails({ m }: { m: NoteImage }) {
+  const [lines, setLines] = useState<string[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    const fmt = (d: Date) => `${formatDate(epochOf(d.getFullYear(), d.getMonth() + 1, d.getDate()))}, ${formatTime(d.getHours() * 60 + d.getMinutes())}`;
+    void getPhotoInfo(m.hash).then((info) => { if (live) setLines(photoLines(info, new Date(m.createdAt), m, fmt)); });
+    return () => { live = false; };
+  }, [m]);
+  return lines && (
+    <div className="pn-picture-info" onClick={(e) => e.stopPropagation()}>
+      {lines.map((l, i) => <div key={i} className={i === 0 ? "first" : ""}>{l}</div>)}
+    </div>
+  );
+}
+
 export function MediaViewer({ m, onClose, onRemove }: { m: NoteImage; onClose: () => void; onRemove: () => void }) {
   const still = useImageUrl(previewHash(m));
   const video = useVideoUrl(m, true);
   useEffect(() => pushBack(onClose), []); // eslint-disable-line react-hooks/exhaustive-deps
   const what = isVideo(m) ? "video" : "picture";
+  const [info, setInfo] = useState<string | null>(null);
   useCopyKey(m);
   return (
     <div className="pn-picture" onClick={onClose}>
@@ -337,12 +355,15 @@ export function MediaViewer({ m, onClose, onRemove }: { m: NoteImage; onClose: (
         <span className="grow" />
         {canCopyImages && !isVideo(m) && <IconButton icon="oContentCopy" label="Copy image (Ctrl+C)" onClick={() => void copyImage(m)} />}
         <IconButton icon="fDownload" label={`Save ${what} to the phone`} onClick={() => void downloadMedia(m)} />
+        {!isVideo(m) && <IconButton icon="oInfo" label="Details" className={info ? "on" : ""} onClick={() => setInfo(info ? null : "…")} />}
         <IconButton icon="oDelete" label={`Remove ${what}`} onClick={onRemove} />
       </div>
       {video
         ? <video src={video} poster={still ?? undefined} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
         : still && <img src={still} alt="" onClick={(e) => e.stopPropagation()} />}
       {isVideo(m) && !video && <div className="pn-picture-note">This video is on the phone that added it.</div>}
+      {/* The photo's details (379): when it was taken (else added), the camera, its size, where; from its EXIF, kept on this device. */}
+      {info !== null && <PhotoDetails m={m} />}
     </div>
   );
 }

@@ -1982,3 +1982,6 @@ html.phone[data-theme="dark"] {
 .phone .p-monthdrop .p-dp-month { font-size: 15px; color: var(--text); }
 .phone .p-monthdrop .p-dp-years { height: 288px; }
 .phone.wide .p-monthdrop { left: 8px; right: auto; width: 360px; margin: 0; }
+/* A photo's details (379): a small block at the bottom of the viewer, white on the dark band. */
+.phone .pn-picture-info { position: absolute; left: 0; right: 0; bottom: 0; padding: 32px 24px calc(var(--sab) + 20px); background: linear-gradient(transparent, #000c 40%); color: #fff; font-size: 13px; line-height: 19px; opacity: .9; }
+.phone .pn-picture-info .first { font-size: 15px; line-height: 22px; font-weight: 500; opacity: 1; }

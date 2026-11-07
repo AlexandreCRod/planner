@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "../platform.ts";
 import * as db from "./db.ts";
 import { MAX_VIDEO_BYTES } from "../domain/media.ts";
+import { type PhotoInfo, readExif } from "../domain/exif.ts";
 import { getToken } from "./sync.ts";
 
 /** Longest side after shrinking, like the phone. */
@@ -13,6 +14,9 @@ const MAX_SIDE = 1600;
 const MAX_BYTES = 1_800_000;
 
 const key = (hash: string) => `blob:${hash}`;
+const infoKey = (hash: string) => `photoInfo:${hash}`;
+/** A photo's details from its EXIF (379), on the device that added it; null when there are none here. */
+export const getPhotoInfo = async (hash: string): Promise<PhotoInfo | null> => (await db.get<PhotoInfo>(infoKey(hash))) ?? null;
 export const getBlob = (hash: string) => db.get<Blob>(key(hash));
 
 const listeners = new Set<(hash: string) => void>();
@@ -48,6 +52,11 @@ export async function importImage(file: Blob): Promise<{ hash: string; mime: str
   } while (blob.size > MAX_BYTES && quality > 0.3);
   const hash = await sha256(blob);
   await putBlob(hash, blob);
+  // The original's own details (379): read before they're lost with the re-encoding, and kept on this device only.
+  try {
+    const info = readExif(await file.slice(0, 256 * 1024).arrayBuffer());
+    if (Object.keys(info).length) await db.put(infoKey(hash), info);
+  } catch { /* no details, then */ }
   return { hash, mime: "image/jpeg", width, height };
 }
 
