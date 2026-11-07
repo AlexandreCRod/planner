@@ -173,9 +173,12 @@ html.phone:not(.wide) .p-tab-label { transition: none; }
    A long title fits itself in (FitLine). Planner Test's TEST chip sits small in the bar's top corner there,
    taking no room from the row. */
 html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
-/* With the Tasks button look, today holds Tasks, the to-dos, Search and Settings (four icons, no Today button),
-   288 px with the arrows and edges; away from today Today takes the Tasks button's spot (todayBar.ts). */
-.phone .p-appbar.has-tasks { --day-slot: clamp(64px, calc(100vw - 288px), 150px); }
+/* With the Tasks button look, the bar holds Tasks on every day (todayBar.ts), so at its most (away from today)
+   Today 40, Tasks, the to-dos, Search and Settings: the arrows take 40 px and those four icons 44 on every day,
+   304 px with the edges, and the title's slot the rest (still the same on every day). */
+.phone .p-appbar.has-tasks { --day-slot: clamp(56px, calc(100vw - 304px), 150px); }
+.phone .p-appbar.has-tasks .p-dayrow > .p-icon.title-icon { width: 40px; }
+.phone .p-appbar.has-tasks > :is(.p-icon:not(.p-today-btn), .p-menu-anchor, .p-menu-anchor > .p-icon) { width: 44px; }
 .phone .p-appbar.tall { position: relative; }
 .phone .p-appbar.tall > .p-testchip { position: absolute; left: 12px; top: calc(var(--sat) + 2px); margin: 0; padding: 0 5px; font-size: 9px; line-height: 13px; }
 .phone .p-dayrow { flex: none; display: flex; align-items: center; min-width: 0; }

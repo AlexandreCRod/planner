@@ -542,8 +542,8 @@ export function PhoneToday() {
         </div>
         <span className="grow" />
         <TestChip />
-        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341); the Tasks
-            button (a look) shows on today only, so the bar fits (todayBar.ts). */}
+        {/* Today has a spot of its own, away from today only; the to-dos stay on every day (341), and so does
+            the Tasks button when its look is on (the bar draws tighter then so it fits, todayBar.ts). */}
         {todayBarButtons(isToday, tasksB === "B").map((b) =>
           b === "today" ? <IconButton key={b} className="p-today-btn" icon="oToday" label="Today" onClick={() => show(t)} />
           : b === "tasks" ? <IconButton key={b} icon="oTaskAlt" label="Tasks" onClick={() => go("tasks")} />

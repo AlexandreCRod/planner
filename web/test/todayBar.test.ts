@@ -16,9 +16,13 @@ const slotRule = (selector: string) => {
 };
 const plain = slotRule("html.phone")!;
 const withTasks = slotRule(".phone .p-appbar.has-tasks") ?? plain;
+// With the Tasks button look the bar is drawn tighter (arrows 40, icons 44): read from phone.css.
+const tight = /\.p-appbar\.has-tasks \.p-dayrow > \.p-icon\.title-icon \{ width: 40px; \}/.test(css)
+  && /\.p-appbar\.has-tasks > :is\(\.p-icon:not\(\.p-today-btn\), \.p-menu-anchor[^)]*\) \{ width: 44px; \}/.test(css);
 const barWidth = (vw: number, isToday: boolean, tasks: boolean) => {
   const own = todayBarButtons(isToday, tasks);
-  return 8 + 88 + (tasks ? withTasks : plain)(vw) + own.reduce((n, b) => n + (b === "today" ? 40 : 48), 0) + 2 * 48;
+  const arrow = tasks && tight ? 40 : 44, icon = tasks && tight ? 44 : 48;
+  return 8 + 2 * arrow + (tasks ? withTasks : plain)(vw) + own.reduce((n, b) => n + (b === "today" ? 40 : icon), 0) + 2 * icon;
 };
 
 test("Today's bar fits at 360 and 390 px, with and without the Tasks button, on today and on other days", () => {
@@ -27,12 +31,12 @@ test("Today's bar fits at 360 and 390 px, with and without the Tasks button, on 
 });
 
 test("the arrows stay still from day to day: the title's slot doesn't depend on the day", () => {
-  assert.equal(barWidth(390, true, true) - 48, barWidth(390, false, true) - 40);
+  assert.equal(barWidth(390, true, true), barWidth(390, false, true) - 40);
 });
 
-test("the Tasks button shows on today only; Today shows away from today; the to-dos always", () => {
+test("the Tasks button (when on) shows on every day; Today shows away from today; the to-dos always", () => {
   assert.deepEqual(todayBarButtons(true, true), ["tasks", "todos"]);
-  assert.deepEqual(todayBarButtons(false, true), ["today", "todos"]);
+  assert.deepEqual(todayBarButtons(false, true), ["today", "tasks", "todos"]);
   assert.deepEqual(todayBarButtons(true, false), ["todos"]);
   assert.deepEqual(todayBarButtons(false, false), ["today", "todos"]);
 });
