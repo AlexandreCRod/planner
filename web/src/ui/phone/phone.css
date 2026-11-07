@@ -510,7 +510,10 @@ html.phone { --day-slot: clamp(76px, calc(100vw - 280px), 150px); }
   box-shadow: 0 1px 3px rgb(0 0 0 / .3), 0 4px 8px 3px rgb(0 0 0 / .15); transform-origin: top right; animation: p-menu-in .12s cubic-bezier(.2, 0, 0, 1);
 }
 /* A menu longer than the screen scrolls inside itself (DropdownMenu caps its height). */
-.phone .p-menu { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.phone .p-menu { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: none; }
+/* A name too long for the menu ends in "…" (it never pans sideways: review of 2.10.3, finding 5). */
+.phone .p-menu button .grow { overflow: hidden; text-overflow: ellipsis; }
+.phone .p-menu button > :not(.grow) { flex: none; }
 .phone .p-menu.out { animation: p-menu-out .075s linear forwards; }
 @keyframes p-menu-in { from { opacity: 0; transform: scale(.8); } }
 @keyframes p-menu-out { to { opacity: 0; } }
