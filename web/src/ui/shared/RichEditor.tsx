@@ -953,10 +953,13 @@ export const RichEditor = forwardRef<RichEditorHandle, {
     document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
   };
 
+  // A blur is told once it's settled, as whether the text still has the focus: a note's checkbox-line hold gives
+  // the focus straight back while the keyboard is up (ChecklistHandles' keep), and the focus came back before the
+  // blur was told, so the note thought it had lost the focus and hid Undo, Redo and the formatting bar.
   return (
     <div ref={wrap} className="rich-wrap">
       <div ref={el} className={placeholder && empty ? "rich is-empty" : "rich"} contentEditable suppressContentEditableWarning spellCheck
-        style={{ minHeight, fontFamily: fontFamily ? `"Planner Boxes", ${fontFamily}` : undefined }} onFocus={() => onFocusChange?.(true)} onBlur={() => onFocusChange?.(false)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
+        style={{ minHeight, fontFamily: fontFamily ? `"Planner Boxes", ${fontFamily}` : undefined }} onFocus={() => onFocusChange?.(true)} onBlur={() => window.setTimeout(() => onFocusChange?.(document.activeElement === el.current), 0)} onInput={(e) => { if (!(e.nativeEvent as InputEvent).isComposing) tidyMarks(true); checkEmpty(); onChange(); }}
         onCompositionStart={() => { composing.current = true; }}
         onCompositionEnd={() => { composing.current = false; tidyMarks(true); }}
         data-placeholder={placeholder} onClick={onClick} onKeyDown={onKeyDown} onPaste={onPaste} onCopy={(e) => onCopy(e)} onCut={(e) => onCopy(e, true)} {...linkHandlers} />
