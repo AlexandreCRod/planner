@@ -49,6 +49,21 @@ export async function putMany(entries: [string, unknown][]): Promise<void> {
   });
 }
 
+/** Deletes [key], and gives what it held (undefined when nothing). */
+export async function take<T>(key: string): Promise<T | undefined> {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    let value: T | undefined;
+    const req = store.get(key);
+    req.onsuccess = () => { value = req.result as T | undefined; if (value !== undefined) store.delete(key); };
+    tx.oncomplete = () => resolve(value);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function clear(): Promise<void> {
   const db = await open();
   return new Promise((resolve, reject) => {

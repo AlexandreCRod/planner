@@ -14,6 +14,7 @@ const MAX_SIDE = 1600;
 const MAX_BYTES = 1_800_000;
 
 const key = (hash: string) => `blob:${hash}`;
+// The same key store.ts's photoDetails drops when no picture uses the file any more.
 const infoKey = (hash: string) => `photoInfo:${hash}`;
 /** A photo's details from its EXIF (379), on the device that added it; null when there are none here. */
 export const getPhotoInfo = async (hash: string): Promise<PhotoInfo | null> => (await db.get<PhotoInfo>(infoKey(hash))) ?? null;

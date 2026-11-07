@@ -175,12 +175,17 @@ export function restoreRecords(entries: [string, Rec][]) {
 
 /** Replaces records from sync: data null = deleted. */
 export function applyRemote(changes: { kind: Kind; id: string; data: Rec | null }[]) {
+  const pictures: string[] = [];
   for (const c of changes) {
     const key = `${c.kind}/${c.id}`;
-    if (c.data === null) records.delete(key);
-    else records.set(key, c.data);
+    if (c.data === null) {
+      const old = records.get(key);
+      if (c.kind === "images" && typeof old?.hash === "string") pictures.push(old.hash);
+      records.delete(key);
+    } else records.set(key, c.data);
   }
   if (changes.length) changed(true);
+  if (pictures.length) void forgetPhotos(pictures);
 }
 
 // ---------- Read side: a snapshot like the Android app's ----------
@@ -352,7 +357,26 @@ function removeItemDeep(id: number) {
   for (const t of list<ItemTag>("itemTags")) if (t.itemId === id) del("itemTags", t);
   for (const l of list<Link>("links")) if (l.sourceId === id || l.targetId === id) del("links", l);
   for (const v of list<NoteVersion>("versions")) if (v.itemId === id) del("versions", v);
-  for (const i of list<NoteImage>("images")) if (i.itemId === id) del("images", i);
+  const hashes: string[] = [];
+  for (const i of list<NoteImage>("images")) if (i.itemId === id) { del("images", i); hashes.push(i.hash); }
+  if (hashes.length) void forgetPhotos(hashes);
+}
+
+/**
+ * A photo's own details (379: when it was taken, the camera, where) are kept on the device that added it, under
+ * photoInfo:<hash> (images.ts writes them). They go when no picture uses that file any more: the photo removed
+ * from its note, the note deleted for good, or either done on another device (review of 2.10.4, finding 8).
+ */
+export const photoDetails = {
+  take: (hash: string): Promise<unknown> => db.take(`photoInfo:${hash}`),
+  put: (hash: string, info: unknown): Promise<void> => db.put(`photoInfo:${hash}`, info),
+};
+/** Drops the details of [hashes] that no picture uses now; resolves to what was dropped (for an Undo). */
+function forgetPhotos(hashes: Iterable<string>): Promise<[string, unknown][]> {
+  const used = new Set(list<NoteImage>("images").map((i) => i.hash));
+  const gone = [...new Set(hashes)].filter((h) => h && !used.has(h));
+  return Promise.all(gone.map((h) => photoDetails.take(h).then((v): [string, unknown] => [h, v], (): [string, unknown] => [h, undefined])))
+    .then((l) => l.filter(([, v]) => v !== undefined));
 }
 
 export function deleteForever(id: number) { removeItemDeep(id); changed(); }
@@ -523,7 +547,12 @@ export function addImage(itemId: number, img: { hash: string; mime: string; widt
   changed();
 }
 
-export function deleteImage(img: NoteImage) { del("images", img); changed(); }
+/** Removes a picture or video from its note; resolves to the photo details dropped with it (forgetPhotos). */
+export function deleteImage(img: NoteImage): Promise<[string, unknown][]> {
+  del("images", img);
+  changed();
+  return forgetPhotos([img.hash]);
+}
 
 /**
  * Removes a picture or video from its note, and returns the undo. Leaving a note that this emptied deletes
@@ -534,8 +563,10 @@ export function removeImage(img: NoteImage): () => void {
   const key = `items/${img.itemId}`;
   const note = records.get(key);
   const attached = [...records].filter(([k, r]) => k !== rk("images", img as unknown as Rec) && attachedTo(k, r, img.itemId));
-  deleteImage(img);
+  const dropped = deleteImage(img);
   return () => {
+    // Its details come back with it.
+    void dropped.then((l) => Promise.all(l.map(([h, v]) => photoDetails.put(h, v)))).catch(() => {});
     if (note && !records.has(key)) {
       records.set(key, { ...note, updatedAt: Date.now() });
       for (const [k, r] of attached) records.set(k, r);
