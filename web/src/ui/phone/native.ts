@@ -11,6 +11,7 @@ import { startPhoneTheme } from "./theme.ts";
 import { startDeviceClock } from "./device.ts";
 import { startOverscroll } from "./overscroll.ts";
 import { startDesk } from "./desk.ts";
+import { noteBack, startTapGuard } from "./tapGuard.ts";
 
 // ---------- Keyboard ----------
 // How much of the bottom of the page the keyboard covers, in CSS px. In the app, Capacitor's
@@ -39,6 +40,7 @@ export function startPhonePlumbing() {
   started = true;
   startPhoneTheme();
   startPressFeedback();
+  startTapGuard();
   startMenuSlide();
   startOverscroll();
   startSelectScroll();
@@ -68,6 +70,7 @@ export function pushBack(fn: () => void) {
 }
 export function setShellBack(fn: () => void) { shellBack = fn; }
 function onBack() {
+  noteBack();
   const top = backStack[backStack.length - 1];
   if (top) top(); else shellBack();
 }

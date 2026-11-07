@@ -277,7 +277,7 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
         <div className="pe-rec-label">On these days</div>
         <div className="pe-circles">
           {[1, 2, 3, 4, 5, 6, 7].map((w) => (
-            <button key={w} className={hasWeekDay(mask, w) ? "on" : ""} onClick={() => { const n = mask ^ dayBit(w); if (n) onChange({ ...d, weekDays: n }); }}>
+            <button key={w} className={hasWeekDay(mask, w) ? "on" : ""} aria-pressed={hasWeekDay(mask, w)} onClick={() => { const n = mask ^ dayBit(w); if (n) onChange({ ...d, weekDays: n }); }}>
               {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"][w - 1]}
             </button>
           ))}
@@ -299,8 +299,8 @@ function RecurrenceDetails({ d, onChange }: { d: Item; onChange: (i: Item) => vo
       {(d.freq === "MONTHLY" || d.freq === "YEARLY") && <>
         <div className="pe-rec-label">On these days of the month</div>
         <div className="pe-circles wrap">
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((md) => <button key={md} className={days.has(md) ? "on" : ""} onClick={() => toggleDay(md)}>{md}</button>)}
-          <button className={`wide ${days.has(LAST_DAY_OF_MONTH) ? "on" : ""}`} onClick={() => toggleDay(LAST_DAY_OF_MONTH)}>Last</button>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((md) => <button key={md} className={days.has(md) ? "on" : ""} aria-pressed={days.has(md)} onClick={() => toggleDay(md)}>{md}</button>)}
+          <button className={`wide ${days.has(LAST_DAY_OF_MONTH) ? "on" : ""}`} aria-pressed={days.has(LAST_DAY_OF_MONTH)} onClick={() => toggleDay(LAST_DAY_OF_MONTH)}>Last</button>
         </div>
         {[...days].some((x) => x >= 29 && x <= 31) && <div className="pe-small">Months without that day are skipped. Use "Last" for the end of every month.</div>}
       </>}
