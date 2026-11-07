@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TapGuard } from "../src/ui/phone/tapGuard.ts";
+import { TapGuard, setGestureEdges } from "../src/ui/phone/tapGuard.ts";
 
 // 378: the Android back gesture from the right edge flipped "Show on calendar" while a routine was set up.
 test("a still tap flips a switch; a little jitter within the slop does too", () => {
@@ -46,4 +46,17 @@ test("a touch that starts in the back gesture's edge strip is known as one, and 
   const mid = new TapGuard();
   mid.down(370, 600, 1000);
   assert.equal(mid.fromEdge(411), false);
+});
+
+test("review of 2.10.4, finding 9: the phone's own wider back-gesture zone counts as the edge, and never less than 24 px", () => {
+  const at = (x: number) => { const g = new TapGuard(); g.down(x, 600, 1000); return g.fromEdge(411); };
+  assert.equal(at(30), false); // 24 px strip
+  setGestureEdges(40, 36);
+  assert.equal(at(30), true);
+  assert.equal(at(411 - 30), true);
+  assert.equal(at(411 - 38), false);
+  setGestureEdges(0, 0); // three-button navigation
+  assert.equal(at(20), true);
+  assert.equal(at(30), false);
+  setGestureEdges(24, 24);
 });

@@ -10,6 +10,7 @@ import { isNative } from "../../platform.ts";
 import { pieces } from "../../domain/media.ts";
 import { changed } from "../../store/store.ts";
 import { type Place, photonUrl, placesFromPhoton } from "../../domain/places.ts";
+import { setGestureEdges } from "./tapGuard.ts";
 
 export type { Place };
 
@@ -23,6 +24,7 @@ interface DevicePlugin {
   saveMediaStart(o: { name: string; mime: string }): Promise<{ id: string }>;
   saveMediaPiece(o: { id: string; data: string }): Promise<void>;
   saveMediaEnd(o: { id: string; cancel?: boolean }): Promise<void>;
+  gestureEdges(): Promise<{ left?: number; right?: number }>;
 }
 
 const plugin = isNative ? registerPlugin<DevicePlugin>("Device") : null;
@@ -82,13 +84,22 @@ async function readClock() {
 }
 
 let started = false;
-/** Follows the phone's 24-hour setting: read now, and again whenever the app comes back. */
+/** Follows the phone's 24-hour setting and its back-gesture zones: read now, and again whenever the app comes back. */
 export function startDeviceClock() {
   if (started || !plugin) return;
   started = true;
   void readClock();
-  void CapApp.addListener("resume", () => void readClock());
+  void readEdges();
+  void CapApp.addListener("resume", () => { void readClock(); void readEdges(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void readClock(); });
+}
+
+/** The back gesture's real zones at the screen's sides (review of 2.10.4, finding 9), for the switches' tap guard. */
+async function readEdges() {
+  try {
+    const e = await plugin!.gestureEdges();
+    if (typeof e.left === "number" && typeof e.right === "number") setGestureEdges(e.left, e.right);
+  } catch { /* an older app: the 24 px strip stays */ }
 }
 
 /** Where the phone is, roughly, when the person has already let this app know (never asked for here). */

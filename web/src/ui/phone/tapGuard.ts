@@ -18,6 +18,16 @@ const CLICK_WINDOW = 700;
 
 /** The strip at the left and right edges where the system's back gesture starts (CSS px; Android's is about 24 dp). */
 export const EDGE_STRIP = 24;
+/**
+ * The phone's own back-gesture zones, when Android tells the app (review of 2.10.4, finding 9: HyperOS or the
+ * gesture-sensitivity setting can make them wider). Never narrower than EDGE_STRIP: with buttons instead of
+ * gestures Android says 0, and the short wait at the edge costs little.
+ */
+const edges = { left: EDGE_STRIP, right: EDGE_STRIP };
+export function setGestureEdges(left: number, right: number) {
+  edges.left = Number.isFinite(left) ? Math.max(EDGE_STRIP, left) : EDGE_STRIP;
+  edges.right = Number.isFinite(right) ? Math.max(EDGE_STRIP, right) : EDGE_STRIP;
+}
 /** How long a toggle touched in the edge strip waits for a back press before it flips (ms). */
 export const EDGE_WAIT = 260;
 
@@ -32,7 +42,7 @@ export class TapGuard {
   cancel(t: number) { if (!this.touching) return; this.cancelled = true; this.touching = false; this.endAt = t; }
   back(t: number) { this.backAt = t; }
   /** Did the touch start in the back gesture's strip, on a screen [width] wide? */
-  fromEdge(width: number): boolean { return this.x0 < EDGE_STRIP || this.x0 > width - EDGE_STRIP; }
+  fromEdge(width: number): boolean { return this.x0 < edges.left || this.x0 > width - edges.right; }
   /** Was there a back press after this touch began? */
   backSince(): boolean { return this.backAt >= this.downAt; }
   lastEnd(): number { return this.endAt; }

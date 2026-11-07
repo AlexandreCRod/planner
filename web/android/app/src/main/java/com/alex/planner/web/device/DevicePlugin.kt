@@ -10,6 +10,8 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import android.text.format.DateFormat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -119,6 +121,25 @@ class DevicePlugin : Plugin() {
         SelectionToolbar.set(r)
         if (r != null) activity?.runOnUiThread { runCatching { SelectionToolbar.mode.get()?.invalidateContentRect() } }
         call.resolve()
+    }
+
+    /**
+     * The back gesture's zones at the left and right edges, in the page's CSS px ({left, right}; empty before the
+     * window has its insets), so the page's switches know where a touch may turn into a back swipe (378; review
+     * of 2.10.4, finding 9). With three-button navigation Android says 0.
+     */
+    @PluginMethod
+    fun gestureEdges(call: PluginCall) {
+        val activity = activity ?: return call.resolve(JSObject())
+        activity.runOnUiThread {
+            val view = bridge?.webView
+            val zones = view?.let { ViewCompat.getRootWindowInsets(it) }?.getInsets(WindowInsetsCompat.Type.systemGestures())
+            if (zones == null) call.resolve(JSObject())
+            else {
+                val density = view.resources.displayMetrics.density
+                call.resolve(JSObject().put("left", zones.left / density).put("right", zones.right / density))
+            }
+        }
     }
 
     /** One soft pulse of the named strength: "tick", "pickup", "settle" or "confirm" (Feel.kt). */
