@@ -4,7 +4,7 @@
 // fingers, moves an event on long-press-and-drag (snapped to 15 minutes), adds one on a tap on an
 // empty slot, and slides sideways like a pager to the days before and after. Month and Year slide the
 // same way.
-import { listsToTop } from "./calendarTop.ts";
+import { anchorToShow, listsToTop, setDayShower, takePendingDay } from "./calendarTop.ts";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { addMonths, epochOf, formatDate, formatDateShort, formatTime, monthLong, monthShort, nowMinutes, relativeDay, startOfWeek, today as todayEpoch, weekday, ymd, rangeShows } from "../../domain/dates.ts";
@@ -66,6 +66,7 @@ export function resetCalendar() {
 }
 
 let goToday: (() => void) | null = null;
+
 /** The calendar's own Today button (the T key). */
 export const calendarGoToday = () => goToday?.();
 let resetLive: (() => void) | null = null;
@@ -98,7 +99,7 @@ function openDailyNote(s: Snapshot, day: number) {
 export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min: number) => void; pending: SlotPreview | null }) {
   const s = useSnapshot();
   const [mode, setMode] = useState<Mode>(baseMode);
-  const [anchor, setAnchorState] = useState(selected);
+  const [anchor, setAnchorState] = useState(() => { const p = takePendingDay(); if (p !== null) selected = p; return selected; });
   const [menu, setMenu] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [f, setF] = useState(filters);
@@ -116,8 +117,10 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   const jumpToday = () => { setAnchor(todayEpoch()); listsToTop(body.current); };
   useEffect(() => {
     goToday = jumpToday;
+    // Something added on a day not on screen (372): that week, day or month is shown.
+    setDayShower((day) => { const to = anchorToShow(mode, anchor, day, mondayFirst()); if (to !== null) { setAnchor(to); listsToTop(body.current); } });
     resetLive = () => { resetCalendar(); setF(filters); setMode(baseMode()); jumpToday(); };
-    return () => { goToday = null; resetLive = null; };
+    return () => { goToday = null; resetLive = null; setDayShower(null); };
   });
 
   const step = (dir: number) => setAnchor(

@@ -16,6 +16,7 @@ import {
   type EditScope, type Snapshot, addLink, deleteFollowing, deleteOccurrence, onFlush, removeLink, restore, saveItem, saveSeriesEdit, setCompletedAt, snapshot, toggleCompletion, trash, useSnapshot, withUndo,
 } from "../../store/store.ts";
 import { go, openItem } from "../shared/common.tsx";
+import { calendarShowDay } from "./calendarTop.ts";
 import { typeLabel } from "../shared/kinds.ts";
 import { Checkbox, Dialog, DropdownMenu, FilterChip, IconButton, MIcon, RoutineRing, SectionHeader, Segmented, TopAppBar, type MenuItem } from "./chrome.tsx";
 import { findLinks } from "../../domain/links.ts";
@@ -1160,6 +1161,8 @@ export function PhoneItemEditor({ id, occ, dup, draft, onDraft, onClose, saveRef
       const movedTo = item.startDay !== null && item.startDay !== original.startDay ? item.startDay : undefined;
       saveSeriesEdit(scope, original, occ, edited, { reminders: cur.reminders, tags: tagList(), movedTo });
     } else saveItem({ ...item, id: currentId }, { reminders: cur.reminders, tags: tagList() });
+    // A new task or event on a day the calendar doesn't show: it moves there (372).
+    if (isNew && item.startDay !== null) calendarShowDay(item.startDay);
     onClose();
   };
   if (saveRef) saveRef.current = () => save();
