@@ -40,6 +40,11 @@ import java.time.ZoneId
     permissions = [Permission(alias = "notifications", strings = [Manifest.permission.POST_NOTIFICATIONS])],
 )
 class AlarmPlugin : Plugin() {
+    private companion object {
+        /** The longest the page stays hidden while it moves to what a notification opened. */
+        const val LAUNCH_HIDE_MAX_MS = 700L
+    }
+
     /** What a notification or the alarm clock's icon asked to open, until the page takes it. */
     private var launchItem: Long? = null
     private var launchSection: String? = null
@@ -57,7 +62,30 @@ class AlarmPlugin : Plugin() {
     }
 
     override fun handleOnNewIntent(intent: Intent) {
-        if (readLaunch(intent)) notifyListeners("launch", JSObject())
+        if (!readLaunch(intent)) return
+        // Back from the background on a notification: the page still shows its last screen (Training, say) until
+        // it has moved to the item, so it's hidden meanwhile (371); the page shows it again once the item is
+        // drawn (launchShown), and a timer does in any case.
+        hideUntilShown()
+        notifyListeners("launch", JSObject())
+    }
+
+    private val showAgain = Runnable { bridge?.webView?.alpha = 1f }
+
+    private fun hideUntilShown() {
+        val web = bridge?.webView ?: return
+        web.alpha = 0f
+        web.removeCallbacks(showAgain)
+        web.postDelayed(showAgain, LAUNCH_HIDE_MAX_MS)
+    }
+
+    /** The page has drawn what the notification opened. */
+    @PluginMethod
+    fun launchShown(call: PluginCall) {
+        activity?.runOnUiThread {
+            bridge?.webView?.let { it.removeCallbacks(showAgain); it.alpha = 1f }
+        }
+        call.resolve()
     }
 
     override fun handleOnResume() {

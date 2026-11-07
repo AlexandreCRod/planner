@@ -43,6 +43,7 @@ interface Plugin {
   previewRing(o: RingChoices): Promise<{ opened: boolean }>;
   takeDone(): Promise<{ json: string }>;
   takeLaunch(): Promise<{ itemId?: number; section?: string }>;
+  launchShown(): Promise<void>;
   widgets(o: { json: string }): Promise<void>;
   forecast(o: { json: string }): Promise<void>;
   takeWidgetUndone(): Promise<{ json: string }>;
@@ -90,6 +91,8 @@ export const native = {
   previewRing: (c: RingChoices) => call((p) => p.previewRing(c), { opened: false }),
   takeDone: async () => JSON.parse((await call((p) => p.takeDone(), { json: "[]" })).json) as { itemId: number; day: number }[],
   takeLaunch: () => call((p) => p.takeLaunch(), {}),
+  /** The page shows what a notification opened: the app, hidden meanwhile so the last page doesn't flash, shows again (371). */
+  launchShown: () => call((p) => p.launchShown(), undefined),
   forecast: (json: string) => call((p) => p.forecast({ json }), undefined),
   widgets: (payload: unknown) => call((p) => p.widgets({ json: JSON.stringify(payload) }), undefined),
   takeWidgetUndone: async () => JSON.parse((await call((p) => p.takeWidgetUndone(), { json: "[]" })).json) as { itemId: number; day: number }[],

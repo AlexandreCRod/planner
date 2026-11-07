@@ -9,12 +9,12 @@ import { buildAgenda } from "../domain/agenda.ts";
 import { clockFormat, dateStyle, today } from "../domain/dates.ts";
 import { snapshot, subscribe, toggleCompletion } from "../store/store.ts";
 import { carryOver } from "../store/prefs.ts";
-import { go } from "../ui/shared/common.tsx";
 import { look, onLooks } from "../ui/phone/looks.ts";
 import { clockPrefs, onClockPrefs } from "./clockPrefs.ts";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
 import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";
+import { launchHash } from "./launch.ts";
 
 let last = "";
 let timer: number | undefined;
@@ -53,11 +53,33 @@ async function takeDone() {
   for (const c of done) if (!s.done.isDone(c.itemId, c.day)) toggleCompletion(c.itemId, c.day, true);
 }
 
-/** A notification (or the alarm clock's icon) asked to open an item or a section of the Alarms page. */
+/** Shown after the page has drawn what was opened: two frames, so the new page is on screen, not just in the DOM. */
+const whenDrawn = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn));
+
+/**
+ * A notification (or the alarm clock's icon) asked to open an item or a section of the Clock page while the app
+ * was in the background. The app hid itself as it came back (AlarmPlugin), so the last page (Training, say) doesn't
+ * show for a moment first (371); it shows again once the item is drawn.
+ */
 async function takeLaunch() {
-  const l = await native.takeLaunch();
-  if (l.itemId) go(`item/${l.itemId}`);
-  else if (l.section) go(`alarms/${l.section}`);
+  const to = launchHash(await native.takeLaunch());
+  if (to) location.hash = to;
+  whenDrawn(() => void native.launchShown());
+}
+
+/**
+ * On a cold start, before the first drawing: the app opens straight on what the notification asked for, with the
+ * Today page under it (so back goes there, not out of the app).
+ */
+export async function takeLaunchBeforeStart() {
+  if (!hasAlarms) return;
+  const to = launchHash(await native.takeLaunch());
+  if (to) {
+    history.replaceState(null, "", "#/today");
+    if (to.startsWith("#/alarms/")) history.replaceState(null, "", to);
+    else history.pushState(null, "", to);
+  }
+  whenDrawn(() => void native.launchShown());
 }
 
 let started = false;
@@ -77,7 +99,6 @@ export function startAlarmMirror() {
   });
   onNative("launch", () => void takeLaunch());
   void takeDone();
-  void takeLaunch();
   void refreshAlarmState();
   startWidgetMirror();
 }

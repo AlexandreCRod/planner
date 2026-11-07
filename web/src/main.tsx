@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { startNotifications } from "./notify.ts";
-import { startAlarmMirror } from "./alarms/mirror.ts";
+import { startAlarmMirror, takeLaunchBeforeStart } from "./alarms/mirror.ts";
 import { startHealthReading } from "./health/healthConnect.ts";
 import { detectTestApp, isNative, isTestApp } from "./platform.ts";
 import { seedSampleOnce } from "./store/sample.ts";
@@ -87,7 +87,12 @@ async function start() {
   // The PC shows reminders from the page; the phone build hands them to its native alarm engine, which
   // rings them (and its alarm clocks, timers...) with the app closed.
   if (!isNative) startNotifications();
-  else { document.documentElement.classList.add("native"); startAlarmMirror(); startHealthReading(); startDailyBackups(); }
+  else {
+    document.documentElement.classList.add("native");
+    // Opened from a notification: straight on its item, not the start page first (371).
+    await takeLaunchBeforeStart();
+    startAlarmMirror(); startHealthReading(); startDailyBackups();
+  }
   root().render(<StrictMode><App /></StrictMode>);
   if ("serviceWorker" in navigator && location.hostname !== "localhost") navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
