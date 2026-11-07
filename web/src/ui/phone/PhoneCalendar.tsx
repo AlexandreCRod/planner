@@ -71,18 +71,13 @@ export const calendarGoToday = () => goToday?.();
 let resetLive: (() => void) | null = null;
 /**
  * A tap on the Calendar tab while it's shown (353): back to today, the saved view and no filters, in place and
- * at once with a short fade, like Google Calendar's Today; no rebuilding of the calendar and no slide. False when
+ * at once, like Google Calendar's Today (370: no fade, which read as a blink); no rebuilding of the calendar and no slide. False when
  * the calendar isn't showing or a pinch zoom has to be undone too (then the page is rebuilt, as before).
  */
 export function calendarResetLive(): boolean {
   if (!resetLive || savedHour !== null) return false;
   resetLive();
   return true;
-}
-/** The jump to today (353): the days change in one go and fade in quickly, so the eye sees a new place, not a scroll. */
-export const TODAY_FADE_MS = 160;
-function fadeIn(el: HTMLElement | null) {
-  el?.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: TODAY_FADE_MS, easing: "cubic-bezier(.2, 0, 0, 1)" });
 }
 
 /** Text on a solid colour, as Compose's contentColor(): dark on light colours, white on the rest. */
@@ -117,7 +112,8 @@ export function PhoneCalendar({ onNewAt, pending }: { onNewAt: (day: number, min
   /** Picked in the menu: remembered, like the native calendarView setting. */
   const pickMode = (m: Mode) => { localStorage.setItem("calModePhone", m); setMode(m); };
   const body = useRef<HTMLDivElement>(null);
-  const jumpToday = () => { setAnchor(todayEpoch()); listsToTop(body.current); fadeIn(body.current); };
+  // The jump to today: the days change in one go, with no slide and no fade (370: 353's quick fade read as a blink).
+  const jumpToday = () => { setAnchor(todayEpoch()); listsToTop(body.current); };
   useEffect(() => {
     goToday = jumpToday;
     resetLive = () => { resetCalendar(); setF(filters); setMode(baseMode()); jumpToday(); };
