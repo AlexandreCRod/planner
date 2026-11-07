@@ -14,7 +14,7 @@ import { clockPrefs, onClockPrefs } from "./clockPrefs.ts";
 import { alarmSettings, onAlarmSettings } from "./settings.ts";
 import { startWidgetMirror } from "./widgets.ts";
 import { hasAlarms, native, onNative, refreshAlarmState } from "./native.ts";
-import { launchHash } from "./launch.ts";
+import { type Launch, askShortcut, isShortcut, launchHash } from "./launch.ts";
 
 let last = "";
 let timer: number | undefined;
@@ -62,9 +62,18 @@ const whenDrawn = (fn: () => void) => requestAnimationFrame(() => requestAnimati
  * show for a moment first (371); it shows again once the item is drawn.
  */
 async function takeLaunch() {
-  const to = launchHash(await native.takeLaunch());
+  const l = await native.takeLaunch();
+  const to = launchHash(l);
   if (to) location.hash = to;
+  shortcutParts(l);
   whenDrawn(() => void native.launchShown());
+}
+
+/** What a shortcut does besides opening its page (375): the stopwatch starts; "New task" opens the add panel. */
+function shortcutParts(l: Launch) {
+  if (!isShortcut(l.shortcut)) return;
+  if (l.shortcut === "stopwatch") void native.stopwatch("start", { id: 0 }).then(refreshAlarmState);
+  if (l.shortcut === "task") askShortcut("task");
 }
 
 /**
@@ -73,12 +82,14 @@ async function takeLaunch() {
  */
 export async function takeLaunchBeforeStart() {
   if (!hasAlarms) return;
-  const to = launchHash(await native.takeLaunch());
+  const l = await native.takeLaunch();
+  const to = launchHash(l);
   if (to) {
     history.replaceState(null, "", "#/today");
     if (to.startsWith("#/alarms/")) history.replaceState(null, "", to);
-    else history.pushState(null, "", to);
+    else if (to !== "#/today") history.pushState(null, "", to);
   }
+  shortcutParts(l);
   whenDrawn(() => void native.launchShown());
 }
 

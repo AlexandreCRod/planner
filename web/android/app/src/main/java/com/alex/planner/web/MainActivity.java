@@ -10,6 +10,7 @@ import com.alex.planner.web.device.DevicePlugin;
 import com.alex.planner.web.device.TopRefresh;
 import com.alex.planner.web.health.HealthConnectPlugin;
 import com.alex.planner.web.invite.InvitePlugin;
+import com.alex.planner.web.shortcut.Shortcuts;
 import com.alex.planner.web.update.UpdatePlugin;
 import com.getcapacitor.BridgeActivity;
 
@@ -41,6 +42,8 @@ public class MainActivity extends BridgeActivity {
         EdgeToEdge.enable(this);
         // The screen's top refresh rate (363b): some phones hold apps at 60 Hz unless they ask.
         TopRefresh.INSTANCE.apply(this);
+        // The app icon's long-press shortcuts (375).
+        Shortcuts.INSTANCE.publish(this);
         // No stretch or glow at the WebView's edges: the page draws its own rubber band (overscroll.ts).
         if (getBridge() != null && getBridge().getWebView() != null) getBridge().getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
     }

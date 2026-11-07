@@ -8,3 +8,12 @@ test("a notification's launch becomes the page it opens", () => {
   assert.equal(launchHash({ section: "timers" }), "#/alarms/timers");
   assert.equal(launchHash({}), null);
 });
+
+// 375: the app icon's long-press shortcuts.
+test("each app shortcut opens its page: New task on Today, New note a new note, Stopwatch and Timer on the Clock page", () => {
+  assert.equal(launchHash({ shortcut: "task" }), "#/today");
+  assert.equal(launchHash({ shortcut: "note" }), "#/note/new");
+  assert.equal(launchHash({ shortcut: "stopwatch" }), "#/alarms/stopwatch");
+  assert.equal(launchHash({ shortcut: "timer" }), "#/alarms/timer");
+  assert.equal(launchHash({ shortcut: "something else" }), null);
+});

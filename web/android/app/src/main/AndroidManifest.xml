@@ -56,6 +56,15 @@
 
         </activity>
 
+        <!-- The app icon's shortcuts (375) pass through this invisible step to the running app (shortcut/Shortcuts.kt). -->
+        <activity
+            android:name=".shortcut.ShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Health Connect's privacy link, Android 14 and up: opens the app. -->
         <activity-alias
             android:name="ViewPermissionUsageActivity"

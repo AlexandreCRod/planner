@@ -33,6 +33,8 @@ object Notifications {
     const val EXTRA_OPEN_ITEM = "openItemId"
     /** Opens a section of the Alarms page ("alarm", "timer"...). */
     const val EXTRA_OPEN_SECTION = "openAlarmSection"
+    /** An app shortcut (shortcut/Shortcuts.kt): "task", "note", "stopwatch" or "timer". */
+    const val EXTRA_OPEN_SHORTCUT = "openShortcut"
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)

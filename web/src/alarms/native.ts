@@ -42,7 +42,7 @@ interface Plugin {
   sync(o: { json: string }): Promise<void>;
   previewRing(o: RingChoices): Promise<{ opened: boolean }>;
   takeDone(): Promise<{ json: string }>;
-  takeLaunch(): Promise<{ itemId?: number; section?: string }>;
+  takeLaunch(): Promise<{ itemId?: number; section?: string; shortcut?: string }>;
   launchShown(): Promise<void>;
   widgets(o: { json: string }): Promise<void>;
   forecast(o: { json: string }): Promise<void>;

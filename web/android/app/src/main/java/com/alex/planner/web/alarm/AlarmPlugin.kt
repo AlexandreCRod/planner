@@ -48,6 +48,7 @@ class AlarmPlugin : Plugin() {
     /** What a notification or the alarm clock's icon asked to open, until the page takes it. */
     private var launchItem: Long? = null
     private var launchSection: String? = null
+    private var launchShortcut: String? = null
 
     override fun load() {
         Notifications.createChannels(context)
@@ -103,6 +104,11 @@ class AlarmPlugin : Plugin() {
         if (intent.hasExtra(Notifications.EXTRA_OPEN_ITEM)) {
             launchItem = intent.getLongExtra(Notifications.EXTRA_OPEN_ITEM, 0).takeIf { it != 0L }
             intent.removeExtra(Notifications.EXTRA_OPEN_ITEM)
+            any = true
+        }
+        if (intent.hasExtra(Notifications.EXTRA_OPEN_SHORTCUT)) {
+            launchShortcut = intent.getStringExtra(Notifications.EXTRA_OPEN_SHORTCUT)
+            intent.removeExtra(Notifications.EXTRA_OPEN_SHORTCUT)
             any = true
         }
         if (intent.hasExtra(Notifications.EXTRA_OPEN_SECTION)) {
@@ -176,8 +182,10 @@ class AlarmPlugin : Plugin() {
         val o = JSObject()
         launchItem?.let { o.put("itemId", it) }
         launchSection?.let { o.put("section", it) }
+        launchShortcut?.let { o.put("shortcut", it) }
         launchItem = null
         launchSection = null
+        launchShortcut = null
         call.resolve(o)
     }
 

@@ -35,6 +35,7 @@ import { App as CapApp } from "@capacitor/app";
 import { isNative, useWide } from "../../platform.ts";
 import { deskWheel, scrollsSideways, setDeskHandlers } from "./desk.ts";
 import { hasAlarms } from "../../alarms/native.ts";
+import { onShortcut, takeShortcut } from "../../alarms/launch.ts";
 import { PermissionHost, PhoneAlarms, openAlarmAddMenu, openAlarmSection } from "./PhoneAlarms.tsx";
 import { ClockTabMenu, runningNow, useClockTab } from "./ClockTab.tsx";
 import { feel } from "./haptics.ts";
@@ -451,6 +452,13 @@ export function PhoneApp() {
     const day = key === "calendar" ? calendarSelectedDay() : key === "today" ? todayViewedDay() : todayEpoch();
     setAdding({ mode: "quick", type, day, min: null });
   };
+
+  // The app icon's "New task" shortcut (375): the add panel opens on Today, as the + does there.
+  useEffect(() => {
+    const run = () => { if (takeShortcut() === "task") setAdding({ mode: "quick", type: "TASK", day: todayEpoch(), min: null }); };
+    run();
+    return onShortcut(run);
+  }, []);
 
   // The keys (desk.ts): Esc closes a full-screen page (after anything open over it), N is the + button,
   // T the page's "today", Ctrl+F the search (a note's own find bar is the note's).
