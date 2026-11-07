@@ -10,5 +10,5 @@ test("the alarm card's Undo is plain text like Skip, with no fill", () => {
   for (const l of undo) assert.doesNotMatch(l, /background/);
   const src = readFileSync(new URL("../src/ui/phone/PhoneAlarms.tsx", import.meta.url), "utf8");
   // A one-off alarm skipped is off; its card keeps Undo while the message's Undo can still bring it back.
-  assert.match(src, /onGone: \(\) => setJust\(null\)/);
+  assert.match(src, /onGone: \(\) => \{ setJust\(null\); holdSkip\(null\); \}/);
 });
