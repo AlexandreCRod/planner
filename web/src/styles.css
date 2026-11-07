@@ -39,6 +39,21 @@
   --strong: color-mix(in oklab, var(--p-acc-dark-container, #0842a0) 58%, #4a4c52); --on-strong: #eceef1;
 }
 
+/* 2.10.5 (368: c's softer blue): on dark, the accent's own hue at set lightnesses (Blue: text #9cb3dc, washes
+   #151c2a, filled #2a3b5a with #e3e9f5), as the phone's controls (phone.css "2.10.5: controls"). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --acc: oklch(from var(--p-acc-dark, #a8c7fa) 0.764 calc(c * 0.8) h);
+    --accent-soft: oklch(from var(--p-acc-dark, #a8c7fa) 0.227 calc(c * 0.36) h);
+    --strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.353 calc(c * 0.74) h); --on-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.933 calc(c * 0.21) h);
+  }
+}
+:root[data-theme="dark"] {
+  --acc: oklch(from var(--p-acc-dark, #a8c7fa) 0.764 calc(c * 0.8) h);
+  --accent-soft: oklch(from var(--p-acc-dark, #a8c7fa) 0.227 calc(c * 0.36) h);
+  --strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.353 calc(c * 0.74) h); --on-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.933 calc(c * 0.21) h);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); }

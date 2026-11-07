@@ -2002,3 +2002,58 @@ html.phone[data-theme="dark"] {
 }
 @media (prefers-color-scheme: dark) { html.phone.cal-rich:not([data-theme="light"]) { --cal-wash: 26%; --cal-chip: 22%; } }
 html.phone.cal-rich[data-theme="dark"] { --cal-wash: 26%; --cal-chip: 22%; }
+
+/* ---------- 2.10.5: controls (368: a's behaviour, c's softer blue) ----------
+   Blue only where you act or choose: the selected tab, ticks, switches, main buttons and chosen chips. On the
+   dark theme each tone is the chosen accent's own hue at a set lightness (c's values for Blue: text and the
+   selected tab #9cb3dc, ticks/switches/bars/rings #8ea7d4, washes #151c2a, main buttons #2a3b5a with #e3e9f5),
+   so the accent setting still works; the light theme keeps its tones (--p-mark = --p-strong there). The routines
+   count and the + are outlined in a hairline with off-white text; the tasks bar is off-white. */
+html.phone { --p-mark: var(--p-strong); --p-on-mark: var(--p-on-strong); --p-hairline: var(--line); --p-ring: var(--p-outline); }
+@media (prefers-color-scheme: dark) { html.phone:not([data-theme="light"]) {
+  --p-primary: oklch(from var(--p-acc-dark, #a8c7fa) 0.764 calc(c * 0.8) h);
+  --p-mark: oklch(from var(--p-acc-dark, #a8c7fa) 0.726 calc(c * 0.9) h);
+  --p-on-mark: #0b0f17;
+  --p-sec-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.227 calc(c * 0.36) h);
+  --p-on-sec-container: var(--p-primary);
+  --p-primary-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.27 calc(c * 0.5) h);
+  --p-on-primary-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.86 calc(c * 0.4) h);
+  --p-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.353 calc(c * 0.74) h);
+  --p-on-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.933 calc(c * 0.21) h);
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%230b0f17' stroke-width='2.2' stroke-linecap='square'/%3E%3C/svg%3E");
+  --p-hairline: #232328; --p-ring: #3a3a42;
+} }
+html.phone[data-theme="dark"] {
+  --p-primary: oklch(from var(--p-acc-dark, #a8c7fa) 0.764 calc(c * 0.8) h);
+  --p-mark: oklch(from var(--p-acc-dark, #a8c7fa) 0.726 calc(c * 0.9) h);
+  --p-on-mark: #0b0f17;
+  --p-sec-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.227 calc(c * 0.36) h);
+  --p-on-sec-container: var(--p-primary);
+  --p-primary-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.27 calc(c * 0.5) h);
+  --p-on-primary-container: oklch(from var(--p-acc-dark, #a8c7fa) 0.86 calc(c * 0.4) h);
+  --p-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.353 calc(c * 0.74) h);
+  --p-on-strong: oklch(from var(--p-acc-dark, #a8c7fa) 0.933 calc(c * 0.21) h);
+  --p-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-8' fill='none' stroke='%230b0f17' stroke-width='2.2' stroke-linecap='square'/%3E%3C/svg%3E");
+  --p-hairline: #232328; --p-ring: #3a3a42;
+}
+/* Ticks, switches, the selection mark, bars and rings: the light blue, with dark marks on it. */
+.phone .p-switch.on { border-color: var(--p-mark); background: var(--p-mark); }
+.phone .p-switch.on .thumb { background: var(--p-on-mark); }
+.phone :is(.today-list, .p-rows) .task input[type=checkbox]:checked, .phone .p-checkbox:checked { border-color: var(--p-mark); background-color: var(--p-mark); }
+.phone .p-selmark { background: var(--p-mark); color: var(--p-on-mark); }
+.phone .p-progress .active, .phone .p-progress .stop { background: var(--p-mark); }
+.phone .p-rchip.done .ring { background: var(--p-mark); border-color: var(--p-mark); color: var(--p-on-mark); }
+.phone .rich::highlight(pn-tick) { color: var(--p-mark); }
+/* The selected tab: its label in the text blue too (its icon already is, on the wash). */
+.phone .p-tab.on .p-tab-label { color: var(--p-primary); }
+/* Chosen chips and segments: the wash with the text blue. */
+.phone .p-segmented button.on { background: var(--p-sec-container); color: var(--p-on-sec-container); }
+/* The routines count, outlined: a hairline ring and off-white digits. */
+.phone .p-routines-head { padding: 0 2px 0 16px; height: 48px; }
+.phone .p-routines-head > .n, .phone .p-routines-head:not(:has(.n)) { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 15px; box-shadow: inset 0 0 0 1px var(--p-ring); color: var(--text); }
+.phone .p-routines-head:not(:has(.n)) { height: 30px; margin: 9px 0; }
+/* The + : outlined, an off-white sign, no fill or shadow. */
+.phone .p-fab { background: var(--bg); color: var(--text); box-shadow: inset 0 0 0 1px var(--p-ring); }
+/* Today's tasks bar: off-white for what's done (still green once all are). */
+.phone .today-list .p-taskbar .active, .phone .today-list .p-taskbar .stop { background: var(--text); }
+.phone .today-list .p-taskbar.all .active { background: #86c79a; }
